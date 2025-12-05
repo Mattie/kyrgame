@@ -27,9 +27,7 @@ describe('HealthCheck', () => {
     )
 
     await waitFor(() =>
-      expect(
-        screen.getByText(/locations reachable/i)
-      ).toBeInTheDocument()
+      expect(screen.getByText(/locations reachable/i)).toBeInTheDocument()
     )
     expect(screen.getByText(/3 locations loaded/i)).toBeInTheDocument()
   })
@@ -45,10 +43,43 @@ describe('HealthCheck', () => {
     render(<HealthCheck />)
 
     await waitFor(() =>
-      expect(
-        screen.getByText(/locations unreachable/i)
-      ).toBeInTheDocument()
+      expect(screen.getByText(/locations unreachable/i)).toBeInTheDocument()
     )
     expect(screen.getByText(/503/)).toBeInTheDocument()
+  })
+
+  it('handles network errors gracefully', async () => {
+    vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Network error'))
+
+    render(<HealthCheck />)
+
+    await waitFor(() =>
+      expect(screen.getByText(/locations unreachable/i)).toBeInTheDocument()
+    )
+    expect(screen.getByText(/Network error/)).toBeInTheDocument()
+  })
+
+  it('handles non-array payloads', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({}),
+    } as unknown as Response)
+
+    render(<HealthCheck />)
+
+    await waitFor(() =>
+      expect(screen.getByText(/locations reachable/i)).toBeInTheDocument()
+    )
+    expect(screen.getByText(/0 locations loaded/i)).toBeInTheDocument()
+  })
+
+  it('shows loading state initially', () => {
+    vi.spyOn(global, 'fetch').mockImplementation(
+      () => new Promise(() => {}) // Never resolves
+    )
+
+    render(<HealthCheck />)
+
+    expect(screen.getByText(/Loading location catalog/i)).toBeInTheDocument()
   })
 })

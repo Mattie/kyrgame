@@ -23,6 +23,7 @@ Kyrandia began as a MajorBBS/Worldgroup text adventure where apprentices chased 
 ## Repository Layout
 
 - `backend/` — FastAPI services, SQLAlchemy models, fixtures, and scripts for packaging offline content.
+- `frontend/` — Vite + React + TypeScript application providing a view-only navigator UI for exploring game fixtures.
 - `docs/` — Porting plan, architecture notes, and code maps that tie legacy concepts to the new stack.
 - `legacy/` — The original MajorBBS/Worldgroup sources, assets, and build files (`ELWKYR.MAK`, `elwkyr.vcxproj`, message catalogs, and packaged `Dist/`).
 - `LICENSE.txt`, `CONTRIBUTING.txt`, `AGENTS.md` — Policies and contributor guidance that apply across the project.
@@ -31,11 +32,18 @@ Kyrandia began as a MajorBBS/Worldgroup text adventure where apprentices chased 
 
 1. **Install backend dependencies**
    - Follow `backend/DEVELOPMENT.md` to create a virtual environment and install requirements.
-2. **Run tests**
-   - Execute `pytest backend/tests` to validate fixtures, models, and helper utilities.
-3. **Package offline content**
+2. **Install frontend dependencies**
+   - Navigate to `frontend/` and run `npm install` to install the Node.js dependencies.
+   - Copy `frontend/.env.example` to `frontend/.env.local` and configure your backend endpoints.
+3. **Run the development server**
+   - Start the backend API server following instructions in `backend/DEVELOPMENT.md`.
+   - In a separate terminal, run `cd frontend && npm run dev` to start the frontend development server.
+4. **Run tests**
+   - Backend: Execute `pytest backend/tests` to validate fixtures, models, and helper utilities.
+   - Frontend: Execute `cd frontend && npm test` to run the frontend test suite.
+5. **Package offline content**
    - Generate a bundle suitable for disconnected clients with `python -m kyrgame.scripts.package_content --output legacy/Dist/offline-content.json`.
-4. **Consult or build the legacy module**
+6. **Consult or build the legacy module**
    - The C sources live in `legacy/`. To build the Borland target, run `cd legacy && make -f ELWKYR`. Visual Studio users can open `legacy/elwkyr.vcxproj`.
 
 ## Legacy Backstory (for context)
