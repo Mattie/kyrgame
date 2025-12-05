@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "brfdes": "Village Square",
+    "objlds": "A fountain sparkles here",
+    "objects": [1],
+    "gi_north": 2,
+    "gi_south": 0,
+    "gi_east": 3,
+    "gi_west": 0
+  },
+  {
+    "id": 2,
+    "brfdes": "Northern Road",
+    "objlds": "Pine trees line the road",
+    "objects": [],
+    "gi_north": 0,
+    "gi_south": 1,
+    "gi_east": 0,
+    "gi_west": 0
+  },
+  {
+    "id": 3,
+    "brfdes": "Wizard's Study",
+    "objlds": "Books and scrolls abound",
+    "objects": [2, 3],
+    "gi_north": 0,
+    "gi_south": 0,
+    "gi_east": 0,
+    "gi_west": 1
+  }
+]
