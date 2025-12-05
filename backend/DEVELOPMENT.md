@@ -60,37 +60,38 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
 
 **Create or resume a session**
 
-```
-POST /auth/session
-Content-Type: application/json
+- **Route:** `POST /auth/session`
+- **Headers:** `Content-Type: application/json`
+- **Body:**
 
-{
-  "player_id": "hero",                # required string
-  "resume_token": "...",              # optional existing token to resume
-  "allow_multiple": false,             # optional; defaults to false for single-session enforcement
-  "room_id": 7                         # optional starting room override
-}
-```
-
-Successful creation returns `201 Created`; resumes return `200 OK`:
-
-```
-{
-  "status": "created",
-  "session": {
-    "token": "<bearer-token>",
+  ```json
+  {
     "player_id": "hero",
-    "room_id": 7,
-    "first_login": true,
-    "resumed": false,
-    "replaced_sessions": 0
+    "resume_token": "...",
+    "allow_multiple": false,
+    "room_id": 7
   }
-}
-```
+  ```
 
-> TODO: The repository tracks `expires_at`/`last_seen` for session tokens, but those fields are not yet surfaced in the HTTP response. A contract test has been added to guard the gap until the API is updated.
+- **Responses:**
+  - `201 Created` for new sessions, `200 OK` when resuming with `resume_token`.
+  - Envelope:
 
-Example cURL:
+    ```json
+    {
+      "status": "created",
+      "session": {
+        "token": "<bearer-token>",
+        "player_id": "hero",
+        "room_id": 7,
+        "first_login": true,
+        "resumed": false,
+        "replaced_sessions": 0
+      }
+    }
+    ```
+
+    When resuming, `status` becomes `recovered`, `resumed` is `true`, and `first_login` is `false`.
 
 ```bash
 curl -X POST http://localhost:8000/auth/session \
@@ -98,111 +99,124 @@ curl -X POST http://localhost:8000/auth/session \
   -d '{"player_id": "hero", "room_id": 7}'
 ```
 
+> TODO: The repository tracks `expires_at`/`last_seen` for session tokens, but those fields are not yet surfaced in the HTTP response. A contract test guards the gap until the API is updated.
+
 **Validate an active session**
 
-```
-GET /auth/session
-Authorization: Bearer <token>
-```
+- **Route:** `GET /auth/session`
+- **Headers:** `Authorization: Bearer <token>`
+- **Response:**
 
-Returns the same envelope shape as creation with `status: "active"` and the stored `room_id`.
+  ```json
+  {
+    "status": "active",
+    "session": {
+      "token": "<bearer-token>",
+      "player_id": "hero",
+      "room_id": 7,
+      "first_login": false,
+      "resumed": false,
+      "replaced_sessions": 0
+    }
+  }
+  ```
+
+```bash
+curl http://localhost:8000/auth/session \
+  -H 'Authorization: Bearer <token>'
+```
 
 **Logout**
 
-```
-POST /auth/logout
-Authorization: Bearer <token>
-```
-
-Returns `{ "status": "logged_out" }` and closes any active WebSocket associated with the token.
+- **Route:** `POST /auth/logout`
+- **Headers:** `Authorization: Bearer <token>`
+- **Response:** `{ "status": "logged_out" }` and any connected WebSocket is closed.
 
 ### Fixture lookups
 
+Unless you add your own auth layer, the lookup routes are open for ease of fixture inspection.
+
 **List commands**
 
-```
-GET /commands
-```
+- **Route:** `GET /commands`
+- **Response:** array of command entries with `id`, `command` text, `payonl` flag (pay-only), and optional handler `cmdrou`:
 
-Response: an array of command definitions with IDs and optional handler routes:
+  ```json
+  [
+    { "id": 1, "command": "north", "payonl": false, "cmdrou": "lcrous" },
+    { "id": 2, "command": "south", "payonl": false, "cmdrou": "lcrous" }
+  ]
+  ```
 
-```
-[
-  { "id": 1, "command": "north", "payonl": false, "cmdrou": "lcrous" },
-  ...
-]
+```bash
+curl http://localhost:8000/commands | jq '.[0]'
 ```
 
 **List locations**
 
-```
-GET /world/locations
-```
+- **Route:** `GET /world/locations`
+- **Response:** array of `LocationModel` entries, mirroring `KYRLOCS` fields with exit pointers:
 
-Response: an array of location entries mirroring `KYRLOCS` fields:
+  ```json
+  [
+    {
+      "id": 0,
+      "brfdes": "Edge of the Forest",
+      "objlds": "The path is narrow and mossy...",
+      "nlobjs": 1,
+      "objects": [101],
+      "gi_north": 1,
+      "gi_south": -1,
+      "gi_east": -1,
+      "gi_west": -1
+    }
+  ]
+  ```
 
-```
-[
-  {
-    "id": 0,
-    "brfdes": "Edge of the Forest",
-    "objlds": "The path is narrow and mossy...",
-    "nlobjs": 1,
-    "objects": [101],
-    "gi_north": 1,
-    "gi_south": -1,
-    "gi_east": -1,
-    "gi_west": -1
-  }
-]
+```bash
+curl http://localhost:8000/world/locations | jq '.[0].brfdes'
 ```
 
 **List objects**
 
-```
-GET /objects
-```
+- **Route:** `GET /objects`
+- **Response:** array of object catalog entries with legacy message references and behavior hooks:
 
-Response: an array of object catalog entries:
+  ```json
+  [
+    {
+      "id": 101,
+      "name": "Key",
+      "objdes": 42,
+      "auxmsg": 900,
+      "flags": ["can_pick_up"],
+      "objrou": "obj_key"
+    }
+  ]
+  ```
 
-```
-[
-  {
-    "id": 101,
-    "name": "Key",
-    "objdes": 42,
-    "auxmsg": 900,
-    "flags": ["can_pick_up"],
-    "objrou": "obj_key"
-  }
-]
+```bash
+curl http://localhost:8000/objects | jq '.[0]'
 ```
 
 **Localization bundles**
 
-```
-GET /i18n/<locale>/messages
-```
+- **Route:** `GET /i18n/<locale>/messages`
+- **Response:** locale metadata plus the raw catalog map keyed by legacy message IDs:
 
-Response: the locale metadata plus the message catalog map:
-
-```
-{
-  "version": "1.0.0",
-  "locale": "en-US",
-  "catalog_id": "kyrandia",
-  "messages": {
-    "WELCOME": "Welcome to Kyrandia!",
-    "CMD001": "You walk north",
-    ...
+  ```json
+  {
+    "version": "1.0.0",
+    "locale": "en-US",
+    "catalog_id": "kyrandia",
+    "messages": {
+      "WELCOME": "Welcome to Kyrandia!",
+      "CMD001": "You walk north"
+    }
   }
-}
-```
-
-Example cURL (with locale discovery):
+  ```
 
 ```bash
-curl http://localhost:8000/i18n/locales
 curl http://localhost:8000/i18n/en-US/messages | jq '.messages.WELCOME'
 ```
 
@@ -214,14 +228,16 @@ Connect with the bearer token returned by `/auth/session`:
 ws://localhost:8000/ws/rooms/<room_id>?token=<bearer-token>
 ```
 
-Upon connection, the gateway emits `room_welcome` followed by broadcasts when other players enter or chat. Room fan-out messages use a common envelope:
+On connect, the server sends `room_welcome` and caches the token/socket pairing. If a player switches rooms, the gateway emits `room_change` to that socket before broadcasting to the new room.
 
-```
+Room fan-out messages share a stable envelope. Movement or entry events resemble:
+
+```json
 {
   "type": "room_broadcast",
   "room": 7,
   "payload": {
-    "event": "player_enter",       # or "chat", "player_moved", etc.
+    "event": "player_enter",
     "type": "player_moved",
     "player": "hero",
     "from": 6,
@@ -233,9 +249,9 @@ Upon connection, the gateway emits `room_welcome` followed by broadcasts when ot
 }
 ```
 
-Chat events carry the text and mode in the payload instead of movement fields:
+Chat fan-out swaps the movement fields for text and mode:
 
-```
+```json
 {
   "type": "room_broadcast",
   "room": 7,
@@ -253,4 +269,5 @@ Chat events carry the text and mode in the payload instead of movement fields:
 }
 ```
 
-Command acknowledgements are delivered privately to the sender as `{ "type": "command_response", "room": <id>, "payload": { ... } }` envelopes.
+Command acknowledgements are delivered privately to the sender in the same envelope shape but with `type: "command_response"` and a payload that echoes `command_id`/`message_id` for the initiating verb.
+
