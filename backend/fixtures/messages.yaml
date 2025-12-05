@@ -1,5 +1,2681 @@
 messages:
-  welcome: "Welcome to Kyrandia dev shard."
-  location_1: "You stand at the heart of the village."
-  location_2: "The road stretches into tall pines."
-  spell_ready: "Your spellbook hums with energy."
+  LEVEL6: 'Elwynor Technologies: Kyrandia Player Editor'
+  FOREST: '...You''re in a dark forest. Tall, ominous pine trees surround you, their
+    thick, bristly branches hanging down and making it difficult to proceed in any
+    direction. Almost all of the sunlight is blocked out by the densely packed trees,
+    and the few rays which do filter down create dark, menacing shadows which seem
+    to dance along the leafy forest floor. As you glance around, this location appears
+    to be very similar to the rest of the forest, making it confusing to determine
+    your exact location.'
+  DTPASS: '...You''re in a dark, twisting cavern. Everything around you is complete
+    and total darkness, making it impossible to determine any of the features of this
+    twisting passageway. From somewhere above, tiny drops of water fall upon your
+    head, and the air is particularly humid. The ground feels solid underneath your
+    feet, although extremely broken and rocky, and due to the solid darkness, you
+    cannot see in which directions you can go.'
+  GOLDEN: '...You''re in a golden forest. You are surrounded by tall, shimmering golden
+    elm trees, their breathtaking golden branches and leaves scintillating in the
+    sunlight. Although formed of solid gold, the trees still appear to be living in
+    full bloom, swaying enchantingly in the gentle breezes of this wonderful paradise.
+    A feeling of eternal love swells within your soul, as though this is the heaven
+    you''ve always wished to spend your life in forever. The trees blocks most of
+    your view with their sparkling beauty, but you can move off in any direction.'
+  KRD000: '...You''re near a mystical willow tree. Before you rises the mysterious,
+    eerie silhouette of a willow tree, the most strange and fascinating of all of
+    the natural magic of Kyrandia. Although willows are normally associated with death
+    and sorrow, this particular tree is unusual, as it radiates an extremely powerful
+    aura of good -- a miracle of the hailed Goddess Tashanna. A small, dirt path winds
+    off to the north, and dark forest surrounds you in all other directions.'
+  KRD001: '...You''re on a north/south path. Surrounded by tall, ominous pine trees,
+    you''re located on a narrow dirt path which twists off to the north and south.
+    Dark forest leads off to the east and west sides of this little road, which extends
+    beyond your vision into dark undergrowth. Somewhere nearby you hear the chirping
+    of a songbird singing a faintly familiar romantic melody. The unmistakable aroma
+    of blooming roses also hangs in the air, although you cannot see its origin.'
+  KRD002: '...You''re at a "T" intersection on a path. In a small clearing of the
+    dark forest here a narrow north/south path intersects with a smooth road that
+    leads off to the east. Although it seems the road may have at one time extended
+    further to the west, it has long since been overgrown by dark forest. The sunlight
+    seems particularly bright here, especially in contrast to the dark forest which
+    surrounds you. For some unknown reason, as you look around, memories run through
+    your mind of long lost love.'
+  KRD003: '...You''re on an overgrown path. Thick, ugly-looking bushes have crowded
+    over whatever road used to continue from here. Particularly nasty thorn bushes
+    and twisting, spiny vines discourage you from digging through this wild overgrowth.
+    Several annoying gnats swarm about you as you examine this chaos of nature, biting
+    painfully at your face and neck. The heat and humidity of this particular location
+    brings a sweat to your forehead, almost as though magically induced. An intersection
+    of several paths is just off to the south, and dark forest surrounds you in all
+    other directions.'
+  KRD004: '...You''re on an east/west road. Cleared through the thick forest, apparently
+    ages ago, this smooth dirt road shows signs of frequent and recent use. To the
+    east, the road leads to a village in the distance, as well as winding off through
+    the dark forest to the west. Tall, majestic oak trees line the road to the north
+    and south, guarding the border of the extensive dark forest. As you glance around,
+    you notice the word "zennyra" written in the middle of the road.'
+  KRD005: '...You''re on the outskirts of a village. Before you lies a high wall of
+    large oak logs, carved to deadly, pointed pinnacles at the top. A thin column
+    of smoke rises from beyond the wall, along with the odor of cooking food and other
+    strange smells. This is apparently one of the few dwellings of human inhabitants
+    within the Great Forest of Kyrandia. An entrance into the villages is to the east,
+    a path winds off to the west, and dark forest lies in all other directions.'
+  KRD006: '...You''re in the village square. Located directly within the village gates,
+    this well-kept plaza has been landscaped with tall, beautiful oak trees, lush,
+    green hedges, and splendid assortments of flowers. Various paths, all in good
+    condition, lead off in all directions. To the north is a small hut with smoke
+    rising from it, to the south lies a intriguing, little shop, to the east is the
+    village temple, and a path leading out into the forest is to the west.'
+  KRD007: '...You''re at the village temple. Columns constructed from flawless marble
+    and arranged in a closely-knit, circular pattern establish this place as the center
+    of the village''s religious rites. Several small elm trees border the circumference
+    of this temple, and the interior is laden with numerous lavender roses bushes,
+    in brilliant, full bloom. In the center of this holy outdoors dagoba rests a sunken,
+    marble altar. A small shanty lies to the south and paths lead off to the north
+    and west.'
+  KRD008: '...You''re at the gem cutter''s hut. This quaint, little hut has been built
+    from assorted branches of the forest bound together by dried vines, and all twisted
+    and weaved together into a miraculously stable bungalow. A column of smoke rises
+    smoothly from a miniature chimney, and strange, spicy odors float from within
+    its walls. Sitting outside, directly in front of you, is a haggard, old man. A
+    path winding off to the south leads to the village square.'
+  KRD009: '...You''re at the spell shop. Well-built from attractive redwood, truly
+    a rare wood in these parts, this mystical hutch is labeled by a charming, purple
+    sign. Standing before you is a strangely dressed man who smiles and nods at you
+    kindly. A tingle runs down the back of your neck and you suddenly feel the urge
+    to spend large amounts of gold. A small path winds off to the north to the village
+    square. Your eyes seem to drift towards the sign.'
+  KRD010: '...You''re at the healer''s abode. Covered in a layer of purple mists,
+    this marble shrine is the abode of a kind and gentle healer. Not only amiable,
+    the healer who stands before you is also beautiful. She smiles at you sympathetically,
+    and mouths the words "For a donation, I''ll gladly tend to all your needs...".
+    Suddenly, you do feel a little feverish and the need for some medical attention.
+    The temple lies to the south.'
+  KRD011: '...You''re at the wise man''s shanty. This dirty, run-down, and odorous
+    piece of shelter is home to a lonely, eccentric miser who happens to be the wisest
+    wise man in the land, although not the friendliest. He is standing just a little
+    off to your right with his hand stretched out, perhaps in greetings, perhaps for
+    gold. He grins at you impishly and spits a large glob of some disgusting substance
+    which you neither recognize nor care to recognize. The only escape seems to be
+    the temple to the north.'
+  KRD012: '...You''re at a bubbling brook. Twisting its way through the terrain of
+    the forest, this sparkling stream of fresh water has surfaced from the depths
+    of the forest undergrowth to the east to flow visibly along a rocky bed for a
+    short distance. However, it once again winds through the heavy vegetation to become
+    hidden as it flows off to the west. From the sunlight which filters through the
+    dense forest around you, you occasionally see brief, golden glitters within the
+    brook. Dark forest continues in all directions.'
+  KRD013: '...You''re in the Vale of the Butterflies. Truly a paradise in reality,
+    this magnificent natural beauty is a wonder to behold. Flowers of all varieties,
+    colors, and scents bloom majestically, creating a regal hall of nature. Yet even
+    more resplendent and marvelous are the hundreds of thousands of florid and exotic
+    butterflies which sail all around you, carried by the gentle breezes of the forest.
+    Dark forest lies in all directions.'
+  KRD014: '...You''re in a glade of pines. Swaying back and forth in the gentle breezes
+    of the forest, several clumps of pine trees thrive in this darkened glade. The
+    ground is littered with millions of fallen pine needles, creating a spongy bed
+    on the forest floor. You also notice several pinecones dangling from the trees,
+    some within your reach, although the wind keeps the tree branches in motion. The
+    eerie whistling of the wind through the boughs above you sends a shiver down your
+    spine. Dark forest lies in all directions.'
+  KRD015: '...You''re in a small, lush valley. This fertile dish of the forest is
+    a little below sea level, and as a result the air is sultry and the ground is
+    wet with the remnants of previous rainfalls. Several tiny, pink flowers have sprouted
+    amongst the heavy, green undergrowth, adding a touch of color and light to this
+    mass of thriving vegetation. Dark forest continues off in all directions, endlessly.'
+  KRD016: '...You''re in a dead wooded glade. Merely a clump of old, leafless, and
+    rotting fir trees. Whatever pestilence caused their death, its evil seems to linger
+    in the air and the ghostly fingers of the barren branches almost seem to reach
+    out for you, beckoning you to your death. An icy wind blows across your face and
+    whistles harrowingly through the dead limbs. Something about this location fills
+    your soul with fear, and your heart beats faster as you glance around in terror
+    of this unknown evil. Dark forest lies off in all directions.'
+  KRD017: '...You''re at an ancient grave. Eerie white mists float hauntingly around
+    a slab of marble with strange etchings carved into its polished surface. You hear
+    the spine-tingling shriek of an owl somewhere high above in the midst of the dark
+    branches of the surrounding ash trees. A cold, biting wind nips at your face and
+    you feel as though someone, or something, is watching your every move intensely.
+    Dark forest lies off in all directions.'
+  KRD018: '...You''re near a hollow stump. Protruding from the dense undergrowth of
+    the forest, this decrepit and decaying stump has been hollowed out by time and
+    nature. Although you cannot see through the darkness of the stump, you can smell
+    a putrid odor of unimaginable origin. You hear the faint rush of running water
+    off to the north and dark forest surrounds you in all directions.'
+  KRD019: '...You''re at a flaming thicket. Radiating intense energy, this blazing
+    natural inferno glows a deep red as its orange tongues of fire lash out at you
+    aggressively. Although you can feel the destructive power of this conflagration,
+    it doesn''t seem to spread beyond the thicket and, even more surprisingly, the
+    thicket appears perfectly intact and unharmed. The sporadic crackles of the fire
+    make you jump. Dark forest lies off in all directions.'
+  KRD020: '...You''re at the Tree of Rubies. This glittering tree of magic is covered
+    with big, beautiful, and shining rubies which seem to be begging to be plucked
+    from their branches. However, you also hear several strange hissing sounds coming
+    from within the dark recesses this tree''s lush, green leaves. For some strange
+    reason, as you glance around, a vision appears in your mind of a beautiful woman
+    who is concealing a dagger for which to slay her lover. The vision vanishes as
+    quickly as it had appeared, leaving you wondering about the duality of the universe
+    for a moment. Dark forest lies off in all directions.'
+  KRD021: '...You''re at the tree of the mockingbird. This oddly shaped tree has been
+    naturally shaped into the likeness of a large bird, wings spread out, mouth agape
+    in a cry of the wild. At the very top of the tree you can hear the flutter of
+    wings, an occasional glimpse of feathers, and the unmistakable cry of the mockingbird.
+    The ground is splattered with excess bird remains. Dark forest extends in all
+    directions.'
+  KRD022: '...You''re on the banks of a lush lagoon. To the north a sparkling, deep
+    blue sea flows out across the horizon. You''re on a beautiful, sandy shore which
+    is shaded by the boughs of overhanging cypress trees, which extend past the shoreline
+    and finally touch the water, their leaves floating gently on its smooth surface.
+    As you gaze into the sparkling sea, a beautiful image of the Goddess Tashanna
+    appears in human form for a fleeting moment and then suddenly transforms into
+    a spectacular pegasus and flies away in the chimerical images of the waves. Dark
+    forest lies off to the south.'
+  KRD023: '...You''re in a natural chapel. Truly a work of natural magic, this small
+    space in the forest has been shaped by the powers of the universe into a breathtaking
+    chapel dedicated to the Goddess Tashanna. The most beautiful assortment of tall
+    trees, blooming flowers, and luscious bushes you have ever seen grow in orchestrated
+    harmony in the form of a protected, peaceful, and enchanting sanction. To the
+    west, through a natural archway of oaks, lies an altar, the dark forest extends
+    off in all other directions.'
+  KRD024: '...You''re at a silver altar. Enclosed by large, majestic oak trees, this
+    small alcove is illuminated by a beautiful, shining altar carved from pure silver.
+    It''s holy radiance fills your soul with peace and love, leaving you breathless
+    with joy. The altar is surrounded by several lavender rose bushes, their purplish
+    pulchritude complimenting the brilliance of the altar. The only exit is an archway
+    of oaks to the east.'
+  KRD025: '...You''re in the Grove of Oaks. These magnificent and majestic soldiers
+    of the forest stand tall and proud, rising above the forest in an aura of sheer
+    power and wisdom. Something about their august presence fills your soul with courage
+    and determination. As you glance around, a vision suddenly appears in your mind
+    of the Goddess Tashanna, who smiles at you warmly and whispers in your ear: "No
+    matter where you go, I will be with you...". The vision then vanishes as quickly
+    as it had appeared. Dark forest surrounds you in all directions.'
+  KRD026: '...You''re in a cluster of ash trees. Silent and solemn in their pose,
+    these ash trees are analogous to coffin bearers in mourning. You can almost feel
+    the sorrow and regret these ancestral guardians of peace, who''s realm has been
+    disturbed by a spreading pain or evil, which has destroyed the very roots of their
+    existence. As you look around, you feel emotion swelling in your soul, feeling
+    sorry for the sorrow and pain of the world. Dark forest lies in all directions.'
+  KRD027: '...You''re near a strange, large rock. This uniquely shaped boulder dominates
+    this small, dark clearing within the surrounding forest. The ground is rather
+    damp and muddy, and the air is rather moist and muggy. A faint, purplish mist
+    hovers around the base of the rock, creating an aura of divine mysticism. The
+    sunlight which filters down through the surrounding trees creates fantastical
+    shadows, seeming to dance with their own souls. Dark forest surrounds you in all
+    directions.'
+  KRD028: '...You''re at an abandoned campsite. This small clearing has the remains
+    of a campsite littered about its center. Ashes from a fire, broken branches, and
+    trampled undergrowth mark this place as a once well-used base camp. Written on
+    a nearby tree, apparently carved by a previous camper, is the phrase: "Travel
+    fast and travel far..."; the writing then ends abruptly. Dark forest lies off
+    in all directions.'
+  KRD029: '...You''re on a plateau. Rising slightly above the treeline of the forest,
+    this leveled peak of rocky grassland gives you an excellent view of the entire
+    region extending for miles in all directions. Off to the northeast you can see
+    the sparkle of the sea, to the west a misty mountain range, and off in all directions
+    deep, dark forest. The air is crisp and clean, and you feel good to be alive.
+    A wooded hill slopes down to the east.'
+  KRD030: '...You''re on a densely wooded hill. Sloping steeply up to the west, this
+    hill is covered with tall pine trees and thick undergrowth. You hear the hum of
+    bees in somewhere in one of the nearby pines, accompanied by the rather annoying,
+    although harmonious, chirping of birds. The air seems to become cleaner up to
+    the west, and the base of this hill lies down to the east.'
+  KRD031: '...You''re at the base of a densely wooded hill. A pine covered hill rises
+    up to the west, although densely overgrown. Overhanging pine branches sweep past
+    your head in the intermittent gusts of air which blow down from the hill to the
+    west. An odor of sweet flowers emanates from somewhere off to the south, and you
+    hear the faint rush of water off to the north. For a moment, as you look around,
+    you get a feeling of loneliness. Except for the rising hill to the west, dark
+    forest lies in all other directions.'
+  KRD032: '...You''re at a bubbling spring of water. Crystal-clear water spouts from
+    the heavy undergrowth from a small, limestone fissure in the ground. The unmistakable
+    scent of springwater fills your nostrils and brings a feeling of freshness to
+    your soul. Blooming near this sparkling spray of water, a beautiful, lavender
+    rose bush flourishes colorfully. Dark forest stretches off in all directions.'
+  KRD033: '...You''re in a shady, natural shelter. The boughs of the surrounding elm
+    trees have grown together, enclosing this small area into a protected, natural
+    shelter. The dirt floor is covered with a layer of dry, fallen leaves. No sunlight
+    is able to penetrate through the natural roof of this shelter, and it is illuminated
+    only by the reflections of the forest around it. The air is slightly humid and
+    has an odor of decaying vegetation. Dark forest continues off in all directions.'
+  KRD034: '...You''re in the Druid''s Circle. This unparalleled spectacle of enchantment
+    is totally awe-inspiring, and your soul is filled with wonder. Three silver rings,
+    encompassing the entire area, magically float in the air, stacked upon each other.
+    They are surrounded by a wide circle of the largest and most majestic oak trees
+    you have ever laid eyes upon. In the center of this dazzling vortex is a brightly
+    glowing orb of pure light, whose brilliance is almost blinding. You can feel the
+    powerful presence of the goddess Tashanna radiating throughout all of this mystical
+    and holy sphere. Dark forest lies in all directions.'
+  KRD035: '...You''re at a terraced waterfall. Gently flowing water tinkling down
+    layers of polished, purplish stone paint a majestic landscape before your eyes.
+    A few rays of sunlight filter through the nearby forest growth to glitter off
+    the shallow, rushing water, sparkling with a holy radiance. As you behold this
+    natural fascination, a surge of overwhelming emotions fills your soul with a love
+    beyond anything describable. You notice an entrance to a cave to the north and
+    dark forest lies in all other directions.'
+  KRD036: '...You''re at a large, sparkling waterfall. Rushing white water plunges
+    down this great cataract, sending sprays of cold spring water in all directions.
+    Perhaps the most august, magnificent, and inspiring scene of nature you have ever
+    witnessed, this majestic, sparkling cascade takes your breath away with its sheer
+    natural beauty. This graceful torrent rushes down into a clear, deep pool which
+    flows into a surging stream that vanishes into the undergrowth to the east. Several
+    assorted green plants have flourished in the rich soil nearby, complemented by
+    a few, blooming lavender rose bushes, all adding the final touch of perfection
+    to this heaven on earth. You see a cavern behind the falls to the north, an entrance
+    to a cave to the west, and dark forest to the south and east.'
+  KRD037: '...You''re in a small clearing in a forest. The sweet smell of springtime
+    drifts through the gentle breeze in this small, grassy clearing. Dew drips from
+    the petals of the assorted flowers which are blooming freely here, and the ground
+    is soft and damp. Above you, the sky is a beautiful, bright shade of blue with
+    fluffy, white clouds sailing smoothly across the horizon. Your soul feels at peace
+    in this natural sanction. Surrounding you in all directions is a deep, green forest.'
+  KRD038: '...You''re near the Fountain of Eternal Magic. Concealed for eons within
+    the depths of the surrounding dark forest, this enchanting and mystical jet of
+    shimmering, iridescent water rises grandly before you. Rising from a beautiful
+    well, carved from the purest white marble, this resplendent wonder radiates an
+    aura of powerful sorcery, its glittering water inviting you to drink its enticing
+    ambrosia. A splendid portrait of the Goddess Tashanna has been inscribed in the
+    base of this fountain along with an engraving which reads "aeid treven alliw suoy
+    irof levol yym ftub ayb tseog aemit sdna issap lsdnegel y f". Dark forest lies
+    in all directions.'
+  KRD039: '...You''re near a platinum tree. Yet another wonder of the world of the
+    Goddess Tashanna, before you rises a magnificent oak tree magically turned to
+    solid platinum, sparkling in the sunlight. Even more awe-inspiring, however, are
+    the branches of this platinum beauty which have grown together in the shape of
+    a large heart, emanating an aura of powerful magic and love. In the mystical zephyrs
+    which waft around this tree, you hear whispers of words that you cannot clearly
+    hear, but which bring peace to your soul. Dark forest surrounds you in all directions.'
+  KRD040: '...You''re in a small field of lilacs. A breezy, sunlit opening within
+    the vast forest, this small field is alive with the grass and lilacs waving in
+    the gentle wind. Without the tall trees of the forest obstructing too much of
+    your view, you can now discern large mountains, shrouded in purplish mists, far
+    off in the west. You are also quite aware of the continuous buzzing of assorted
+    insects which swarm around you in this grassy clearing. Dark forest awaits you
+    in all directions.'
+  KRD041: '...You''re at the Secret Shrine of Tashanna. Hidden behind the plunging
+    cascade of water and covered in purplish mists, this sacred spot radiates an aura
+    of unmatched "good". The shrine itself is in the shape of a unicorn, carved from
+    pure silver, which glitters in the spray of the waterfall, shining in a holy brilliance
+    that fills your soul with awe. The rest of this wizened cavern appears to have
+    been carved from solid, unflawed amethyst, which sparkles incandescently, dazzling
+    you with its iridescence. The only exit is through the waterfall to the south.'
+  KRD042: '...You''re near a large statue. Located in the middle of dark forest, this
+    incredible work of art would be amazing if discovered within the finest art gallery
+    of Kyrandia, and far so lost deep in the center of a dark forest. You feel a powerful
+    urge to examine the statue more closely, and in your mind you cannot help but
+    to wonder about the nature of the artist who created this, his inspiration and
+    dedication. Dark forest lies in all directions.'
+  KRD043: '...You''re at the entrance to a dark cave. Before you rises a colossal
+    mountain cliff of solid granite with a small, dark hole at the base, leading into
+    a dark cave. The ground is rather rocky, with assorted patches of grass sprouting
+    like oases in a desert of gray granite. To the east, a large waterfall thunders
+    loudly, as a smaller, terraced waterfall flows off to the south. The cave entrance
+    is to the north.'
+  KRD101: '...You''re in a dark forest. Tall, ominous pine trees surround you, their
+    thick, bristly branches hanging down and making it difficult to proceed in any
+    direction. Almost all of the sunlight is blocked out by the densely packed trees,
+    and the few rays which do filter down create dark, menacing shadows which seem
+    to dance along the leafy forest floor. As you glance around, you happen to notice
+    a small shrine, almost completely hidden in the underbrush. You feel a tingle
+    of excitement in your very heart and soul. It is very confusing to determine your
+    exact location.'
+  KRD170: '...You''re in a dark cave. This natural excavation in the granite of the
+    mountain is not very large. The walls, floor, and ceiling of this dark hole are
+    jagged and uneven making it difficult to keep your balance. The air is extremely
+    humid and water drips from the ceiling high above, creating an eerie atmosphere
+    to the entire place. Sunlight finds its way in from the opening to the south,
+    and dark, twisting caverns wind off in all other directions.'
+  KRD178: '...You''re in a natural hall. This long passageway has been smoothly carved
+    from the solid granite of this mountain, in contrast to the jagged caverns to
+    the south. Oddly enough, there is a strong smell of sulfur in the air, almost
+    choking you with its strength. This strange hall continues off into the darkness
+    to the north, from which a cold, eerie wind gently blows. The caverns twist off
+    to the south.'
+  KRD179: '...You''re at a bottomless chasm. At the northern end of a great natural
+    hall, this wide, dark pit lies ominously before you, as though taunting you with
+    its impassibility. There appears to be no way around this blockade; the ceiling
+    of this cavern is very high, the walks are smooth and slippery, and the chasm
+    expands from wall to wall and is at least twenty feet across. Far on the other
+    side, you see a sparkling jade cavern, its beauty tempting you almost mockingly.
+    There is a natural hall which continues off to the south.'
+  KRD180: '...You''re in a jade cavern. Multiple hues of beautiful jade sparkle around
+    you in this cavern of precious gems. All the walls, floor, and ceiling of this
+    incredible natural chamber shine with their own incandescent light, their combined
+    brilliance lighting the surroundings in a holy, green aura. A huge, bottomless
+    chasm blocks the way to the south, while a dark passage in the far side of this
+    lovely cavern leads off to the north.'
+  KRD181: '...You''re at a statue of Tashanna. Before you rises a lovely sculptured
+    statue of the Goddess Tashanna, Lady of Legends. It rises from an iron base and
+    extends up about eight feet to the ceiling of this smooth cavern. A beautifully
+    carved marble path leads off to a large structure to the east. You hear a distant
+    thunder of rushing water off to the north, and from a dark passageway to the south
+    you see a faint glimmer of green light.'
+  KRD182: '...You''re near a reflecting pool. This peaceful and delightful pool has
+    been ornately hand-carved from the purest marble. The water of the pool is crystal
+    clear, and it sparkles in the light of this large cavern, reflecting a faint image
+    of you as you peer into it. You also notice many intricate symbols at the bottom
+    of the pool, traced by pure gold, although you can identify none of them. A large,
+    marble structure rises off to the east, while a marble path leads to the west.'
+  KRD183: '...You''re at the forgotten Pantheon of Tashanna. Long lost within the
+    depths of this hidden underground city, this ancient temple of the Lady of Legends,
+    Tashanna, is perhaps the greatest legend of all Kyrandia. Folklore of ages past
+    claim this spot to be the greatest pinnacle of the power of Tashanna. Constructed
+    from pure marble pillars embedded with mystical symbols of silver and gold, and
+    covered in purplish mists, this holy sanction radiates an aura of eternal peace
+    and love. An odd-shaped marble archway lies to the east and a reflecting pool
+    is located to the west.'
+  KRD184: '...You''re at the Portal of the Past. Huge, marble archways line the entrance
+    to this relatively small marble chamber. On the far side of this chamber a shimmering,
+    magical portal radiates with an enchanting, multi-chromatic light. Many strange
+    and wonderful visions flash through the portal, almost holding you spellbound
+    with their dancing, iridescent images. Unfortunately, the visions change so quickly,
+    you can rarely catch more than a brief, blurry flash. The only exit appears to
+    be the marble archways leading off to the west.'
+  KRD185: '...You''re in a smooth-walled alcove. Dark and barren, this small, natural
+    chamber has few noticeable features. The ceiling is about two feet above your
+    head, and is made of the same smooth and solid granite of the floor and walls.
+    The west side of this tiny cave has a noticeable, fist-sized crevice, and you
+    hear the faint rush of water from somewhere around you. The only exit is to the
+    south.'
+  KRD186: '...You''re in a dark cave. This damp, gloomy location is characterized
+    only by jagged rock covered with fungi and bacteria. A dominating odor of decay
+    fills your nostrils making it difficult to breathe. Your attention is caught by
+    a fancy, large machine sitting in the corner. The only exit is a bright passageway
+    to the north.'
+  KRD187: '...You''re in a bright passageway. This mystical hall appears to be pure
+    light, radiating in awe-inspiring brilliance all around you. You feel as if you
+    are floating in mid-air. There seem to be no boundaries as to where you can go,
+    however, you do notice what appear to be exits from this spectacular wonder to
+    the north and south.'
+  KRD188: '...You''re at some misty ruins. A thick layer of purplish mists blanket
+    this entire cavern; the mists are so smooth and beautiful, however, they almost
+    seem like a magical, royal carpet. Shrouded within the mists, you see faint glimpses
+    of broken marble pillars, as though this was once some great temple. In the center
+    of this mysterious cavern, a bright blue orb of pure light floats, mystically
+    suspended in midair. A strange feeling enters your very soul, and an eerie wind
+    seems to whisper as it blows across your face. The only exit is a bright passageway
+    to the south.'
+  KRD189: '...You''re on a sandy beach near the sea. The beautiful, bright blue sea
+    lies to the south, where it seems to extend on forever, except for a few distant
+    mountain peaks across the sparkling water to the south. The crashing of the small
+    waves on the wet sand near the water sounds like faraway thunder, which conjures
+    up strange memories of your early childhood. The beach becomes more grassy to
+    the north.'
+  KRD190: '...You''re on a grassy beach. Large clumps of long, soft grass cover almost
+    all of the sand of this little beach. A gentle breeze blows from the south, warm
+    and salty, filling your lungs with clean, fresh air. Beautiful, golden forest
+    lies off in all directions, except the sea which is off the south.'
+  KRD199: '...You''re at a large clump of silver tulips. Beauty within beauty, this
+    sparkling, silver tulip bush blooms magically amongst the golden elm trees, seeming
+    to naturally blend in with this mystical fantasyland. The enchanted tulips are
+    too numerous to count, their almost unending silver magic filling your eyes with
+    stars. As rays of sunlight filter down, they''re defracted by the silver into
+    many vivid rainbows, truly a wonderful spectacle to witness. Golden forest lies
+    off in all directions.'
+  KRD201: '...You''re at a crystal tree. This unique crystalline tree has been delicately
+    carved in the shape of two hearts bound together in the harmony of nature. This
+    beautiful structure sparkles in the sunlight and radiance of the forest around
+    it, and its reflected rays of warmth sends a tingle down your spine and fills
+    your soul with the touch of love. Golden forest lies off in all directions.'
+  KRD204: '...You''re at the Gateway of the Rainbows. Before your eyes rises the most
+    breathtakingly beautiful scene you have ever witnessed. An incredible, large archway
+    of rainbows shines brilliantly, its vivid spectrum of colors almost blinding you
+    with awe. Within the archway, an intricate assortment of "bars" of rainbows create
+    a shimmering gateway of beauty, which although lovely, effectively block passage
+    through them to the east. Beyond the gateway, you can only imagine what fantastical
+    paradises thrive in heavenly sanction. Golden forest lies off in all other directions.'
+  KRD207: '...You''re in the Centre of the Elms. The very heart of this magical forest,
+    this cluster of golden elm trees is indeed a mystical sight to behold. In the
+    center of this sanction, silvery letters float in the air above your head to read:
+    "Put your faith before yourself; you shall have but one chance to prove your piety".
+    Golden forest lies off in all directions.'
+  KRD213: '...You''re at the Altar of Eternal Sunshine. Rising from the depths of
+    this seemingly endless golden fantasyland, this silver altar is a magnificent
+    representation of the glory of Tashanna. At the base of the altar, there is an
+    inscription which reads: "D-tu u-f vo-opx- tqf-m i-sf". The gentle breezes of
+    the forest seem especially soothing here. Golden forest lies off in all directions.'
+  KRD216: '...You''re on a grassy plain. This open field is covered with short blades
+    of soft, green grass which wave like an ocean in the gentle breezes. The air is
+    fresh and the sky is clear, but something feels ominous about this peaceful appearing
+    picnic ground. Golden forest lies off to the south, and a barren desert is to
+    the north.'
+  KRD217: '...You''re in a wasteland of decay. This barren desert of death and decay
+    radiates an aura of sheer evil. Even the air is stagnant and filled with the odors
+    of rotting waste. The ground is hard, grey rock, and the sky is almost as dark.
+    You feel a chilling fear in your heart, and the sudden urge to run as fast as
+    your feet can carry you. A large mountain lies to the north, and there is a grassy
+    plain to the south.'
+  KRD218: '...You''re at the Demon Gate. Before you rises a huge mountain face of
+    jagged rock which extends high above your view. Directly in front of you is what
+    appears to be the form of a gate, carved into the rock, and adorned with elaborate
+    figures of devils and demons. In the center of this gate a small niche lies noticeably
+    empty, as though waiting for a key. A barren wasteland of decay lies to the south.'
+  KRD219: '...You''re in a resplendent cul-de-sac. This royal entrance has been richly
+    decorated with fine tapestries and marble structures. The mystical scent of incense
+    lingers in the air from times long ago. Gold lettering on the south wall read:
+    "Welcome to the Halls of Lady Kyra". A long hallway leads off to the north.'
+  KRD220: '...You''re in a long, decorated hallway. Constructed from beautiful marble,
+    this long hallway has been adorned with lovely tapestries, a red and gold royal
+    carpet, and a faint scent of incense. There''s a cul-de-sac to the south, and
+    a large hall to the north.'
+  KRD221: '...You''re in the Royal Welcome Hall. This is the royal reception center
+    of the Halls of Lady Kyra. Everything has been carpeted in rich red and gold materials,
+    filling your heart with a sense of total awe. There is a large sign suspended
+    high in the air which reads: "Lady Kyra welcomes you to her castle under the mountain!".
+    Flights of marble stairs lie to the east and west, and hallways lead off to the
+    north and south.'
+  KRD222: '...You''re on a flight of marble stairs. Constructed from solid marble
+    and decorated with beautiful, red carpeting, these royal stairs lead up to the
+    north, and down to the east.'
+  KRD223: '...You''re on a flight of marble stairs. Constructed from solid marble
+    and decorated with beautiful, red carpeting, these royal stairs lead up to the
+    north, and down to the west.'
+  KRD224: '...You''re in a smooth hallway. This smooth, marble hallway has no real
+    outstanding features, except for some scratching on the west wall which reads:
+    "Travel fast and travel far, thou shall never escape the wrath of Zar". The hallway
+    continues to the north and south.'
+  KRD225: '...You''re in a crumbling passageway. Constructed from the ancient stone
+    of the mountain, this tight hall is crumbling around you. Bits of dust float down
+    from the slowly collapsing ceiling. There are small alcoves to the east and west,
+    a larger hall to the south, and stairs leading downward to the north.'
+  KRD226: '...You''re in an eroded storage closet. This small and barren little room
+    was apparently once used for storage of food... or so you assume from the smell
+    of rotted provisions that hangs heavily in the air. You happen to notice something
+    scraped into the western wall which reads, in a barely decipherable script: "Time
+    changes everything". The only exit is a crumbling hall to the east.'
+  KRD227: '...You''re in a small, stuffy alcove. This room has many wooden pegs sticking
+    out from the eastern wall; you conclude this chamber was once used for storage
+    of cloaks and armor, however none lie here. The repulsive odor of large quantities
+    of rat droppings fills the air, driving you to uncontrollable nausea... almost.
+    The only exit is a crumbling hall to the west.'
+  KRD228: '...You''re on a flight of stone stairs. Roughly carved from grayish stone,
+    these stairs lead down to the north and up to the south. You also happen to notice
+    something carved into one of the steps, a memory of a young couple which reads:
+    "T+A Forever".'
+  KRD229: '...You''re at the base of a stone stairway. Beneath the main structure
+    of this castle under the mountain lies this simple basement construction. A flight
+    of stone stairs rises up to the south, and there are exits to the north, east,
+    and west. The air is particularly damp down here.'
+  KRD230: '...You''re in a stinking, damp passageway. This moist, stone hall is filled
+    with an almost unbearable odor of rot and decay. Slime and mold cover all the
+    walls, floor, and ceiling. There is a crumbling dungeon cell lying open to the
+    south, and you see a flight of stairs to the east.'
+  KRD231: '...You''re in an crumbling dungeon cell. Once used to imprison the criminals
+    of Kyrandia, this now deserted jail lies barren and empty. A sense of great evil
+    lingers in the air, however, making you shiver with a twinge of fear. Something
+    doesn''t seem right here, but you just can''t seem to place your finger on what...
+    or can you? A stinking, damp passageway leads off to the north.'
+  KRD232: '...You''re in the underground animal pen. This smelly cave is saturated
+    with the odor of rotted animal waste. The fencing of this pen has long since crumbled
+    to dust, leaving only a few deteriorating troughs near the eastern wall. The only
+    exit appears to be to the west.'
+  KRD233: '...You''re in a decaying, stone hallway. This ancient passage winds off
+    to the north and south. An ominous feeling of great magic tingles at your soul
+    here, from no apparently visible source.'
+  KRD234: '...You''re at a small, abandoned water well. Before your eyes lies a quaint,
+    old water well constructed from beautiful, hand-carved red bricks. It has an almost
+    magical aura to it -- though simple in design -- and you feel a strange sense
+    of eternal peace as you lean near it. You happen to notice a small hole in the
+    eastern wall which leads off into darkness. The rest of this chamber seems to
+    be crumbling like the other parts of the basement. A decaying, stone hall lies
+    off to the south.'
+  KRD235: '...You''re in a dark, damp cavern. You can barely see much in this near
+    pitch black hole, but you feel yourself on sturdy, though somewhat uneven, terrain.
+    A certain moistness lingers in the air, and you feel drops of water from the ceiling
+    shrouded in darkness above you. You see a definite exit to the west, but the darkness
+    prohibits you from determining what other exits may exist.'
+  KRD236: '...You''re in an odd-shaped cave. This chalky cavern seems to be lit by
+    the phosphorous nature of its walls and ceiling. In the dim light provided by
+    this mysterious mineral, you can see many strange, encrypted symbols, which read:
+    "Hqofowy asitpqnm ifqnpytuvc qotmay gioem loopas asit, illiada falgoria simajf.
+    Unaloop la heartoy". A dark cavern twists off to the west.'
+  KRD237: '...You''re in a tiny, curved cave. Shrouded in almost complete darkness,
+    you find it difficult to observe any of the visible features of this cave. However,
+    from feeling your way around, you realize that the curved and rocky walls seem
+    to be made from sandstone-like rock, while the floor is a very fine and dusty
+    sand; you cannot reach the ceiling. You cannot see where any exits may lie, but
+    you feel curves of the floor towards the south and east.'
+  KRD238: '...You''re in a cavern of diamonds. This magnificent natural beauty is
+    illuminated by the magical properties of the walls, floor, and ceiling of this
+    breathtaking chamber which seems to be carved from solid diamond. You are almost
+    overwhelmed by the sheer extravagance of such a hidden wonder, concealed within
+    the depths of the Halls of Lady Kyra. Something special seems to touch your soul
+    as you examine your surroundings... a feeling beyond expression with mortal words.
+    The only apparent exit is a dark cave to the west.'
+  KRD239: '...You''re at an intricate, marble balcony. You''re overlooking the Royal
+    Welcome Hall. Dark red carpeting covers the floor, and the balcony itself has
+    been intricately carved by a fine craftsman into a beautiful work of marble art.'
+  KRD240: '...You''re at the top of a marble stairway. Beautifully carved marbles
+    stairs lead downward to the south, covered with a dark red carpet. Halls lead
+    off to the east and west.'
+  KRD241: '...You''re at the top of a marble stairway. Beautifully carved marbles
+    stairs lead downward to the south, covered with a dark red carpet. Halls lead
+    off to the east and west.'
+  KRD242: '...You''re in a gold-decorated hallway. This lovely passageway has been
+    lavishly covered with various gold ornamentations. Large gold lettering on the
+    marble floor reads: "Hail to the Lady Kyra". Marble halls continue to the east
+    and west.'
+  KRD243: '...You''re in the southeast corner. This junction of two marble halls is
+    quite splendidly decorated. Beautiful tapestries hang from the walls, and the
+    ceiling is a incredibly wonderful portrait of the Lady Kyra. The halls continue
+    separately to the north and west.'
+  KRD244: '...You''re in a southeast hall. This marble hall is sparsely decorated
+    with only a few small murals of faraway lands. Large chambers lie to the east
+    and west, and the hall continues to the north and south.'
+  KRD245: '...You''re in the Chamber of the Alchemist. This large chamber is filled
+    with various scents of strange and mystical spices, decorated with exotic paintings,
+    and covered in a rather thick layer of dust. An eerie green light filters down
+    from the oddly shaped ceiling above you. The only exit is to the west.'
+  KRD246: '...You''re in the Chamber of the Lavender Rose. This gracefully designed
+    chamber tells a pictorial history of the lavender roses of Kyrandia. You see a
+    lovely mural of the Lady Kyra declaring the lavender rose as the official symbol
+    of the Kingdom of Kyrandia. Another beautiful mural portrays the Goddess Tashanna
+    creating the lavender rose, taking a plain white rose and touching it with her
+    Wand of Rainbows. You cannot help but smile at the sight of such magic. The only
+    exit is to the east.'
+  KRD247: '...You''re in a northeast hall. This marble hall is decorated with a beautiful
+    mural on the ceiling which portrays the quests of many great heroes. As you examine
+    it closely, you can recognize a few of the names such as Corvus Andromeda, Richard
+    the Lion-Hearted, Anastasia the Beautiful, and many others... even a picture of
+    the horrible bastard, The Enchanter. Chambers lie to the east and west, and the
+    hall continues to the north and south.'
+  KRD248: '...You''re in the Chamber of the Gateway. This majestic chamber of the
+    history of Kyrandia has been uniquely decorated with the story of the magical
+    Gateway of Rainbows in the golden forest. A dazzlingly colorful painting on the
+    ceiling displays the wondrous fantasyland which lies beyond the brilliant hues
+    of the Gateway itself. Various murals on the walls describe the legends of the
+    Gateway... how only two people of pure heart and soul may pass beyond its majestic
+    arches. The only exit from this chamber appears to be to the west.'
+  KRD249: '...You''re in the Chamber of Sir Alexis. This beautifully decorated chamber
+    of the pictorial history of Sir Alexis, is filled with an air of greatness and
+    honor... like the great knight himself. Artistic paintings of this knight''s many
+    wonderful deeds portray a vital aspect of the history of Kyrandia -- the romantic
+    order of knighthood. The knights of Kyrandia fought for the cause of good, to
+    defend righteousness, and to represent the glory of the Goddess Tashanna and the
+    wise ruler of the kingdom, the beautiful Lady Kyra. You are amazed at the life-like
+    quality of the artwork. The only exit appears to be to the east.'
+  KRD250: '...You''re in the northeast corner. The intersection between two great,
+    marble hallways is adorned with oil paintings of beautiful landscapes of various
+    Kyrandian scenes. Among these are the Magic Sand Castle in the center of the ancient
+    kingdom, the lava pits of the Great Volcano of Tears, and a masterpiece depiction
+    of the Bard''s Carnival, the magical and musical event of each Kyrandian century.
+    The halls lead off to the west and south.'
+  KRD251: '...You''re in a silver hall. Everything, from the paint on the wall to
+    the silver inscriptions on the floor to the intricate silver chandelier hanging
+    above is made of silver. The inscriptions are a replica of an ancient document
+    from long ago, which read: "By the glory of the Goddess Tashanna, I swear my eternal
+    loyalty to the Lady Kyra and the defense of the Kingdom of Kyrandia. Across time
+    and space, Lord Alexis, Knight of the Lavender Rose, Champion of the Lady of the
+    Kingdom." Each silver letter seems to sparkle with something special, touching
+    your heart with patriotism for this wonderful land. The hall continues to the
+    east and west.'
+  KRD252: '...You''re in the Hall of Music. This entire chamber reverberates with
+    the beautiful sound of one of the ancient romantic songs of Kyrandia past. It
+    goes like this: "I live my life in a fantasy land, dreaming of the day when I''ll
+    win your hand. Every breath I take, every beat of my heart, my love grows for
+    you as it has from the start. Sing me a song of a fairy tale, a story of our magic
+    love. Whisper the lyrics in my ear, you''re the one I''ve been dreaming of. All
+    the knights of legends past can''t match my love for you. I''d sail the golden
+    seas of fantasy and chase the stars for you. Legends pass, but I will still love
+    you. You are my paradise, my dream come true. Heaven is in your arms, lying next
+    to you. Lady of legends, my dream''s confirmation; queen of a world of my imagination.
+    The world of reality believes legends are gone, yet looking in your eyes I see
+    legends live on. If I could freeze the hands of time for just one day, I''d ask
+    you to come with me and sail far away. Across our rainbow, hand in hand together,
+    living a legend and loving forever. Legends pass and time goes by but my love
+    for you will never die, ''cause you are my legend come true, legend come true..."
+    You may exit to the east or west.'
+  KRD253: '...You''re in the Hall of Memories. From the moment you first step into
+    this room, your mind is suddenly filled with memories of times, places, and people
+    of your past. Some are good and happy, while others are so powerfully filled with
+    sorrow and grief, you almost faint from all the emotional pain that surges within
+    your heart. Truly, this is one of the strangest of all of the remaining chambers
+    of the fortress under the mountain. You may leave to the east or west.'
+  KRD254: '...You''re in the Hall of LadyHawk. Dedicated years ago to the great Lady
+    of the Hawks, who helped to save the kingdom in the Battle of the Great Dragons
+    in the Third Age of Kyrandia, this chamber, unfortunately, has also been looted
+    and vandalized by the evil which has passed through here. However, you still have
+    a dim memory of the beautiful memories of this lady of ancient times. You may
+    leave to the north or the east.'
+  KRD255: '...You''re in the Hall of Hearts. Once beautifully decorated with many
+    lovely, detailed stone sculptures of hearts of love, this chamber is now an object
+    of sheer sorrow and pity. Someone, or something, purposely came through and cracked,
+    broke, or completely shattered each and every heart. You mind is overwhelmed with
+    the symbolic meaning of this tragic event. You may leave in any direction.'
+  KRD256: '...You''re in the Chamber of the Champion. As you glance around this incredible
+    chamber, you are left awe-struck with the sheer magnificence of it''s artistic
+    beauty. Everything from the floor to the ceiling is one, breathtaking mural depicting
+    the service of Lady Kyra''s famed champion. In the air you hear the echoing of
+    a voice singing "I''ll be the hero you''ve been dreaming of...". You may leave
+    to the west.'
+  KRD257: '...You''re in the Chamber of the Lady. This magical chamber is covered
+    with lovely paintings of the legendary Lady Kyra. This was her room, created with
+    love and care by the finest architects of the entire kingdom. However, it is now
+    dark and empty... the lady, like all the other fantastic beauties of Kyrandia,
+    has vanished. Questions in your mind: "Is she gone forever?" "Can this world ever
+    live again?" "What IS the power of true love?". Only time will tell. You may leave
+    to the east.'
+  KRD258: '...You''re in the Hall of Winter. Once known as the Hall of Spring, this
+    cold and deserted chamber is now dead... the beautiful life it once had has disappeared
+    and vanished into eternal desolation. A biting chill runs down the back of your
+    neck, leaving you shivering in sorrow. You may go in any direction.'
+  KRD259: '...You''re in the Chamber of the Bard. This splendidly decorated room is
+    filled with murals of the history of the many great bards, including the most
+    famous of all, Brin. Enscribed in golden gothic letters are some of the lyrics
+    of one of his more popular songs, "Fairy Tales", which read: If you believe in
+    magic, or wish upon a star... Then fantasy can touch your life, no matter who
+    you are It doesn''t matter how old you are, or if you''re rich or poor Your imagination
+    is the key that opens any door... And nothing is impossible, if only you believe...
+    Once you find your dreamworld, you''ll never want to leave You can ride a winged
+    horse high into the skies... And as reality fades away your spirit starts to rise
+    As you read the inscriptions, a beautiful melody runs through your mind, sending
+    a tingle through your soul. The only exit appears to be to the west.'
+  KRD260: '...You''re the Chamber of the Magician. This mystical chamber was once
+    the quarters of the honorable magician known as "The Wanderer". Colorful murals
+    of magical events, famous wizards, and mysterious, faraway places cover the walls
+    and ceiling. In center of the floor lies various wizard-like symbols, including
+    the ancient truth, "Love is a power beyond all magic". The only visible exit is
+    to the east.'
+  KRD261: '..You''re in the Chamber of Poetry. This small room was once used to glorify
+    some of the greatest poets and poems of the kingdom of Kyrandia. However, it too
+    has long been deserted, but one last poem remains carved on the otherwise barren
+    stone floor. The poem reads: Through the looking glass I spied A fantasy forest
+    that long ago died And standing there''s a little girl All alone and teary-eyed
+    Bewildered and mystified In her forest, against the world All alone in her fantasy
+    forest You may exit to the east or south.'
+  KRD262: '...You''re in an empty garden. This strange and lonely chamber was apparently
+    once a small, beautiful garden, but died long ago, leaving the flagstones bare...
+    nothing grows here no more. A sudden feeling of sadness overwhelms you, as tears
+    fall from your eyes for the unknown gardener who once cared for this now empty
+    garden. You can leave to the east or west.'
+  KRD263: '...You''re in the Hall of the Sea. A lovely painting of a seaside romance
+    is depicted on the ceiling of this strange chamber. A sudden chill enters the
+    depths of your heart here, beyond anything you have ever felt before, almost bringing
+    you to your knees. You may leave to the east or west.'
+  KRD264: '...You''re in the Hall of Marble Pillars. Beautifully designed, this was
+    once a wonderful center for the great philosophers of old to meet and discuss
+    life, the universe, and everything. However, it has long been deserted, the pillars
+    are starting to crumble, and an overall feeling of gloom blankets everything in
+    misery. Archways highlight exits in all directions.'
+  KRD265: '...You''re in the northern Hall of Tashanna. Your eyes can see nothing
+    here. You can go to the north or south.'
+  KRD266: '...You''re in the southern Hall of Tashanna. Your eyes can see nothing
+    here. You can go to the north or south.'
+  KRD267: '...You''re in a grey-black hall. Everything seem extremely dismal here,
+    and you feel the sudden urge to leave as quickly as your feet can carry you. You
+    may follow this urge to the north or the south.'
+  KRD268: '...You''re on a red carpeted stairway. This red-carpeted stairway is stained
+    with the tears of the Great Death, which passed, not so long ago, through this
+    magical kingdom, destroying all the beauty which once existed in this fantasyworld.
+    You feel helpless, because you are helpless. That''s life for you! Speaking of
+    helpless, I hope you ARE aware that there is a very large and very nasty dragon
+    searching to cook your buns to a nice crisp and then feast upon your flesh. Have
+    a nice day, and by the way, you can go north and south, or you can just do nothing!'
+  KRD269: '...You''re in a red carpeted hall. Well, everything''s red. You suddenly
+    recollect an old saying, "Love is like a red, red rose... it has thorns, soon
+    dies, and generally isn''t worth the trouble that comes with it". (Yeah, I know
+    the author is switching the theme, but who reads long descriptions anyway). This
+    thought does not brighten your day. Stairs go down to the south, and there''s
+    something to the north.'
+  KRD270: '...You''re nowhere really. You can go to the east, west, north, and gee,
+    even south. That means you can go in all directions. Have fun, and don''t forget,
+    dragon feces rolls downhill.'
+  KRD271: '...You''re on a marble stairway. The stairs lead up to the north, and down
+    to the east. Not much more to say, except you smell the distinctive odor of dragon''s
+    urine here.'
+  KRD272: '...You''re on a marble stairway. The stairs lead up to the north, and down
+    to the west. Not much more to say, except you smell the distinctive odor of dragon''s
+    urine here.'
+  KRD273: '...You''re at the top of a marble stairway. There is a balcony to the east,
+    and marble stairs leading down to the south. Everything seems to be shrouded in
+    a cloud of evil darkness.'
+  KRD274: '...You''re on a marble balcony. This well-constructed gothic-style (god
+    we have alot of dashes here!) balcony has been blackened by the flames of a very
+    powerful dragon. Darkness is everywhere, blackness shrouds anything and everything,
+    and a feeling of general gloom pervades everything. Home, sweet home. You can
+    go to marble stairs leading down to the east and west, or you can go up stairs
+    to the north.'
+  KRD275: '...You''re at the top of a marble stairway. There is a balcony to the west,
+    and marble stairs leading down to the south. Everything seems to be shrouded in
+    a cloud of evil darkness.'
+  KRD276: '...You''re on a spiral stairway. This boring stairway leads up to the north
+    and down to the south. On one of the stairs an inscription reads "From the light
+    comes darkness, and darkness shall rule forever."'
+  KRD277: "\e[0m...You're on a spiral stairway. You can go north (up) or south (down).\
+    \ Enjoy."
+  KRD278: "\e[0m...You're on the mountain's peak. From this high, top-of-the-world\
+    \ ledge you can see the beautiful land of Kyrandia stretching for an eternity\
+    \ in all directions. You see off in the distance the Golden Forest, the Silver\
+    \ Sea, and far, far away you can faintly see the silhouette of the incredible\
+    \ SandCastle of Kyrandia, the capital of this once great kingdom. You gasp in\
+    \ awe, as you feel like you are living only in a dreamworld. The only exit is\
+    \ the stairs down to the south."
+  KRD279: '...You''re in a blue-carpeted hall. Everything has been decorated with
+    a beautiful silk carpeting, from the floor to the ceiling, creating a plush environment
+    for warm greetings and royal processions. You may go to the north or south.'
+  KRD280: "\e[0m...You're in the Chamber of Truth. This plain, marble room is completely\
+    \ barren, except for yet another inscription on the floor which reads: \"Seek\
+    \ the truth here.\" Exits lie off in all directions."
+  KRD281: "\e[0m...You're in the lonely hall. As you glance around this barren stone\
+    \ chamber, a sudden surge of emptiness fills your soul, bringing the emotions\
+    \ of hopelessness and despair to your heart. A tear runs down your cheek, but\
+    \ you brush it away and deep inside you feel the inspiration to bring life once\
+    \ again to the world of Kyrandia. This hall leads off to the east and west."
+  KRD282: '...You''re in the Chamber of the Body. This corner-chamber is mundanely
+    decorated, except for the quite noticeable feature of a large chasm splitting
+    one half of the room. It''s width, strangely enough, is difficult to accurately
+    estimate -- you cannot help but wonder if you could successfully jump across.
+    There are smaller halls leading off to the north and west.'
+  KRD283: '...You''re in blackened quadrangle. Apparently decimated a while ago by
+    a great blast of fire, nothing remains of this intersection of four chambers.
+    You can go to the north, south, east, or west.'
+  KRD284: '...You''re at the Waterfall of Fantasy. Shrouded here in purplish mists
+    lies the most awe-inspiring wonderment of the magic of Tashanna... the mystical
+    Waterfall of Fantasy. Before you, rising high into the clouds, this majestic cascade
+    of beautifully clear water sparkles flamingly as it rushes from the heavens to
+    this dreamworld come true, stepping down on plateaus made of pure emerald. At
+    the bottom of this jeweled cataract, an enchanting, crystal clear pool has formed
+    in serene harmony with this enchanting place of legends. The air is filled with
+    the sweet aroma of the surrounding lavender rose bushes and the melodious music
+    of songbirds singing in joy. In the sky, night and day, shines the brightest rainbow
+    you''ve ever seen... and floating above it are golden letters which read: "ATASILYF".
+    The only exit is to the east.'
+  KRD285: '...You''re in the Chamber of the Mind. The only really noticeable feature
+    of this room is some writing on the floor which reads: This thing all things devours;
+    Birds, beasts, trees, flowers; Gnaws iron, bites steel; Grinds hard stones to
+    meal; Slays kings, ruins town, And beats high mountains down. The only exits are
+    to the west and south.'
+  KRD286: '...You''re in the Hall of Feasting. This hall was once used to hold the
+    great feast of the honorable Lady Kyra. It''s latest feast, however, was the feast
+    the dragon Zar had upon the flesh of the last inhabitants of this kingdom under
+    the mountain. Remnants of human bones and other body parts, as well as large globs
+    of blood stains, are everywhere, mandating the evil which has taken over this
+    cold, grey place. You can exit to the east and west if you wish, or you can just
+    choose to stay here and rot like everything else.'
+  KRD287: '...You''re in a hall. The hall continues to the east and west.'
+  KRD288: '...You''re in the Chamber of the Heart. This particular room has a certain
+    warmth to it, setting your spirit to peace. Nothing spectacular seems to catch
+    your attention, except for an inscription on the west wall, which reads: "Commitment
+    of the heart strengthens the soul." The only exits are to the north and east.'
+  KRD289: '...You''re in a crumbling centre. This intersection of four chambers is
+    slowly being destroyed by the decay of time. Once long, long ago this chamber
+    was cared for and loved, but now it has been abandoned and left to waste away
+    into oblivion. There are chambers in all directions.'
+  KRD290: '...You''re in the Chamber of Eternal Magic. If this magical room once contained
+    any powerful sorcery, it has long since been destroyed. You notice a roughly carved
+    inscription in the far wall which read: "Nothing is Eternal". You find your soul
+    void of any and all feelings in this strangely familiar location, and you feel
+    yourself growing weak and faint. You cannot help but contemplate the peace of
+    death. The only exit is to the west.'
+  KRD291: '...You''re in the Chamber of the Soul. This mystical room strikes you with
+    complete awe. As you look around, everything seems to extend forever, in an infinitely
+    large universe... with no boundaries. Far in the distance billions of stars glimmer
+    as whole galaxies grow and die before your eyes. Within your vision, you are witnessing
+    eternity... beyond any and all mortal limitations. You feel the rush of time passing
+    by, oblivious to all things of physical nature. Doorways of light are exits to
+    the south and east.'
+  KRD292: '...You''re in a barren hall. Except for the dirty and worn marble floor,
+    walls, and ceiling, there is nothing else of interest. Looking at such total emptiness
+    makes you only more aware of the sheer desolation of this once dreamy fantasy
+    world. Emotions of remorse, hopelessness, and plain disgust fill your heart, soul,
+    mind, and body. The hall continues to the east and west.'
+  KRD293: '...You''re in the chamber of the magic orb. In the center of this room,
+    floating high in the air, is the fading silhouette of a once great orb. Perhaps
+    long ago it was a materialized reality, but now it has faded to a mere quasi-real
+    image. Your hand passes freely through it, and it seems oblivious to your existence.
+    Nothing really remains of this ancient magic... like everything in Kyrandia, this
+    fantasy seems to be dying too. The only exit from this room is a crumbling archway
+    to the east.'
+  KRD294: '...You''re in the Chamber of Hidden Magic. This room, like most wonderful
+    things in life, is only a dream. It doesn''t exist.'
+  KRD295: '...You''re in the Chamber of Life. This is a dimly lit room, with a somber
+    ambiance and a low hum that emanates from deep within. The floor is made of the
+    purest white marble, and placed exactly in the center of the room is an unadorned
+    altar. Exits lie to the north and south.'
+  KRD296: '...You''re in a beautiful, small chapel. Oh, how lovely this religious
+    chamber appears to your worldly eye... all delicate and "good" amongst the chaos
+    of reality. The silver altar on the far side (don''t bother looking, it doesn''t
+    have an extra description) is tarnished, something that you notice with considerable
+    irony -- after all, it is the holy focus of the WONDERFUL Goddess Tashanna. You
+    look around and suddenly realize: this world is no longer a living fantasy, but
+    instead a cold, grey world, long forgotten by it''s patron goddess. You feel the
+    desire to leave; the exit is to the west.'
+  KRD297: '...You''re at a hidden, emerald shrine. This fantasy room does not exist.'
+  KRD298: '...You''re in the Hall of the Royal Knights. Before your eyes lies yet
+    another "great" hall of this kingdom under the mountain. You smirk as you glance
+    at its gothic architecture, again, made mostly from marble like everything else
+    in this forgotten realm. You spit on the floor in disgust. At your last glance,
+    you also notice a triangular rune in the center of the floor. Words inscribed
+    beside it say, "Patience, wisdom, and faith are the devotions of fools". Plain,
+    old exits lead to the north, south, and east.'
+  KRD299: '...You''re in the Hall of the Throne. Constructed from the purest of marble,
+    in a Gothic-style architecture, this beautiful hall served as both a greetings
+    chamber for those who came to see the Lady Kyra and a feasting hall for any special
+    royal banquets or other such events. Once alive with activity, it now lies empty'
+  KRD300: '...You''re in the royal kitchen. This rather large room was once used to
+    prepare the great feasts and banquets for the Lady Kyra and her guests. Now, however,
+    it lies barren and deserted, as if some horrible evil had vanquished the good
+    magic that once thrived here. A strong odor of sulfur floats from the northern
+    wall. The Hall of the Throne lies to the west.'
+  KRD301: '...You''re in the throne chamber. Once the great hall where the Lady Kyra
+    herself ruled the Kingdom of Kyrandia, this Gothic-style chamber has been trashed
+    by some unknown force. The walls and floor have large cracks in them, dust and
+    debris cover everything, and anything of value has long since been looted by thieves.
+    You also notice a huge hole in the northern wall, beyond which lies a pitch-black
+    darkness. A evil stench of death and decay emanates from that hole. The Hall of
+    the Throne lies to the south.'
+  KRD302: '...You''re in the lair of the dragon. This dark, gloomy cave radiates an
+    aura of incredible evil. The darkness hides almost all the features of this large,
+    ragged cavern, but the distinctive odor of dragon waste identifies this place
+    as a lair of a dragon. A chill of fear runs through your blood and your heart
+    beats fast as the effects of dragonfear overcome you. The throne chamber lies
+    to the south.'
+  KRD303: '...You''re in the Forest of Fantasy.'
+  KRD304: '...You''re at the Waterfall of Fantasy. Shrouded here in purplish mists
+    lies the most awe-inspiring wonderment of the magic of Tashanna... the mystical
+    Waterfall of Fantasy. Before you, rising high into the clouds, this majestic cascade
+    of beautifully clear water sparkles flamingly as it rushes from the heavens to
+    this dreamworld come true, stepping down on plateaus made of pure emerald. At
+    the bottom of this jeweled cataract, an enchanting, crystal clear pool has formed
+    in serene harmony with this enchanting place of legends. The air is filled with
+    the sweet aroma of the surrounding lavender rose bushes and the melodious music
+    of songbirds singing in joy. In the sky, night and day, shines the brightest rainbow
+    you''ve ever seen... and floating above it are golden letters which read: "ATASILYF".
+    The Forest of Fantasy lies to the west.'
+  LEVEL3: 'Elwynor Technologies: Kyrandia messages'
+  ACTCOD: DEMO
+  KYRKEY: NORMAL
+  GIVCRD: Allow users to exchange gold for BBS credits? YES
+  LEVEL4: Kyrandia messages
+  KYRATR: "\e[1;32m"
+  WILCMD: kneel
+  TEMPLE: glory be to tashanna
+  EGLADE: fear no evil
+  FOUNTI: offer true love to tashanna
+  BELINF: believe in fantasy
+  RIDDLE: cast the spells and cross the seas, heart, soul, mind, and body are the
+    keys
+  CREDITS: "\e[0m \e[1;32mWelcome back, %-4s %s! Kyrandia,V%-4s (Fantasy World of\
+    \ Legends) Designed and Programmed by - Scott Brinker & Richard Skurnick (C) 1988-96\
+    \ by Galacticomm, Inc. (C) 2005-21 Elwynor Technologies All rights reserved."
+  ACREDITS: "\e[0;1;32m \xC9\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\
+    \xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\
+    \xCD\xBB \xBA \x03 \x03 \xBA \xBA Welcome back, %-4s %-9s \xBA \xBA \xBA \xBA\
+    \ \x03 Kyrandia,V%-5s \x03 \xBA \xBA (Fantasy World of Legends) \xBA \xBA \xBA\
+    \ \xBA Designed and Programmed by - \xBA \xBA Scott Brinker & Richard Skurnick\
+    \ \xBA \xBA \xBA \xBA (C) 1988-96 by Galacticomm, Inc. \xBA \xBA (C) 2005-21 Elwynor\
+    \ Technologies \xBA \xBA \x03 All rights reserved. \x03 \xBA \xC8\xCD\xCD\xCD\xCD\
+    \xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\
+    \xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBC"
+  KLOGO: "\e[0m \e[1;32m\aIf you don't believe in legends, you haven't seen Kyrandia..."
+  FOULID: "\e[0m \e[1;35mHey you! None of that stuff here. \e[36mPlease enter your\
+    \ Player-ID:"
+  GETALS: "\e[0m \e[1;32mSince this is your first time entering Kyrandia (Fantasy-world),\
+    \ you must pick a 3-9 character Player-ID for yourself. This is what you will\
+    \ be known as throughout the game. \e[36mPlease enter your Player-ID:"
+  BADPID: "\e[0m \e[1;35mSorry, the Player-ID you have chosen is invalid. Player-IDs\
+    \ must be between three and nine characters (letters only)."
+  NTGOOD: "\e[0m \e[1;35mSorry, someone else has already taken that Player-ID."
+  B4PLA2: "\e[0m \e[1;36mPlease choose another Player-ID:"
+  GOODPD: Good! You will now be known as "%s" throughout Kyrandia (Fantasy World).
+    Press ENTER to begin
+  INTROA: Welcome, brave and adventurous one, to the wondrous and magical game of
+    Kyrandia, Fantasy World of Legends!! You are about to journey to a fantasy land
+    far, far away... a land of swords and sorcery where the only limit is your own
+    imagination. You will travel to the world of Kyrandia, a fairy tale land of magic
+    and mystery, realm of the beautiful and powerful goddess of Kyrandia, Tashanna,
+    the "Lady of Legends." Here, you begin as a young apprentice from a small village
+    who seeks to grow in knowledge, wisdom, and power, with high hopes of being granted
+    the title of "Arch-Mage of Legends" -- the mightiest wizard of Kyrandia! To achieve
+    your goal, you must cross the lands of Kyrandia, face unknown perils, solve mystical
+    enigmas, battle rivalrous mages, and conqueror your own mind, body, and soul.
+    Time has stood still for too long on Kyrandia -- now is the time for one mage
+    to rise above and master the powers of sorcery and magic. Press ENTER to continue
+  INTROB: 'However, before you begin your adventure, here''s a brief explanation of
+    how to play: Kyrandia is a multi-player interactive game, where many people at
+    once can adventure with each other in the same simulated adventure world. Players
+    can help one another, engage in battle, trade information, or just "shoot the
+    breeze." To move about in Kyrandia, type the direction you want your character
+    to go (north, south, east or west). You can speak with other players using action
+    verbs. For example, if you were to type "say hello there", other players at the
+    same location would see "hello there." You may pick up objects and do things with
+    them. You can look at your current surroundings or other players. Almost any mundane
+    action you can think of can be performed. However, the world of Kyrandia is much,
+    much more. The underlying theme of the entire game is the use of magic. Similar
+    in concept to the popular role-playing game "Dungeons & Dragons," players are
+    "magic-users" who start at level 1 (Apprentice) and advance to higher levels and
+    more powerful magic. Press ENTER to continue'
+  INTROC: Although you must be the one to discover all the details (and many there
+    are) of the magic of Kyrandia, we'll give you a little help to start off with.
+    Spells are magic cast by players, sometimes at objects or other players. To cast
+    a spell a player must first have it memorized. He must also have enough spell
+    points to cast it, and must be of high enough level for certain spells. Also,
+    some spells require the player to have certain components (objects) to cast them.
+    To actually cast the spell, a player must type "cast" and then the secret incantation
+    of the spell to be cast; sometimes, a direct object must be included as well,
+    such as "at the elf". The physical strength and endurance of a player is determined
+    by his "hit points." A player's hit points increase as he gains levels or by magical
+    means. It is through hit points that most players battle each other; when a player's
+    hit points reach 0, he is killed, and must start from scratch at the beginning
+    again. To see what spells you have memorized and how many spell points you have,
+    type "spells". To see how many hit points you have, type "hits". To see what objects
+    you are holding, type "inv". And if you need it, type "help". Press ENTER to continue
+  INTROD: You may ask what great treasure lies in this adventure? You will run across
+    many exciting characters and travel through breathtaking scenery. Beyond that,
+    explore this great world to find what is hidden for you. The first player to reach
+    the end will be granted the title of "Arch-Mage of Legends." Kyrandia is based
+    upon a complete Fantasy World created by Scott Brinker; it was programmed by Scott
+    Brinker and Richard Skurnick in March-June of 1988, and is based on multi-player
+    interactive game concepts originated by Tim Stryker. Also, thanks are due to those
+    who gave the support and inspiration to make this fantasy a reality. Kyrandia
+    is dedicated to the lonely souls of the world; type "help fantasy" in the game
+    for more. Enjoy the magic, mystery, and mirth of Kyrandia, Fantasy World of Legends!
+    Kyrandia,V%-4s (Fantasy World of Legends) Designed and Programmed by - Scott Brinker
+    & Richard Skurnick (C) 1988-96 by Galacticomm, Inc. (C) 2005-21 Elwynor Technologies
+    All rights reserved. Press ENTER to begin
+  HLPMSG: 'Help is available for the following subjects: commands ... what you can
+    do fantasy .... a note from the author gold ....... "money" of Kyrandia hits .......
+    your strength/combat levels ..... advancing in Kyrandia spells ..... the magic
+    of Kyrandia winning .... solving the game Type "help <subject>" (example: "help
+    fantasy") at the prompt. To exit type "X". You will be placed in the same spot
+    when you return.'
+  HLPCOM: '...Suddenly, a small elf runs out from nowhere! He gives you a nod and
+    a smile and whispers in your ear... Kyrandia is a multi-player fantasy adventure.
+    You can speak with other players using action verbs. For example, if you were
+    to type "say hello there", other players at the same location would see "hello
+    there." You can move around the large world of Kyrandia by telling the computer
+    which direction you wish to go (example: west). You can abbreviate these commands
+    for your convenience: n(orth), s(outh), e(ast), and w(est). In some instances,
+    you can also use special commands too (example: climb the tree). Also, it is rumored
+    travel can be done magically as well! You can pick up objects and use them in
+    assorted ways (you can experiment for yourself). Also, for added novelty, you
+    can do numerous "mundane" actions, such as: smile, laugh, kick <Player-ID>, wink,
+    hug <Player-ID>, and many more! The rest you have to figure out on your own! Good
+    luck! *** The elf then bows swiftly to you and disappears in a puff of smoke!'
+  HLPFAN: It has taken over two years to fully visualize this Fantasy World of Kyrandia,
+    a mirror-image of a dreamworld inspired by love and fashioned by imagination.
+    Created with smiles and tears, hopes and fears, and a passion of the soul immeasurable
+    by mortal definitions, Kyrandia holds a magic beyond sorcery; a magic that will
+    bloom like the lavender roses of Kyrandia across time and space forever... love.
+    This entire work is dedicated to my Lady of Legends, the one who dances eternally
+    in my dreams; forever alive in my heart and soul, beyond reality, but never beyond
+    imagination and hope, over the rainbow, in the fantasy forest where wishes come
+    true and the emeralds sparkle in the waterfall forever more. Although Kyrandia
+    is an adventure game, filled with action, excitement, and interaction, I ask you
+    to also take some time amongst the casting of fireballs and battling of monsters
+    to examine the scenery of Kyrandia and delve into the deeper meanings of this
+    visionary Fantasy World. Thank you so much for partaking in this humble world
+    of mine. I wish you the best of luck, in Kyrandia, and in everything in life.
+    Farewell. Scott James Brinker (fantasy author/programmer)
+  HLPGOL: '...As you ask for a help, a genie suddenly pops out in a cloud of smoke,
+    smiles, and says to you... Welcome to Kyrandia! I''m so pleased and honored to
+    have you in my humble world. Thank you so, so much for joining this wonderful
+    fantasy land! However, you wish to know about gold, huh? Well, as you''ve probably
+    already concluded, gold is the currency of Kyrandia, similar to the "dollar" of
+    your original world. You can use gold to buy things from the many different people
+    you will meet in Kyrandia, or for other, more arcane purposes. To get gold, well,
+    you have to get it the hard way -- find it. Or, if you''re a good alchemist, you
+    might be able to make it? Ah, well that''s up to you to discover. If you''re having
+    trouble finding gold out in the vast wilderness of Kyrandia, you could always
+    try and get a job. Rumor has it many village store keepers are always looking
+    for good adventurers. Anyway, hope I''ve been of some assistance, but I have to
+    run for now. Have a great time, and I bid you well on all your adventures in Kyrandia!
+    *** The genie disappears in a flash of forked, blue lightning!'
+  HLPHIT: '...As you make your request for some aid, an old, wise man suddenly appears
+    before you, gives you a small grin, and says... "Hit points" are the representation
+    of your character''s strength, health, and endurance. When your hit points reaches
+    zero, your character dies. As you grow in power (gain levels) your number of hit
+    points increase. You combat with people through the use of magic, ultimately to
+    bring their hit points to zero. You can use spells or magical items, but the result
+    is usually the same. However, if you wish to be really slick, you can also attack
+    people in other ways besides lowering their hit points -- I''ll leave it up to
+    you to discover how... You can also combat with the many different creatures of
+    Kyrandia, but you best beware: their power is often way beyond your magic! When
+    a character dies, he (or she) is automatically restarted at the very beginning
+    of the game, near the willow tree, at level 1. *** The old man then gives you
+    a respectful bow and vanishes in a puff of smoke, but not before grinning to himself.'
+  HLPLEV: '...As you call out for help, a flash of incredibly bright light blinds
+    you! *** Before you stands the Goddess Tashanna, shining in sheer beauty. She
+    kisses your check and says... Your power is measured in "levels" in Kyrandia,
+    which determine how many "hit points" you have, how many "spell points" you have,
+    and how powerful of spells you may cast. You gain 2 spell points per level, and
+    you gain 4 hit points per level. (see "help spells" and "help hits"). Each level
+    also has a "title", or name, associated with it. For example, when you start at
+    level 1, you are titled "Apprentice"; to win the game, you must become an "Arch-Mage
+    of Legends". (see "help winning"). It is up to you to discover exactly how many
+    levels there are, and their respective titles. However, everyone wears a "Patch
+    of Sorcery" which declares their title (type "look <so-and-so>"). You may also
+    look at yourself to admire your own title too. Above all else, remember... some
+    things are more powerful than magic! *** The Goddess Tashanna then smiles at you,
+    and vanishes in a purple flash!'
+  HLPSPE: '...A tall, ominous wizard dressed in deep blue robes suddenly appears before
+    you in a column of orange flame! He bows to you and begins to speak... Kyrandia
+    is a world of magic. To become powerful in Kyrandia, you therefore must master
+    the art of spellweaving. The spell system of Kyrandia works like this: every player
+    has a "spellbook" in which he keeps the spells he can memorize; no one can steal
+    this book, and the player cannot lose it. Once a spell is in the spellbook, a
+    player may memorize that spell (type: memorize <spell name>). You can have up
+    to ten spells "memorized" at the same time. A player then may cast any spell he
+    has memorized (type: cast <spell name>). Some spells also require a direct object
+    (a target), such as a person, place, or thing; the direct object should be placed
+    right after the spell name when being cast. Also note that some spells require
+    certain components (objects) or other special circumstances to be successfully
+    cast. You must also be of a certain level to cast different spells; the most powerful
+    spells can only be cast by those of high enough level. *** The wizard then bows
+    and vanishes into thin air!'
+  HLPWIN: '...An image of the author, Scott Brinker, appears in a shimmering circle
+    of rainbows! He smiles and says... To "win" Kyrandia, you must master the magic
+    of this world and gain the title of "Arch-Mage of Legends". Upon reaching this
+    high level, you are eligible to collect any prize the System Operator of this
+    realm may be offering. The game will notify you of how to collect your prize and
+    glory. Let it be known that only the FIRST player to solve Kyrandia (on this system)
+    may be the one to receive the prize. However, everyone who takes part in the experience
+    of Kyrandia can win; if not a materialistic award of credits, then many hours
+    of enjoyable gaming, the thrill of magical Dungeons & Dragons combat, and special
+    insight into a dreamworld created from true love -- an enchanting, parallel fantasy
+    of the world of reality in which we all live. I''m sorry, but I can''t give you
+    any "hints" or "solutions", because after all, that would take away all the excitement
+    and adventure I''ve created for you! However, I do suggest you see with your heart
+    as well as your eyes... *** He then shakes your hand, smiles again, and vanishes
+    in his iridescent circle of rainbows.'
+  NOHELP: '...Sorry, there is no help available for %s.'
+  PLCHLD: ''
+  MDES00: '...%s is a ragged looking young man without any really distinguishing qualities.
+    He is dressed in a simple, grey loincloth stained with dirt and other grime and
+    you notice he doesn''t have any Patch of Sorcery. He appears to be holding'
+  MDES01: '...%s is a rather stocky individual who looks like he''s been through some
+    tough times lately. He''s wearing a plain-stitched robe with a Patch of Sorcery.
+    The Patch of Sorcery has "Magic-User" woven in bright red thread. He seems to
+    have'
+  MDES02: '...An air of egotism surrounds %s, who holds his head high and walks tall
+    and proud. You seem to find something ironically humorous in his behavior, and
+    something extremely hilarious about his wardrobe. Although he is wearing a fine
+    light green robe, it has a very large hole in the rear. His Patch of Sorcery has
+    "Evoker" woven in brown threads. He seems to hold'
+  MDES03: '...%s is distinguished by the bright yellow, cone-shaped hat with a silver
+    tassel hanging down. The expression on his face is one of kindness and peace.
+    A Patch of Sorcery labeled "Conjurer" is sewn by silver threads to his yellow
+    tunic. He seems to be holding'
+  MDES04: '...%s is richly robed in dark blue with hundreds of silver stars and bright
+    constellations sewn all over his garments. His silver cap glows with a strange,
+    magical radiance which draws your attention to its mystical aura. Sewn by black
+    threads into the fine blue material of his robe on his left arm is a Patch of
+    Sorcery inscribed with the word "Magician". He seems to be holding'
+  MDES05: '...Dressed in drab grey rags, %s seems indifferent to his apparent lack
+    of fine apparel. Instead, he appears to be lost within his own thoughts, as though
+    pondering the entire meaning of life. Attached by red threads to his right arm
+    a Patch of Sorcery titled "Mystic" stands out against its grey surroundings. He
+    seems to be holding'
+  MDES06: '...Truly a regal individual, %s is clothed in white robes tied by a bright
+    blue rope belt. He has a certain grim smile permanently embedded on his face,
+    like the cat that swallowed the canary. However, despite his mysterious background,
+    he proudly wears a Patch of Sorcery labeled "Enchanter" sewn by light blue threads
+    into the chest of his white robe. He seems to be holding'
+  MDES07: '...%s gives you the impression of being a walking advertisement for a barbarian
+    clothing store. He''s wearing leather armor with several gold metal bands and
+    spikes sticking out from assorted places -- an ancient birth control garment.
+    On the back of his leather outfit a Patch of Sorcery sewn by yellow threads reads
+    "Warlock". He appears to be holding'
+  MDES08: '...Elegantly dressed in black and silver robes, %s stands tall and proud,
+    radiating an aura of magnificence and power. His dark eyes are deep with mystical
+    secrets un-interpretable by a mere glance. A Patch of Sorcery, titled "Sorcerer",
+    is sewn by white threads into the black left arm of his robes. He seems to have'
+  MDES09: '...Clothed in solid green robes with a green hat and green saddles to boot,
+    %s is a stout, middle-aged man who has a look of determination imbedded within
+    his grim countenance. A Patch of Sorcery, sewn by bright green threads, has been
+    inscribed with the words "Green Wizard". He seems to be holding'
+  MDES10: '...Dressed in solid blue apparel, %s is a tall, proud wizard with a large,
+    silver hat, styled in the traditional magic-user cone shape. A twinkle in his
+    eye and a slight smile on his face, which almost makes you wonder what he has
+    running through his mind. He wears a dark blue patch which reads "Blue Wizard".
+    He seems to be holding'
+  MDES11: '...%s is draped in fine, red silk robes which cover him in complete, royal
+    attire. An almost ageless mysticism surrounds him, charming you with it''s magical
+    touch of mystery. A bright red patch reads "Red Wizard" on his right shoulder.
+    He appears to hold'
+  MDES12: '...Tall and quite lean, %s is an incredible wizard, with a determined look
+    in his young, yet wise countenance. Although he looks somewhat inexperienced you
+    notice on his right sleeve a silvery grey patch reads "Grey Wizard". This is indeed
+    an experienced soul. He appears to be holding'
+  MDES13: '...Broad-shouldered and very well built, %s appears to be the walking definition
+    of a hulk. Deep in his eyes you see a total lack of mercy or pity, just a cold
+    hard stare. This wizard must have encountered many hard and dangerous situations.
+    Sewn onto his left sleeve in off white threads is a Patch of Sorcery which reads
+    "White Wizard". He appears to be holding'
+  MDES14: '...Ragged from his many trials and tribulations, %s has a look of extreme
+    wisdom in his dark eyes, and you can feel a powerful aura radiating from him.
+    He appears to be tired and weary, but you feel wary of his magical powers. Magically
+    attached to his left arm in magenta threads is a Patch of Sorcery which reads
+    "Mage". He appears to be holding'
+  MDES15: '...%s is clothed in dark robes, and a black hood with silver runes inscribed
+    around the edges hides most of his features. However, you see the shine of what
+    appear to be golden eyes staring out from the hood at you, eating into your soul.
+    Sewn onto the robe in bright pink threads is a Patch of Sorcery which reads "Mage
+    of Ice". He appears to be holding'
+  MDES16: '...A strange grin is the most noticeable feature of %s, and his eyes seem
+    to be lit with deep curiosity and interest in his surroundings. He is dressed
+    in red robes which make him look quite dashing and his dark brown eyes put you
+    to ease. A matching Patch of Sorcery sewn in brown reads "Mage of Wind". He appears
+    to be holding'
+  MDES17: '...%s is a handsome young mage who has endured many hardships. A superb
+    example of determination and will power, he stands tall and proud, fearing nothing.
+    You wonder if this is wise, considering the current conditions of constant danger.
+    A Patch of Sorcery sewn in golden threads reads "Mage of Fire". He appears to
+    be holding'
+  MDES18: '...Radiating an aura of sheer power and wisdom, %s is dressed in traditional
+    wizard dress, even up to the cone-shaped hat! Sparks fly from his fingers, and
+    occasionally from his long, black hair. You shake as you feel some supernatural
+    force is being emitted from his body. Sewn onto his left sleeve in orange threads
+    is a Patch of Sorcery which reads "Mage of Light". He appears to be holding'
+  MDES19: '...A bright white light emanates from %s, almost totally blinding you.
+    After a second it fades and an elderly gentlemen appears. This wizard radiates
+    a great deal of mystical energy, both magical and charismatic. Within his eyes
+    you see the stars of wisdom. Delicately attached to his right sleeve in amber
+    threads is a Patch of Sorcery which reads "Arch-Mage". He appears to be holding'
+  MDES20: '...You gaze around and notice a fellow standing as though he were in a
+    trance. You look into the eyes of %s, but the look is not returned. This hits
+    you as being rather strange, for it leaves you a bit shaken. You try to gain his
+    attention but are unsuccessful. Sewn in black treads to his chest is Patch of
+    Sorcery which reads "Arch-Mage of Wands". He appears to be holding'
+  MDES21: '...Standing before you is a middle aged gentleman who is starting to show
+    his age. %s has small wrinkles appear on his forehead and his hands shake a bit.
+    Dressed in a dull green clock, you can detect that he may be hiding something.
+    Sewn onto the left shoulder of the clock in yellow threads is a Patch of Sorcery
+    which reads "Arch-Mage of Staves". He appears to be holding'
+  MDES22: '...%s is a wise old gentlemen, but a incredible strong magical aura emanates
+    from him. His hair is silvery grey in color and his eyes dull from the years he
+    has spent in the world. Sewn in a unique shade of blue is a Patch of Sorcery which
+    reads "Arch-Mage of Swords". He appears to be holding'
+  MDES23: '...As you gaze into his eyes, you feel as though %s were beckoning you
+    to some greater cause or to perhaps warn you of some kind of impending doom. You
+    are left with an unsure feeling of your meaning or the meaning of life as it exists.
+    Neatly sewn in white threads upon his right shoulder is a Patch of Sorcery which
+    reads "Arch-Mage of Jewels". He appears to be holding'
+  MDES24: '...As you look upon %s, an incredible feeling of weakness overcomes you.
+    You feel as though you have no value compared to anything else in the world. You
+    can detect tremendous energy radiating from within the area. Sewn ever so neatly
+    and carefully onto his right shoulder in multicolor threads is a unique Patch
+    of Sorcery which reads "Arch-Mage of Legends". He appears to be holding'
+  FDES00: '...%s is a simple, although rather beautiful, young woman. Something in
+    her eyes fills your soul with peace and comfort. Her smile is perhaps the most
+    powerful magic she possesses, especially since she doesn''t even bear a Patch
+    of Sorcery -- a lowly apprentice. She seems to be holding'
+  FDES01: '...%s is a charming lady, wearing well-kept light green robes which flow
+    elegantly around her figure. You notice a mysterious twinkle in her eye. She wears
+    a Patch of Sorcery woven in light brown threads, which reads "Magic-user". She
+    seems to be holding'
+  FDES02: '...An air of egotism surrounds %s, who holds her head high and walks tall
+    and proud. You seem to find something ironically humorous in her behavior, and
+    something extremely hilarious about her wardrobe. Although she is wearing a fine
+    light green robe, it has a very large hole in the rear. Her Patch of Sorcery has
+    "Evoker" woven in brown threads. She seems to hold'
+  FDES03: '...%s is dressed in a long white gown. Gently inserted between the light
+    threads of her hair is a lavender rose. A pleasant smile and a sparkle in her
+    eyes are her most notable traits. A Patch of Sorcery labeled "Conjurer is sewn
+    in silver threads to her gown. She seems to be holding'
+  FDES04: '...Dressed in a heavy dark cape, %s sticks out in the crowd. Lightly sprinkled
+    upon the cape is a substance of silvery dust. You detect a strong aura of magical
+    power which makes you very weary of this person. Sewn by black threads on the
+    side of the black cape is a Patch of Sorcery inscribed with the word "Magician".
+    She seems to be holding'
+  FDES05: '...Dressed as though she just cleaned the hut, %s looks as though she has
+    had better days. A terrible look of despair can be seen in her eyes. Bearly attached
+    to her rags by red threads is a Patch of Sorcery titled "Mystic". She seems to
+    be holding'
+  FDES06: '...Dressed in fine white satin, %s is truly a proud person. An air of true
+    elegancy can be detected, although there is something solemn about her. Sewn onto
+    her right sleeve by light blue threads is a Patch of Sorcery labeled "Enchanter".
+    She seems to be holding'
+  FDES07: '...%s gives you the impression of being a walking advertisement for a barbarian
+    clothing store. She''s wearing leather armor with several gold metal bands and
+    spikes sticking out from assorted places -- an ancient birth control garment.
+    On the back of her leather outfit a Patch of Sorcery sewn by yellow threads reads
+    "Warlock". She appears to have'
+  FDES08: '...Elegantly dressed in black and silver robes, %s stands tall and proud,
+    radiating an aura of magnificence and power. Her dark eyes are deep with mystical
+    secrets un-interpretable by a mere glance. A Patch of Sorcery, titled "Sorcerer",
+    is sewn by white threads into the black left arm of her robes. She seems to have'
+  FDES09: '...Clothed in solid green robes with a green hat and green saddles to boot,
+    %s is a stout, middle-aged woman who has a look of determination imbedded within
+    her grim countenance. A Patch of Sorcery, sewn by bright green threads, has been
+    inscribed with the words "Green Wizard". She seems to be holding'
+  FDES10: '...Dressed in solid blue apparel, %s is a tall, proud wizard with a large,
+    silver hat, styled in the traditional magic-user cone shape. A twinkle in her
+    eye and a slight smile on her face, which almost makes you wonder what she has
+    running through her mind. She wears a dark blue patch which reads "Blue Wizard".
+    She seems to be holding'
+  FDES11: '...%s is draped in fine, red silk robes which cover her in complete, royal
+    attire. An almost ageless mysticism surrounds her, charming you with it''s magical
+    touch of mystery. A bright red patch reads "Red Wizard" on her right shoulder.
+    She appears to hold'
+  FDES12: '...Tall and quite lean, %s is an incredible wizard, with a determined look
+    in her young, yet wise countenance. Although she looks somewhat inexperienced
+    you notice on her right sleeve a silvery grey patch reads "Grey Wizard". This
+    is indeed an experienced soul. She appears to be holding'
+  FDES13: '...Broad-shouldered and rather strangely built for a women, %s looks like
+    she was been battling often with some of the more difficult creatures in this
+    region. Sewn onto her left sleeve in off white threads is a Patch of Sorcery which
+    reads "White Wizard". She appears to be holding'
+  FDES14: '...Worn out from her many difficult battles, %s has a look of exhaustion
+    on her beautiful, but dirty, face. As you look closer, you are able to detect
+    a strong magical aura. This beauty is indeed very powerful. Magically attached
+    to her left arm in magenta threads is a Patch of Sorcery which reads "Mage". She
+    appears to be holding'
+  FDES15: '...%s is draped in a dark blue robe which is decorated with many runic
+    symbols and mystical letters. Her smile has a somewhat evil appearance, and her
+    red eyes do startle you. Long, black hair falls down across her shoulders, giving
+    her a wild look. Sewn onto the robe in bright pink threads is a Patch of Sorcery
+    which reads "Mage of Ice". She appears to be holding'
+  FDES16: '...%s looks like a very nice lady, and beauty is most definitely one of
+    her better traits. You sense a warm, loving appreciation of life flowing from
+    her magical aura. A matching Patch of Sorcery sewn in brown reads "Mage of Wind".
+    She appears to be holding'
+  FDES17: '...%s is a beautiful young mage who has endured many hardships. A superb
+    example of determination and will power, she stands tall and proud, fearing nothing.
+    You wonder if this is wise, considering the current conditions of constant danger.
+    A Patch of Sorcery sewn in golden threads reads "Mage of Fire". She appears to
+    be holding'
+  FDES18: '...Catching your eye immediately is the bright shinny smile of %s. Her
+    golden blonde hair blows gently in the light breeze. You can feel the presence
+    of this lady in your every thought. Sewn onto her left sleeve in orange threads
+    is a Patch of Sorcery which reads "Mage of Light". She appears to be holding'
+  FDES19: '...%s looks back at you with gentle eyes. This is indeed a lady. She is
+    dressed in a cream colored floor length dress. A pretty pink ribbon rises out
+    of her golden brown hair. On her face is a glowing smile. You can tell that this
+    lady has a warm heart. You feel as though you are in the presence of the Goddess
+    Tashanna. Delicately attached to her right sleeve in amber threads is a Patch
+    of Sorcery which reads "Arch-Mage". She seems to be gently holding'
+  FDES20: '...Looking very distracted, %s is a very nervous person. Looking at you
+    very suspiciously she does not seem to trust you. In fact she doesn''t seem to
+    trust any movements and is quite jumpy. Sewn in black treads to her chest is Patch
+    of Sorcery which reads "Arch-Mage of Wands". She appears to be holding'
+  FDES21: '...Standing before you is a middle aged lady who is starting to show her
+    age. %s has small wrinkles appear on her forehead and her hands shake a bit. Dressed
+    in a dull green clock, you can detect that she may be hiding something. Sewn onto
+    the left shoulder of the clock in yellow threads is a Patch of Sorcery which reads
+    "Arch-Mage of Staves". She appears to be holding'
+  FDES22: '...%s is a wise old gentlewomen, but a incredible strong magical aura emits
+    from her. Her hair is silvery grey in color and her eyes dull from the years she
+    has spent in the world. Sewn in a unique shade of blue is a Patch of Sorcery which
+    reads "Arch-Mage of Swords". She appears to be holding'
+  FDES23: '...As you gaze into her eyes, you feel as though %s were beckoning you
+    to some greater cause or to perhaps warn you of some kind of impending doom. You
+    are left with an unsure feeling of your meaning or the meaning of life as it exists.
+    Neatly sewn in white threads upon her right shoulder is a Patch of Sorcery which
+    reads "Arch-Mage of Jewels". She appears to be holding'
+  FDES24: '...As you look upon %s, an incredible feeling of weakness overcomes you.
+    You feel as though you have no value compared to anything else in the world. You
+    can detect tremendous energy radiating from within the area. Sewn ever so neatly
+    and carefully onto her right shoulder in multicolor threads is a unique Patch
+    of Sorcery which reads "Arch-Mage of Legends". She appears to be holding'
+  KID000: '...The ruby is a deep shade of red, and it many facets sparkle brilliantly
+    as you examine it, enchanting you with its crimson glimmer. It isn''t much bigger
+    than half your palm, but seems quite heavy for its size.'
+  KID001: '...The emerald is a bright hue of green, and it seems to shine with its
+    own beautiful, inner light. It has been naturally shaped into a three dimensional
+    hexagon, with, strangely enough, perfectly smooth edges.'
+  KID002: '...Small and round, this dark red garnet is one of the more common gemstones
+    of the land, yet nonetheless, has a certain charm of its own. Like all of the
+    garnets which are normally found, there is a tiny black splotch in its center.'
+  KID003: '...The pearl is a lovely little stone, pure white in color, with a shiny
+    surface that reflects all surrounding light, causing it to sparkle with a special
+    brilliance of its own.'
+  KID004: '...The aquamarine is a beautiful, light blue gem. It is shaped like a small
+    triangle, with darker shades of blue in the center. Because of its unique shape,
+    it also acts like a prism, refracting any light that enters it into vivid, tiny
+    rainbows.'
+  KID005: '...The moonstone is a fascinating, milky-white precious stone no bigger
+    than your thumb and forefinger. As you examine it, a strange tingle runs down
+    your spine and you feel the presence of magic.'
+  KID006: '...The sapphire is a medium-sized gemstone, dark blue in color, except
+    for a small white spot in its center which shines blazingly -- a star sapphire.
+    One of the rarer and more beautiful jewels, you feel power in this royal treasure.'
+  KID007: '...The diamond, the legendary jewel which represents eternal love, is truly
+    a spectacular wonder to behold. Its thousands of facets glitter dazzlingly as
+    you examine it, almost mesmerizing you with their dancing radiance.'
+  KID008: '...The amethyst is a crystalline, purple stone. Its jagged facets refract
+    any light into myriad, reddish-blue images which dance almost magically before
+    your eyes.'
+  KID009: '...The onyx is a smooth, jet black rock about the size of your palm. Looking
+    at it closely, it reminds you of a pool of inky water, reflecting surrounding
+    images with almost mystical clarity.'
+  KID010: '...The opal, strangely enough, doesn''t appear to have any color. In fact,
+    this gem seems to be almost invisible, barely distinguishable in your hands. It
+    has a certain, mysterious vibration to its substance.'
+  KID011: '...Dark crimson, streaked with varying shades of red, the bloodstone is
+    a very mystifying jewel. Staring at it, you get the feeling that you are somehow
+    gazing into another dimension.'
+  KID012: '...The elixir is a mysterious, blue-green liquid which radiates a very
+    magical energy. A strange, sulfuric odor rises from its watery substance, making
+    you quite nauseous.'
+  KID013: '...The staff is made from solid oak wood, topped with a silver cone. It
+    has a certain regal bearing to its nature, as though it was the scepter of a king.
+    Mystical symbols have been carved into it, and although they are unreadable, you
+    feel a mysterious tingle run down your spine as you examine them.'
+  KID014: '...The key is made of solid gold, and it sparkles almost magically as you
+    examine it. It is about the size of your fist, although it is quite heavy due
+    to its substance. You feel a surge of emotion in your heart for a brief moment.'
+  KID015: '...The locket is made from shiny gold, polished to perfection and decorated
+    with many intricate designs. You particularly notice a beautiful replication of
+    a magnificent waterfall carved lovingly into its center.'
+  KID016: '...The amulet is a light-blue gemstone set in a silver pendant with a thin
+    silver chain attached. The amulet has a mysterious glow to its stone, almost enchanting
+    you with its soft radiance. You also notice that the gemstone has been cut in
+    the shape of a large teardrop, as though symbolic of its origin.'
+  KID017: '...The pendant is made of dull silver with little ornamentation, except
+    for a rough inscription which reads: "Nothing is impossible, if only you believe...".'
+  KID018: '...The charm is a small, bright blue jewel which radiates a magical light
+    from within, creating the image of a bright blue orb of light in your mind. You
+    feel occasional surges of electric energy erupt from it, delivering mild shocks
+    to you.'
+  KID019: '...The bracelet has been wrought from pure white gold, a very rare element
+    indeed. It sparkles as you examine it closely, almost as though trying to enchant
+    you with its dancing brilliance.'
+  KID020: '...The coronet is truly a magnificent work of incredible craftsmanship,
+    apparently once designed to honor the greatest kings and queens of the many realms
+    of fantasy. It has a slightly magical aurora to it.'
+  KID021: '...The tiara is a magnificent work of craftsmanship. It seems to sparkle
+    with an almost unearthly brilliance as you examine it closely. You sense something
+    very special and magical about this beautiful treasure.'
+  KID022: '...The necklace is a wonderfully crafted piece of jewelry, made from the
+    finest silver and adorned with numerous precious stones, from rubies, to diamonds,
+    to emeralds. You feel a certain sense of peace in your soul as you examine it.'
+  KID023: '...The broach sparkles with dark blue gemstones, radiating an aura of sheer
+    magical beauty. It is something to be treasured for the rest of your mortal life.'
+  KID024: '...This royal artifact, one of the many creations from the great Age of
+    Alexis, represents the holy symbol of the royal family of Tenderkin to the south.
+    You can almost sense the prestige that was once carried with this beautiful sceptre.'
+  KID025: '...The rod is a long slender metallic object, primarily made from a rare
+    metal find in Kyrandia. It is black in color and weighs quite a bit.'
+  KID026: '...The wand is about two feet in length and about half an inch in diameter.
+    It appears to be constructed from pure silver, although it is much lighter than
+    you would expect. A silver tulip entwined within two hearts has been intricately
+    carved across its length.'
+  KID027: '...This small, silver trinket is hung from a thin, silver chain. At first
+    glance, it appears to be worthless, yet you sense a mysterious force locked within
+    its simplicity.'
+  KID028: '...The soulstone is a large jewel, slightly bigger than your palm. It has
+    been carved into the shape of a perfectly symmetrical ellipse. When glanced at
+    from a distance, it appears to be only a dull grey in color, but when you gaze
+    closely, it jumps to life, sparkling brilliant, multi-colored rainbows.'
+  KID029: '...The kyragem is one of the loveliest gems of the entire world, scintillating
+    with a bright, prismatic splendor. Although this beautiful jewel is rather small
+    in size, it radiates an aura of incredible power, filling your soul with eternal
+    peace and love. Mystically etched into the center of the stone, you see the words,
+    "Across time and space forever...", shining blazingly.'
+  KID030: '...The dragonstaff is a great rod, at least six feet in length and about
+    two inches in diameter. It appears to have been constructed from solid cedar,
+    with an exact replica of a small dragon''s head placed on its top, its mouth gaping
+    open. Strange, unintelligible symbols have been carved in the wood from top to
+    bottom, and the entire staff radiates powerful magic.'
+  KID031: '...Bubbling and frothing constantly, this pinkish-red potion is most certainly
+    one of the strangest concoctions in all of Kyrandia. A distinctive odor of many
+    potent and mysterious spices emanates from the center of this magical liquid,
+    tempting you to drink its enchanting substance.'
+  KID032: '...About the size of your palm, this appears to be just an ordinary pinecone.
+    However, something about it -- you can''t figure out what -- leads you to believe
+    there is a hidden magic to its simple nature.'
+  KID033: '...The dagger is made from pure silver, and it shines with a bright glimmer
+    as you examine it. Its hilt is decorated with several small jewels, which add
+    to the sparkle of this small blade. An inscription, written in gold, on the blade
+    reads: "Love Conquers All".'
+  KID034: '...The sword is a beautiful blade forged from the finest metals of the
+    land, sharpened to a perfect edge, and decorated with many precious jewels of
+    incredible beauty.'
+  KID035: '...The scroll has been made from fine papyrus paper, although it seems
+    quite worn and ancient. A certain magical force surrounds it, and you feel yourself
+    being magically drawn to reading its mystical symbols.'
+  KID036: '...The codex appears to be a very ancient and magical work, dating back
+    before the ages of the elders. Your eyes seem to be drawn to reading its mysterious
+    symbols.'
+  KID037: '...This powerful book of knowledge radiates an awesome aura of pure energy,
+    beckoning you to read its mystical language. An ominous feeling enters your soul.'
+  KID038: '...The parchment is made from a leathery material which has been rolled
+    up. After further examination you unroll it and feel some of its magic escape.
+    You are compelled to want to read it.'
+  KID039: '...The ring is made of pure gold and flawless in its design. You can notice
+    that twelve tiny specks surround it denoting some kind of significance. This is
+    the holy symbol of wholeness... oneness... eternal unity.'
+  KID040: '...The rose is a beautiful flower, solid lavender in color, and eternally
+    in full bloom. It has lovely fragrance, the most wonderful, natural perfume you
+    have ever smelled. This star of natural beauty is also the holy symbol of the
+    Goddess Tashanna.'
+  KID041: '...The lilac is a small, white flower.'
+  KID042: '...The orchid, strangely enough, seems to be of solid gold. It sparkles
+    with a magical brilliance as you examine it, almost enchanting you with its simple
+    glitter.'
+  KID043: '...The shard is a crystalline, elongated-hexagonal piece of clear quartz.
+    It has been magically shaped into the form of a teardrop, representing its sorrowful
+    origin. Something about the shard touches the deepest part of your heart.'
+  KID044: '...The tulip is a delicate flower made of the purest silver. Something
+    about the gentle nature of the beautiful work of nature touches your heart. You
+    can also detect a sweet odor magically rising from it''s shiny petals.'
+  KID045: '...The dryad is a female tree nymph, about four feet tall with long blonde
+    hair and large, deep blue eyes. She smiles at you warmly, and bows to you respectfully.
+    You also notice a lavender rose placed perfectly in the middle of her beautiful
+    hair.'
+  AID045: '...The dryad smiles at you, as though understanding your desire, but she
+    nonetheless dances away from your grasp.'
+  KID046: '...The willow is a large, magical tree, which radiates a mystical power
+    beyond anything of this world. Many strange and exotic symbols have been carved
+    elaborately into the trunk, which read: "-n--l, oh servant of Tashanna, and pay
+    homage to thy source of life energy, for thy power to be recognized by the forces
+    of nature and magic." You notice that the first word has been partially worn away
+    by time... or something else.'
+  AID046: '...The willow tree doesn''t seem to want to move.'
+  KID047: '...The altar has been constructed from the finest marble of Kyrandia, pure
+    white with a holy radiance to its smooth, shiny surface. Enscribed in gold, are
+    the words: "To thou whom seeketh thy power, praise thy power with all thy heart
+    and soul. Offer thy wealth generously, for thy physically body is nothing to thy
+    soul, and glory be to the great goddess alone."'
+  AID047: '...Stealing altars isn''t allowed in the realm of Tashanna, foolish mortal!'
+  KID048: '...The sign reads as follows: -------------------------- | Ye Olde Spell
+    Shoppe | -------------------------- ------------------------------ burnup ....
+    80gp cantcmeha 100gp clutzopho . 50gp cuseme .... 40gp fpandl .... 60gp hocus
+    .... 400gp howru ..... 25gp koolit .... 60gp noouch .... 30gp pocus ..... 45gp
+    sunglass .. 35gp thedoc .... 75gp tiltowait 1000gp weewillo 120gp whereami 100gp
+    zapher .... 50gp'
+  AID048: '...The sign is magically bound to the ground.'
+  KID049: '...The statue is a beautiful work of art depicting a young man and a royal
+    lady of incredible charm, holding each other close, facing the any obstacles of
+    the world together. There is something so life-like about this statue, it enchants
+    you with a certain magic, filling your heart and soul with an unending feeling
+    of eternal peace and love.'
+  AID049: '...The statue doesn''t budge.'
+  KID050: '...The shrine is almost completely hidden within the heavy, dark green
+    underbrush of the forest. It seems to be constructed from pure silver and gold,
+    adorned with several sparkling jewels. Enscribed on the base of the shrine you
+    see the phrase: "Offer thy treasures here".'
+  AID050: '...Oh, for crying out loud, stop being such a scrounge!'
+  KID051: '...This machine seems to be some sort of gambling system. There is a slot
+    in the center of it, with a writing above saying: "Enter Garnet Here". You feel
+    a sudden urge to act foolishly.'
+  AID051: '...The slot machine growls at you.'
+  KID052: '...The dragon is a magnificent, yet horrifying magical creature of darkness.
+    Its huge body is covered with protective, green scales which seem to almost shine
+    with a royal beauty. From its long, ominous spiked tail to its grinning maw, it
+    strikes both fear and awe into your mortal soul.'
+  AID052: '...Suddenly, the goddess Tashanna appears before you and says: "Now why
+    would you want to do a STUPID thing like that?"'
+  KID053: '...The altar, constructed from pure marble, stands about four feet high
+    and at first glance appears completely unadorned. However, as you examine it more
+    closely, you are able to see a faded inscription which seems to read: "Tlho hoe
+    wmkg lhevy mw oeagh azd ymkp, vlzd azd umdi, imk age feadi hm wafe hoe foappezce
+    hoah pley aoead, desmhe hoiyepw hm hoe hayj ah oazd."'
+  AID053: '...The altar really doesn''t seem to want to move.'
+  TIRED: '...You are exhausting yourself! You need to rest for a few seconds before
+    continuing...'
+  LVLM00: '...Ah, you''ve already accomplished that task though!'
+  LVLM01: '*** %s is attempting a magical instant replay!'
+  LVLM02: '...A voice in your mind says, "Ah, it is not yet time, my friend...".'
+  LVLM03: '*** %s seems to be hearing voices!'
+  LVL200: '...As you kneel, a vision of the Goddess Tashanna materializes before you.
+    She lays her hand gently upon your shoulder and says to you, "Rise, rise, Magic-user!
+    Your first advancement has begun." She then vanishes, and you feel yourself grow
+    in power! *** You are now at level 2! *** A spell has been added to your spellbook!'
+  GETLVL: '*** %s seems to suddenly grow in strength and knowledge!'
+  LVL300: '...As you praise the Goddess Tashanna, you feel yourself grow in power!
+    *** You are now at level 3!'
+  MARRY0: '...What bigamy is this? You''ve already sworn your life to %s! Surely you
+    have more dedication than that!'
+  MARRY1: '*** %s is looking like a nasty polygamist!'
+  MARRY2: '...Trying to marry yourself, huh? Sorry, we don''t allow that sort of self
+    pleasure in Kyrandia...'
+  MARRY3: '*** %s is looking somewhat skeptical about a new way of life.'
+  MARRY4: '...You devote the rest of your mortal life in Kyrandia to %s.'
+  MARRY5: '*** %s has decided to devote the rest of %s mortal life in Kyrandia to
+    you!'
+  MARRY6: '*** %s has decided to devote the rest of %s mortal life in Kyrandia to
+    %s!'
+  MARRY7: '...Feeling somewhat lonely, huh? Sorry, that person isn''t around...'
+  MARRY8: '*** %s is feeling somewhat romantically amorous.'
+  OFFER0: '...The Goddess Tashanna accepts your humble offer and gives you her eternal
+    blessings!'
+  OFFER1: '*** %s is having holy communion with the Goddess Tashanna.'
+  PINEC0: '...You successfully grab one of the pinecones!'
+  PINEC1: '*** %s has successfully grabbed one of the pinecones from the tree!'
+  PINEC2: '...You miss!'
+  PINEC3: '*** %s is trying to grab a pinecone without much success.'
+  BGEM00: '...As you drop the gem into the stump, a powerful surge of magical energy
+    rushes through your entire body! *** You are now at level 6! *** A spell has been
+    added to your spellbook!'
+  BGEM01: '*** %s has just gained in power and knowledge!'
+  BGEM02: '...The gem drops smoothly into the endless depths of the stump. You feel
+    a mysterious tingle down your spine, as though you have begun to unleash a powerful
+    source of magic.'
+  BGEM03: '*** %s is dropping things in the stump.'
+  BGEM04: '...It drops into the endless depths of the stump, but nothing seems to
+    happen.'
+  BGEM05: '...But you don''t have one, you hallucinating fool!'
+  BGEM06: '*** %s, who has apparently been smoking too many magic weeds, is having
+    hallucinations with the stump!'
+  SILVM0: '...As you offer your fourth birthstone to the Goddess Tashanna, you feel
+    a powerful surge of magical energy course through your body! *** You are now at
+    level 4! *** A spell has been added to your spellbook!'
+  SILVM1: '*** %s seems to grow in strength and power!'
+  SILVM2: '...The Goddess Tashanna accepts the offer of your birthstone! You feel
+    the urge to complete the offering with the rest of your birthstones.'
+  SILVM3: '*** %s is making offerings to the Goddess Tashanna!'
+  SILVM4: '...The Goddess accepts your offer, but in your soul you realize that your
+    offering was not one of your birthstones, or was out of sequence.'
+  SILVM5: '*** You hear the roll of thunder in the distance! %s is making false offerings
+    to the Goddess Tashanna!'
+  SAPRAY: '...As you pray, a vision of the Goddess Tashanna appears before you, shining
+    in her eternal, radiant beauty. She smiles at you and says: "Oh, brave and courageous
+    one, there is so much you must learn. What you have seen is only a small fraction
+    of the world of Kyrandia... don''t let your pride outmatch your knowledge. Search
+    for the truth of the four elements of all life, and know your corresponding birthstones,
+    and their relation to the forces of nature and magic. I bid thee the best of luck."
+    The goddess then vanishes as mysteriously as she had appeared.'
+  RUBY00: '...You successfully grab one of the rubies!'
+  RUBY01: '*** %s has successfully grabbed a ruby from the tree!'
+  RUBY02: '...You fail to grab a ruby. *** A snake lunges out from the tree and bites
+    for you for 8 points of damage!'
+  RUBY03: '*** %s tries to grab a ruby, but instead is bitten by a large snake!'
+  DRUID0: '...As you touch the scepter to the orb of light, it vanishes in a flash!
+    *** A spell has been added to your spellbook!'
+  DRUID1: '*** %s is doing something mysterious with the orb of light!'
+  DRUID2: '...Unfortunately, you don''t have a scepter!'
+  FEAR01: '...As you boldly defy the evil, the Goddess Tashanna rewards you for your
+    courage with more knowledge and power. You are now level 5!'
+  FEAR02: '*** %s has just gained in wisdom and courage.'
+  ASHM00: '...As you cry your tears for the sorrow of the ash trees, they fall to
+    the ground and magically transform into a beautiful crystal shard!'
+  ASHM01: '*** A shard suddenly appears on the ground near the ash trees!'
+  ASHM02: '*** Unfortunately, the shard vanishes a moment later!'
+  GROSE1: '...You pick one of the beautiful, lavender roses and add it to your possessions!'
+  GROSE2: '*** %s has just picked one of the lavender roses.'
+  GROSE3: '...You have too many possessions to grab one.'
+  GROSE4: '*** %s is attempting to pick one of the lavender roses.'
+  MAGF00: '...As you toss the pinecone into the fountain, a genie suddenly appears
+    above the fountain and states: "Thanks for you donation; a scroll has been delivered
+    somewhere within the forest of Kyrandia as a sign of our thanks." *** The genie
+    then vanishes!'
+  MAGF01: '*** As %s tosses a pinecone into the fountain, a genie suddenly appears
+    above the fountain and states: "Thanks for you donation; a scroll has been delivered
+    somewhere within the forest of Kyrandia as a sign of our thanks." *** The genie
+    then vanishes!'
+  MAGF02: '...The fountain sparkles magically in acceptance of your gift!'
+  MAGF03: '*** %s is has just tossed something into the fountain, which sparkles magically
+    in acceptance of the gift!'
+  MAGF04: '...As you toss the pinecone into the fountain, a voice echoes all around,
+    whispering in the wind: "The fountain needs more to work its magic!"'
+  MAGF05: '...As you toss the shard into the fountain, a genie magically appears for
+    a moment, hands you an amulet, and then vanishes!'
+  MAGF06: '...As you toss the shard into the fountain, a voice echoes all around,
+    whispering in the wind: "The fountain needs more to work its magic!"'
+  MAGF07: '*** As %s tosses the pinecone into the fountain, a voice echoes all around,
+    whispering in the wind: "The fountain needs more to work its magic!"'
+  DRINK0: '...The fresh water is very delicious and refreshing!'
+  DRINK1: '*** %s is drinking the water with a refreshed smile.'
+  TMPRAY: '...As you pray, a vision of the Goddess Tashanna appears in your mind,
+    standing before you in a holy brilliance of light. She smiles and speaks softly
+    to you: "One of your many quests must be the realization of your astral origins;
+    seek thy birthstones and prove thy knowledge."'
+  URSCRL: '...As you read the %s, it vanishes in a puff of purple smoke. *** The "%s"
+    spell is added to your spellbook!'
+  SCRLM0: '...As you read the %s, it vanishes in a puff of purple smoke. *** Any spells
+    you had memorized are mysteriously forgotten!'
+  SCRLM1: '...As you read the %s, it vanishes in a puff of purple smoke. *** Any possessions
+    you may have been holding, except for your spellbook, vanish into thin air!'
+  SCRLM2: '...As you read the %s, it vanishes in a puff of purple smoke. *** Any gold
+    you may have been holding, vanishes in a purple flash of light!'
+  SCRLM3: '...As you read the %s, it vanishes in a puff of purple smoke. *** All your
+    spell points of energy have been magically drained!'
+  SCRLM4: '...As you read the %s, it vanishes in a puff of orange smoke. *** Suddenly,
+    you feel yourself thrown into a spinning, magical vortex...'
+  SCRLM42: '*** Your stomach feels slightly upset.'
+  SCRLM5: '...As you read the %s, it suddenly vanishes in a wisp of blue smoke! ***
+    Suddenly, there is a deafening crash of thunder and a dragonstaff appears in your
+    hands!'
+  SCRLM6: '...As you read the %s, it suddenly vanishes in a flash of yellow light!
+    *** Suddenly, a %s mysteriously appears in your hands!'
+  SCRLM7: '...As you read the %s, it vanishes in a puff of purple smoke. *** You suffer
+    %d hit points of damage!'
+  UKISSD: '...The dryad nimbly escapes you, giggles, smiles, and gives you a %s!'
+  OKISSD: '*** %s attempts to %s the dryad, which nimbly escapes, giggles, smiles,
+    and gives %s a %s!'
+  DIEMSG: '*** Suddenly, everything goes black, and you feel yourself falling through
+    a deep chasm. Strange colors flash in your mind and your ears are deafened with
+    the sound of rolling thunder. After what seems like an eternity, you finally feel
+    yourself floating gently to the ground, and your vision returns...'
+  KILLED: '*** %s just ceased to exist, having been sucked into a vanishing void.'
+  NOTMEM: '...You concentrate upon your words of magic, yet nothing happens! You cannot
+    seem to find that spell memorized in your mind.'
+  SPFAIL: '*** %s is trying to cast a spell, without success.'
+  S001M1: '...As you mutter the incantation, you feel your legs grow weak and your
+    heart beat fast. Suddenly, there is a flash of silvery light, and'
+  BASMSG: '*** Suddenly, your eyes flash bright blue, blinding you for a moment. When
+    you open them again, you feel as if your power of seeing has been diminished.'
+  BASMSG1: '*** Suddenly, your skin burns with an invisible fire, wracking your body
+    with almost unbearable agony. A moment later, the pain diminishes and fades away,
+    but leaves you feeling slightly feeble.'
+  BASMSG2: '*** Suddenly, a chilling, supernatural wind flies from the very air around
+    you, painfully freezing your entire body. As it dissipates, you feel somewhat
+    weakened.'
+  BASMSG3: '*** Suddenly, a bolt of lightning flashes from out of nowhere, striking
+    you in the chest, full force! Although you seem to suffer no physical damage,
+    you do feel a little mentally tired.'
+  BASMSG4: '*** Suddenly a large, ugly demon, dripping with gore, bursts out from
+    the ground in front of you. With its terrifying roar, it lunges for your throat,
+    and then vanishes in a puff of smoke. *** You feel slightly drained.'
+  BASMSG5: '*** Suddenly, you feel your body changing under the influence of strange
+    and powerful forces. *** You have transformed back to your visible human form.'
+  RET2NM: '*** Suddenly, %s is engulfed in a swirl of multi-colored mists! *** %s
+    appears from within the sparkling mists, which then vanish.'
+  SBOOK1: '...The spellbook is made from fine papyrus paper and bound in a leather
+    book cover with iron bindings. As you look inside, you see... *---------------------------------*
+    | Spell Book of %-4s %-9s | | |'
+  SBOOK2: '| %-9s %-9s %-9s |'
+  SBOOK3: '| There doesn''t appear to be | | any spells in your spellbook! |'
+  SBOOK4: '*---------------------------------* The spellbook radiates an aura of powerful
+    magic.'
+  ASBOOK1: "...The spellbook is made from fine papyrus paper and bound in a leather\
+    \ book cover with iron bindings. As you look inside, you see... \xC9\xCD\xCD\xCD\
+    \xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\
+    \xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBB \xBA Spell Book of %-4s %-9s \xBA\
+    \ \xCC\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\
+    \xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xB9"
+  ASBOOK2: "\xBA %-9s %-9s %-9s \xBA"
+  ASBOOK3: "\xBA There doesn't appear to be \xBA \xBA any spells in your spellbook!\
+    \ \xBA"
+  ASBOOK4: "\xC8\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\
+    \xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBC The spellbook\
+    \ radiates an aura of powerful magic."
+  LOSSPL: '...You master the %s spell, however the %s spell slips from your memory!'
+  GAISPL: '...You master the %s spell!'
+  MEMSPL: '*** %s has just memorized a spell from %s spellbook!'
+  MISS00: '...You concentrate on the spell and start to cast it. The power of the
+    spell builds but suddenly fizzles out as though something were still missing.'
+  MISS01: '*** %s is concentrating on casting a spell that suddenly fizzles out as
+    though something were still missing.'
+  SPM000: '...As you cast the spell, a flash of bright blue light encircles you for
+    a brief moment! You suddenly feel mystically protected.'
+  SPM001: '*** %s casts a spells, and is suddenly encircled in a flash of bright blue
+    light for a brief moment!'
+  SPM002: '...Uttering the magical incantation, you are suddenly engulfed in a mystical
+    cloud of purple mists. You feel the touch of the Goddess Tashanna, and then you''re
+    blinded by a bright white flash of light! Afterwards, you feel quite strengthened.'
+  SPM003: '*** %s is momentarily engulfed in a mystical cloud of purple mists.'
+  SPM004: '...You cast the spell, and a mystical beam of orange light flies from your
+    fingers, disintegrating %s''s %s!'
+  SPM005: '*** A mystical beam of orange light flies from %s''s fingers, disintegrating
+    you %s!'
+  SPM006: '*** A mystical beam of orange light flies from %s''s fingers at %s, disintegrating
+    %s %s!'
+  SPM007: '...As you murmur the incantation, a globe of dark red light flies from
+    your palms at %s, destroying %s possessions!'
+  SPM008: '*** A globe of dark red light flies from %s''s palms at you, destroying
+    all your possessions!'
+  SPM009: '*** A globe of dark red light flies from %s''s palms at %s, destroying
+    all %s possessions!'
+  S05M00: '...A bolt of bright blue lightening flies from your fingers but is magically
+    dispelled.'
+  S05M01: '*** A bolt of bright blue lightening flies from %s''s fingers but is magically
+    dispelled from affecting you.'
+  S05M02: '*** A bolt of bright blue lightening flies from %s''s fingers at %s but
+    is magically dispelled.'
+  S05M03: '...Your moonstone suddenly starts to glow brightly. *** A bolt of blue
+    lightening flies from the moonstone striking %s''s spellbook in a brilliant flash.
+    *** %s''s spellbook has been totally wiped clean. *** Your moonstone then suddenly
+    vanishes.'
+  S05M04: '*** %s''s moonstone starts to glow strangely. *** A bolt of blue lightening
+    flashes from %s striking your spellbook.'
+  S05M05: '*** %s''s moonstone starts to glow strangely. *** A bolt of blue lightening
+    flashes from %s striking %s''s spellbook.'
+  S06M00: '...A ball of fire erupts from your hands and culminates in a fiery explosion!'
+  S06M01: '*** A ball of fire erupts from %s''s hands and culminates in a fiery explosion!'
+  S06M02: '*** You have been hit by the fire!'
+  S06M03: '*** %s has been hit by the fire.'
+  S06M04: '*** The explosion seems to have no effect on you.'
+  S07M00: '...As you cast the spell, you feel a surge of magical energy flow through
+    your body. *** Your eyes glow a bright red for a moment!'
+  S07M01: '*** %s eyes suddenly glow a bright red for a moment!'
+  S08M00: '...You see yourself fading away, and soon you are completely invisible!'
+  S08M01: '*** %s fades away and becomes invisible!'
+  S09M00: '...You cast the spell and turn white as a ghost and feel as though you
+    are about to drop dead. *** Suddenly, the feeling subsides as though nothing were
+    wrong.'
+  S09M01: '*** %s casts a spell and turns white as a ghost as though they were about
+    to drop dead.'
+  S10M00: '...As the last word of this spell leaves your lips, the room starts to
+    darken as a terrible storm approaches.'
+  S10M01: '*** As the final words of a spell leave the lips of %s, the room starts
+    to darken as a terrible storm approaches.'
+  S10M02: '*** Large chunks of ice fly at you from the storm, striking you in several
+    vital areas causing you 30 points of damage.'
+  S10M03: '*** Large chunks of ice flying from the storm strike %s in several vital
+    areas causing a great deal of damage.'
+  S10M04: '*** Large chunks of ice flying from the storm at you are magically destroyed
+    without causing you any harm.'
+  S11M00: '...You cast the spell accurately, unfortunately, for some mysterious reason
+    the spell does not work.'
+  S11M02: '...You successfully cast the spell and a yellow ball of light flies from
+    your fingers.'
+  S11M03: '*** %s successfully casts a spell and a yellow ball of light flies at you.'
+  S11M04: '*** %s successfully casts a spell and a yellow ball of light flies at %s.'
+  S11M05: '*** You just dropped your %s.'
+  S11M06: '*** %s has just dropped %s %s.'
+  S12M00: '...As you finish the spell a white mist appears around %s and the number
+    %d appears in your mind.'
+  S12M01: '*** %s casts a spell and a white mist appears around you for a brief moment.'
+  S12M02: '*** %s has just cast a spell and a white mist appears around %s for a brief
+    moment.'
+  S13M00: '...You cast the spell but it doesn''t seem to have any effects.'
+  S13M01: '*** %s casts a spell at you but it doesn''t seem to have any effects.'
+  S13M02: '*** %s casts a spell at %s but it doesn''t seem to have any effects.'
+  S13M03: '...You cast the spell and your opponent suddenly forgets all the spells
+    that they had memorized.'
+  S13M04: '*** %s casts a spell at you and suddenly you have forgotten all the spells
+    that you had memorized.'
+  S13M05: '*** %s casts a spell which leaves %s scratching around for something that
+    they have forgotten.'
+  S14M00: '...Upon completing the required incantation, you are suddenly are blinded
+    by a brilliant flash of light. *** When the light dies out you notice...'
+  S14M01: '*** %s completes a spell incantation and is suddenly enclosed in a blinding
+    flash of light.'
+  S15M00: '...A dense yellow mist surrounds you for a second and when it is gone you
+    feel almost like new.'
+  S15M01: '*** %s casts a spell and a dense yellow mist surrounds the caster for several
+    seconds.'
+  S17M00: '...A red bolt flies from your fingers but fails to make contact with %s.'
+  S17M01: '*** A red bolt flies from %s''s fingers but fails to make contact with
+    you.'
+  S17M02: '*** A red bolt flies from %s''s fingers at %s but fails to make contact.'
+  S17M03: '...A red bolt flies from your fingers and strikes %s in a small, bright
+    flash.'
+  S17M04: '*** A red bolt flies from %s''s fingers at you and strikes you in a small
+    flash causing %d points of damage.'
+  S17M05: '*** A red bolt flies from %s''s fingers at %s and strikes in a small flash
+    and %s loses some strength.'
+  S18M00: '...Instantly as you finish this difficult spell large chunks of ice fly
+    across the room at the others.'
+  S18M01: '*** %s''s fingers are turning a strange color of blue, as though something
+    terrible is about to happen.'
+  S18M02: '*** A large white chunk of ice comes flying at you, striking you in the
+    chest, causing you 26 points of damage.'
+  S18M03: '*** A large white chunk of ice flies at %s, causing them a great deal of
+    damage.'
+  S18M04: '*** A large white chunk of ice comes flying at you, but a strange blue
+    aura protects you from any damage.'
+  S19M00: '...A dense blue mist leaves your palms at %s but does not seem to have
+    any effects.'
+  S19M01: '*** A dense blue mist leaves %s''s palms towards you but does not seem
+    to have any effects.'
+  S19M02: '*** A dense blue mist leaves %s''s palms towards %s but does not seem to
+    have any effects.'
+  S19M03: '...A dense blue mist leaves your palms and surrounds %s in a cone of cold
+    air.'
+  S19M04: '*** A dense blue mist leaves %s''s palms and surrounds you in a cone of
+    cold air causing you %d points of damage.'
+  S19M05: '*** A dense blue mist leaves %s''s palms and surrounds %s in a cone of
+    cold air and %s sustains some damage.'
+  S20M00: '...As you finish this spell small junks of ice fly from your fingers across
+    the entire room.'
+  S20M01: '*** %s''s fingers are turn a strange color of blue, as ice begins to form.'
+  S20M02: '*** Small white chunks of ice come flying at you, and hit you directly!'
+  S20M03: '*** Small white chunks of ice come flying at %s, and hit directly!'
+  S20M04: '*** Small white chunks of ice come flying at you, but a strange blue aura
+    protects you from any damage.'
+  S21M00: '...An enormous red bolt flies from your fingers but fails to make contact
+    with %s.'
+  S21M01: '*** An enormous red bolt flies from %s''s fingers but fails to make contact
+    with you.'
+  S21M02: '*** An enormous red bolt flies from %s''s fingers at %s but fails to make
+    contact.'
+  S21M03: '...An enormous red bolt flies from your fingers and strikes %s in blinding
+    flash.'
+  S21M04: '*** An enormous red bolt flies from %s''s fingers and you and strikes you
+    in a blinding flash causing %d points of damage.'
+  S21M05: '*** An enormous red bolt flies from %s''s fingers at %s and striker in
+    a blinding flash and %s loses a great deal strength.'
+  S22M00: '...A powerful bolt of lightning flies from your fingers but is deflected
+    from %s.'
+  S22M01: '*** A power bolt of lightning flies from %s''s finger but is deflected
+    from you.'
+  S22M02: '*** A powerful bolt of lightning flies from %s''s finger at %s but is deflected.'
+  S22M03: '...A powerful bolt of lightning flies from your finger striking %s.'
+  S22M04: '*** A powerful bolt of lightning flies from %s''s finger striking you for
+    %d damage.'
+  S22M05: '*** A powerful bolt of lightning flies from %s''s finger striking %s and
+    %s takes some damage.'
+  S23M00: '...You cast the spell successfully but the magical forces of the Goddess
+    Tashanna do not permit you to travel to that place!'
+  S23M01: '*** %s casts a spell and looks as though %s might be taking a trip but
+    the Goddess Tashanna does not permit it.'
+  S23M02: '...You cast the spell successfully and a sudden dust cloud sucks you up!
+    *** You feel as though you are traveling through time and space when suddenly
+    the cloud disappears...'
+  S23M03: '*** %s casts a spell successfully and is suddenly engulfed in a dust cloud.'
+  S24M00: '...Suddenly, you are transformed into a ugly, puesdo dragon!'
+  S24M01: '*** %s suddenly transforms into a ugly puesdo dragon!'
+  S25M00: '...As you finish chanting the spell a brilliant green light surrounds you
+    for a brief moment and then vanishes.'
+  S25M01: '*** As %s finishes chanting a spell, a brilliant green light appears for
+    a brief moment and then vanishes.'
+  S26M00: '...As you cast the spell you are instantly encased in a tomb of ice. ***
+    Suddenly the ice shatters and you are free.'
+  S26M01: '*** %s casts a spell and is instantly encased in a tomb of ice. *** Suddenly
+    the ice shatters and the caster is free again.'
+  S27M00: '...As the last word of this powerful spell leaves you mouth, the room suddenly
+    grows darker as the terror of your spell is about to manifest itself.'
+  S27M01: '*** As the last word of a spell comes from %s''s mouth, the room suddenly
+    grows darker as the terror of the spell is about to manifest itself.'
+  S27M02: '*** Several large bolts of lightning descend from out of nowhere but are
+    deflected from hitting you.'
+  S27M03: '*** Several large bolts of lightning descend from out of nowhere and strike
+    you in an ear shattering crackle, knocking you off your feet causing you a great
+    deal of damage.'
+  S27M04: '*** Several large bolts of lightning descend from out of nowhere and strike
+    %s in an ear shattering crackle, knocking the person to the ground.'
+  S28M00: '...Suddenly your bloodstone starts to vibrate wildly. *** The bloodstone
+    then mysteriously vanishes. *** %s starts to shake violently in a fit of delusion.
+    *** %s''s fit subsides and %s looks quite defenseless.'
+  S28M01: '*** Suddenly the bloodstone %s is holding starts to vibrate wildly. ***
+    The bloodstone then mysteriously vanishes. *** You suddenly start to feel very
+    ill as though something has invaded your body. *** The feeling suddenly vanishes,
+    leaving you feel completely defenseless.'
+  S28M02: '*** %s suddenly looks like %s is having problems, controlling things. ***
+    In the midst of the confusion, %s suddenly looks very ill. *** Just as mysteriously
+    as things started, things are now quite, but %s looks completely defenseless.'
+  S29M00: '...A blinding blue bolt of lightning flies from your fingers but is deflected
+    from %s.'
+  S29M01: '*** A blinding blue bolt of lightning flies from %s''s finger but is deflected
+    from you.'
+  S29M02: '*** A blinding blue bolt of lightning flies from %s''s finger at %s but
+    is deflected.'
+  S29M03: '...A blinding blue bolt of lightning flies from your fingers striking %s.'
+  S29M04: '*** A blinding blue bolt of lightning flies from %s''s finger striking
+    you for %d damage.'
+  S29M05: '*** A blinding blue bolt of lightning flies from %s''s finger striking
+    %s and %s sustains a great deal of damage.'
+  S30M00: '...Upon uttering the words of this spell, a large blue ball begins to form.'
+  S30M01: '*** Upon uttering the final words of a spell, a large blue ball forms by
+    %s''s fingers.'
+  S30M02: '*** A large blue ball flies at you, culminating in a bright blue explosion
+    causing you 16 points of damage.'
+  S30M03: '*** A large blue ball flies at %s, culminating in a bright blue explosion
+    causing damage.'
+  S30M04: '*** A large blue ball flies at you, but strangely enough is deflected by
+    some magical resistance.'
+  S31M00: '...A large ball of fire erupts from your hands and culminates in a brilliant
+    explosion!'
+  S31M01: '*** A large ball of fire erupts from %s''s hands and culminates in a brilliant
+    explosion!'
+  S31M02: '*** The explosion seems to have no effect on you.'
+  S31M03: '*** The explosion causes your flesh to burn for a moment. %s has been hit
+    by the fire!'
+  S31M04: '*** The explosion causes %s''s flesh to burn for a moment.'
+  S32M00: '...A large red bolt flies from your fingers but %s is protected from its
+    affects.'
+  S32M01: '*** A large red bolt flies from %s''s fingers at you but you are protected
+    from its affects.'
+  S32M02: '*** A large red bolt flies from %s''s fingers at %s but %s is protected
+    from its affects.'
+  S32M03: '...A large red bolt flies from your fingers at %s causing a great deal
+    of damage.'
+  S32M04: '*** A large red bolt flies from %s''s fingers at you causing %d points
+    of damage.'
+  S32M05: '*** A large red bolt flies from %s''s fingers at %s and %s is hit causing
+    a great deal of damage.'
+  S33M00: '...As you cast the spell a large wall of ice encases you for a moment and
+    then seems to melt away.'
+  S33M01: '*** %s casts a spell and a large wall of ice encases the caster for a moment
+    and then seems to melt away.'
+  S34M00: '...As the spell is cast a silver ball appears by your target. *** The ball
+    disappears and the number %d appears in your mind.'
+  S34M01: '*** As %s casts a spell, a small silver ball appears by your head and then
+    disappears.'
+  S34M02: '*** As %s casts a spell, a small silver ball appears by %s''s head and
+    then disappears.'
+  S35M00: '...As you cast the spell a large wall of fire rises around you for a moment
+    and then fades away.'
+  S35M01: '*** %s casts a spell and a large wall of fire rises for a brief second
+    and then fades out.'
+  S36M00: '...Upon completing the incantation of this spell, your sapphire starts
+    to glow in a dark shade of blue and starts to burn your hand with intolerable
+    pain. *** The gem suddenly vanishes and as you look at your hand you notice that
+    it looks perfectly ok. *** You have the feeling of being completely impenetrable.'
+  S36M01: '*** One of %s''s possessions starts to glow in a dark shade of blue. ***
+    %s seems to be experiencing some sort of discomfort with one of %s hands. ***
+    %s is looking like nothing can every hurt %s again.'
+  S37M00: '...As you finish casting the spell, a terrible chill fills the room.'
+  S37M01: '*** %s casts a spell, which fills the room with a terrible chill.'
+  S37M02: '*** Hundreds of pieces of ice start to rain down from the heavens, several
+    hitting you for 20 points of damage.'
+  S37M03: '*** Hundreds of pieces of ice start to rain down from the heavens, several
+    hitting %s causing damage.'
+  S37M04: '*** Hundreds of pieces of ice start to rain down from the heavens, but
+    some magic force prevents you from being hit.'
+  S38M00: '...You successfully complete the spell and your eyes burn for a moment
+    and start to tear.'
+  S38M01: '*** %s successfully completes the spell and you notice that the caster
+    appears to be crying.'
+  S39M00: '...As you complete the incantation your eyes turn bright red.'
+  S39M01: '*** As %s finishes an incantation, you notice the casters eyes have turn
+    bright red for a second.'
+  S40M00: '...A blue mist leaves your palms at %s but does not seem to have any effects.'
+  S40M01: '*** A blue mist leaves %s''s palms towards you but does not seem to have
+    any effects.'
+  S40M02: '*** A blue mist leaves %s''s palms towards %s but does not seem to have
+    any effects.'
+  S40M03: '...A blue mist leaves your palms and surrounds %s in a cone of cold air.'
+  S40M04: '*** A blue mist leaves %s''s palms and surrounds you in a cone of cold
+    air causing you %d points of damage.'
+  S40M05: '*** A blue mist leaves %s''s palms and surrounds %s in a cone of cold air
+    and %s sustains some damage.'
+  S41M00: '...As you finish chanting the spell a dull green light surrounds you for
+    a brief moment and then vanishes.'
+  S41M01: '*** As %s finishes chanting a spell, a dull green light appears for a brief
+    moment and then vanishes.'
+  S43M00: '...A small yellow mist surrounds you for a second and when it is gone you
+    are feeling slightly better.'
+  S43M01: '*** %s casts a spell and a small yellow mist surrounds the caster for a
+    second.'
+  S44M00: '...As you cast the spell you feel a strange sensation and realize that
+    %s has'
+  S44M01: '*** %s has just entered your mind and been able to read all your spells.'
+  S44M02: '*** %s has just a spell that is playing mind games with %s''s head.'
+  S45M00: '...In the blink of an eye, you suddenly have become invisible!'
+  S45M01: '*** In the blink of an eye, %s has become invisible!'
+  S47M00: '...You cast the spell but some magical resistance prevents it from succeeding.'
+  S47M01: '*** %s casts a spell and you feel something tugging at you without success.'
+  S47M02: '*** %s casts a spell at %s but some magical resistance prevents it from
+    working.'
+  S47M03: '...The powers of the spell are released in lightning force. *** The %s
+    that %s is holding just vanished! *** The %s just magically appeared in your hands.'
+  S47M04: '*** %s just cast a spell. *** The %s that you are holding just vanished
+    into thin air. *** The %s you just lost, magically appeared in %s''s hand.'
+  S47M05: '*** %s just cast a spell. *** The %s that %s is holding just vanished into
+    thin air. *** The %s just reappeared, magically in %s''s hand.'
+  S48M00: '...A small red flash flies from your fingers at %s but is neutralized.'
+  S48M01: '*** A small red flash flies from %s''s fingers at you but is neutralized.'
+  S48M02: '*** A small red flash flies from %s''s fingers at %s but is neutralized.'
+  S48M03: '...A small red flash flies from your fingers and hits %s.'
+  S48M04: '*** A small red flash flies from %s''s fingers and hits you doing %d points
+    of damage.'
+  S48M05: '*** A small red flash flies from %s''s fingers and hits %s as %s takes
+    a small amount of damage.'
+  S49M00: '...Upon casting the spell a cold freeze fills the room and you become frozen
+    in a sheet of ice. *** After several moments the room returns to normal and you
+    are unharmed.'
+  S49M01: '*** As %s finishes a spell, the entire room is filed with a cold freeze
+    and the caster is frozen in a sheet of ice. *** After several moments the room
+    returns to normal and the caster is unharmed.'
+  S50M00: '...You cast the spell but an invisible force prevents it from working.'
+  S50M01: '*** %s casts a spell on you but an invisible force prevents it from working.'
+  S50M02: '*** %s casts a spell on %s but an invisible force prevents it from working.'
+  S50M03: '...You cast your destructive spell, causing your target to lose a great
+    deal of power.'
+  S50M04: '*** %s casts a spell on you, draining you of a great deal of your magical
+    power.'
+  S50M05: '*** %s casts a spell on %s, draining a great deal of magical power.'
+  S51M00: '...You cast the spell but it doesn''t seem to have any effects.'
+  S51M01: '*** %s casts a spell at you but it doesn''t seem to have any effects.'
+  S51M02: '*** %s casts a spell at %s but it doesn''t seem to have any effects.'
+  S51M03: '...You cast the spell and your opponent forgets a spell.'
+  S51M04: '*** %s casts a spell at you and suddenly you have forgotten something.'
+  S51M05: '*** %s casts a spell at %s and there are no visual effects.'
+  S52M00: '...You cast this spell quite wearily and a fear rises in your soul as you
+    feel the earth begin to rumble.'
+  S52M01: '*** As %s casts the, spell a fear rises in your soul as you feel the earth
+    beginning to rumble.'
+  S52M02: '*** Large flames shoot out at you but a magical force prevents you from
+    being harmed.'
+  S52M03: '*** Large flames shoot out and engulf you, burning your entire body. The
+    pain is more than you have ever felt before and when flames die you feel extremely
+    weakened.'
+  S52M04: '*** Large flames shoot out and engulf %s, burning its victims entire body.
+    *** When the flames die down the target looks extremely weakened.'
+  S53M00: '...You cast the spell and a wall of fire rises around you for a brief second
+    and then fades out.'
+  S53M01: '*** %s casts a spell and a wall of fire rises for a brief second and then
+    fades out.'
+  S54M00: '...A large blue vapor cloud appears around %s but doesn''t seem to have
+    effects.'
+  S54M01: '*** A large blue vapor cloud comes from %s towards you but doesn''t seem
+    to have and effects.'
+  S54M02: '*** A large blue vapor cloud heads from %s at %s but doesn''t seem to have
+    any effects.'
+  S54M03: '...A large blue vapor cloud surrounds %s in a massive cone of cold air.'
+  S54M04: '*** A large blue vapor cloud from %s surrounds you in a massive cone of
+    cold air causing you %d points of damage.'
+  S54M05: '*** A large blue vapor cloud from %s, surrounds %s in a massive cone of
+    cold air as %s sustains a great deal of damage.'
+  S55M00: '...As you finish the spell a lighting bolt strikes you with no effect.'
+  S55M01: '*** A lightning bolt strikes %s with no effects.'
+  S56M00: '...A large lightning bolt descends upon you, striking you with no effect.'
+  S56M01: '*** A large lightning bolt descends upon %s, striking with no effect.'
+  S57M00: '...You cast the spell but a strange force prevents it from working.'
+  S57M01: '*** %s casts a spell on you but a strange force prevents it from working.'
+  S57M02: '*** %s casts a spell on %s but a strange force prevents it from working.'
+  S57M03: '...You cast the spell successfully, causing your target to lose some power.'
+  S57M04: '*** %s casts a spell on you, draining you of some of your magical power.'
+  S57M05: '*** %s casts a spell on %s, draining some magical power.'
+  S58M00: '...A small yellow mist surrounds you for a second and when it is gone you
+    are feeling much better.'
+  S58M01: '*** %s casts a spell and a small yellow mist surrounds the caster for several
+    seconds.'
+  S59M00: '...You start to concentrate upon the words required to cast this powerful
+    spell. Upon completing its words a silence falls upon everybody. *** A vision
+    appears within your mind of the Goddess Tashanna, standing almighty in her domain,
+    snaring at you for what you have just unleased. *** You notice that the rose you
+    were holding has just vanished.'
+  S59M01: '*** %s is in deep concentration while attempting to cast a spell.'
+  S59M02: '*** Suddenly, the ground begins to shake violently and a loud crackling
+    noise is heard in the distance.'
+  S59M03: '*** A gaping hole opens in the ground swallowing up any objects that may
+    have been there!'
+  S59M04: '*** The intensity of the earthquake bangs you around for what seems like
+    an eternity causing you 50 points of damage.'
+  S59M05: '*** The intensity of the earthquake bangs %s around for what seems to be
+    an eternity causing %s massive damage.'
+  S60M00: '...A bright blue lightning bolt descends upon you, striking you with no
+    effect.'
+  S60M01: '*** A bright blue lightning bolt descends upon %s, striking with no effect.'
+  S61M00: '...A massive fireball erupts from your hands and culminates in a blinding
+    explosion!'
+  S61M01: '*** A massive fire ball erupts from %s''s hands and culminates in a blinding
+    explosion!'
+  S61M02: '*** The blinding explosion generates an enormous amount of heat and damages
+    you for 32 points.'
+  S61M03: '*** The blinding explosion generates an enormous amount of heat and causes
+    %s damage.'
+  S61M04: '*** The blinding explosion generates an enormous amount of heat but seems
+    to have no affect on you.'
+  S62M00: '...As you cast the spell, you are suddenly transformed into a willowisp
+    with wings!'
+  S62M01: '*** %s suddenly transforms into a willowisp with wings!'
+  S63M00: '...You cast this tedious spell and realize your located at coordinate %d.'
+  S63M01: '*** %s is casting a spell to help get %s bearings straight.'
+  S64M00: '...As you cast the spell you are engulfed in a large explosion which fades
+    almost instantly.'
+  S64M01: '*** %s casts a spell and is engulfed in a large explosion which fades almost
+    instantly.'
+  S65M00: '...A bright light surrounds the target for a second and a little voice
+    whispers to you that your friend is really %s.'
+  S65M01: '*** %s casts a spell which surrounds you in bright lights revealing your
+    true identity.'
+  S65M02: '*** %s casts a spell which surrounds %s in a bright light for a brief moment.'
+  S66M00: '...A bolt of lightning flies from you finger but is deflected from %s.'
+  S66M01: '*** A bolt of lightning flies from %s''s finger but is deflected from you.'
+  S66M02: '*** A bolt of lightning flies from %s''s finger at %s, but %s deflects
+    it with a flick of the wrist.'
+  S66M03: '...A bolt of lightning flies from your finger, striking %s.'
+  S66M04: '*** A bolt of lightning flies from %s''s finger striking you for %d damage.'
+  S66M05: '*** A bolt of lightning flies from %s''s finger striking %s and %s takes
+    some damage.'
+  S67M00: '...You put all your concentration into cast this highly deadly spell. ***
+    Suddenly from out of thin air appears a deadly Aerial Servant. *** Unable to complete
+    its mission, it turns on you, viciously slashing at you for what seems to be an
+    eternity. *** It suddenly emits an ear piercing screech and vanishes, leaving
+    you to your misery.'
+  S67M01: '*** %s is putting all %s concentration into casting a spell. *** Suddenly
+    from out of thin air a Deadly Aerial Servant appears. *** The servant viciously
+    starts to slash at %s for what seems to be an eternity. *** The servant then suddenly
+    emits an ear piercing screech and vanishes, leaving %s in a bloody mess.'
+  S67M02: '...You put all your concentration into cast this highly deadly spell. ***
+    Suddenly from out of thin air appears a Deadly Aerial Servant. The servant flies
+    up to you bows and flies off to its target. *** A shiver runs down your spine
+    as the servant vanishes from your sight.'
+  S67M03: '*** %s is putting all %s concentration into casting a spell. *** Suddenly
+    from out of thin air a Deadly Aerial Servant appears. The servant bows to the
+    caster and then flies off to find its target.'
+  S67M04: '*** Suddenly a large Aerial Servant appears from out of thin air.'
+  S67M05: '*** The Aerial Servant shrieks at you in hatred and starts shredding you
+    into a bloody mess. *** The servant then vanishes as quickly as it came.'
+  S67M06: '*** The Aerial Servant shrieks at %s and starts tearing %s into a bloody
+    mess. *** The servant then vanishes as quickly as it came.'
+  S67M08: '*** Suddenly a large Aerial Servant appears from out of thin air. *** The
+    servant shrieks at you but is instantly dispelled by a strange magical aura.'
+  S67M09: '*** Suddenly a large Aerial Servant appears from out of thin air. *** The
+    servant shrieks at %s but is instantly dispelled by a strange magical aura.'
+  NOSUCC: '*** %s casts a spell, to no avail!'
+  SNW000: '...You cast the spell with accuracy, but for some mysterious reason, the
+    spell is deflected from hitting your target!'
+  SNW001: '*** %s attempts to cast a spell at you, but it is mystically dispelled
+    by your protection!'
+  SNW002: '*** %s casts a spell at %s, but it is mysteriously deflected!'
+  MERCYA: '...%s is protected by the Goddess Tashanna! The spell fails!'
+  MERCYB: '*** %s tries to cast a spell on you, but you are protected by the Goddess
+    Tashanna!'
+  MERCYC: '*** %s tries to cast a spell on %s, but %s is protected by the Goddess
+    Tashanna!'
+  MERCYU: '*** You are mystically protected by the mercy of the Goddess Tashanna!'
+  MERCYO: '*** %s is mystically protected by the mercy of the Goddess Tashanna!'
+  SKISSR: '...Your heart racing with excitement, and your soul filled with true love,
+    you lean near and gives %s a warm, passionate kiss, expressing your eternal devotion
+    to %s!'
+  SKISSU: '*** %s, who has sworn to love you until the end of time, leans near and
+    gives you a long, warm, passionate kiss, expressing %s eternal devotion to you!'
+  SKISSO: '*** %s leans near and gives %s a long, warm, passionate kiss, expressing
+    %s eternal devotion to %s!'
+  S16M00: '...Suddenly, you are transformed into a beautiful, white pegasus!'
+  S16M01: '*** %s suddenly transforms into a beautiful, white pegasus!'
+  WILFLY: '...As you lift above the ground, you feel yourself gracefully fly across
+    the endless depths of the chasm to the other side...'
+  PEGFLY: '...As you majestically soar into the air, you feel yourself magically propelled
+    across the beautiful, sparkling sea...'
+  UNOFLY: '...For some mysterious reason, you don''t really feel like flying here.'
+  HUNFLY: '...Unfortunately, Tashanna did not grant humans with the power of flight.'
+  ATFLY1: '*** %s is attempting to fly, without much success.'
+  BUYM00: '...The shop keeper smirks at you and says, "Sorry, but you''re going to
+    need more gold for THAT spell."'
+  BUYM01: '*** The shop keeper and %s seem to be haggling for a few minutes, but the
+    shop keeper finally turns his back on %s.'
+  BUYM02: '...The shop keeper smiles, takes your gold, and says, "Thank you!". ***
+    He then waves his hands and a bright purplish globe of light envelops your spellbook
+    for a moment!'
+  BUYM03: '*** The shop keeper and %s haggle for a few minutes, then the shop keeper
+    takes %s gold and casts an incantation upon %s''s spellbook.'
+  BUYM04: '...The shop keeper sadly says to you, "Sorry, but we don''t have that spell
+    in stock... I''ll try and order it for you by, oh, say sometime in the next six
+    hundred years! Have a good day."'
+  TRDM00: '...The gem cutter considers for a moment, takes your gem, and then gives
+    you %d pieces of gold.'
+  TRDM01: '*** %s trades the gem cutter %s for %d pieces of gold.'
+  TRDM02: '...The gem cutter looks sharply at you, and then suddenly smiles. He leans
+    closer and says, "I bid you good luck, brave seeker of legends". He takes the
+    kyragem and hands you a soulstone.'
+  TRDM03: '*** %s and the gem cutter move off by themselves for a few minutes.'
+  TRDM04: '...The gem cutter says to you, "Thanks, but no thanks."'
+  TRDM05: '...Unfortunately, you don''t have that at the moment.'
+  CHEAPO: '...Unfortunately, you do not have that in gold. Best beware of making false
+    offers to the gods!'
+  UGETCR: '...As you make you offering, a flash of lightning streaks from the sky
+    and strikes your offered gold, disintegrating it! *** %d credits have been added
+    to your account, compliments of the Goddess Tashanna!'
+  OGETCR: '*** A flash of lightning streaks from the sky and strikes an offering of
+    gold from %s!'
+  NOGTCR: '...As you make you offering, a flash of lightning streaks from the sky
+    and strikes your offered gold, disintegrating it! *** The Goddess Tashanna appears
+    to you and graciously thanks you for your wonderful sacrifice.'
+  TAKROS: '...The healer smiles at you and humbly accepts you beautiful offer. She
+    then touches her palm to your forehead and utters a strange incantation.'
+  NOHAVE: '...Unfortunately, you don''t have a rose. The healer smiles at you, but
+    does nothing.'
+  NOROSE: '*** %s is trying to offer something to the healer, unsuccessfully.'
+  NOGOOD: '...The healer denies your offer and tells you to be less materialistic;
+    to appreciate and respect more of the beauty of nature.'
+  FNDGOL: '...You find %d pieces of gold in the brook!'
+  NOFNDG: '...You search the brook, but don''t find anything this time.'
+  PRAYER: '...As you pray, a vision of the Goddess Tashanna appears in your mind,
+    she smiles at you, and offers her blessings.'
+  HNSYOU: '...As you offer your heart and soul, the most precious jewels of your life,
+    you feel the hand of the Goddess Tashanna bless you with power. *** You are now
+    at level 7! *** A spell has been added to your spellbook!'
+  HNSOTH: '*** %s has suddenly grown in strength and knowledge!'
+  PANM00: '...As you speak the words of eternal strength and acceptance of the supreme
+    powers of good in the universe, a golden key suddenly materializes in your hands.'
+  PANM01: '*** %s is suddenly engulfed within a shimmering globe of golden light,
+    which radiates brilliantly for a few moments and then vanishes!'
+  PANM02: '...Something is preventing the powers of magic to perform their wonders!'
+  PANM03: '...As you examine the ancient runes embedded into the marble pillars, you
+    are only able to recognize a few of the symbols, although you cannot instantly
+    translate their true meaning. You read: "ha-tc en-esa-eop ore-ef gusi- xx-he xxx-e-".'
+  PANM04: '*** %s is examining the symbols on the pillars.'
+  WALM00: '...As you drop the key into the crevice, a flash of golden light engulfs
+    you, and you feel yourself being magically transported through space...'
+  WALM01: '...For some reason, nothing happens at all!'
+  WALM02: '*** Oddly enough, %s is playing around with the wall.'
+  WALM03: '...As you chant the words, the wall suddenly begins to glow with a shimmering,
+    golden hue!'
+  WALM04: '*** Suddenly, the wall begins to glow with a shimmering, golden hue!'
+  WALM05: '*** The golden glow of the wall suddenly fades away!'
+  DAGM00: '...As you concentrate upon your wish, the Goddess Tashanna intervenes with
+    her magic, and a dagger appears in your hands!'
+  DAGM01: '*** %s is concentrating with sincere determination.'
+  DAGM02: '...What a creative imagination you have!'
+  DAGM03: '...The statue is quite a spectacular work of art, especially for its large
+    proportions. Despite the wonderful artwork, your attention is grasped by an inscription
+    near the base which reads: "id- upi- ozs-omsy-pm -p p-ysom y-r fs--rt".'
+  DAGM04: '*** %s is examining the statue carefully.'
+  REFM00: '...As you toss the dagger into the pool, it vanishes in circles of ripples.
+    *** Suddenly, a beautiful sword rises from the water and levitates into your hands!'
+  REFM01: '*** %s is playing around in the pool.'
+  REFM02: '...Oh, surely thou jest!'
+  REFM03: '...As you look into the pool, you see a mirror image of yourself. *** Suddenly,
+    the words "feoamut wotaquop jagarooni pistobba" appear in the pool, and then mysteriously
+    vanish!'
+  REFM04: '*** %s is looking into the pool.'
+  MISM00: '...As you touch the orb, you are suddenly pulled through a magical portal...'
+  MISM01: '...As you concentrate upon the orb, it glows even brighter for a moment,
+    and suddenly a charm appears in your hands!'
+  MISM02: '*** %s is concentrating with great fervor.'
+  MISM03: '...You can''t seem to concentrate.'
+  MISM04: '...The orb accepts your offer, and glows brightly for a moment! *** You
+    are now at level 8!'
+  MISM05: '*** %s is attempting to touch the orb!'
+  LVL9M0: '...Tashanna accepts your offer! *** You are now at level 9!'
+  LVL9M1: '*** %s suddenly grows in strength and knowledge!'
+  SLOT00: '...You drop the garnet in the slot, and the machine starts to hum and spin...
+    *** Suddenly a voice booms: "WE HAVE A WIIIIIIINNNNNNERRRR!"'
+  SLOT01: '*** %s is playing around with the slot machine. *** Suddenly a voice booms:
+    "We have a winner!"'
+  SLOT02: '*** Suddenly, %s appears in your hands!'
+  SLOT03: '...You drop the garnet in the slot, and the machine starts to hum and spin...
+    *** Suddenly a voice booms: "WE HAVE A LOOOOOSSSSEEEEERRRRR!"'
+  SLOT04: '*** %s is playing around with the slot machine. *** Suddenly a voice booms:
+    "WE HAVE A LOOOOOSSSSEEEEERRRRR!"'
+  ROCK00: '...The rock glows a bright purple in acceptance of your offering, and the
+    sword vanishes! *** A tiara suddenly appears in your hands!'
+  ROCK01: '*** %s is messing around with the rock.'
+  ROCK02: '...Hmmmmm, that''s an interesting concept, but unfortunately, not an acceptable
+    one.'
+  LV10M0: '...Tashanna graciously accepts your gift. *** You are now at level 10!'
+  OEPORT: '*** %s enters the portal in a blinding flash of light! *** Suddenly, %s
+    is thrown from the portal back into this chamber!'
+  ENDPOR: '*** Suddenly you are thrown back into the chamber as the vision vanishes
+    before your eyes!'
+  PORTAL: '...As you walk into the portal, you are suddenly blinded by spectacular
+    and colorful images beyond anything you have ever seen before! As your eyes start
+    to adjust to the brilliance, a magical scene appears before you... ***'
+  PORTAL1: You're standing near a beautiful waterfall in the center of an underground
+    forest. Memories of young loves appear before you, so realistic you feel as if
+    you could reach out and touch them. Your heart begins to race faster and faster...
+  PORTAL2: You're lying in a small, wooden chapel. Next to you, you feel the warm
+    touch of your life's eternal love, holding you close. All you can remember is
+    the dark wood of the rafters above as you journey to paradise...
+  PORTAL3: You're crying on the floor, begging for the return of the love you lost
+    long ago. Tears fall like raindrops from your red, swollen eyes as your heart
+    breaks from the sorrow of losing the meaning and inspiration of your life...
+  PORTAL4: You're standing alone in solitude on a dark, windy beach. You look across
+    the black horizon remembering times of happiness and peace long ago, as the world
+    moves on emotionlessly...
+  PORTAL5: You're standing by a statue which you dimly recognize in your subconscious,
+    but your mind is filled with thoughts of determination, inspiration, and above
+    all else, hope. You feel a power growing within your soul, as a smile returns
+    to your face, and a sparkle lights in your eyes...
+  PORTAL6: You're flying through the air on the wings of a pegasus, soaring high above
+    the forest below. It is the most exhilarating feeling of freedom you could have
+    ever imagined...
+  PORTAL7: You're riding a magical carnival ride, holding the hand of your dearest
+    love. As you soar through the evening sky, you experience the joy of heaven...
+  PORTAL8: 'A single name echos through your mind: Kyra.'
+  PORTAL9: 'Voices vibrate through your head, whispering the words: "Across time and
+    space, I love you forever..."'
+  INVDES: '...The force is unseen!'
+  WILDES: '...The willowisp quickly flies from your direct vision.'
+  PEGDES: '...The pegasus is a wonderful creature, but it moves quickly away from
+    your direct vision.'
+  PDRDES: '...The pseudo dragon is so ugly, that you turn your head immediately.'
+  RABOM0: '...The wand breaks in two.'
+  RABOM1: '*** %s is looking rather disappointed.'
+  RABOM2: '...The wand breaks in two. *** Suddenly, a the goddess Tashanna appears
+    in holy beauty before you. She smiles kindly at you and places a legendary kyragem
+    in your hands. "Take care, fair one," she whispers to you before vanishing!'
+  RABOM3: '*** %s is momentarily surrounded by a circle of shimmering rainbows!'
+  SANM00: '...You dig through the sand and happen to find a piece of gold!'
+  SANM01: '*** %s is digging through the sand.'
+  SANM02: '...You dig through the sand, but you find nothing of interest!'
+  SUNM00: '...As you cast the zapher spell, the tulip vanishes and a silver wand appears
+    in your hands!'
+  SUNM01: '*** %s is attempting to cast a spell.'
+  SUNM02: '...As you cast the spell, a vision appears in your mind of a bright flash
+    of light with a silverish explosion!'
+  SUNM03: '...As you offer the kyragem, you feel a warmth surround you. *** You are
+    now at level 12!'
+  SUNM04: '*** %s is smiling with joy.'
+  CTREM0: '...As you aim the wand at the crystal tree, there''s a flash of silver
+    light! *** You are now at level 11!'
+  CTREM1: '*** %s is staring at the crystal tree with "oohs" and "ahhs".'
+  TULM00: '...You pick a beautiful silver tulip!'
+  TULM01: '*** %s is messing around in the tulips!'
+  TULM02: '...You can''t seem to grab one.'
+  NPAY00: '...Sorry, but that is beyond your capabilities at this time!'
+  NPAY01: '*** %s is doing something way beyond the limits of the law.'
+  NPAY02: '...You offer the gold graciously and it is accepted. *** A vision in your
+    mind appears and says "Now why not donate some real money to this system so you
+    can really enjoy this game". *** The vision vanishes as quickly as it came.'
+  NPAY03: '*** %s makes an offer, but then starts to complain about being ripped off!'
+  SOUKEY: '...As you place the soulstone into the niche, suddenly the demon gate comes
+    to life with a thousand vibrant, glowing colors! You feel yourself pulled into
+    the gate, there is a flash of bright light, and suddenly...'
+  BODM01: '...You leap with all your might and cross the chasm! *** A broach appears
+    among your possesions! *** You are now at level 13!'
+  BODM02: '*** %s has just successfully leaped across the chasm!'
+  BODM03: '*** However, one of your other items was lost in the jump...'
+  BODM04: '...You leap with all your might, and you almost make the other side, but
+    at the last inch, you slip and fall backwards, into the endless depths of the
+    chasm...'
+  BODM05: '*** %s attempts to jump the chasm, but unfortunately falls to certain death...'
+  MINM01: '...An emotionless voice responds: "Correct." *** A pendant appears in your
+    hands! *** You are now at level 14!'
+  MINM02: '*** %s has suddenly grown in strength and knowledge.'
+  MINM03: '*** However, one of your other possessions seems to have vanished.'
+  HEAR01: '...Your commitment to your heart''s love proves you worthy of greater knowledge.
+    *** A locket suddenly appears in your hands! *** You are now at level 15!'
+  HEAR02: '*** %s is momentarily surrounded by a dark red glow.'
+  HEAR03: '*** However, you also notice one of your other possessions is now missing.'
+  SOUL01: '...Your realization that time has no effect upon the immortal soul proves
+    you worthy of greater enlightnment. *** You are now at level 16! *** You also
+    receive a ring, the symbol of universal unity, as a mark of your achievement.'
+  SOUL02: '*** %s has suddenly grown in strength and wisdom.'
+  SOUL03: '*** Unfortunately, one of your other possessions has been lost somewhere
+    in time.'
+  DEVM01: '...You devote yourself... *** Your broach vanishes in a red flash! ***
+    Your pendant vanishes in a blue flash! *** Your locket vanishes in a golden flash!
+    *** Your ring vanishes in a purple flash! *** You are now at level 17!'
+  DEVM02: '*** %s is suddenly surrounded by a rainbow variety of flashes of light!'
+  DEVM03: '...Your devotion is not complete.'
+  DEVM04: '*** %s is looking rather disappointed.'
+  TRUM01: '...As you seek the truth, the Goddess Tashanna, in all her glory and beauty
+    appears before you and says: "This is your test to become a Mage of Fire. I wish
+    you the best of luck." *** The Goddess then vanishes. *** Suddenly, you feel yourself
+    in a game of tug-o-war. You fight with all your effort against your invisible
+    opponent, trying to win. You feel yourself starting to pull your opponent to your
+    victory, when suddenly you slip and fall...'
+  TRUM02: '...As you seek the truth, the Goddess Tashanna, in all her glory and beauty
+    appears before you and says: "This is your test to become a Mage of Fire. I wish
+    you the best of luck." *** The Goddess then vanishes. *** Suddenly, you feel yourself
+    in a game of tug-o-war. You fight with all your effort against your invisible
+    opponent, trying to win. You feel yourself slipping, and losing the battle, when
+    suddenly an inner strength pulls you to victory! *** You are now at level 18!'
+  TRUM03: '*** %s is looking a little peaked.'
+  LEVL19: '...You''re now level 19! Congratulations!'
+  LEVL20: '...You''re now level 20! Congratulations!'
+  LEVL21: '...You''re now level 21! Congratulations!'
+  LEVL22: '...You''re now level 22! Congratulations!'
+  LEVL23: '...You''re now level 23! Congratulations!'
+  LEVL24: '...You''re now level 24! Congratulations!'
+  GEMAPP: '*** A leaf from one of the nearby trees falls gently to the ground, where
+    it suddenly transforms into a beautiful %s!'
+  BMSG00: '*** A nasty, little brownie suddenly runs in from nowhere!'
+  BMSG01: '*** The brownie grabs all your gold, snickers evilly, and kicks you in
+    the shin!'
+  BMSG02: '*** The brownie has just stolen all of %s''s gold and kicked %s in the
+    shin!'
+  BMSG03: '*** The brownie steals all your possesions except for your spellbook!'
+  BMSG04: '*** The brownie has just stolen all of %s''s possessions!'
+  BMSG05: '*** The brownie runs up to you, grins, jumps in the air, and slaps you
+    in the face!'
+  BMSG06: '*** The brownie has just slapped %s in the face with an evil snicker!'
+  BMSG07: '*** The brownie then makes a few obscene gestures and disappears in a blink
+    of the eye!'
+  DMSG00: '*** The dryad smiles at you, bows respectfully, and vanishes in a purplish
+    flash of light!'
+  DMSG01: '*** The %s that was lying %s vanishes in a puff of purplish mists!'
+  DMSG02: '*** Suddenly, a dryad appears in a purplish flash of light!'
+  EMSG00: '*** Suddenly, a small, green elf jumps from out of nowhere!'
+  EMSG01: '*** The elf smiles at you and hands you %d gold pieces!'
+  EMSG02: '*** The elf has just given %s %d gold pieces!'
+  EMSG03: '*** The elf is whispers something to %s secretly!'
+  EMSG04: '*** The elf then tips his hat to you and vanishes as quickly as he had
+    appeared!'
+  EHINT0: '*** The elf whispers to you: "Travel fast and travel far, thou shall never
+    escape the wrath of Zar..."'
+  EHINT1: '*** The elf whispers to you: "Understand thy heart, soul, mind, and body..."'
+  EHINT2: '*** The elf whispers to you: "Walk through danger without fear..."'
+  EHINT3: '*** The elf whispers to you: "Cry for those who cannot cry; do not be ashamed
+    of your tears for those who have been hurt..."'
+  EHINT4: '*** The elf whispers to you: "Seek your power ''cross the great sea on
+    the island of fantasy..."'
+  EHINT5: '*** The elf whispers to you: "Kyrandia (Fantasy World of Legends) is Copyrighted
+    (C) 1988-1996 by Galacticomm, Inc. and (C) 2005-2021 by Elwynor Technologies..."'
+  EHINT6: '*** The elf whispers to you: "Powerful is the spell that is not a spell,
+    that can be cast, but not memorized, and appears in no spellbook... seek this
+    spell..."'
+  EHINT7: '*** The elf whispers to you: "The magic of the forest itself is not something
+    to be overlooked... the elements of nature hold much power..."'
+  EHINT8: '*** The elf whispers to you: "Answering riddles can open doors, like a
+    key..."'
+  EHINT9: '*** The elf whispers to you: "The soul is the key..."'
+  ZARABO: '*** Suddenly, the sky darkens above you as a shadow of a huge dragon covers
+    you! You hear ear-shattering screech echo all around you, and you feel a powerful
+    blast of hot wind which almost knocks you senseless!'
+  ZMSG00: '*** Suddenly, the dragon casts a spell and vanishes in a cloud of black,
+    acrid smoke!'
+  ZMSG01: '*** Suddenly you hear a ear-piercing screech of rage! *** A dragon suddenly
+    appears in a cloud of black, acrid smoke! *** You have the sudden urge to flee
+    in panic!'
+  ZMSG02: '*** Suddenly, the dragon roars out its battle cry!'
+  ZMSG03: '*** Before you can react, the dragon swings its neck and rips at you with
+    its razor sharp teeth, tearing your chest apart!'
+  ZMSG04: '*** In a blink of an eye, the dragon inhales deeply, and then breathes
+    an explosion of fire directly at you, boiling your flesh in its searing heat!'
+  ZMSG05: '*** The dragon turns at you in disgust and sheer hatred, and slashes at
+    you with one of its claws, shredding several of your limbs!'
+  ZMSG06: '*** The dragon pauses for a moment in deep concentration, and then turns
+    to stare directly at you. *** Suddenly, a bolt of lightning flies from the creature''s
+    claws, smashing into your chest with a force great enough to pulverize a small
+    village!'
+  ZMSG07: '*** %s has just been brutally attacked by the dragon!'
+  ZMSG08: '...You successfully cast the spell! *** The dragon roars, turns on you,
+    and lashes at you with its huge, spiked, powerful tail, crushing you to the ground!'
+  ZMSG09: '*** %s, in a fit of idiocy, magically attacked the dragon, who in turn
+    crushed %s violently with its tail!'
+  ZMSG10: '*** Suddenly, the dragon vanishes in an explosion of bright orange flames!'
+  ZMSG11: '*** Suddenly, a dragon appears in an explosion of bright orange flames,
+    bellowing out a roar of anger!'
+  ZMSG12: '...As you rub the staff, the dragon suddenly bellows out a deafening roar
+    of rage!'
+  ZMSG13: '...As you rub the staff, a deafening crash of thunder erupts and you feel
+    the ground under you feet begin to tremble!'
+  ZMSG14: '*** The dragon gives you a look of sheer hatred, lunges for you, and rips
+    the dragonstaff from your hands!'
+  YOUWIN: "\a ...the dragon looks at you with contempt... yet respect. *** You are\
+    \ now at level 25... Arch-mage of Legends! *** You fear the dragon no longer...\
+    \ Congratulations to you, Arch-mage of Legends, you have mastered the magic of\
+    \ Kyrandia! Of course, you are now eligible to accept any prize the System Operator\
+    \ is offering; call the Sysop, at (XXX) XXX-XXXX to collect your prize (you must\
+    \ be the first caller to be the winner). However, you have won more than materialistic\
+    \ treasures, for to have reached this point, you have experienced a magical journey\
+    \ through the very heart and soul of the author... and witnessed a visionary fantasy\
+    \ of true love, across time and space forever. Follow your dreams, for the story\
+    \ of Kyrandia, is one we all live, in one way or another... and the story will\
+    \ never end."
+  SHEWON: '*** Suddenly, the dragon bows respectfully to %s who has now attained the
+    title of Arch-mage of Legends!'
+  HUH: '...Huh?'
+  NOWNOW: '...Now, now!'
+  SAIDIT: '...You said it!'
+  SPEAK1: '*** %s %ss:'
+  SPEAK2: '%s'
+  SPEAK3: '*** You hear a voice nearby.'
+  WHAT: '...What??'
+  WATCHIT: '...Hey, watch it!'
+  WHISPR1: '*** %s whispers to you: %s'
+  WHISPR2: '...%s hears you!'
+  WHISPR3: '*** %s is whispering to %s!'
+  NOSUCHP: '...You see no such person here!'
+  VOICE: '...What a load voice!'
+  YELLER1: '*** %s is %sing at the top of %s voice!'
+  YELLER2: '*** You hear someone %sing nearby!'
+  YELLER3: '...You''re very loud about it'
+  YELLER4: '*** %s %ss:'
+  YELLER5: '%s!!'
+  YELLER6: '*** From somewhere nearby you hear someone screaming: %s!'
+  MOVUTL: '...You cannot move in that direction.'
+  PONDER1: '...%s?'
+  KISUTL1: '...%s who or what?'
+  KISUTL2: '...Why bother to %s %s?'
+  KISUTL3: '*** %s'
+  KISUTL4: has just given %s %s a %s!
+  KISUTL5: is trying to %s %s %s!
+  KISUTL6: '...Why bother to %s %s?'
+  KISUTL7: '*** %s'
+  KISUTL8: has just given the %s %s a %s!
+  KISUTL9: is trying to %s the %s %s!
+  DONE: '...Consider it done!'
+  KISUTL10: '*** %s has just given you a %s!'
+  KISUTL11: '*** %s hs just given %s a %s!'
+  BEST: '...You do your best!'
+  KISUTL12: '*** %s is doing %s best to %s you!'
+  KISUTL13: '*** %s is doing %s best to %s %s!'
+  KISUTL14: '...Sorry, there''s not one around!'
+  COUNTR1: '...But what?'
+  COUNTR2: '...Naah, YOU do it!'
+  GLDCNT: '...You have %d gold piece%s!'
+  GIVIT1: '...Tell, you what, I will, if you give me a break!'
+  GIVCRD1: '...Invalid amount!'
+  GIVCRD2: '...You don''t have enough!'
+  GIVCRD3: '...That person isn''t here!'
+  GIVCRD4: '...Ok, done.'
+  GIVCRD5: '*** %s has just given you %d gold piece%s!'
+  GIVCRD6: '*** %s has just given %s %d gold piece%s!'
+  GIVERU1: '...You can''t, %s does not appear to be here.'
+  GIVERU2: '...You Indian giver, you!'
+  GIVERU3: '...But you don''t have one!'
+  GIVERU4: '...Nice thought and all, but no can do.'
+  GIVERU5: '...Ooops, it slipped out of your hands!'
+  GIVERU6: '*** %s just dropped %s %s by mistake!'
+  GIVERU7: '...Good job, you made %s drop %s %s!'
+  GIVERU8: you %s, which made you drop your %s!
+  GIVERU9: '%s %s, which made %s drop %s %s!'
+  GIVERU10: you %s!
+  GIVERU11: '%s %s!'
+  GMSGUTL1: '*** %s has just'
+  GMSGUTL2: given
+  GMSGUTL3: '%sed'
+  GETTER: '...Interesting concept!'
+  GETGP1: '...But no such person is here!'
+  GETGP2: '...You Indian giver, you!'
+  GETGP3: '...%s is not holding any %s!'
+  GETGP4: '...Your hands are already full!'
+  GETGP5: '...You do not succeed!'
+  GETGP6: '*** %s is trying to %s your %s!'
+  GETGP7: '*** %s is trying to %s %s''s %s!'
+  GETGP8: '...You stole it!'
+  GETGP9: '*** %s just stole your %s!'
+  GETGP10: '*** %s just stole %s''s %s!'
+  GETLOC1: '...%s wiggles loose from you!'
+  GETLOC2: '*** %s is trying to %s you!'
+  GETLOC3: '*** %s is trying to %s %s!'
+  GETLOC4: '...Sorry, there is no %s lying %s.'
+  GETLOC5: '*** %s is trying to %s the %s, without success.'
+  GETLOC6: '...You''re hands are too full already!'
+  GETLOC7: '*** %s has just taken the %s that was %s.'
+  LOOKER1: '*** %s is examining the %s %s.'
+  LOOKER2: '*** %s is examining %s %s.'
+  LOOKER3: '*** %s is looking at you carefully.'
+  LOOKER4: '*** %s is closely examining %s.'
+  LOOKER5: '...You''re %s.'
+  SHOVER1: '...There is no exit to the "%s"!'
+  SHOVER2: '...Sorry, "%s" is not here!'
+  SHOVER3: '...You''d better see a doctor about that!'
+  SHVUTL1: '...You caught "%s" off guard!'
+  SHVUTL2: '*** %s has just shoved you %s!'
+  DROPIT1: '...A supernatural force is preventing this!'
+  DROPIT2: '...Okay, done.'
+  DROPIT3: '*** %s dropped %s %s!'
+  DROPIT4: '...Nice idea, but you dont have one...'
+  DROPIT5: '...Oh, really? I never knew that!'
+  WINKER1: '...Wink!'
+  WINKER2: '...You wink slyly.'
+  WINKER3: '*** %s has just winked slyly at you!'
+  WINKER4: '*** %s has just winked slyly at %s!'
+  WINKER5: '...No can do.'
+  BRIEFR1: '...Ok, "brief" descriptions from now on.'
+  BRIEFR2: '...Type "brief on" or "brief off".'
+  UNBRIEF: '...Ok, "full" descriptions from now on.'
+  READER1: '...Why read %s?'
+  READER2: '...Ah, but you don''t have one!'
+  SCROLL1: '*** %s is reading %s magical %s!'
+  HITCTR: '...You have %d out of %d hit points remaining.'
+  KYRA1: '...Type "?" for help.'
+  KYRA2: '...Nah, I dont believe it!'
+  KYRA3: '...Oh, that''s a lousy reason!'
+  KYRA4: '...Now, now, don''t get nasty!'
+  KYRA5: '...%s what?'
+  KYRA6: '...Why would you want to %s?'
+  KYRA7: '...How do you plan to %s?'
+  KYRA8: '...What''s the point in wanting to %s?'
+  KYRA9: '...Surely you jest!'
+  CMPCMD1: '...Sorry, only "live" users may do that!'
+  SMPUTL1: '...%s'
+  SMPUTL2: '*** %s is %s'
+  EXIKYR: '...Exiting Kyrandia...'
+  KUTM00: There is nothing lying %s.
+  KUTM01: There is %s lying %s.
+  KUTM02: There is %s and %s lying %s.
+  KUTM03: There is
+  KUTM04: and %s lying %s.
+  KUTM05: There is a dryad standing here.
+  KUTM06: By the way, there is a very large and angry dragon here too!
+  KUTM07: your spellbook and %d piece%s of gold.
+  KUTM08: and
+  KUTM09: '%s spellbook.'
+  KUTM10: (your eyes glow for a moment)
+  KUTM11: is here.
+  KUTM12: are here.
+  OBJM00: '...Rub-a-dub-dub!'
+  OBJM01: '...Ooooookay!'
+  OBJM02: '...Your amulet glows for a moment!'
+  OBJM03: '...Okay, if you say so!'
+  OBJM04: '...How thoughtful of you!'
+  OBJM05: '...At who?!??!'
+  OBJM06: '...At WHO?!??! Huh?'
+  OBJM07: '...WHAT?!'
+  OBJM08: '...Tastes great... less filling.'
+  OBJM09: '...But you don''t have one!!'
+  KSPM00: '...The %s seems to be magically resistant!'
+  KSPM01: '*** %s is attempting to cast a spell on %s!'
+  KSPM02: '...But there isn''t one in sight!'
+  KSPM03: '...Mysteriously, it fails...'
+  KSPM04: '...A vision enters your mind...'
+  KSPM05: '...The vision ends suddenly...'
+  KSPM06: '*** You suddenly get the feeling that you are being watched!'
+  KSPM07: '*** %s is concentrating in a mystical trance!'
+  KSPM08: '...Suddenly your diamond turns red and disappears! ***'
+  KSPM09: '...But you don''t have that spell in your spellbook!'
+  KSPM10: '...You don''t have the power.'
+  KINM00: '*** Suddenly, you get the feeling that an old friend has returned... again.'
+  KINUSE: '*** Sorry, but only one person can be in the Kyrandia Player Editor at
+    a time. Try again later!'
+  KYREDT: 'Kyrandia User Account Editor ---------------------------- Enter Player-ID
+    to edit:'
+  NOSUCH: Sorry, but that Player-ID does not have a game account.
+  KYRMNU: "\e[0m Now Editing : %s [E] Edit this account [A] Abort and Exit [X] Save\
+    \ and Exit Select an option:"
+  BADCHO: Sorry, but that is not one of the available options.
+  KYRAC1: "\e[0m Player-ID: %s [01] Altnam/Attnam : %s/%s [02] Current Level : %d\
+    \ [03] Current Location : %d - %s [04] Gold on hand : %u [05] Spell Points Left\
+    \ : %d [06] Hit Points Left : %d [07] Spouse's Name : %s [08] Objects Held : %d\
+    \ [09] Spells Info : <separate display>"
+  KYRAC2: '[10] CINVIS - %3d [11] FIRPRO - %3d [12] ICEPRO - %3d [13] LIGPRO - %3d
+    [14] OBJPRO - %3d [15] ALTNAM - %3d Objects Held ------------'
+  KYRAC3: '[22] Birthstone Index : %d - %s - %s - %s - %s [23] Tree Stump Index :
+    %d'
+  CHGWCH: 'Select the item number to change (1-23):'
+  EDT001: "\e[0m Valid Alternate Names are: [1] Player-ID [2] \"Some Unseen Force\"\
+    /\"Unseen Force\" [3] \"Some pegasus\"/\"pegasus\" [4] \"Some pseudo dragon\"\
+    /\"pseudo dragon\" [5] \"Some willowisp\"/\"willowisp\" Select an option (1-5):"
+  EDT002: 'Enter new level (1-25):'
+  EDT003: 'Enter new location number (0-304):'
+  EDT004: "\e[0m Enter gold on hand (0-32766):"
+  EDT005: 'Enter remaining spell points (level dependant):'
+  EDT006: 'Enter remaining hit points (level dependant):'
+  EDT007: 'Enter new spouse name, ''X'' to clear, or press ENTER to keep current spouse:'
+  EDT008: 'Enter maximum number of objects that a player may hold at one time (0-6):'
+  EDT009: ''
+  EDT010: 'You can set the time remaining for seeing invisible players in 15-second
+    intervals (1=15 secs, 2=30 secs, 3=45 secs, 120=1800 secs, 240=3600 secs). Enter
+    a number (1-240):'
+  EDT011: 'You can set the time remaining for fire protection in 15-second intervals
+    (1=15 secs, 2=30 secs, 3=45 secs, 120=1800 secs, 240=3600 secs). Enter a number
+    (1-240):'
+  EDT012: 'You can set the time remaining for ice protection in 15-second intervals
+    (1=15 secs, 2=30 secs, 3=45 secs, 120=1800 secs, 240=3600 secs). Enter a number
+    (1-240):'
+  EDT013: 'You can set the time remaining for lightning protection in 15-second intervals
+    (1=15 secs, 2=30 secs, 3=45 secs, 120=1800 secs, 240=3600 secs). Enter a number
+    (1-240):'
+  EDT014: 'You can set the time remaining for object or other protection in 15-second
+    intervals (1=15 secs, 2=30 secs, 3=45 secs, 120=1800 secs, 240=3600 secs). Enter
+    a number (1-240):'
+  EDT015: "\e[0m You can set the time remaining for alternate identity in 15-second\
+    \ intervals (1=15 secs, 2=30 secs, 3=45 secs, 120=1800 secs, 240=3600 secs). The\
+    \ alternate identity must be set in option Altnam/Attnam. Enter a number (1-240):"
+  EDT016: 'Enter item for position #0:'
+  EDT017: 'Enter item for position #1:'
+  EDT018: 'Enter item for position #2:'
+  EDT019: 'Enter item for position #3:'
+  EDT020: 'Enter item for position #4:'
+  EDT021: 'Enter item for position #5:'
+  EDT022: "\e[0m Enter Birthstone index (0-4):"
+  EDT023: "\e[0m Enter Tree Stump index (0-12):"
+  KSPLS0: Selecting a spell that is set to "Y" will toggle it to "N".
+  MODSPL: 'Enter spell number to modify (1-67):'
+  NOSOBJ: No such object!
+  OBJLST: '[%2d] %-12.12s'
+  SPLLST: '[%02d]%-6.6s - %c'
+  RECUPD: Record updated!
+  RECNPD: Record not updated!

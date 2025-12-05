@@ -1,26 +1,584 @@
 [
   {
+    "id": 0,
+    "name": "ruby",
+    "objdes": 86,
+    "auxmsg": 86,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
     "id": 1,
-    "name": "bronze token",
-    "objdes": 1001,
-    "auxmsg": 0,
-    "flags": ["VISIBL", "PICKUP"],
-    "objrou": "obj_default"
+    "name": "emerald",
+    "objdes": 87,
+    "auxmsg": 87,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN"
+    ],
+    "objrou": null
   },
   {
     "id": 2,
-    "name": "spell tome",
-    "objdes": 1002,
-    "auxmsg": 0,
-    "flags": ["VISIBL", "REDABL"],
-    "objrou": "obj_default"
+    "name": "garnet",
+    "objdes": 88,
+    "auxmsg": 88,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
   },
   {
     "id": 3,
-    "name": "healing draught",
-    "objdes": 1003,
-    "auxmsg": 1004,
-    "flags": ["VISIBL", "DRIABL"],
-    "objrou": "obj_default"
+    "name": "pearl",
+    "objdes": 89,
+    "auxmsg": 89,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 4,
+    "name": "aquamarine",
+    "objdes": 90,
+    "auxmsg": 90,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 5,
+    "name": "moonstone",
+    "objdes": 91,
+    "auxmsg": 91,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 6,
+    "name": "sapphire",
+    "objdes": 92,
+    "auxmsg": 92,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 7,
+    "name": "diamond",
+    "objdes": 93,
+    "auxmsg": 93,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 8,
+    "name": "amethyst",
+    "objdes": 94,
+    "auxmsg": 94,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 9,
+    "name": "onyx",
+    "objdes": 95,
+    "auxmsg": 95,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 10,
+    "name": "opal",
+    "objdes": 96,
+    "auxmsg": 96,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 11,
+    "name": "bloodstone",
+    "objdes": 97,
+    "auxmsg": 97,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 12,
+    "name": "elixir",
+    "objdes": 98,
+    "auxmsg": 98,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN",
+      "DRIABL"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 13,
+    "name": "staff",
+    "objdes": 99,
+    "auxmsg": 99,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 14,
+    "name": "key",
+    "objdes": 100,
+    "auxmsg": 100,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 15,
+    "name": "locket",
+    "objdes": 101,
+    "auxmsg": 101,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 16,
+    "name": "amulet",
+    "objdes": 102,
+    "auxmsg": 102,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 17,
+    "name": "pendant",
+    "objdes": 103,
+    "auxmsg": 103,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 18,
+    "name": "charm",
+    "objdes": 104,
+    "auxmsg": 104,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 19,
+    "name": "bracelet",
+    "objdes": 105,
+    "auxmsg": 105,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 20,
+    "name": "coronet",
+    "objdes": 106,
+    "auxmsg": 106,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 21,
+    "name": "tiara",
+    "objdes": 107,
+    "auxmsg": 107,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 22,
+    "name": "necklace",
+    "objdes": 108,
+    "auxmsg": 108,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 23,
+    "name": "broach",
+    "objdes": 109,
+    "auxmsg": 109,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 24,
+    "name": "sceptre",
+    "objdes": 110,
+    "auxmsg": 110,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 25,
+    "name": "rod",
+    "objdes": 111,
+    "auxmsg": 111,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 26,
+    "name": "wand",
+    "objdes": 112,
+    "auxmsg": 112,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 27,
+    "name": "trinket",
+    "objdes": 113,
+    "auxmsg": 113,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 28,
+    "name": "soulstone",
+    "objdes": 114,
+    "auxmsg": 114,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 29,
+    "name": "kyragem",
+    "objdes": 115,
+    "auxmsg": 115,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 30,
+    "name": "dragonstaff",
+    "objdes": 116,
+    "auxmsg": 116,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "RUBABL"
+    ],
+    "objrou": "zaritm"
+  },
+  {
+    "id": 31,
+    "name": "potion",
+    "objdes": 117,
+    "auxmsg": 117,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "DRIABL"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 32,
+    "name": "pinecone",
+    "objdes": 118,
+    "auxmsg": 118,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 33,
+    "name": "dagger",
+    "objdes": 119,
+    "auxmsg": 119,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 34,
+    "name": "sword",
+    "objdes": 120,
+    "auxmsg": 120,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 35,
+    "name": "scroll",
+    "objdes": 121,
+    "auxmsg": 121,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "REDABL"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 36,
+    "name": "codex",
+    "objdes": 122,
+    "auxmsg": 122,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "REDABL"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 37,
+    "name": "tome",
+    "objdes": 123,
+    "auxmsg": 123,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "REDABL"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 38,
+    "name": "parchment",
+    "objdes": 124,
+    "auxmsg": 124,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "REDABL"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 39,
+    "name": "ring",
+    "objdes": 125,
+    "auxmsg": 125,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 40,
+    "name": "rose",
+    "objdes": 126,
+    "auxmsg": 126,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 41,
+    "name": "lilac",
+    "objdes": 127,
+    "auxmsg": 127,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 42,
+    "name": "orchid",
+    "objdes": 128,
+    "auxmsg": 128,
+    "flags": [
+      "VISIBL",
+      "PICKUP",
+      "NEEDAN"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 43,
+    "name": "shard",
+    "objdes": 129,
+    "auxmsg": 129,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 44,
+    "name": "tulip",
+    "objdes": 130,
+    "auxmsg": 130,
+    "flags": [
+      "VISIBL",
+      "PICKUP"
+    ],
+    "objrou": null
+  },
+  {
+    "id": 45,
+    "name": "dryad",
+    "objdes": 131,
+    "auxmsg": 132,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 46,
+    "name": "tree",
+    "objdes": 133,
+    "auxmsg": 134,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 47,
+    "name": "altar",
+    "objdes": 135,
+    "auxmsg": 136,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 48,
+    "name": "sign",
+    "objdes": 137,
+    "auxmsg": 138,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 49,
+    "name": "statue",
+    "objdes": 139,
+    "auxmsg": 140,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 50,
+    "name": "shrine",
+    "objdes": 141,
+    "auxmsg": 142,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 51,
+    "name": "machine",
+    "objdes": 143,
+    "auxmsg": 144,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 52,
+    "name": "dragon",
+    "objdes": 145,
+    "auxmsg": 146,
+    "flags": [],
+    "objrou": null
+  },
+  {
+    "id": 53,
+    "name": "altar",
+    "objdes": 147,
+    "auxmsg": 148,
+    "flags": [],
+    "objrou": null
   }
 ]

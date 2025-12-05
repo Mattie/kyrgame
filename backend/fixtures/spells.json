@@ -1,18 +1,538 @@
 [
   {
-    "id": 1,
-    "name": "flare",
-    "sbkref": 0,
+    "id": 0,
+    "name": "abbracada",
+    "sbkref": 2,
     "bitdef": 1,
-    "level": 1,
-    "splrou": "spl_light"
+    "level": 10,
+    "splrou": "spl001"
+  },
+  {
+    "id": 1,
+    "name": "allbettoo",
+    "sbkref": 2,
+    "bitdef": 2,
+    "level": 17,
+    "splrou": "spl002"
   },
   {
     "id": 2,
-    "name": "ward",
-    "sbkref": 0,
+    "name": "blowitawa",
+    "sbkref": 3,
+    "bitdef": 1,
+    "level": 5,
+    "splrou": "spl003"
+  },
+  {
+    "id": 3,
+    "name": "blowoutma",
+    "sbkref": 3,
     "bitdef": 2,
+    "level": 12,
+    "splrou": "spl004"
+  },
+  {
+    "id": 4,
+    "name": "bookworm",
+    "sbkref": 3,
+    "bitdef": 4,
+    "level": 21,
+    "splrou": "spl005"
+  },
+  {
+    "id": 5,
+    "name": "burnup",
+    "sbkref": 1,
+    "bitdef": 1,
+    "level": 6,
+    "splrou": "spl006"
+  },
+  {
+    "id": 6,
+    "name": "cadabra",
+    "sbkref": 2,
+    "bitdef": 4,
+    "level": 4,
+    "splrou": "spl007"
+  },
+  {
+    "id": 7,
+    "name": "cantcmeha",
+    "sbkref": 2,
+    "bitdef": 8,
+    "level": 7,
+    "splrou": "spl008"
+  },
+  {
+    "id": 8,
+    "name": "canthur",
+    "sbkref": 2,
+    "bitdef": 16,
+    "level": 16,
+    "splrou": "spl009"
+  },
+  {
+    "id": 9,
+    "name": "chillou",
+    "sbkref": 1,
+    "bitdef": 2,
+    "level": 20,
+    "splrou": "spl010"
+  },
+  {
+    "id": 10,
+    "name": "clutzopho",
+    "sbkref": 3,
+    "bitdef": 8,
+    "level": 5,
+    "splrou": "spl011"
+  },
+  {
+    "id": 11,
+    "name": "cuseme",
+    "sbkref": 3,
+    "bitdef": 16,
+    "level": 3,
+    "splrou": "spl012"
+  },
+  {
+    "id": 12,
+    "name": "dumdum",
+    "sbkref": 3,
+    "bitdef": 32,
+    "level": 17,
+    "splrou": "spl013"
+  },
+  {
+    "id": 13,
+    "name": "feeluck",
+    "sbkref": 3,
+    "bitdef": 64,
+    "level": 10,
+    "splrou": "spl014"
+  },
+  {
+    "id": 14,
+    "name": "firstai",
+    "sbkref": 2,
+    "bitdef": 32,
+    "level": 10,
+    "splrou": "spl015"
+  },
+  {
+    "id": 15,
+    "name": "flyaway",
+    "sbkref": 3,
+    "bitdef": 128,
+    "level": 10,
+    "splrou": "spl016"
+  },
+  {
+    "id": 16,
+    "name": "fpandl",
+    "sbkref": 1,
+    "bitdef": 4,
     "level": 2,
-    "splrou": "spl_shield"
+    "splrou": "spl017"
+  },
+  {
+    "id": 17,
+    "name": "freezuu",
+    "sbkref": 1,
+    "bitdef": 8,
+    "level": 14,
+    "splrou": "spl018"
+  },
+  {
+    "id": 18,
+    "name": "frostie",
+    "sbkref": 1,
+    "bitdef": 16,
+    "level": 8,
+    "splrou": "spl019"
+  },
+  {
+    "id": 19,
+    "name": "frozenu",
+    "sbkref": 1,
+    "bitdef": 32,
+    "level": 7,
+    "splrou": "spl020"
+  },
+  {
+    "id": 20,
+    "name": "frythes",
+    "sbkref": 1,
+    "bitdef": 64,
+    "level": 13,
+    "splrou": "spl021"
+  },
+  {
+    "id": 21,
+    "name": "gotcha",
+    "sbkref": 1,
+    "bitdef": 128,
+    "level": 9,
+    "splrou": "spl022"
+  },
+  {
+    "id": 22,
+    "name": "goto",
+    "sbkref": 3,
+    "bitdef": 256,
+    "level": 13,
+    "splrou": "spl023"
+  },
+  {
+    "id": 23,
+    "name": "gringri",
+    "sbkref": 3,
+    "bitdef": 512,
+    "level": 12,
+    "splrou": "spl024"
+  },
+  {
+    "id": 24,
+    "name": "handsof",
+    "sbkref": 2,
+    "bitdef": 64,
+    "level": 3,
+    "splrou": "spl025"
+  },
+  {
+    "id": 25,
+    "name": "heater",
+    "sbkref": 2,
+    "bitdef": 128,
+    "level": 7,
+    "splrou": "spl026"
+  },
+  {
+    "id": 26,
+    "name": "hehhehh",
+    "sbkref": 1,
+    "bitdef": 256,
+    "level": 22,
+    "splrou": "spl027"
+  },
+  {
+    "id": 27,
+    "name": "hocus",
+    "sbkref": 3,
+    "bitdef": 1024,
+    "level": 18,
+    "splrou": "spl028"
+  },
+  {
+    "id": 28,
+    "name": "holyshe",
+    "sbkref": 1,
+    "bitdef": 512,
+    "level": 14,
+    "splrou": "spl029"
+  },
+  {
+    "id": 29,
+    "name": "hotflas",
+    "sbkref": 1,
+    "bitdef": 1024,
+    "level": 8,
+    "splrou": "spl030"
+  },
+  {
+    "id": 30,
+    "name": "hotfoot",
+    "sbkref": 1,
+    "bitdef": 2048,
+    "level": 12,
+    "splrou": "spl031"
+  },
+  {
+    "id": 31,
+    "name": "hotkiss",
+    "sbkref": 1,
+    "bitdef": 4096,
+    "level": 5,
+    "splrou": "spl032"
+  },
+  {
+    "id": 32,
+    "name": "hotseat",
+    "sbkref": 2,
+    "bitdef": 256,
+    "level": 3,
+    "splrou": "spl033"
+  },
+  {
+    "id": 33,
+    "name": "howru",
+    "sbkref": 3,
+    "bitdef": 2048,
+    "level": 2,
+    "splrou": "spl034"
+  },
+  {
+    "id": 34,
+    "name": "hydrant",
+    "sbkref": 2,
+    "bitdef": 512,
+    "level": 6,
+    "splrou": "spl035"
+  },
+  {
+    "id": 35,
+    "name": "ibebad",
+    "sbkref": 2,
+    "bitdef": 1024,
+    "level": 24,
+    "splrou": "spl036"
+  },
+  {
+    "id": 36,
+    "name": "icedtea",
+    "sbkref": 1,
+    "bitdef": 8192,
+    "level": 15,
+    "splrou": "spl037"
+  },
+  {
+    "id": 37,
+    "name": "icutwo",
+    "sbkref": 3,
+    "bitdef": 4096,
+    "level": 16,
+    "splrou": "spl038"
+  },
+  {
+    "id": 38,
+    "name": "iseeyou",
+    "sbkref": 3,
+    "bitdef": 8192,
+    "level": 3,
+    "splrou": "spl039"
+  },
+  {
+    "id": 39,
+    "name": "koolit",
+    "sbkref": 1,
+    "bitdef": 16384,
+    "level": 3,
+    "splrou": "spl040"
+  },
+  {
+    "id": 40,
+    "name": "makemyd",
+    "sbkref": 2,
+    "bitdef": 2048,
+    "level": 8,
+    "splrou": "spl041"
+  },
+  {
+    "id": 41,
+    "name": "mower",
+    "sbkref": 3,
+    "bitdef": 16384,
+    "level": 7,
+    "splrou": "spl042"
+  },
+  {
+    "id": 42,
+    "name": "noouch",
+    "sbkref": 2,
+    "bitdef": 4096,
+    "level": 1,
+    "splrou": "spl043"
+  },
+  {
+    "id": 43,
+    "name": "nosey",
+    "sbkref": 3,
+    "bitdef": 32768,
+    "level": 5,
+    "splrou": "spl044"
+  },
+  {
+    "id": 44,
+    "name": "peekabo",
+    "sbkref": 2,
+    "bitdef": 8192,
+    "level": 15,
+    "splrou": "spl045"
+  },
+  {
+    "id": 45,
+    "name": "peepint",
+    "sbkref": 3,
+    "bitdef": 65536,
+    "level": 7,
+    "splrou": "spl046"
+  },
+  {
+    "id": 46,
+    "name": "pickpoc",
+    "sbkref": 3,
+    "bitdef": 131072,
+    "level": 8,
+    "splrou": "spl047"
+  },
+  {
+    "id": 47,
+    "name": "pocus",
+    "sbkref": 1,
+    "bitdef": 32768,
+    "level": 1,
+    "splrou": "spl048"
+  },
+  {
+    "id": 48,
+    "name": "polarba",
+    "sbkref": 2,
+    "bitdef": 16384,
+    "level": 13,
+    "splrou": "spl049"
+  },
+  {
+    "id": 49,
+    "name": "sapspel",
+    "sbkref": 1,
+    "bitdef": 65536,
+    "level": 11,
+    "splrou": "spl050"
+  },
+  {
+    "id": 50,
+    "name": "saywhat",
+    "sbkref": 3,
+    "bitdef": 262144,
+    "level": 6,
+    "splrou": "spl051"
+  },
+  {
+    "id": 51,
+    "name": "screwem",
+    "sbkref": 1,
+    "bitdef": 131072,
+    "level": 16,
+    "splrou": "spl052"
+  },
+  {
+    "id": 52,
+    "name": "smokey",
+    "sbkref": 2,
+    "bitdef": 32768,
+    "level": 2,
+    "splrou": "spl053"
+  },
+  {
+    "id": 53,
+    "name": "snowjob",
+    "sbkref": 1,
+    "bitdef": 262144,
+    "level": 13,
+    "splrou": "spl054"
+  },
+  {
+    "id": 54,
+    "name": "sunglass",
+    "sbkref": 2,
+    "bitdef": 65536,
+    "level": 3,
+    "splrou": "spl055"
+  },
+  {
+    "id": 55,
+    "name": "surgless",
+    "sbkref": 2,
+    "bitdef": 131072,
+    "level": 12,
+    "splrou": "spl056"
+  },
+  {
+    "id": 56,
+    "name": "takethat",
+    "sbkref": 1,
+    "bitdef": 524288,
+    "level": 4,
+    "splrou": "spl057"
+  },
+  {
+    "id": 57,
+    "name": "thedoc",
+    "sbkref": 2,
+    "bitdef": 262144,
+    "level": 5,
+    "splrou": "spl058"
+  },
+  {
+    "id": 58,
+    "name": "tiltowait",
+    "sbkref": 1,
+    "bitdef": 1048576,
+    "level": 24,
+    "splrou": "spl059"
+  },
+  {
+    "id": 59,
+    "name": "tinting",
+    "sbkref": 2,
+    "bitdef": 524288,
+    "level": 8,
+    "splrou": "spl060"
+  },
+  {
+    "id": 60,
+    "name": "toastem",
+    "sbkref": 1,
+    "bitdef": 2097152,
+    "level": 18,
+    "splrou": "spl061"
+  },
+  {
+    "id": 61,
+    "name": "weewillo",
+    "sbkref": 3,
+    "bitdef": 524288,
+    "level": 7,
+    "splrou": "spl062"
+  },
+  {
+    "id": 62,
+    "name": "whereami",
+    "sbkref": 3,
+    "bitdef": 1048576,
+    "level": 6,
+    "splrou": "spl063"
+  },
+  {
+    "id": 63,
+    "name": "whopper",
+    "sbkref": 2,
+    "bitdef": 1048576,
+    "level": 12,
+    "splrou": "spl064"
+  },
+  {
+    "id": 64,
+    "name": "whoub",
+    "sbkref": 3,
+    "bitdef": 2097152,
+    "level": 3,
+    "splrou": "spl065"
+  },
+  {
+    "id": 65,
+    "name": "zapher",
+    "sbkref": 1,
+    "bitdef": 4194304,
+    "level": 4,
+    "splrou": "spl066"
+  },
+  {
+    "id": 66,
+    "name": "zelastone",
+    "sbkref": 1,
+    "bitdef": 8388608,
+    "level": 10,
+    "splrou": "spl067"
   }
 ]

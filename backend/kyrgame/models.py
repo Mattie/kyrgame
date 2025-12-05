@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import BigInteger, Column, Integer, JSON, String
 from sqlalchemy.orm import declarative_base
 
@@ -45,6 +45,7 @@ class LocationModel(BaseModel):
     id: int
     brfdes: str = Field(max_length=constants.BRFDES_LEN)
     objlds: str = Field(max_length=constants.OBJLDS_LEN)
+    nlobjs: int
     objects: List[int] = Field(default_factory=list, max_length=constants.MXLOBS)
     gi_north: int
     gi_south: int
@@ -52,6 +53,12 @@ class LocationModel(BaseModel):
     gi_west: int
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    @model_validator(mode="after")
+    def validate_object_count(self):
+        if self.nlobjs != len(self.objects):
+            raise ValueError("nlobjs must equal the number of object ids present")
+        return self
 
 
 class PlayerModel(BaseModel):
@@ -132,6 +139,7 @@ class Location(Base):
     id = Column(Integer, primary_key=True)
     brfdes = Column(String(constants.BRFDES_LEN), nullable=False)
     objlds = Column(String(constants.OBJLDS_LEN), nullable=False)
+    nlobjs = Column(Integer, nullable=False)
     objects = Column(JSON, nullable=False)
     gi_north = Column(Integer, nullable=False)
     gi_south = Column(Integer, nullable=False)

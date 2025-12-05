@@ -27,6 +27,12 @@ def load_spells(path: Path | None = None) -> List[models.SpellModel]:
     return [models.SpellModel(**item) for item in data]
 
 
+def load_commands(path: Path | None = None) -> List[models.CommandModel]:
+    fixture_path = (path or FIXTURE_ROOT) / "commands.json"
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    return [models.CommandModel(**item) for item in data]
+
+
 def load_messages(path: Path | None = None) -> models.MessageCatalogModel:
     fixture_path = (path or FIXTURE_ROOT) / "messages.yaml"
     data = yaml.safe_load(fixture_path.read_text(encoding="utf-8"))
@@ -38,10 +44,12 @@ def fixture_summary(path: Path | None = None) -> dict:
     location_models = load_locations(path)
     object_models = load_objects(path)
     spell_models = load_spells(path)
+    command_models = load_commands(path)
     message_catalog = load_messages(path)
     return {
         "locations": len(location_models),
         "objects": len(object_models),
         "spells": len(spell_models),
+        "commands": len(command_models),
         "messages": len(message_catalog.messages),
     }
