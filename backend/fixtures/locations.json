@@ -1,32 +1,3833 @@
 [
   {
+    "id": 0,
+    "brfdes": "near a mystical willow tree",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      46,
+      45,
+      2
+    ],
+    "gi_north": 1,
+    "gi_south": 88,
+    "gi_east": 94,
+    "gi_west": 71
+  },
+  {
     "id": 1,
-    "brfdes": "Village Square",
-    "objlds": "A fountain sparkles here",
-    "objects": [1],
+    "brfdes": "on a north/south path",
+    "objlds": "on the path",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
     "gi_north": 2,
     "gi_south": 0,
-    "gi_east": 3,
-    "gi_west": 0
+    "gi_east": 95,
+    "gi_west": 72
   },
   {
     "id": 2,
-    "brfdes": "Northern Road",
-    "objlds": "Pine trees line the road",
-    "objects": [],
-    "gi_north": 0,
+    "brfdes": "at a \"T\" intersection on a path",
+    "objlds": "in the dirt",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 3,
     "gi_south": 1,
-    "gi_east": 0,
-    "gi_west": 0
+    "gi_east": 4,
+    "gi_west": 73
   },
   {
     "id": 3,
-    "brfdes": "Wizard's Study",
-    "objlds": "Books and scrolls abound",
-    "objects": [2, 3],
-    "gi_north": 0,
-    "gi_south": 0,
+    "brfdes": "on an overgrown path",
+    "objlds": "in the underbrush",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 87,
+    "gi_south": 2,
+    "gi_east": 96,
+    "gi_west": 74
+  },
+  {
+    "id": 4,
+    "brfdes": "on an east/west road",
+    "objlds": "on the road",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 96,
+    "gi_south": 95,
+    "gi_east": 5,
+    "gi_west": 2
+  },
+  {
+    "id": 5,
+    "brfdes": "on the outskirts of a village",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 109,
+    "gi_south": 110,
+    "gi_east": 6,
+    "gi_west": 4
+  },
+  {
+    "id": 6,
+    "brfdes": "in the village square",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 8,
+    "gi_south": 9,
+    "gi_east": 7,
+    "gi_west": 5
+  },
+  {
+    "id": 7,
+    "brfdes": "at the village temple",
+    "objlds": "near the altar",
+    "nlobjs": 1,
+    "objects": [
+      47
+    ],
+    "gi_north": 10,
+    "gi_south": 11,
+    "gi_east": -1,
+    "gi_west": 6
+  },
+  {
+    "id": 8,
+    "brfdes": "at the gem cutters hut",
+    "objlds": "near the hut",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 6,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 9,
+    "brfdes": "at the spell shop",
+    "objlds": "near the hutch",
+    "nlobjs": 1,
+    "objects": [
+      48
+    ],
+    "gi_north": 6,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 10,
+    "brfdes": "at the healer's abode",
+    "objlds": "in the mists",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 7,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 11,
+    "brfdes": "at the wise man's shanty",
+    "objlds": "in the dirt",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 7,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 12,
+    "brfdes": "at a bubbling brook",
+    "objlds": "near the water",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 75,
+    "gi_south": 74,
+    "gi_east": 82,
+    "gi_west": 60
+  },
+  {
+    "id": 13,
+    "brfdes": "in the Vale of the Butterflies",
+    "objlds": "in the flowers",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 149,
+    "gi_south": 150,
+    "gi_east": 161,
+    "gi_west": 140
+  },
+  {
+    "id": 14,
+    "brfdes": "in a glade of pines",
+    "objlds": "among the fallen pine needles",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 154,
+    "gi_south": 155,
+    "gi_east": 157,
+    "gi_west": 134
+  },
+  {
+    "id": 15,
+    "brfdes": "in a small, lush valley",
+    "objlds": "in the undergrowth",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      10
+    ],
+    "gi_north": 57,
+    "gi_south": 58,
+    "gi_east": 77,
+    "gi_west": 57
+  },
+  {
+    "id": 16,
+    "brfdes": "in a dead wooded glade",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 113,
+    "gi_south": 93,
+    "gi_east": 114,
+    "gi_west": 91
+  },
+  {
+    "id": 17,
+    "brfdes": "at an ancient grave",
+    "objlds": "near the tombstone",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 128,
+    "gi_south": 129,
+    "gi_east": 141,
+    "gi_west": 119
+  },
+  {
+    "id": 18,
+    "brfdes": "near a hollow stump",
+    "objlds": "near the stump",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 147,
+    "gi_south": 148,
+    "gi_east": 164,
+    "gi_west": 142
+  },
+  {
+    "id": 19,
+    "brfdes": "at a flaming thicket",
+    "objlds": "by the thicket",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 160,
+    "gi_south": 159,
+    "gi_east": 139,
+    "gi_west": 151
+  },
+  {
+    "id": 20,
+    "brfdes": "at the Tree of Rubies",
+    "objlds": "near the tree",
+    "nlobjs": 1,
+    "objects": [
+      3
+    ],
+    "gi_north": 131,
+    "gi_south": 132,
+    "gi_east": 134,
+    "gi_west": 115
+  },
+  {
+    "id": 21,
+    "brfdes": "at the tree of the mockingbird",
+    "objlds": "near the tree",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 98,
+    "gi_south": 97,
+    "gi_east": 106,
+    "gi_west": 85
+  },
+  {
+    "id": 22,
+    "brfdes": "on the banks of a lush lagoon",
+    "objlds": "in the sand",
+    "nlobjs": 1,
+    "objects": [
+      8
+    ],
+    "gi_north": -1,
+    "gi_south": 144,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 23,
+    "brfdes": "in a natural chapel",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 49,
+    "gi_south": 48,
+    "gi_east": 62,
+    "gi_west": 24
+  },
+  {
+    "id": 24,
+    "brfdes": "at a silver altar",
+    "objlds": "by the altar",
+    "nlobjs": 2,
+    "objects": [
+      0,
+      4
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 23,
+    "gi_west": -1
+  },
+  {
+    "id": 25,
+    "brfdes": "in the Grove of Oaks",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      3
+    ],
+    "gi_north": 120,
+    "gi_south": 119,
+    "gi_east": 128,
+    "gi_west": 106
+  },
+  {
+    "id": 26,
+    "brfdes": "in a cluster of ash trees",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      2,
+      2,
+      2
+    ],
+    "gi_north": 146,
+    "gi_south": 147,
+    "gi_east": 166,
+    "gi_west": 143
+  },
+  {
+    "id": 27,
+    "brfdes": "near a strange, large rock",
+    "objlds": "near the rock",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 82,
+    "gi_south": 83,
+    "gi_east": 99,
+    "gi_west": 78
+  },
+  {
+    "id": 28,
+    "brfdes": "at an abandoned campsite",
+    "objlds": "by the ashes",
+    "nlobjs": 1,
+    "objects": [
+      7
+    ],
+    "gi_north": 97,
+    "gi_south": 96,
+    "gi_east": 108,
+    "gi_west": 82
+  },
+  {
+    "id": 29,
+    "brfdes": "on a plateau",
+    "objlds": "on the rocks",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 30,
+    "gi_west": -1
+  },
+  {
+    "id": 30,
+    "brfdes": "on a densely wooded hill",
+    "objlds": "in the undergrowth",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 31,
+    "gi_west": 29
+  },
+  {
+    "id": 31,
+    "brfdes": "at the base of a densely wooded hill",
+    "objlds": "on the fallen pine needles",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 121,
+    "gi_south": 120,
+    "gi_east": 126,
+    "gi_west": 30
+  },
+  {
+    "id": 32,
+    "brfdes": "at a bubbling spring of water",
+    "objlds": "near the water",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 67,
+    "gi_south": 64,
+    "gi_east": 134,
+    "gi_west": 93
+  },
+  {
+    "id": 33,
+    "brfdes": "in a shady, natural shelter",
+    "objlds": "on the dirt floor",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      2
+    ],
+    "gi_north": 152,
+    "gi_south": 103,
+    "gi_east": 70,
+    "gi_west": 159
+  },
+  {
+    "id": 34,
+    "brfdes": "in the Druid's Circle",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 51,
+    "gi_south": 50,
+    "gi_east": 59,
+    "gi_west": 58
+  },
+  {
+    "id": 35,
+    "brfdes": "at a terraced waterfall",
+    "objlds": "near the water",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 43,
+    "gi_south": 54,
+    "gi_east": 55,
+    "gi_west": 77
+  },
+  {
+    "id": 36,
+    "brfdes": "at a large, sparkling waterfall",
+    "objlds": "near the water",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 41,
+    "gi_south": 55,
+    "gi_east": 80,
+    "gi_west": 43
+  },
+  {
+    "id": 37,
+    "brfdes": "in a small clearing",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      10
+    ],
+    "gi_north": 122,
+    "gi_south": 121,
+    "gi_east": 124,
+    "gi_west": 103
+  },
+  {
+    "id": 38,
+    "brfdes": "near the Fountain of Eternal Magic",
+    "objlds": "by the fountain",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 159,
+    "gi_south": 158,
+    "gi_east": 115,
+    "gi_west": 153
+  },
+  {
+    "id": 39,
+    "brfdes": "near a platinum tree",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      6,
+      0
+    ],
+    "gi_north": 76,
+    "gi_south": 75,
+    "gi_east": 85,
+    "gi_west": 58
+  },
+  {
+    "id": 40,
+    "brfdes": "in a small field of lilacs",
+    "objlds": "on the soil",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 143,
+    "gi_south": 142,
+    "gi_east": 147,
+    "gi_west": 126
+  },
+  {
+    "id": 41,
+    "brfdes": "at the Secret Shrine of Tashanna",
+    "objlds": "by the shrine",
+    "nlobjs": 1,
+    "objects": [
+      3
+    ],
+    "gi_north": -1,
+    "gi_south": 36,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 42,
+    "brfdes": "near a large statue",
+    "objlds": "near the statue",
+    "nlobjs": 1,
+    "objects": [
+      49
+    ],
+    "gi_north": 142,
+    "gi_south": 141,
+    "gi_east": 148,
+    "gi_west": 128
+  },
+  {
+    "id": 43,
+    "brfdes": "at the entrance to a dark cave",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 170,
+    "gi_south": 35,
+    "gi_east": 36,
+    "gi_west": -1
+  },
+  {
+    "id": 44,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 3,
+    "objects": [
+      3,
+      2,
+      3
+    ],
+    "gi_north": 45,
+    "gi_south": 89,
+    "gi_east": 67,
+    "gi_west": 112
+  },
+  {
+    "id": 45,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 46,
+    "gi_south": 44,
+    "gi_east": 66,
+    "gi_west": 90
+  },
+  {
+    "id": 46,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      42
+    ],
+    "gi_north": 47,
+    "gi_south": 45,
+    "gi_east": 65,
+    "gi_west": 134
+  },
+  {
+    "id": 47,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 48,
+    "gi_south": 46,
+    "gi_east": 64,
+    "gi_west": 60
+  },
+  {
+    "id": 48,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 23,
+    "gi_south": 47,
+    "gi_east": 63,
+    "gi_west": 70
+  },
+  {
+    "id": 49,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      9
+    ],
+    "gi_north": 50,
+    "gi_south": 23,
+    "gi_east": 61,
+    "gi_west": 86
+  },
+  {
+    "id": 50,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 34,
+    "gi_south": 49,
+    "gi_east": 60,
+    "gi_west": 153
+  },
+  {
+    "id": 51,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 52,
+    "gi_south": 34,
+    "gi_east": 58,
+    "gi_west": 56
+  },
+  {
+    "id": 52,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 53,
+    "gi_south": 51,
+    "gi_east": 15,
+    "gi_west": 148
+  },
+  {
+    "id": 53,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      2
+    ],
+    "gi_north": 54,
+    "gi_south": 52,
+    "gi_east": 57,
+    "gi_west": 64
+  },
+  {
+    "id": 54,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      8
+    ],
+    "gi_north": 35,
+    "gi_south": 53,
+    "gi_east": 56,
+    "gi_west": 100
+  },
+  {
+    "id": 55,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 36,
+    "gi_south": 56,
+    "gi_east": 79,
+    "gi_west": 35
+  },
+  {
+    "id": 56,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 55,
+    "gi_south": 57,
+    "gi_east": 78,
+    "gi_west": 54
+  },
+  {
+    "id": 57,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 56,
+    "gi_south": 15,
+    "gi_east": 77,
+    "gi_west": 53
+  },
+  {
+    "id": 58,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 15,
+    "gi_south": 59,
+    "gi_east": 39,
+    "gi_west": 51
+  },
+  {
+    "id": 59,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 5,
+    "objects": [
+      2,
+      0,
+      2,
+      0,
+      3
+    ],
+    "gi_north": 58,
+    "gi_south": 60,
+    "gi_east": 75,
+    "gi_west": 34
+  },
+  {
+    "id": 60,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 3,
+    "objects": [
+      2,
+      3,
+      4
+    ],
+    "gi_north": 59,
+    "gi_south": 61,
+    "gi_east": 12,
+    "gi_west": 50
+  },
+  {
+    "id": 61,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 60,
+    "gi_south": 62,
+    "gi_east": 74,
+    "gi_west": 49
+  },
+  {
+    "id": 62,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 61,
+    "gi_south": 63,
+    "gi_east": 73,
+    "gi_west": 23
+  },
+  {
+    "id": 63,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 62,
+    "gi_south": 64,
+    "gi_east": 72,
+    "gi_west": 48
+  },
+  {
+    "id": 64,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 63,
+    "gi_south": 65,
+    "gi_east": 71,
+    "gi_west": 47
+  },
+  {
+    "id": 65,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      6
+    ],
+    "gi_north": 64,
+    "gi_south": 66,
+    "gi_east": 70,
+    "gi_west": 46
+  },
+  {
+    "id": 66,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 65,
+    "gi_south": 67,
+    "gi_east": 69,
+    "gi_west": 45
+  },
+  {
+    "id": 67,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      4
+    ],
+    "gi_north": 66,
+    "gi_south": 32,
+    "gi_east": 68,
+    "gi_west": 44
+  },
+  {
+    "id": 68,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 69,
+    "gi_south": 154,
+    "gi_east": 90,
+    "gi_west": 67
+  },
+  {
+    "id": 69,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 70,
+    "gi_south": 68,
+    "gi_east": 89,
+    "gi_west": 66
+  },
+  {
+    "id": 70,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 71,
+    "gi_south": 69,
+    "gi_east": 88,
+    "gi_west": 65
+  },
+  {
+    "id": 71,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 72,
+    "gi_south": 70,
     "gi_east": 0,
+    "gi_west": 64
+  },
+  {
+    "id": 72,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 73,
+    "gi_south": 71,
+    "gi_east": 1,
+    "gi_west": 63
+  },
+  {
+    "id": 73,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 74,
+    "gi_south": 72,
+    "gi_east": 2,
+    "gi_west": 62
+  },
+  {
+    "id": 74,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 12,
+    "gi_south": 73,
+    "gi_east": 3,
+    "gi_west": 61
+  },
+  {
+    "id": 75,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      0,
+      0
+    ],
+    "gi_north": 39,
+    "gi_south": 12,
+    "gi_east": 86,
+    "gi_west": 59
+  },
+  {
+    "id": 76,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      4,
+      3
+    ],
+    "gi_north": 77,
+    "gi_south": 39,
+    "gi_east": 84,
+    "gi_west": 15
+  },
+  {
+    "id": 77,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 78,
+    "gi_south": 76,
+    "gi_east": 83,
+    "gi_west": 57
+  },
+  {
+    "id": 78,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      1,
+      0
+    ],
+    "gi_north": 79,
+    "gi_south": 77,
+    "gi_east": 27,
+    "gi_west": 56
+  },
+  {
+    "id": 79,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 80,
+    "gi_south": 78,
+    "gi_east": 82,
+    "gi_west": 55
+  },
+  {
+    "id": 80,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 80,
+    "gi_south": 79,
+    "gi_east": 81,
+    "gi_west": 36
+  },
+  {
+    "id": 81,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 81,
+    "gi_south": 82,
+    "gi_east": 101,
+    "gi_west": 80
+  },
+  {
+    "id": 82,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 81,
+    "gi_south": 27,
+    "gi_east": 100,
+    "gi_west": 79
+  },
+  {
+    "id": 83,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 3,
+    "objects": [
+      10,
+      2,
+      2
+    ],
+    "gi_north": 27,
+    "gi_south": 84,
+    "gi_east": 83,
+    "gi_west": 77
+  },
+  {
+    "id": 84,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      0
+    ],
+    "gi_north": 83,
+    "gi_south": 85,
+    "gi_east": 98,
+    "gi_west": 76
+  },
+  {
+    "id": 85,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 84,
+    "gi_south": 86,
+    "gi_east": 21,
+    "gi_west": 39
+  },
+  {
+    "id": 86,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 85,
+    "gi_south": 87,
+    "gi_east": 97,
+    "gi_west": 75
+  },
+  {
+    "id": 87,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 3,
+    "objects": [
+      3,
+      3,
+      2
+    ],
+    "gi_north": 86,
+    "gi_south": 3,
+    "gi_east": 28,
+    "gi_west": 12
+  },
+  {
+    "id": 88,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 0,
+    "gi_south": 89,
+    "gi_east": 93,
+    "gi_west": 70
+  },
+  {
+    "id": 89,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 88,
+    "gi_south": 90,
+    "gi_east": 92,
+    "gi_west": 69
+  },
+  {
+    "id": 90,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 89,
+    "gi_south": 65,
+    "gi_east": 91,
+    "gi_west": 68
+  },
+  {
+    "id": 91,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 92,
+    "gi_south": 148,
+    "gi_east": 16,
+    "gi_west": 90
+  },
+  {
+    "id": 92,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 93,
+    "gi_south": 91,
+    "gi_east": 113,
+    "gi_west": 89
+  },
+  {
+    "id": 93,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 94,
+    "gi_south": 92,
+    "gi_east": 112,
+    "gi_west": 88
+  },
+  {
+    "id": 94,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 95,
+    "gi_south": 93,
+    "gi_east": 111,
+    "gi_west": 0
+  },
+  {
+    "id": 95,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 4,
+    "gi_south": 94,
+    "gi_east": 110,
     "gi_west": 1
+  },
+  {
+    "id": 96,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      10
+    ],
+    "gi_north": 28,
+    "gi_south": 4,
+    "gi_east": 109,
+    "gi_west": 3
+  },
+  {
+    "id": 97,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 21,
+    "gi_south": 28,
+    "gi_east": 107,
+    "gi_west": 86
+  },
+  {
+    "id": 98,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 98,
+    "gi_south": 21,
+    "gi_east": 105,
+    "gi_west": 84
+  },
+  {
+    "id": 99,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      8
+    ],
+    "gi_north": 100,
+    "gi_south": 99,
+    "gi_east": 104,
+    "gi_west": 27
+  },
+  {
+    "id": 100,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 3,
+    "objects": [
+      3,
+      2,
+      2
+    ],
+    "gi_north": 101,
+    "gi_south": 99,
+    "gi_east": 103,
+    "gi_west": 82
+  },
+  {
+    "id": 101,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      50
+    ],
+    "gi_north": 101,
+    "gi_south": 100,
+    "gi_east": 102,
+    "gi_west": 81
+  },
+  {
+    "id": 102,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      6
+    ],
+    "gi_north": 102,
+    "gi_south": 103,
+    "gi_east": 122,
+    "gi_west": 101
+  },
+  {
+    "id": 103,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 102,
+    "gi_south": 104,
+    "gi_east": 37,
+    "gi_west": 100
+  },
+  {
+    "id": 104,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 103,
+    "gi_south": 104,
+    "gi_east": 121,
+    "gi_west": 99
+  },
+  {
+    "id": 105,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 105,
+    "gi_south": 106,
+    "gi_east": 120,
+    "gi_west": 98
+  },
+  {
+    "id": 106,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 105,
+    "gi_south": 107,
+    "gi_east": 25,
+    "gi_west": 21
+  },
+  {
+    "id": 107,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      4
+    ],
+    "gi_north": 106,
+    "gi_south": 108,
+    "gi_east": 119,
+    "gi_west": 97
+  },
+  {
+    "id": 108,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 107,
+    "gi_south": 109,
+    "gi_east": 118,
+    "gi_west": 28
+  },
+  {
+    "id": 109,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 108,
+    "gi_south": 5,
+    "gi_east": -1,
+    "gi_west": 96
+  },
+  {
+    "id": 110,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 5,
+    "gi_south": 111,
+    "gi_east": -1,
+    "gi_west": 95
+  },
+  {
+    "id": 111,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 110,
+    "gi_south": 112,
+    "gi_east": 117,
+    "gi_west": 94
+  },
+  {
+    "id": 112,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 111,
+    "gi_south": 113,
+    "gi_east": 116,
+    "gi_west": 93
+  },
+  {
+    "id": 113,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      3
+    ],
+    "gi_north": 112,
+    "gi_south": 16,
+    "gi_east": 115,
+    "gi_west": 92
+  },
+  {
+    "id": 114,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 115,
+    "gi_south": 59,
+    "gi_east": 132,
+    "gi_west": 16
+  },
+  {
+    "id": 115,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 116,
+    "gi_south": 114,
+    "gi_east": 20,
+    "gi_west": 113
+  },
+  {
+    "id": 116,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 115,
+    "gi_south": 115,
+    "gi_east": 131,
+    "gi_west": 112
+  },
+  {
+    "id": 117,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      1,
+      0
+    ],
+    "gi_north": -1,
+    "gi_south": 116,
+    "gi_east": 130,
+    "gi_west": 111
+  },
+  {
+    "id": 118,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 119,
+    "gi_south": -1,
+    "gi_east": 129,
+    "gi_west": 108
+  },
+  {
+    "id": 119,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 25,
+    "gi_south": 118,
+    "gi_east": 17,
+    "gi_west": 107
+  },
+  {
+    "id": 120,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 31,
+    "gi_south": 25,
+    "gi_east": 127,
+    "gi_west": 105
+  },
+  {
+    "id": 121,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      2
+    ],
+    "gi_north": 37,
+    "gi_south": 31,
+    "gi_east": 125,
+    "gi_west": 104
+  },
+  {
+    "id": 122,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 122,
+    "gi_south": 37,
+    "gi_east": 123,
+    "gi_west": 102
+  },
+  {
+    "id": 123,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 123,
+    "gi_south": 124,
+    "gi_east": -1,
+    "gi_west": 122
+  },
+  {
+    "id": 124,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      0,
+      0
+    ],
+    "gi_north": 123,
+    "gi_south": 125,
+    "gi_east": 144,
+    "gi_west": 37
+  },
+  {
+    "id": 125,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 124,
+    "gi_south": 126,
+    "gi_east": 143,
+    "gi_west": 121
+  },
+  {
+    "id": 126,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 125,
+    "gi_south": 127,
+    "gi_east": 40,
+    "gi_west": 31
+  },
+  {
+    "id": 127,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      4,
+      3
+    ],
+    "gi_north": 126,
+    "gi_south": 128,
+    "gi_east": 142,
+    "gi_west": 120
+  },
+  {
+    "id": 128,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 127,
+    "gi_south": 17,
+    "gi_east": 42,
+    "gi_west": 25
+  },
+  {
+    "id": 129,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      1
+    ],
+    "gi_north": 17,
+    "gi_south": -1,
+    "gi_east": 140,
+    "gi_west": 118
+  },
+  {
+    "id": 130,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 131,
+    "gi_east": 136,
+    "gi_west": 117
+  },
+  {
+    "id": 131,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 130,
+    "gi_south": 20,
+    "gi_east": 135,
+    "gi_west": 116
+  },
+  {
+    "id": 132,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 20,
+    "gi_south": 149,
+    "gi_east": 133,
+    "gi_west": 114
+  },
+  {
+    "id": 133,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 134,
+    "gi_south": 66,
+    "gi_east": 155,
+    "gi_west": 132
+  },
+  {
+    "id": 134,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 135,
+    "gi_south": 133,
+    "gi_east": 14,
+    "gi_west": 20
+  },
+  {
+    "id": 135,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 136,
+    "gi_south": 134,
+    "gi_east": 154,
+    "gi_west": 131
+  },
+  {
+    "id": 136,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 137,
+    "gi_south": 135,
+    "gi_east": 153,
+    "gi_west": 130
+  },
+  {
+    "id": 137,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 138,
+    "gi_south": 136,
+    "gi_east": 152,
+    "gi_west": -1
+  },
+  {
+    "id": 138,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 139,
+    "gi_south": 137,
+    "gi_east": 151,
+    "gi_west": -1
+  },
+  {
+    "id": 139,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 4,
+    "objects": [
+      4,
+      2,
+      3,
+      2
+    ],
+    "gi_north": 140,
+    "gi_south": 138,
+    "gi_east": 150,
+    "gi_west": -1
+  },
+  {
+    "id": 140,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 141,
+    "gi_south": 139,
+    "gi_east": 13,
+    "gi_west": 129
+  },
+  {
+    "id": 141,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      22
+    ],
+    "gi_north": 142,
+    "gi_south": 140,
+    "gi_east": 149,
+    "gi_west": 17
+  },
+  {
+    "id": 142,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 40,
+    "gi_south": 42,
+    "gi_east": 18,
+    "gi_west": 127
+  },
+  {
+    "id": 143,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 144,
+    "gi_south": 40,
+    "gi_east": 26,
+    "gi_west": 125
+  },
+  {
+    "id": 144,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      4
+    ],
+    "gi_north": 22,
+    "gi_south": 143,
+    "gi_east": 146,
+    "gi_west": 124
+  },
+  {
+    "id": 145,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 145,
+    "gi_south": 146,
+    "gi_east": 168,
+    "gi_west": -1
+  },
+  {
+    "id": 146,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 145,
+    "gi_south": 147,
+    "gi_east": 167,
+    "gi_west": 144
+  },
+  {
+    "id": 147,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 26,
+    "gi_south": 18,
+    "gi_east": 165,
+    "gi_west": 40
+  },
+  {
+    "id": 148,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      4,
+      2
+    ],
+    "gi_north": 18,
+    "gi_south": 149,
+    "gi_east": 163,
+    "gi_west": 42
+  },
+  {
+    "id": 149,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 148,
+    "gi_south": 13,
+    "gi_east": 162,
+    "gi_west": 141
+  },
+  {
+    "id": 150,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 13,
+    "gi_south": 151,
+    "gi_east": 160,
+    "gi_west": 139
+  },
+  {
+    "id": 151,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 150,
+    "gi_south": 152,
+    "gi_east": 19,
+    "gi_west": 138
+  },
+  {
+    "id": 152,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      41
+    ],
+    "gi_north": 151,
+    "gi_south": 153,
+    "gi_east": 159,
+    "gi_west": 137
+  },
+  {
+    "id": 153,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      4
+    ],
+    "gi_north": 152,
+    "gi_south": 154,
+    "gi_east": 38,
+    "gi_west": 136
+  },
+  {
+    "id": 154,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 153,
+    "gi_south": 14,
+    "gi_east": 158,
+    "gi_west": 135
+  },
+  {
+    "id": 155,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      6
+    ],
+    "gi_north": 14,
+    "gi_south": 115,
+    "gi_east": 156,
+    "gi_west": 133
+  },
+  {
+    "id": 156,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 157,
+    "gi_south": 156,
+    "gi_east": 134,
+    "gi_west": 155
+  },
+  {
+    "id": 157,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 158,
+    "gi_south": 156,
+    "gi_east": 55,
+    "gi_west": 14
+  },
+  {
+    "id": 158,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      3
+    ],
+    "gi_north": 38,
+    "gi_south": 157,
+    "gi_east": 154,
+    "gi_west": 147
+  },
+  {
+    "id": 159,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 19,
+    "gi_south": 38,
+    "gi_east": 33,
+    "gi_west": 152
+  },
+  {
+    "id": 160,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 161,
+    "gi_south": 19,
+    "gi_east": 134,
+    "gi_west": 150
+  },
+  {
+    "id": 161,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 162,
+    "gi_south": 160,
+    "gi_east": 161,
+    "gi_west": 13
+  },
+  {
+    "id": 162,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 163,
+    "gi_south": 161,
+    "gi_east": 162,
+    "gi_west": 149
+  },
+  {
+    "id": 163,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 164,
+    "gi_south": 162,
+    "gi_east": 163,
+    "gi_west": 148
+  },
+  {
+    "id": 164,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 165,
+    "gi_south": 163,
+    "gi_east": 164,
+    "gi_west": 18
+  },
+  {
+    "id": 165,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 166,
+    "gi_south": 164,
+    "gi_east": 165,
+    "gi_west": 147
+  },
+  {
+    "id": 166,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 167,
+    "gi_south": 165,
+    "gi_east": 166,
+    "gi_west": 26
+  },
+  {
+    "id": 167,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 168,
+    "gi_south": 166,
+    "gi_east": 167,
+    "gi_west": 146
+  },
+  {
+    "id": 168,
+    "brfdes": "in a dark forest",
+    "objlds": "on the forest floor",
+    "nlobjs": 1,
+    "objects": [
+      19
+    ],
+    "gi_north": 168,
+    "gi_south": 167,
+    "gi_east": 168,
+    "gi_west": 145
+  },
+  {
+    "id": 169,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 2,
+    "objects": [
+      4,
+      3
+    ],
+    "gi_north": 174,
+    "gi_south": 173,
+    "gi_east": 170,
+    "gi_west": 170
+  },
+  {
+    "id": 170,
+    "brfdes": "in a dark cave",
+    "objlds": "in the dark",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 173,
+    "gi_south": 43,
+    "gi_east": 171,
+    "gi_west": 169
+  },
+  {
+    "id": 171,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 172,
+    "gi_south": 175,
+    "gi_east": 169,
+    "gi_west": 170
+  },
+  {
+    "id": 172,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 175,
+    "gi_south": 171,
+    "gi_east": 170,
+    "gi_west": 173
+  },
+  {
+    "id": 173,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      3
+    ],
+    "gi_north": 176,
+    "gi_south": 170,
+    "gi_east": 172,
+    "gi_west": 174
+  },
+  {
+    "id": 174,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 177,
+    "gi_south": 169,
+    "gi_east": 173,
+    "gi_west": 176
+  },
+  {
+    "id": 175,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 174,
+    "gi_south": 172,
+    "gi_east": 174,
+    "gi_west": 176
+  },
+  {
+    "id": 176,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 2,
+    "objects": [
+      4,
+      2
+    ],
+    "gi_north": 170,
+    "gi_south": 173,
+    "gi_east": 175,
+    "gi_west": 177
+  },
+  {
+    "id": 177,
+    "brfdes": "in a dark, twisty cavern",
+    "objlds": "in the dark",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 178,
+    "gi_south": 174,
+    "gi_east": 176,
+    "gi_west": 172
+  },
+  {
+    "id": 178,
+    "brfdes": "in a natural hall",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 179,
+    "gi_south": 177,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 179,
+    "brfdes": "at an endless chasm",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 178,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 180,
+    "brfdes": "in a jade cavern",
+    "objlds": "on the cavern floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      0
+    ],
+    "gi_north": 181,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 181,
+    "brfdes": "at a Statue of Tashanna",
+    "objlds": "by the statue",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 185,
+    "gi_south": 180,
+    "gi_east": 182,
+    "gi_west": -1
+  },
+  {
+    "id": 182,
+    "brfdes": "near a reflecting pool",
+    "objlds": "by the water",
+    "nlobjs": 3,
+    "objects": [
+      2,
+      3,
+      2
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 183,
+    "gi_west": 181
+  },
+  {
+    "id": 183,
+    "brfdes": "at the forgotten Pantheon of Tashanna.",
+    "objlds": "on the floor",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 184,
+    "gi_west": 182
+  },
+  {
+    "id": 184,
+    "brfdes": "at the Portal of the Past",
+    "objlds": "near the portal",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 183
+  },
+  {
+    "id": 185,
+    "brfdes": "in a smooth-walled alcove",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      7
+    ],
+    "gi_north": -1,
+    "gi_south": 181,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 186,
+    "brfdes": "in a dark cave",
+    "objlds": "in the darkness",
+    "nlobjs": 1,
+    "objects": [
+      51
+    ],
+    "gi_north": 187,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 187,
+    "brfdes": "in a bright passageway",
+    "objlds": "in the brilliance",
+    "nlobjs": 1,
+    "objects": [
+      10
+    ],
+    "gi_north": 188,
+    "gi_south": 186,
+    "gi_east": 187,
+    "gi_west": 187
+  },
+  {
+    "id": 188,
+    "brfdes": "at some misty ruins",
+    "objlds": "in the mists",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 187,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 189,
+    "brfdes": "on a sandy beach near the sea",
+    "objlds": "near the sea",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 190,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 190,
+    "brfdes": "on a grassy beach",
+    "objlds": "in the grass",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 197,
+    "gi_south": 189,
+    "gi_east": 193,
+    "gi_west": 192
+  },
+  {
+    "id": 191,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 199,
+    "gi_south": 191,
+    "gi_east": 192,
+    "gi_west": 191
+  },
+  {
+    "id": 192,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 198,
+    "gi_south": 192,
+    "gi_east": 190,
+    "gi_west": 191
+  },
+  {
+    "id": 193,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      6,
+      3
+    ],
+    "gi_north": 196,
+    "gi_south": 193,
+    "gi_east": 194,
+    "gi_west": 190
+  },
+  {
+    "id": 194,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 195,
+    "gi_south": 194,
+    "gi_east": 194,
+    "gi_west": 193
+  },
+  {
+    "id": 195,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      3
+    ],
+    "gi_north": 204,
+    "gi_south": 194,
+    "gi_east": 195,
+    "gi_west": 196
+  },
+  {
+    "id": 196,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 203,
+    "gi_south": 193,
+    "gi_east": 195,
+    "gi_west": 197
+  },
+  {
+    "id": 197,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      4
+    ],
+    "gi_north": 202,
+    "gi_south": 190,
+    "gi_east": 196,
+    "gi_west": 198
+  },
+  {
+    "id": 198,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      2
+    ],
+    "gi_north": 201,
+    "gi_south": 192,
+    "gi_east": 197,
+    "gi_west": 199
+  },
+  {
+    "id": 199,
+    "brfdes": "at a large clump of silver tulips",
+    "objlds": "near the tulips",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 200,
+    "gi_south": 191,
+    "gi_east": 198,
+    "gi_west": 199
+  },
+  {
+    "id": 200,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 209,
+    "gi_south": 199,
+    "gi_east": 201,
+    "gi_west": 200
+  },
+  {
+    "id": 201,
+    "brfdes": "at a crystal tree",
+    "objlds": "near the tree",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 208,
+    "gi_south": 198,
+    "gi_east": 202,
+    "gi_west": 200
+  },
+  {
+    "id": 202,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 207,
+    "gi_south": 197,
+    "gi_east": 203,
+    "gi_west": 201
+  },
+  {
+    "id": 203,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 206,
+    "gi_south": 196,
+    "gi_east": 204,
+    "gi_west": 202
+  },
+  {
+    "id": 204,
+    "brfdes": "at the Gateway of the Rainbows",
+    "objlds": "near the rainbows",
+    "nlobjs": 2,
+    "objects": [
+      1,
+      0
+    ],
+    "gi_north": 205,
+    "gi_south": 195,
+    "gi_east": -1,
+    "gi_west": 203
+  },
+  {
+    "id": 205,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      8
+    ],
+    "gi_north": 214,
+    "gi_south": 204,
+    "gi_east": 205,
+    "gi_west": 206
+  },
+  {
+    "id": 206,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 213,
+    "gi_south": 203,
+    "gi_east": 205,
+    "gi_west": 207
+  },
+  {
+    "id": 207,
+    "brfdes": "in the Centre of the Elms",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      0
+    ],
+    "gi_north": 212,
+    "gi_south": 202,
+    "gi_east": 206,
+    "gi_west": 208
+  },
+  {
+    "id": 208,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      4,
+      2
+    ],
+    "gi_north": 211,
+    "gi_south": 201,
+    "gi_east": 207,
+    "gi_west": 209
+  },
+  {
+    "id": 209,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 210,
+    "gi_south": 200,
+    "gi_east": 208,
+    "gi_west": 209
+  },
+  {
+    "id": 210,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      20
+    ],
+    "gi_north": 215,
+    "gi_south": 209,
+    "gi_east": 211,
+    "gi_west": 210
+  },
+  {
+    "id": 211,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 211,
+    "gi_south": 208,
+    "gi_east": 212,
+    "gi_west": 210
+  },
+  {
+    "id": 212,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      27
+    ],
+    "gi_north": 212,
+    "gi_south": 207,
+    "gi_east": 213,
+    "gi_west": 211
+  },
+  {
+    "id": 213,
+    "brfdes": "at the Altar of Eternal Sunshine",
+    "objlds": "near the altar",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": 202,
+    "gi_south": 206,
+    "gi_east": 214,
+    "gi_west": 212
+  },
+  {
+    "id": 214,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      0
+    ],
+    "gi_north": 214,
+    "gi_south": 205,
+    "gi_east": 214,
+    "gi_west": 213
+  },
+  {
+    "id": 215,
+    "brfdes": "in a golden forest",
+    "objlds": "on the ground",
+    "nlobjs": 4,
+    "objects": [
+      2,
+      2,
+      4,
+      3
+    ],
+    "gi_north": 216,
+    "gi_south": 210,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 216,
+    "brfdes": "on a grassy plain",
+    "objlds": "in the grass",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 217,
+    "gi_south": 215,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 217,
+    "brfdes": "in a wasteland of decay",
+    "objlds": "in the dust",
+    "nlobjs": 2,
+    "objects": [
+      4,
+      0
+    ],
+    "gi_north": 218,
+    "gi_south": 216,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 218,
+    "brfdes": "at the Demon Gate",
+    "objlds": "near the gate",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 217,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 219,
+    "brfdes": "in a resplendent cul-de-sac",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      12,
+      3,
+      4
+    ],
+    "gi_north": 220,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 220,
+    "brfdes": "in a long, decorated hallway",
+    "objlds": "on the floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      4
+    ],
+    "gi_north": 221,
+    "gi_south": 219,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 221,
+    "brfdes": "in the Royal Welcome Hall",
+    "objlds": "on the floor",
+    "nlobjs": 2,
+    "objects": [
+      31,
+      2
+    ],
+    "gi_north": 224,
+    "gi_south": 220,
+    "gi_east": 223,
+    "gi_west": 222
+  },
+  {
+    "id": 222,
+    "brfdes": "on a flight of marble stairs",
+    "objlds": "on the stairs",
+    "nlobjs": 3,
+    "objects": [
+      3,
+      2,
+      1
+    ],
+    "gi_north": 240,
+    "gi_south": -1,
+    "gi_east": 221,
+    "gi_west": -1
+  },
+  {
+    "id": 223,
+    "brfdes": "on a flight of marble stairs",
+    "objlds": "on the stairs",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 241,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 221
+  },
+  {
+    "id": 224,
+    "brfdes": "in a smooth hallway",
+    "objlds": "on the floor",
+    "nlobjs": 2,
+    "objects": [
+      12,
+      31
+    ],
+    "gi_north": 225,
+    "gi_south": 221,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 225,
+    "brfdes": "in a crumbling passageway",
+    "objlds": "in the dirt",
+    "nlobjs": 2,
+    "objects": [
+      9,
+      7
+    ],
+    "gi_north": 228,
+    "gi_south": 224,
+    "gi_east": 227,
+    "gi_west": 226
+  },
+  {
+    "id": 226,
+    "brfdes": "in an eroded storage closet",
+    "objlds": "on the floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      9
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 225,
+    "gi_west": -1
+  },
+  {
+    "id": 227,
+    "brfdes": "in a small, stuffy alcove",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      28
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 225
+  },
+  {
+    "id": 228,
+    "brfdes": "on a flight of stone stairs",
+    "objlds": "on the stairs",
+    "nlobjs": 1,
+    "objects": [
+      12
+    ],
+    "gi_north": 229,
+    "gi_south": 225,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 229,
+    "brfdes": "at the base of a stone stairway",
+    "objlds": "on the stairway",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 233,
+    "gi_south": 228,
+    "gi_east": 232,
+    "gi_west": 230
+  },
+  {
+    "id": 230,
+    "brfdes": "in a stinking, damp passageway",
+    "objlds": "in the dirt",
+    "nlobjs": 3,
+    "objects": [
+      2,
+      2,
+      6
+    ],
+    "gi_north": -1,
+    "gi_south": 231,
+    "gi_east": 229,
+    "gi_west": -1
+  },
+  {
+    "id": 231,
+    "brfdes": "in an crumbling dungeon cell",
+    "objlds": "in the dirt",
+    "nlobjs": 2,
+    "objects": [
+      9,
+      35
+    ],
+    "gi_north": 230,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 232,
+    "brfdes": "in the underground animal pen",
+    "objlds": "in the muck",
+    "nlobjs": 1,
+    "objects": [
+      38
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 229
+  },
+  {
+    "id": 233,
+    "brfdes": "in a decaying, stone hallway",
+    "objlds": "on the floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      11
+    ],
+    "gi_north": 234,
+    "gi_south": 229,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 234,
+    "brfdes": "at a small, abandoned water well",
+    "objlds": "by the well",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 233,
+    "gi_east": 235,
+    "gi_west": -1
+  },
+  {
+    "id": 235,
+    "brfdes": "in a dark, damp cavern",
+    "objlds": "in the dirt",
+    "nlobjs": 3,
+    "objects": [
+      7,
+      1,
+      38
+    ],
+    "gi_north": 237,
+    "gi_south": -1,
+    "gi_east": 236,
+    "gi_west": 234
+  },
+  {
+    "id": 236,
+    "brfdes": "in an odd-shaped cave",
+    "objlds": "in the dirt",
+    "nlobjs": 2,
+    "objects": [
+      40,
+      28
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 235
+  },
+  {
+    "id": 237,
+    "brfdes": "in a tiny, curved cave",
+    "objlds": "in the dirt",
+    "nlobjs": 2,
+    "objects": [
+      10,
+      2
+    ],
+    "gi_north": -1,
+    "gi_south": 235,
+    "gi_east": 238,
+    "gi_west": -1
+  },
+  {
+    "id": 238,
+    "brfdes": "in a cavern of diamonds",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      7,
+      7
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 237
+  },
+  {
+    "id": 239,
+    "brfdes": "at an intricate, marble balcony",
+    "objlds": "on the floor",
+    "nlobjs": 2,
+    "objects": [
+      12,
+      35
+    ],
+    "gi_north": 266,
+    "gi_south": -1,
+    "gi_east": 241,
+    "gi_west": 240
+  },
+  {
+    "id": 240,
+    "brfdes": "at the top of a marble stairway",
+    "objlds": "by the stairs",
+    "nlobjs": 1,
+    "objects": [
+      38
+    ],
+    "gi_north": -1,
+    "gi_south": 222,
+    "gi_east": 239,
+    "gi_west": 253
+  },
+  {
+    "id": 241,
+    "brfdes": "at the top of a marble stairway",
+    "objlds": "by the stairs",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 223,
+    "gi_east": 242,
+    "gi_west": 239
+  },
+  {
+    "id": 242,
+    "brfdes": "in a gold-decorated hallway",
+    "objlds": "on the floor",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      6
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 243,
+    "gi_west": 241
+  },
+  {
+    "id": 243,
+    "brfdes": "in the southeast corner",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      2,
+      8,
+      1
+    ],
+    "gi_north": 244,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 242
+  },
+  {
+    "id": 244,
+    "brfdes": "in a southeast hall",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      35,
+      11
+    ],
+    "gi_north": 247,
+    "gi_south": 243,
+    "gi_east": 245,
+    "gi_west": 246
+  },
+  {
+    "id": 245,
+    "brfdes": "in the Chamber of the Alchemist",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 244
+  },
+  {
+    "id": 246,
+    "brfdes": "in the Chamber of the Lavender Rose",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      40,
+      40,
+      40
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 244,
+    "gi_west": -1
+  },
+  {
+    "id": 247,
+    "brfdes": "in a northeast hall",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      40
+    ],
+    "gi_north": 250,
+    "gi_south": 244,
+    "gi_east": 248,
+    "gi_west": 249
+  },
+  {
+    "id": 248,
+    "brfdes": "in the Chamber of the Gateway",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      2,
+      8,
+      4
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 247
+  },
+  {
+    "id": 249,
+    "brfdes": "in the Chamber of Sir Alexis",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      5
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 247,
+    "gi_west": -1
+  },
+  {
+    "id": 250,
+    "brfdes": "in the northeast corner",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": -1,
+    "gi_south": 247,
+    "gi_east": -1,
+    "gi_west": 251
+  },
+  {
+    "id": 251,
+    "brfdes": "in a silver hall",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      38,
+      2,
+      4
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 250,
+    "gi_west": 252
+  },
+  {
+    "id": 252,
+    "brfdes": "in the Hall of Music",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      12
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 251,
+    "gi_west": 264
+  },
+  {
+    "id": 253,
+    "brfdes": "in the Hall of Memories",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      12,
+      3,
+      9
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 240,
+    "gi_west": 254
+  },
+  {
+    "id": 254,
+    "brfdes": "in the Hall of LadyHawk",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      2
+    ],
+    "gi_north": 255,
+    "gi_south": -1,
+    "gi_east": 253,
+    "gi_west": -1
+  },
+  {
+    "id": 255,
+    "brfdes": "in the Hall of Hearts",
+    "objlds": "on the ground",
+    "nlobjs": 3,
+    "objects": [
+      2,
+      38,
+      40
+    ],
+    "gi_north": 258,
+    "gi_south": 254,
+    "gi_east": 256,
+    "gi_west": 257
+  },
+  {
+    "id": 256,
+    "brfdes": "in the Chamber of the Champion",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      5
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 255
+  },
+  {
+    "id": 257,
+    "brfdes": "in the Chamber of the Lady",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      5
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 255,
+    "gi_west": -1
+  },
+  {
+    "id": 258,
+    "brfdes": "in the Hall of Winter",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 265,
+    "gi_south": 255,
+    "gi_east": 259,
+    "gi_west": 260
+  },
+  {
+    "id": 259,
+    "brfdes": "in the Chamber of the Bard",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 258
+  },
+  {
+    "id": 260,
+    "brfdes": "in the Chamber of the Magician",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      12
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 258,
+    "gi_west": -1
+  },
+  {
+    "id": 261,
+    "brfdes": "in the Chamber of Poetry",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 258,
+    "gi_east": 262,
+    "gi_west": -1
+  },
+  {
+    "id": 262,
+    "brfdes": "in an empty garden",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      2,
+      3
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 263,
+    "gi_west": 261
+  },
+  {
+    "id": 263,
+    "brfdes": "in the Hall of the Sea",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      3,
+      8
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 264,
+    "gi_west": 262
+  },
+  {
+    "id": 264,
+    "brfdes": "in the Hall of Marble Pillars",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      1
+    ],
+    "gi_north": 267,
+    "gi_south": 265,
+    "gi_east": 252,
+    "gi_west": 263
+  },
+  {
+    "id": 265,
+    "brfdes": "in the Northern Hall of Tashanna",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 264,
+    "gi_south": 266,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 266,
+    "brfdes": "in the Southern Hall of Tashanna",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      7,
+      4
+    ],
+    "gi_north": 265,
+    "gi_south": 239,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 267,
+    "brfdes": "in a grey-black hall",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      12,
+      5
+    ],
+    "gi_north": 268,
+    "gi_south": 264,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 268,
+    "brfdes": "on a red-carpeted stairway",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      2
+    ],
+    "gi_north": 269,
+    "gi_south": 267,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 269,
+    "brfdes": "in a red-carpeted hall",
+    "objlds": "on the ground",
+    "nlobjs": 4,
+    "objects": [
+      2,
+      4,
+      3,
+      5
+    ],
+    "gi_north": 270,
+    "gi_south": 268,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 270,
+    "brfdes": "nowhere really",
+    "objlds": "on the ground",
+    "nlobjs": 2,
+    "objects": [
+      7,
+      4
+    ],
+    "gi_north": 279,
+    "gi_south": 269,
+    "gi_east": 272,
+    "gi_west": 271
+  },
+  {
+    "id": 271,
+    "brfdes": "on a marble stairway",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 273,
+    "gi_south": -1,
+    "gi_east": 270,
+    "gi_west": -1
+  },
+  {
+    "id": 272,
+    "brfdes": "on a marble stairway",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 275,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 270
+  },
+  {
+    "id": 273,
+    "brfdes": "at the top of a marble stairway",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 271,
+    "gi_east": 274,
+    "gi_west": -1
+  },
+  {
+    "id": 274,
+    "brfdes": "on a marble balcony",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 276,
+    "gi_south": -1,
+    "gi_east": 275,
+    "gi_west": 273
+  },
+  {
+    "id": 275,
+    "brfdes": "at the top of a marble stairway",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 272,
+    "gi_east": -1,
+    "gi_west": 274
+  },
+  {
+    "id": 276,
+    "brfdes": "on a spiral stairway",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 277,
+    "gi_south": 274,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 277,
+    "brfdes": "on a spiral stairway",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 278,
+    "gi_south": 276,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 278,
+    "brfdes": "on the mountain's peak",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 277,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 279,
+    "brfdes": "in a blue-carpeted hall",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 280,
+    "gi_south": 270,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 280,
+    "brfdes": "in the Chamber of Truth",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 295,
+    "gi_south": 279,
+    "gi_east": 281,
+    "gi_west": 287
+  },
+  {
+    "id": 281,
+    "brfdes": "in the lonely hall",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      24
+    ],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 282,
+    "gi_west": 280
+  },
+  {
+    "id": 282,
+    "brfdes": "in the Chamber of the Body",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 283,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 281
+  },
+  {
+    "id": 283,
+    "brfdes": "in a blackened quadrangle",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 285,
+    "gi_south": 282,
+    "gi_east": 296,
+    "gi_west": 284
+  },
+  {
+    "id": 284,
+    "brfdes": "at the Waterfall of Fantasy",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 283,
+    "gi_west": -1
+  },
+  {
+    "id": 285,
+    "brfdes": "in the Chamber of the Mind",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 283,
+    "gi_east": -1,
+    "gi_west": 286
+  },
+  {
+    "id": 286,
+    "brfdes": "in the Hall of Feasting",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 285,
+    "gi_west": 298
+  },
+  {
+    "id": 287,
+    "brfdes": "in a hall",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 280,
+    "gi_west": 288
+  },
+  {
+    "id": 288,
+    "brfdes": "in the Chamber of the Heart",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 289,
+    "gi_south": -1,
+    "gi_east": 287,
+    "gi_west": -1
+  },
+  {
+    "id": 289,
+    "brfdes": "in a crumbling centre",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 291,
+    "gi_south": 288,
+    "gi_east": -1,
+    "gi_west": 293
+  },
+  {
+    "id": 290,
+    "brfdes": "in the Chamber of Eternal Magic",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 290
+  },
+  {
+    "id": 291,
+    "brfdes": "in the Chamber of the Soul",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 289,
+    "gi_east": 292,
+    "gi_west": -1
+  },
+  {
+    "id": 292,
+    "brfdes": "in a barren hall",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 298,
+    "gi_west": 291
+  },
+  {
+    "id": 293,
+    "brfdes": "in the chamber of the magic orb",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 289,
+    "gi_west": -1
+  },
+  {
+    "id": 294,
+    "brfdes": "in a hidden room",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 295,
+    "brfdes": "in the Chamber of Life",
+    "objlds": "on the ground",
+    "nlobjs": 1,
+    "objects": [
+      53
+    ],
+    "gi_north": 298,
+    "gi_south": 280,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 296,
+    "brfdes": "in a small, beautiful castle",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 283
+  },
+  {
+    "id": 297,
+    "brfdes": "in a hidden room",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 298,
+    "brfdes": "in the Hall of the Royal Knights",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 299,
+    "gi_south": 295,
+    "gi_east": 286,
+    "gi_west": 292
+  },
+  {
+    "id": 299,
+    "brfdes": "in the Hall of the Throne",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 301,
+    "gi_south": 298,
+    "gi_east": 300,
+    "gi_west": -1
+  },
+  {
+    "id": 300,
+    "brfdes": "in the royal kitchen",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 299
+  },
+  {
+    "id": 301,
+    "brfdes": "in the throne chamber",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": 302,
+    "gi_south": 299,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 302,
+    "brfdes": "in the lair of the dragon",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": 301,
+    "gi_east": -1,
+    "gi_west": -1
+  },
+  {
+    "id": 303,
+    "brfdes": "none yet",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": 303,
+    "gi_west": -1
+  },
+  {
+    "id": 304,
+    "brfdes": "none yet",
+    "objlds": "on the ground",
+    "nlobjs": 0,
+    "objects": [],
+    "gi_north": -1,
+    "gi_south": -1,
+    "gi_east": -1,
+    "gi_west": 304
   }
 ]

@@ -8,6 +8,7 @@ from . import fixtures, models
 
 def _reset_tables(session: Session):
     session.query(models.Message).delete()
+    session.query(models.Command).delete()
     session.query(models.Location).delete()
     session.query(models.GameObject).delete()
     session.query(models.Spell).delete()
@@ -27,6 +28,7 @@ def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
     locations = fixtures.load_locations(fixture_root)
     objects = fixtures.load_objects(fixture_root)
     spells = fixtures.load_spells(fixture_root)
+    commands = fixtures.load_commands(fixture_root)
     messages = fixtures.load_messages(fixture_root)
 
     _persist_all(
@@ -36,6 +38,7 @@ def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
                 id=item.id,
                 brfdes=item.brfdes,
                 objlds=item.objlds,
+                nlobjs=item.nlobjs,
                 objects=item.objects,
                 gi_north=item.gi_north,
                 gi_south=item.gi_south,
@@ -73,6 +76,19 @@ def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
                 splrou=item.splrou,
             )
             for item in spells
+        ],
+    )
+
+    _persist_all(
+        session,
+        [
+            models.Command(
+                id=item.id,
+                command=item.command,
+                payonl=int(item.payonl),
+                cmdrou=item.cmdrou,
+            )
+            for item in commands
         ],
     )
 

@@ -1,0 +1,488 @@
+[
+  {
+    "id": 0,
+    "command": "?",
+    "cmdrou": "helper",
+    "payonl": false
+  },
+  {
+    "id": 1,
+    "command": "aim",
+    "cmdrou": "aimer",
+    "payonl": true
+  },
+  {
+    "id": 2,
+    "command": "brief",
+    "cmdrou": "briefr",
+    "payonl": false
+  },
+  {
+    "id": 3,
+    "command": "cast",
+    "cmdrou": "caster",
+    "payonl": true
+  },
+  {
+    "id": 4,
+    "command": "chant",
+    "cmdrou": "caster",
+    "payonl": true
+  },
+  {
+    "id": 5,
+    "command": "check",
+    "cmdrou": "countr",
+    "payonl": false
+  },
+  {
+    "id": 6,
+    "command": "comfort",
+    "cmdrou": "kissr1",
+    "payonl": false
+  },
+  {
+    "id": 7,
+    "command": "comment",
+    "cmdrou": "speakr",
+    "payonl": false
+  },
+  {
+    "id": 8,
+    "command": "concentrate",
+    "cmdrou": "thinkr",
+    "payonl": true
+  },
+  {
+    "id": 9,
+    "command": "count",
+    "cmdrou": "countr",
+    "payonl": false
+  },
+  {
+    "id": 10,
+    "command": "cuddle",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 11,
+    "command": "drink",
+    "cmdrou": "drinkr",
+    "payonl": true
+  },
+  {
+    "id": 12,
+    "command": "drop",
+    "cmdrou": "dropit",
+    "payonl": true
+  },
+  {
+    "id": 13,
+    "command": "e",
+    "cmdrou": "gi_east",
+    "payonl": false
+  },
+  {
+    "id": 14,
+    "command": "east",
+    "cmdrou": "gi_east",
+    "payonl": false
+  },
+  {
+    "id": 15,
+    "command": "embrace",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 16,
+    "command": "examine",
+    "cmdrou": "looker",
+    "payonl": false
+  },
+  {
+    "id": 17,
+    "command": "fly",
+    "cmdrou": "flyrou",
+    "payonl": true
+  },
+  {
+    "id": 18,
+    "command": "french",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 19,
+    "command": "get",
+    "cmdrou": "getter",
+    "payonl": true
+  },
+  {
+    "id": 20,
+    "command": "give",
+    "cmdrou": "giveit",
+    "payonl": true
+  },
+  {
+    "id": 21,
+    "command": "gold",
+    "cmdrou": "gldcnt",
+    "payonl": false
+  },
+  {
+    "id": 22,
+    "command": "grab",
+    "cmdrou": "getter",
+    "payonl": true
+  },
+  {
+    "id": 23,
+    "command": "hand",
+    "cmdrou": "giveit",
+    "payonl": true
+  },
+  {
+    "id": 24,
+    "command": "help",
+    "cmdrou": "helper",
+    "payonl": false
+  },
+  {
+    "id": 25,
+    "command": "hits",
+    "cmdrou": "hitctr",
+    "payonl": false
+  },
+  {
+    "id": 26,
+    "command": "hold",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 27,
+    "command": "how?",
+    "cmdrou": "ponder",
+    "payonl": false
+  },
+  {
+    "id": 28,
+    "command": "hug",
+    "cmdrou": "kissr2",
+    "payonl": false
+  },
+  {
+    "id": 29,
+    "command": "inv",
+    "cmdrou": "gi_invrou",
+    "payonl": false
+  },
+  {
+    "id": 30,
+    "command": "kick",
+    "cmdrou": "kissr2",
+    "payonl": true
+  },
+  {
+    "id": 31,
+    "command": "kiss",
+    "cmdrou": "kissr2",
+    "payonl": true
+  },
+  {
+    "id": 32,
+    "command": "learn",
+    "cmdrou": "memori",
+    "payonl": true
+  },
+  {
+    "id": 33,
+    "command": "look",
+    "cmdrou": "looker",
+    "payonl": false
+  },
+  {
+    "id": 34,
+    "command": "love",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 35,
+    "command": "meditate",
+    "cmdrou": "thinkr",
+    "payonl": true
+  },
+  {
+    "id": 36,
+    "command": "memorize",
+    "cmdrou": "memori",
+    "payonl": true
+  },
+  {
+    "id": 37,
+    "command": "n",
+    "cmdrou": "gi_north",
+    "payonl": false
+  },
+  {
+    "id": 38,
+    "command": "north",
+    "cmdrou": "gi_north",
+    "payonl": false
+  },
+  {
+    "id": 39,
+    "command": "note",
+    "cmdrou": "speakr",
+    "payonl": false
+  },
+  {
+    "id": 40,
+    "command": "pass",
+    "cmdrou": "giveit",
+    "payonl": true
+  },
+  {
+    "id": 41,
+    "command": "pickpocket",
+    "cmdrou": "getter",
+    "payonl": true
+  },
+  {
+    "id": 42,
+    "command": "pilfer",
+    "cmdrou": "getter",
+    "payonl": true
+  },
+  {
+    "id": 43,
+    "command": "pinch",
+    "cmdrou": "kissr2",
+    "payonl": true
+  },
+  {
+    "id": 44,
+    "command": "point",
+    "cmdrou": "aimer",
+    "payonl": true
+  },
+  {
+    "id": 45,
+    "command": "pray",
+    "cmdrou": "prayer",
+    "payonl": true
+  },
+  {
+    "id": 46,
+    "command": "punch",
+    "cmdrou": "kissr2",
+    "payonl": true
+  },
+  {
+    "id": 47,
+    "command": "push",
+    "cmdrou": "shover",
+    "payonl": true
+  },
+  {
+    "id": 48,
+    "command": "rape",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 49,
+    "command": "read",
+    "cmdrou": "reader",
+    "payonl": true
+  },
+  {
+    "id": 50,
+    "command": "romance",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 51,
+    "command": "rub",
+    "cmdrou": "rubber",
+    "payonl": true
+  },
+  {
+    "id": 52,
+    "command": "s",
+    "cmdrou": "gi_south",
+    "payonl": false
+  },
+  {
+    "id": 53,
+    "command": "say",
+    "cmdrou": "speakr",
+    "payonl": false
+  },
+  {
+    "id": 54,
+    "command": "scream",
+    "cmdrou": "yeller",
+    "payonl": false
+  },
+  {
+    "id": 55,
+    "command": "see",
+    "cmdrou": "looker",
+    "payonl": false
+  },
+  {
+    "id": 56,
+    "command": "shout",
+    "cmdrou": "yeller",
+    "payonl": false
+  },
+  {
+    "id": 57,
+    "command": "shove",
+    "cmdrou": "shover",
+    "payonl": true
+  },
+  {
+    "id": 58,
+    "command": "shriek",
+    "cmdrou": "yeller",
+    "payonl": true
+  },
+  {
+    "id": 59,
+    "command": "slap",
+    "cmdrou": "kissr2",
+    "payonl": true
+  },
+  {
+    "id": 60,
+    "command": "smack",
+    "cmdrou": "kissr2",
+    "payonl": true
+  },
+  {
+    "id": 61,
+    "command": "smooch",
+    "cmdrou": "kissr2",
+    "payonl": true
+  },
+  {
+    "id": 62,
+    "command": "snatch",
+    "cmdrou": "getter",
+    "payonl": true
+  },
+  {
+    "id": 63,
+    "command": "south",
+    "cmdrou": "gi_south",
+    "payonl": false
+  },
+  {
+    "id": 64,
+    "command": "spells",
+    "cmdrou": "shwpsp",
+    "payonl": false
+  },
+  {
+    "id": 65,
+    "command": "squeeze",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 66,
+    "command": "steal",
+    "cmdrou": "getter",
+    "payonl": true
+  },
+  {
+    "id": 67,
+    "command": "swallow",
+    "cmdrou": "drinkr",
+    "payonl": true
+  },
+  {
+    "id": 68,
+    "command": "take",
+    "cmdrou": "getter",
+    "payonl": true
+  },
+  {
+    "id": 69,
+    "command": "think",
+    "cmdrou": "thinkr",
+    "payonl": true
+  },
+  {
+    "id": 70,
+    "command": "tickle",
+    "cmdrou": "kissr1",
+    "payonl": true
+  },
+  {
+    "id": 71,
+    "command": "toss",
+    "cmdrou": "giveit",
+    "payonl": true
+  },
+  {
+    "id": 72,
+    "command": "unbrief",
+    "cmdrou": "ubrief",
+    "payonl": false
+  },
+  {
+    "id": 73,
+    "command": "w",
+    "cmdrou": "gi_west",
+    "payonl": false
+  },
+  {
+    "id": 74,
+    "command": "west",
+    "cmdrou": "gi_west",
+    "payonl": false
+  },
+  {
+    "id": 75,
+    "command": "what?",
+    "cmdrou": "ponder",
+    "payonl": false
+  },
+  {
+    "id": 76,
+    "command": "where?",
+    "cmdrou": "ponder",
+    "payonl": false
+  },
+  {
+    "id": 77,
+    "command": "whisper",
+    "cmdrou": "whispr",
+    "payonl": false
+  },
+  {
+    "id": 78,
+    "command": "why?",
+    "cmdrou": "ponder",
+    "payonl": false
+  },
+  {
+    "id": 79,
+    "command": "wink",
+    "cmdrou": "winker",
+    "payonl": true
+  },
+  {
+    "id": 80,
+    "command": "yell",
+    "cmdrou": "yeller",
+    "payonl": false
+  }
+]
