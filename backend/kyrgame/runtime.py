@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI
 
-from . import database, fixtures, loader, rooms
+from . import commands, database, fixtures, loader, rooms
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .scheduler import SchedulerService
@@ -89,6 +89,14 @@ async def bootstrap_app(app: FastAPI):
         "summary": fixtures.fixture_summary(seed_root),
     }
     app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
+
+    command_vocabulary = commands.CommandVocabulary(
+        app.state.fixture_cache["commands"], default_messages
+    )
+    app.state.command_vocabulary = command_vocabulary
+    app.state.command_dispatcher = commands.CommandDispatcher(
+        commands.build_default_registry(command_vocabulary)
+    )
 
     app.state.room_scripts = rooms.RoomScriptEngine(
         gateway=app.state.gateway,

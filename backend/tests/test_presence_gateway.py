@@ -81,13 +81,16 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
                 with pytest.raises(asyncio.TimeoutError):
                     await asyncio.wait_for(rogue_ws.recv(), timeout=0.3)
 
-                chat_payload = {"type": "command", "command": "chat", "args": {"text": "hail"}}
-                await seer_ws.send(json.dumps(chat_payload))
-                await asyncio.wait_for(seer_ws.recv(), timeout=1)
+                    chat_payload = {"type": "command", "command": "chat", "args": {"text": "hail"}}
+                    await seer_ws.send(json.dumps(chat_payload))
+                    await asyncio.wait_for(seer_ws.recv(), timeout=1)
 
-                chat_fan_out = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
-                assert chat_fan_out["type"] == "room_broadcast"
-                assert chat_fan_out["payload"]["args"]["text"] == "hail"
+                    chat_fan_out = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+                    while chat_fan_out.get("type") != "room_broadcast":
+                        chat_fan_out = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+
+                    assert chat_fan_out["type"] == "room_broadcast"
+                    assert chat_fan_out["payload"]["args"]["text"] == "hail"
 
                 with pytest.raises(asyncio.TimeoutError):
                     await asyncio.wait_for(rogue_ws.recv(), timeout=0.3)

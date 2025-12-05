@@ -15,7 +15,7 @@
 - [x] Stood up a FastAPI skeleton with fixture-backed HTTP endpoints, a room WebSocket gateway, simple presence tracking, rate limiting, and a stub room script engine (e.g., the willow routine).
 - [x] Expand player modeling to cover the full legacy state (timers, spell slots, inventories, gems) with validation and serialization parity to `gmplyr`.
 - [x] Persist player sessions and runtime state in a real database (PostgreSQL) with migrations, replacing the current in-memory SQLite bootstrap.
-- [ ] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
+- [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
 - [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects.
 - [ ] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [ ] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
