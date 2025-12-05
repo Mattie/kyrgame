@@ -1,22 +1,29 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from . import models
+
+# Default session expiration: 24 hours
+DEFAULT_SESSION_EXPIRATION_HOURS = 24
 
 
 class PlayerSessionRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def create_session(self, player_id: int, session_token: str, room_id: int):
+    def create_session(
+        self, player_id: int, session_token: str, room_id: int, expiration_hours: int = DEFAULT_SESSION_EXPIRATION_HOURS
+    ):
+        now = datetime.now(timezone.utc)
         player_session = models.PlayerSession(
             player_id=player_id,
             session_token=session_token,
             room_id=room_id,
-            last_seen=datetime.now(timezone.utc),
+            last_seen=now,
+            expires_at=now + timedelta(hours=expiration_hours),
         )
         self.session.add(player_session)
         return player_session
@@ -35,16 +42,30 @@ class PlayerSessionRepository:
         return player_session
 
     def deactivate_all(self, player_id: int, timestamp: Optional[datetime] = None) -> List[str]:
-        tokens: List[str] = []
-        for session in self.session.scalars(
-            select(models.PlayerSession).where(
-                models.PlayerSession.player_id == player_id,
-                models.PlayerSession.is_active.is_(True),
+        # First, get all active session tokens
+        tokens = [
+            row[0] for row in self.session.execute(
+                select(models.PlayerSession.session_token).where(
+                    models.PlayerSession.player_id == player_id,
+                    models.PlayerSession.is_active.is_(True),
+                )
             )
-        ).all():
-            session.is_active = False
-            session.last_seen = timestamp or datetime.now(timezone.utc)
-            tokens.append(session.session_token)
+        ]
+        
+        # Then bulk update all matching sessions
+        if tokens:
+            self.session.execute(
+                update(models.PlayerSession)
+                .where(
+                    models.PlayerSession.player_id == player_id,
+                    models.PlayerSession.is_active.is_(True),
+                )
+                .values(
+                    is_active=False,
+                    last_seen=timestamp or datetime.now(timezone.utc)
+                )
+            )
+        
         return tokens
 
     def list_active(self, player_id: int) -> List[models.PlayerSession]:
@@ -60,7 +81,10 @@ class PlayerSessionRepository:
     def get_by_token(self, session_token: str, active_only: bool = True):
         stmt = select(models.PlayerSession).where(models.PlayerSession.session_token == session_token)
         if active_only:
-            stmt = stmt.where(models.PlayerSession.is_active.is_(True))
+            stmt = stmt.where(
+                models.PlayerSession.is_active.is_(True),
+                models.PlayerSession.expires_at > datetime.now(timezone.utc)
+            )
         return self.session.scalar(stmt)
 
     def set_room(self, session_token: str, room_id: int):
