@@ -465,11 +465,14 @@ def create_app() -> FastAPI:
             current_room = session_record.room_id
         except Exception as e:
             # Database or other error during validation - reject connection during handshake
-            logger.error(f"WebSocket connection error during validation: {type(e).__name__}: {str(e)}")
-            db_session.rollback()
+            logger.error(f"WebSocket connection error during validation: {type(e).__name__}")
             await websocket.send_denial_response(
                 Response(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content="Service temporarily unavailable")
             )
+            try:
+                db_session.rollback()
+            except Exception:
+                pass  # Ignore rollback errors as we're already in error handling
             return
         finally:
             db_session.close()
