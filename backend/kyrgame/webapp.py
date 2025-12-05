@@ -580,8 +580,6 @@ def create_app() -> FastAPI:
         except WebSocketDisconnect:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)
-            if session_connections.get(session_token) is websocket:
-                session_connections.pop(session_token, None)
         finally:
             if session_connections.get(session_token) is websocket:
                 session_connections.pop(session_token, None)
