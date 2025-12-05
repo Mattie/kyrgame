@@ -27,18 +27,18 @@ async def test_presence_service_tracks_membership_and_moves():
     await presence.set_location("hero", 0)
     await presence.set_location("seer", 1)
 
-    assert presence.room_for_player("hero") == 0
-    assert presence.room_for_player("seer") == 1
-    assert presence.players_in_room(0) == {"hero"}
+    assert await presence.room_for_player("hero") == 0
+    assert await presence.room_for_player("seer") == 1
+    assert await presence.players_in_room(0) == {"hero"}
 
     await presence.set_location("hero", 1)
-    assert presence.room_for_player("hero") == 1
-    assert presence.players_in_room(0) == set()
-    assert presence.players_in_room(1) == {"hero", "seer"}
+    assert await presence.room_for_player("hero") == 1
+    assert await presence.players_in_room(0) == set()
+    assert await presence.players_in_room(1) == {"hero", "seer"}
 
     await presence.remove("seer")
-    assert presence.room_for_player("seer") is None
-    assert presence.players_in_room(1) == {"hero"}
+    assert await presence.room_for_player("seer") is None
+    assert await presence.players_in_room(1) == {"hero"}
 
 
 @pytest.mark.anyio

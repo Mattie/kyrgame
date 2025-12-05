@@ -54,17 +54,21 @@ class PresenceService:
                     del self.player_sessions[player_id]
             return previous
 
-    def room_for_player(self, player_id: str) -> int | None:
-        # Note: This is a read-only operation and doesn't need locking
-        # since dict access is atomic in Python. For complete thread safety
-        # in a multi-threaded context, consider using async with self._lock
-        tokens = self.player_sessions.get(player_id)
-        if not tokens:
-            return None
-        token = next(iter(tokens))
-        return self.session_rooms.get(token)
+    async def room_for_session(self, session_token: str) -> int | None:
+        """Get the room ID for a session token."""
+        async with self._lock:
+            return self.session_rooms.get(session_token)
 
-    def players_in_room(self, room_id: int) -> Set[str]:
-        return {
-            self.session_players[token] for token in self.room_sessions.get(room_id, set())
-        }
+    async def room_for_player(self, player_id: str) -> int | None:
+        async with self._lock:
+            tokens = self.player_sessions.get(player_id)
+            if not tokens:
+                return None
+            token = next(iter(tokens))
+            return self.session_rooms.get(token)
+
+    async def players_in_room(self, room_id: int) -> Set[str]:
+        async with self._lock:
+            return {
+                self.session_players[token] for token in self.room_sessions.get(room_id, set())
+            }

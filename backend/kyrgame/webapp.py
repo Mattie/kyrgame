@@ -260,7 +260,7 @@ async def start_session(
         session_connections = request.app.state.session_connections
         for old_token in replaced_tokens:
             old_socket = session_connections.pop(old_token, None)
-            previous_room = request.app.state.presence.session_rooms.get(old_token)
+            previous_room = await request.app.state.presence.room_for_session(old_token)
             if previous_room is not None and old_socket is not None:
                 await request.app.state.gateway.unregister(previous_room, old_socket)
             if old_socket is not None and old_socket.application_state == WebSocketState.CONNECTED:
