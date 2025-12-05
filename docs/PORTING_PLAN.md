@@ -2,12 +2,13 @@
 
 ## Goals
 - Deliver a modern multiplayer web experience with a JS front-end and Python back-end while preserving gameplay behaviors documented in the legacy C code.
-- Keep the C data structures as authoritative schemas when designing persistence and APIs to ensure compatibility with assets and rules. 
+- Keep the C data structures as authoritative schemas when designing persistence and APIs to ensure compatibility with assets and rules.
 - Build the new stack so it can run locally via Docker/WSL2 with repeatable tests and fixtures.
+- Keep the original MajorBBS sources organized in `legacy/` so they remain easy to reference as we extract content and parity requirements.
 
 ## Porting Checklist
 
-- [x] Captured legacy constants (sizes, limits, flags) from `KYRANDIA.H` in `backend/kyrgame/constants.py` to anchor model validation.
+- [x] Captured legacy constants (sizes, limits, flags) from `legacy/KYRANDIA.H` in `backend/kyrgame/constants.py` to anchor model validation.
 - [x] Defined initial Pydantic + SQLAlchemy models for spells, objects, locations, and a partial player record mirroring the legacy structs.
 - [x] Generated JSON fixtures for commands, locations, objects, spells, and localized message bundles with validation tests.
 - [x] Added loader utilities to seed a database session from fixtures and a script to package offline content (`backend/kyrgame/scripts/package_content.py`).
@@ -55,7 +56,7 @@
    - Define the contract for the JS client (event schema, error payloads) and ensure fixtures + APIs expose the localized message catalog needed for UI parity.
 
 ## Architectural Direction
-- **Data contracts:** Mirror the structs in `KYRANDIA.H` as ORM/Pydantic models (player, location, objects, spells, commands) to maintain limits and flags when validating client input and persisting state. 
+- **Data contracts:** Mirror the structs in `legacy/KYRANDIA.H` as ORM/Pydantic models (player, location, objects, spells, commands) to maintain limits and flags when validating client input and persisting state.
 - **Service boundaries:** Align services with legacy modules: command dispatcher (from `KYRCMDS.C`), world/location service (from `KYRLOCS.C`), object catalog/effects (from `KYROBJS.C`), spell/combat engine (from `KYRSPEL.C`), timers/animations (from `KYRANIM.C`), and admin tooling (from `KYRSYSP.C`).
 - **Content pipeline:** Extract message catalogs and location/object tables into JSON fixtures so the backend can deliver localized text to the client and seed databases.
 - **Transport:** Use WebSockets for real-time room broadcasts and HTTP for setup/admin flows, with server-side authorization enforcing level/flag checks.
@@ -66,7 +67,7 @@
 - **Runtime:** Docker-compose for API, DB (PostgreSQL), and front-end assets, runnable under WSL2. Include a `Makefile` to wrap common tasks (`make test`, `make up`, `make seed`).
 
 ## Phase 1: Domain Modeling & Fixtures (TDD)
-1. **Schema extraction:** Convert `KYRANDIA.H` structs into Python domain models and matching DB schemas (players, locations, objects, spells, commands). Use unit tests to assert field constraints (e.g., max slots, flag masks). 
+1. **Schema extraction:** Convert `legacy/KYRANDIA.H` structs into Python domain models and matching DB schemas (players, locations, objects, spells, commands). Use unit tests to assert field constraints (e.g., max slots, flag masks).
 2. **Fixture generation:** Serialize content from `KYRLOCS.C`, `KYROBJS.C`, and spell tables into JSON fixtures. Add tests to validate fixture completeness (counts match `NGLOCS`, `NGOBJS`, `NGSPLS`) and referential integrity.
 3. **Content loader:** Implement a loader that seeds the database from fixtures; test idempotency and error handling for missing fields.
 4. **Docker baseline:** Add docker-compose with API + Postgres; include a healthcheck and smoke test (`pytest -m smoke`) to confirm the stack starts and schemas migrate in WSL2.

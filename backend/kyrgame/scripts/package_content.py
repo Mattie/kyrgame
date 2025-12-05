@@ -34,7 +34,7 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("Dist/offline-content.json"),
+        default=Path("legacy/Dist/offline-content.json"),
         help="Where to write the offline bundle",
     )
     parser.add_argument(
