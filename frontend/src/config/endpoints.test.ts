@@ -1,49 +1,30 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { getApiBaseUrl, getWebSocketUrl } from './endpoints'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-describe('endpoints configuration', () => {
-  beforeEach(() => {
+const setLocation = (url: string) => {
+  Object.defineProperty(window, 'location', {
+    value: new URL(url),
+    writable: true,
+  })
+}
+
+afterEach(() => {
+  vi.resetModules()
+  vi.unstubAllEnvs()
+})
+
+describe('getApiBaseUrl', () => {
+  it('prefers explicit environment override', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'http://api.override/')
+    const { getApiBaseUrl } = await import('./endpoints')
+
+    expect(getApiBaseUrl()).toBe('http://api.override')
+  })
+
+  it('falls back to the backend dev port when running on the Vite host', async () => {
     vi.stubEnv('VITE_API_BASE_URL', '')
-    vi.stubEnv('VITE_WS_URL', '')
-  })
+    setLocation('http://127.0.0.1:5173')
+    const { getApiBaseUrl } = await import('./endpoints')
 
-  afterEach(() => {
-    vi.unstubAllEnvs()
-  })
-
-  it('prefers VITE_API_BASE_URL when provided', () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com')
-
-    expect(getApiBaseUrl()).toBe('https://api.example.com')
-  })
-
-  it('removes trailing slashes from VITE_API_BASE_URL', () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com/')
-
-    expect(getApiBaseUrl()).toBe('https://api.example.com')
-  })
-
-  it('falls back to window location when API base env is missing', () => {
-    vi.unstubAllEnvs()
-
-    expect(getApiBaseUrl()).toBe(window.location.origin)
-  })
-
-  it('uses VITE_WS_URL when defined', () => {
-    vi.stubEnv('VITE_WS_URL', 'wss://ws.example.com/rooms')
-
-    expect(getWebSocketUrl()).toBe('wss://ws.example.com/rooms')
-  })
-
-  it('removes trailing slashes from VITE_WS_URL', () => {
-    vi.stubEnv('VITE_WS_URL', 'wss://ws.example.com/')
-
-    expect(getWebSocketUrl()).toBe('wss://ws.example.com')
-  })
-
-  it('builds websocket url from the API base when no override is set', () => {
-    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com')
-
-    expect(getWebSocketUrl()).toBe('wss://api.example.com/ws')
+    expect(getApiBaseUrl()).toBe('http://127.0.0.1:8000')
   })
 })

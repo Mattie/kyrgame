@@ -5,6 +5,15 @@ export const getApiBaseUrl = (): string => {
   if (envValue) {
     return trimTrailingSlash(envValue)
   }
+
+  const devPorts = new Set(['5173', '4173'])
+  if (devPorts.has(window.location.port)) {
+    const protocol = window.location.protocol.startsWith('https')
+      ? 'https'
+      : 'http'
+    return `${protocol}://${window.location.hostname}:8000`
+  }
+
   return window.location.origin
 }
 

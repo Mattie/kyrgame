@@ -6,6 +6,7 @@ import httpx
 import pytest
 import uvicorn
 import websockets
+from starlette import status
 
 from kyrgame import fixtures
 from kyrgame import models
@@ -78,6 +79,28 @@ async def test_http_endpoints_expose_fixture_shapes():
             assert admin_resp.status_code == 200
             admin_summary = admin_resp.json()
             assert admin_summary == summary
+
+
+@pytest.mark.anyio
+async def test_cors_headers_allow_dev_frontend():
+    app = create_app()
+
+    transport = httpx.ASGITransport(app=app)
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.options(
+                "/world/locations",
+                headers={
+                    "Origin": "http://127.0.0.1:5173",
+                    "Access-Control-Request-Method": "GET",
+                },
+            )
+
+            assert response.status_code == status.HTTP_200_OK
+            assert response.headers.get("access-control-allow-origin") in {
+                "*",
+                "http://127.0.0.1:5173",
+            }
 
 
 @pytest.mark.anyio
