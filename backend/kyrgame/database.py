@@ -4,8 +4,8 @@ from sqlalchemy.orm import sessionmaker
 from .models import Base
 
 
-def get_engine(database_url: str = "sqlite:///kyrgame.db"):
-    return create_engine(database_url, future=True)
+def get_engine(database_url: str = "sqlite:///kyrgame.db", **engine_kwargs):
+    return create_engine(database_url, future=True, **engine_kwargs)
 
 
 def init_db_schema(engine):
@@ -13,5 +13,7 @@ def init_db_schema(engine):
 
 
 def create_session(engine):
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+    SessionLocal = sessionmaker(
+        bind=engine, autoflush=False, autocommit=False, expire_on_commit=False, future=True
+    )
     return SessionLocal()
