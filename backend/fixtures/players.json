@@ -1,0 +1,31 @@
+[
+  {
+    "uidnam": "HeroicUser",
+    "plyrid": "hero",
+    "altnam": "Hero Alt",
+    "attnam": "Hero Att",
+    "gpobjs": [0, 1],
+    "nmpdes": 1,
+    "modno": 0,
+    "level": 3,
+    "gamloc": 0,
+    "pgploc": 0,
+    "flags": 515,
+    "gold": 25,
+    "npobjs": 2,
+    "obvals": [10, 5],
+    "nspells": 3,
+    "spts": 5,
+    "hitpts": 12,
+    "charms": [0, 0, 0, 0, 0, 0],
+    "offspls": 1,
+    "defspls": 1,
+    "othspls": 1,
+    "spells": [5, 0, 2],
+    "gemidx": 0,
+    "stones": [1, 2, 3, 4],
+    "macros": 0,
+    "stumpi": 0,
+    "spouse": ""
+  }
+]

@@ -26,10 +26,47 @@ def load_spells(path: Path | None = None) -> List[models.SpellModel]:
     return [models.SpellModel(**item) for item in data]
 
 
+def _spell_bitmasks(spells: dict[int, models.SpellModel], memorized: List[int]):
+    offspls = defspls = othspls = 0
+    for spell_id in memorized:
+        spell = spells[spell_id]
+        if spell.sbkref == constants.OFFENS:
+            offspls |= spell.bitdef
+        elif spell.sbkref == constants.DEFENS:
+            defspls |= spell.bitdef
+        elif spell.sbkref == constants.OTHERS:
+            othspls |= spell.bitdef
+    return offspls, defspls, othspls
+
+
 def load_commands(path: Path | None = None) -> List[models.CommandModel]:
     fixture_path = (path or FIXTURE_ROOT) / "commands.json"
     data = json.loads(fixture_path.read_text(encoding="utf-8"))
     return [models.CommandModel(**item) for item in data]
+
+
+def load_players(path: Path | None = None) -> List[models.PlayerModel]:
+    fixture_path = (path or FIXTURE_ROOT) / "players.json"
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    spells = {spell.id: spell for spell in load_spells(path)}
+    players: List[models.PlayerModel] = []
+    for item in data:
+        offspls, defspls, othspls = _spell_bitmasks(spells, item.get("spells", []))
+        hydrated = {
+            **item,
+            "offspls": item.get("offspls", offspls),
+            "defspls": item.get("defspls", defspls),
+            "othspls": item.get("othspls", othspls),
+        }
+        players.append(models.PlayerModel(**hydrated))
+    return players
+
+
+def build_player(path: Path | None = None) -> models.PlayerModel:
+    players = load_players(path)
+    if not players:
+        raise FileNotFoundError("No players defined in fixture set")
+    return players[0]
 
 
 def load_message_bundle(
@@ -67,6 +104,7 @@ def fixture_summary(path: Path | None = None) -> dict:
     object_models = load_objects(path)
     spell_models = load_spells(path)
     command_models = load_commands(path)
+    players = load_players(path)
     message_bundles = load_message_bundles(path)
     default_bundle = message_bundles[DEFAULT_LOCALE]
     return {
@@ -74,6 +112,7 @@ def fixture_summary(path: Path | None = None) -> dict:
         "objects": len(object_models),
         "spells": len(spell_models),
         "commands": len(command_models),
+        "players": len(players),
         "messages": len(default_bundle.messages),
         "locales": sorted(message_bundles.keys()),
     }

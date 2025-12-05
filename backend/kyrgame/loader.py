@@ -12,6 +12,7 @@ def _reset_tables(session: Session):
     session.query(models.Location).delete()
     session.query(models.GameObject).delete()
     session.query(models.Spell).delete()
+    session.query(models.Player).delete()
     session.commit()
 
 
@@ -29,6 +30,7 @@ def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
     objects = fixtures.load_objects(fixture_root)
     spells = fixtures.load_spells(fixture_root)
     commands = fixtures.load_commands(fixture_root)
+    players = fixtures.load_players(fixture_root)
     messages = fixtures.load_message_bundle(path=fixture_root)
 
     _persist_all(
@@ -95,4 +97,40 @@ def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
     _persist_all(
         session,
         [models.Message(id=key, text=value) for key, value in messages.messages.items()],
+    )
+
+    _persist_all(
+        session,
+        [
+            models.Player(
+                uidnam=item.uidnam,
+                plyrid=item.plyrid,
+                altnam=item.altnam,
+                attnam=item.attnam,
+                gpobjs=item.gpobjs,
+                nmpdes=item.nmpdes,
+                modno=item.modno,
+                level=item.level,
+                gamloc=item.gamloc,
+                pgploc=item.pgploc,
+                flags=item.flags,
+                gold=item.gold,
+                npobjs=item.npobjs,
+                obvals=item.obvals,
+                nspells=item.nspells,
+                spts=item.spts,
+                hitpts=item.hitpts,
+                offspls=item.offspls,
+                defspls=item.defspls,
+                othspls=item.othspls,
+                charms=item.charms,
+                spells=item.spells,
+                gemidx=item.gemidx,
+                stones=item.stones,
+                macros=item.macros,
+                stumpi=item.stumpi,
+                spouse=item.spouse,
+            )
+            for item in players
+        ],
     )

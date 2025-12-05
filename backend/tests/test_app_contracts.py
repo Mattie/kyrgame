@@ -8,6 +8,7 @@ import uvicorn
 import websockets
 
 from kyrgame import fixtures
+from kyrgame import models
 from kyrgame.webapp import create_app
 
 
@@ -74,6 +75,24 @@ async def test_http_endpoints_expose_fixture_shapes():
             assert admin_resp.status_code == 200
             admin_summary = admin_resp.json()
             assert admin_summary == summary
+
+
+@pytest.mark.anyio
+async def test_player_serialization_round_trip():
+    app = create_app()
+    sample_player = fixtures.build_player()
+
+    transport = httpx.ASGITransport(app=app)
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            example_resp = await client.get("/players/example")
+            assert example_resp.status_code == 200
+            assert example_resp.json() == sample_player.model_dump()
+
+            echo_resp = await client.post("/players/echo", json=sample_player.model_dump())
+            assert echo_resp.status_code == 200
+            echoed = models.PlayerModel(**echo_resp.json()["player"])
+            assert echoed.model_dump() == sample_player.model_dump()
 
 
 @pytest.mark.anyio
