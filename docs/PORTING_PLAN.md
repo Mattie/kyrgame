@@ -117,12 +117,12 @@
 
 ## Next Steps: View-Only Developer Navigator UI
 1. **Lock in client contracts**
-   - Document the minimal payloads the UI will consume: session creation shape, location listing (IDs, exits, descriptions), object catalog, and room broadcast envelope (`room_broadcast`, `command_response`).
-   - Add an `/auth/session` convenience option for specifying a starting room to simplify navigating fixtures without gameplay gates.
-   - Capture token lifetime/refresh requirements (currently missing from HTTP responses even though the repository stores `expires_at`).
+   - [x] Document the minimal payloads the UI will consume: session creation shape, location listing (IDs, exits, descriptions), object catalog, and room broadcast envelope (`room_broadcast`, `command_response`).
+   - [ ] Add an `/auth/session` convenience option for specifying a starting room to simplify navigating fixtures without gameplay gates.
+   - [ ] Capture token lifetime/refresh requirements (currently missing from HTTP responses even though the repository stores `expires_at`).
 2. **Bootstrap the front-end workspace**
-   - Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards.
-   - Wire shared configuration for API base URL and WebSocket endpoint, including bearer token injection.
+   - [x] Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards.
+   - [x] Wire shared configuration for API base URL and WebSocket endpoint (token injection to follow).
 3. **Implement a "view-only" navigator flow**
    - Simple session form that requests a token for a chosen player ID and optional room ID; persist token in memory for the session.
    - Fetch world data on load (`/world/locations`, `/objects`, `/commands`, `/i18n/<locale>/messages`) and cache in state for rendering labels/tooltips.
