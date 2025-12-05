@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -193,6 +194,20 @@ async def start_session(
     request: Request,
     db: Annotated[OrmSession, Depends(get_db_session)],
 ):
+    # Rate limiting for session creation (5 per second per IP to allow for test suites)
+    if not hasattr(request.app.state, 'session_rate_limiters'):
+        request.app.state.session_rate_limiters = {}
+    
+    client_ip = request.client.host if request.client else "unknown"
+    if client_ip not in request.app.state.session_rate_limiters:
+        request.app.state.session_rate_limiters[client_ip] = RateLimiter(max_events=5, window_seconds=1.0)
+    
+    if not request.app.state.session_rate_limiters[client_ip].allow():
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many session creation attempts. Please try again later."
+        )
+    
     template = request.app.state.fixture_cache["player_template"]
     repo = repositories.PlayerSessionRepository(db)
 
@@ -214,29 +229,41 @@ async def start_session(
     if payload.resume_token:
         existing = repo.get_by_token(payload.resume_token)
         if not existing or existing.player_id != player.id:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail="Session not found or expired")
         repo.mark_seen(payload.resume_token)
+        db.commit()
         room_id = existing.room_id
         token = existing.session_token
         resumed = True
         status_code = status.HTTP_200_OK
     else:
         if not payload.allow_multiple:
-            replaced_tokens = repo.deactivate_all(player.id)
-        token = secrets.token_urlsafe(24)
-        repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+            # Use lock to prevent race condition during session replacement
+            if not hasattr(request.app.state, 'session_replacement_lock'):
+                request.app.state.session_replacement_lock = asyncio.Lock()
+            
+            async with request.app.state.session_replacement_lock:
+                replaced_tokens = repo.deactivate_all(player.id)
+                token = secrets.token_urlsafe(24)
+                repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+                db.commit()
+        else:
+            token = secrets.token_urlsafe(24)
+            repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+            db.commit()
 
-    db.commit()
-
-    session_connections = request.app.state.session_connections
-    for old_token in replaced_tokens:
-        old_socket = session_connections.pop(old_token, None)
-        previous_room = request.app.state.presence.session_rooms.get(old_token)
-        if previous_room is not None and old_socket is not None:
-            await request.app.state.gateway.unregister(previous_room, old_socket)
-        if old_socket is not None and old_socket.application_state == WebSocketState.CONNECTED:
-            await old_socket.close(code=status.WS_1011_INTERNAL_ERROR)
-        await request.app.state.presence.remove(old_token)
+    if not payload.allow_multiple and not payload.resume_token:
+        # Commit happened inside the lock, now clean up old connections
+        session_connections = request.app.state.session_connections
+        for old_token in replaced_tokens:
+            old_socket = session_connections.pop(old_token, None)
+            previous_room = request.app.state.presence.session_rooms.get(old_token)
+            if previous_room is not None and old_socket is not None:
+                await request.app.state.gateway.unregister(previous_room, old_socket)
+            if old_socket is not None and old_socket.application_state == WebSocketState.CONNECTED:
+                # Use WS_1008_POLICY_VIOLATION for concurrent session replacement
+                await old_socket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await request.app.state.presence.remove(old_token)
 
     await request.app.state.presence.set_location(player.plyrid, room_id, token)
 
@@ -277,12 +304,18 @@ async def logout(
     repo = repositories.PlayerSessionRepository(db)
     repo.deactivate(session_record.session_token)
     db.commit()
+    
     connections = request.app.state.session_connections
     active_socket = connections.pop(session_record.session_token, None)
-    if active_socket is not None and active_socket.application_state == WebSocketState.CONNECTED:
-        await request.app.state.gateway.unregister(session_record.room_id, active_socket)
-        await active_socket.close(code=status.WS_1000_NORMAL_CLOSURE)
-    await request.app.state.presence.remove(session_record.session_token)
+    
+    # Always clean up presence, even if socket operations fail
+    try:
+        if active_socket is not None and active_socket.application_state == WebSocketState.CONNECTED:
+            await request.app.state.gateway.unregister(session_record.room_id, active_socket)
+            await active_socket.close(code=status.WS_1000_NORMAL_CLOSURE)
+    finally:
+        await request.app.state.presence.remove(session_record.session_token)
+    
     return LogoutResponse(status="logged_out")
 
 
@@ -398,6 +431,7 @@ def create_app() -> FastAPI:
 
         session_token = websocket.query_params.get("token")
         if not session_token:
+            # Missing token
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
@@ -406,11 +440,13 @@ def create_app() -> FastAPI:
             session_repo = repositories.PlayerSessionRepository(db_session)
             session_record = session_repo.get_by_token(session_token)
             if not session_record:
+                # Invalid or expired token
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
             player = db_session.get(models.Player, session_record.player_id)
             if not player:
+                # Player not found
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
@@ -418,6 +454,11 @@ def create_app() -> FastAPI:
             db_session.commit()
             player_id = player.plyrid
             current_room = session_record.room_id
+        except Exception as e:
+            # Database or other error during validation
+            db_session.rollback()
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            return
         finally:
             db_session.close()
 

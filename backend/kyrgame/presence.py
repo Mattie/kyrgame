@@ -55,6 +55,9 @@ class PresenceService:
             return previous
 
     def room_for_player(self, player_id: str) -> int | None:
+        # Note: This is a read-only operation and doesn't need locking
+        # since dict access is atomic in Python. For complete thread safety
+        # in a multi-threaded context, consider using async with self._lock
         tokens = self.player_sessions.get(player_id)
         if not tokens:
             return None
