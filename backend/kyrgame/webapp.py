@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
 
+from . import models
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
@@ -46,6 +47,10 @@ class FixtureProvider:
     @property
     def message_bundles(self):
         return self.scope.app.state.fixture_cache["message_bundles"]
+
+    @property
+    def players(self):
+        return self.scope.app.state.fixture_cache["players"]
 
 
 def get_request_provider(request: Request) -> FixtureProvider:
@@ -118,6 +123,9 @@ async def fetch_message_bundle(
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+players_router = APIRouter(prefix="/players", tags=["players"])
+
+
 @admin_router.get("/fixtures")
 async def fixture_summary(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
     return provider.cache["summary"]
@@ -128,6 +136,16 @@ async def reload_room_scripts(provider: Annotated[FixtureProvider, Depends(get_r
     scripts = provider.room_scripts
     scripts.reload_scripts()
     return {"status": "ok", "reloads": scripts.reloads}
+
+
+@players_router.get("/example")
+async def example_player(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
+    return provider.cache["player_template"].model_dump()
+
+
+@players_router.post("/echo")
+async def echo_player(player: models.PlayerModel):
+    return {"player": player.model_dump()}
 
 
 def create_app() -> FastAPI:
@@ -146,6 +164,7 @@ def create_app() -> FastAPI:
     app.include_router(spells_router)
     app.include_router(i18n_router)
     app.include_router(admin_router)
+    app.include_router(players_router)
 
     gateway: RoomGateway | None = None
 

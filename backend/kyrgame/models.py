@@ -85,12 +85,26 @@ class PlayerModel(BaseModel):
     othspls: int
     spells: List[int] = Field(default_factory=list, max_length=constants.MAXSPL)
     gemidx: Optional[int] = None
-    stones: List[int] = Field(default_factory=list, max_length=4)
+    stones: List[int] = Field(default_factory=list, max_length=constants.BIRTHSTONE_SLOTS)
     macros: Optional[int] = None
     stumpi: Optional[int] = None
     spouse: str = Field(max_length=constants.ALSSIZ)
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    @model_validator(mode="after")
+    def validate_counts(self):
+        if self.npobjs != len(self.gpobjs) or self.npobjs != len(self.obvals):
+            raise ValueError("npobjs must match gpobjs/obvals length")
+        if self.nspells != len(self.spells):
+            raise ValueError("nspells must match the number of memorized spells")
+        if len(self.charms) != constants.NCHARM:
+            raise ValueError(f"charms must contain exactly {constants.NCHARM} timers")
+        if len(self.stones) != constants.BIRTHSTONE_SLOTS:
+            raise ValueError(
+                f"stones must contain exactly {constants.BIRTHSTONE_SLOTS} birthstones"
+            )
+        return self
 
 
 class CommandModel(BaseModel):
@@ -162,18 +176,28 @@ class Player(Base):
     plyrid = Column(String(constants.ALSSIZ), nullable=False)
     altnam = Column(String(constants.APNSIZ), nullable=False)
     attnam = Column(String(constants.APNSIZ), nullable=False)
+    gpobjs = Column(JSON, nullable=False)
+    nmpdes = Column(Integer, nullable=True)
+    modno = Column(Integer, nullable=True)
     level = Column(Integer, nullable=False)
     gamloc = Column(Integer, nullable=False)
     pgploc = Column(Integer, nullable=False)
     flags = Column(BigInteger, nullable=False)
     gold = Column(Integer, nullable=False)
     npobjs = Column(Integer, nullable=False)
+    obvals = Column(JSON, nullable=False)
     nspells = Column(Integer, nullable=False)
     spts = Column(Integer, nullable=False)
     hitpts = Column(Integer, nullable=False)
     offspls = Column(BigInteger, nullable=False)
     defspls = Column(BigInteger, nullable=False)
     othspls = Column(BigInteger, nullable=False)
+    charms = Column(JSON, nullable=False)
+    spells = Column(JSON, nullable=False)
+    gemidx = Column(Integer, nullable=True)
+    stones = Column(JSON, nullable=False)
+    macros = Column(Integer, nullable=True)
+    stumpi = Column(Integer, nullable=True)
     spouse = Column(String(constants.ALSSIZ), nullable=False)
 
 

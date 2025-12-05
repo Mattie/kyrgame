@@ -18,35 +18,7 @@ class FakeClock:
 def base_state():
     locations = {location.id: location for location in fixtures.load_locations()}
     objects = {obj.id: obj for obj in fixtures.load_objects()}
-    player = models.PlayerModel(
-        uidnam="tester",
-        plyrid="hero",
-        altnam="hero",
-        attnam="hero",
-        gpobjs=[2],
-        nmpdes=None,
-        modno=None,
-        level=3,
-        gamloc=0,
-        pgploc=0,
-        flags=0,
-        gold=5,
-        npobjs=1,
-        obvals=[1],
-        nspells=0,
-        spts=0,
-        hitpts=10,
-        charms=[],
-        offspls=0,
-        defspls=0,
-        othspls=0,
-        spells=[],
-        gemidx=None,
-        stones=[],
-        macros=None,
-        stumpi=None,
-        spouse="partner",
-    )
+    player = fixtures.build_player()
     return commands.GameState(player=player, locations=locations, objects=objects)
 
 

@@ -33,6 +33,8 @@ async def bootstrap_app(app: FastAPI):
         "objects": fixtures.load_objects(),
         "spells": fixtures.load_spells(),
         "commands": fixtures.load_commands(),
+        "players": fixtures.load_players(),
+        "player_template": fixtures.build_player(),
         "messages": default_messages,
         "message_bundles": message_bundles,
         "summary": fixtures.fixture_summary(),

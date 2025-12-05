@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from kyrgame import constants
+from kyrgame import fixtures
 from kyrgame import loader
 from kyrgame import models
 from kyrgame.database import create_session, get_engine, init_db_schema
@@ -75,6 +76,23 @@ def test_command_fixture_constraints():
         assert len(cmd.command) <= 32
 
 
+def test_player_factory_matches_legacy_limits():
+    player = fixtures.build_player()
+
+    assert player.npobjs == len(player.gpobjs)
+    assert player.nspells == len(player.spells)
+    assert len(player.charms) == constants.NCHARM
+    assert len(player.stones) == constants.BIRTHSTONE_SLOTS
+
+    decoded_flags = constants.decode_player_flags(player.flags)
+    assert decoded_flags
+    assert set(decoded_flags) <= set(constants.PlayerFlag.__members__)
+
+    assert player.offspls
+    assert player.defspls
+    assert player.othspls
+
+
 def test_messages_fixture_shape():
     catalog = load_json("messages/en-US.legacy.json")
     parsed = models.MessageBundleModel(**catalog)
@@ -97,3 +115,6 @@ def test_loader_populates_database(tmp_path):
     assert session.query(models.Spell).count() == len(load_json("spells.json"))
     bundle = load_json("messages/en-US.legacy.json")
     assert session.query(models.Message).count() == len(bundle["messages"])
+
+    players = fixtures.load_players(FIXTURE_DIR)
+    assert session.query(models.Player).count() == len(players)
