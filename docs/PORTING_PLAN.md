@@ -106,3 +106,30 @@
 - Core domain models with tests passing for constraints and fixture integrity.
 - Command dispatcher and world navigation available via WebSocket API with integration tests for movement and chat.
 - Basic React UI showing room description and handling command input in dev mode.
+
+## Current Backend Capabilities (for UI planning)
+- **Fixture delivery:** HTTP endpoints expose commands, locations, objects, spells, and localized message bundles seeded from JSON fixtures, with an admin summary route for quick sanity checks.
+- **Session + auth stubs:** `/auth/session` issues bearer tokens, optionally targeting a starting room; admin roles/flags are represented via bearer tokens for tooling endpoints.
+- **Room transport:** WebSocket gateway delivers welcome payloads, room broadcast events, and command responses; PresenceService tracks occupants per room and re-scopes subscriptions when players move.
+- **Command dispatch bridge:** Parsed `chat` and `move` commands execute through the dispatcher, emit broadcast payloads, and enforce basic rate limiting for spam.
+- **Repositories/migrations:** SQLAlchemy models and fixture-backed repositories exist alongside Alembic scaffolding, though persistence is still in-memory for tests.
+
+## Next Steps: View-Only Developer Navigator UI
+1. **Lock in client contracts**
+   - Document the minimal payloads the UI will consume: session creation shape, location listing (IDs, exits, descriptions), object catalog, and room broadcast envelope (`room_broadcast`, `command_response`).
+   - Add an `/auth/session` convenience option for specifying a starting room to simplify navigating fixtures without gameplay gates.
+2. **Bootstrap the front-end workspace**
+   - Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards.
+   - Wire shared configuration for API base URL and WebSocket endpoint, including bearer token injection.
+3. **Implement a "view-only" navigator flow**
+   - Simple session form that requests a token for a chosen player ID and optional room ID; persist token in memory for the session.
+   - Fetch world data on load (`/world/locations`, `/objects`, `/commands`, `/i18n/<locale>/messages`) and cache in state for rendering labels/tooltips.
+   - Connect to `/ws/rooms/{room_id}?token=...` and render the welcome payload plus ongoing `room_broadcast` events in an activity log.
+   - Present a room panel showing description, exits, ground objects, and current occupants; add an exit list that dispatches `move` commands over WebSocket to change rooms.
+4. **Developer ergonomics for exploration**
+   - Add a lightweight world map/index view listing all locations with search/filter so developers can jump directly to a room via session reset.
+   - Include debug toggles to show raw event JSON and command IDs to aid future parity work.
+   - Provide graceful fallbacks when the WebSocket closes (e.g., token expired) and a reconnect button to resume the navigator session.
+5. **Testing + docs**
+   - Add Vitest unit tests for parsing room data and rendering components; include a Cypress/Vitest integration that spins up the FastAPI test app and confirms room joins/moves render correctly.
+   - Update README/back-end docs with steps for launching the navigator UI alongside the API for local exploration.
