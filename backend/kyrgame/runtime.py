@@ -2,8 +2,9 @@ import asyncio
 import contextlib
 from fastapi import FastAPI
 
-from . import database, fixtures, loader
+from . import database, fixtures, loader, rooms
 from .gateway import RoomGateway
+from .scheduler import SchedulerService
 
 
 async def bootstrap_app(app: FastAPI):
@@ -19,13 +20,24 @@ async def bootstrap_app(app: FastAPI):
 
     app.state.engine = engine
     app.state.gateway = RoomGateway()
+    app.state.scheduler = SchedulerService()
+    await app.state.scheduler.start()
+
     app.state.fixture_cache = {
         "locations": fixtures.load_locations(),
         "objects": fixtures.load_objects(),
         "spells": fixtures.load_spells(),
         "commands": fixtures.load_commands(),
+        "messages": fixtures.load_messages(),
         "summary": fixtures.fixture_summary(),
     }
+
+    app.state.room_scripts = rooms.RoomScriptEngine(
+        gateway=app.state.gateway,
+        scheduler=app.state.scheduler,
+        locations=app.state.fixture_cache["locations"],
+        messages=app.state.fixture_cache["messages"],
+    )
 
     app.state.background_tasks = [asyncio.create_task(_heartbeat_task(app))]
 
@@ -40,6 +52,10 @@ async def shutdown_app(app: FastAPI):
     gateway = getattr(app.state, "gateway", None)
     if gateway:
         await gateway.close_all()
+
+    scheduler = getattr(app.state, "scheduler", None)
+    if scheduler:
+        await scheduler.stop()
 
     engine = getattr(app.state, "engine", None)
     if engine is not None:

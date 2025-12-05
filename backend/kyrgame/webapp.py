@@ -29,6 +29,10 @@ class FixtureProvider:
     def gateway(self) -> RoomGateway:
         return self.scope.app.state.gateway
 
+    @property
+    def room_scripts(self):
+        return self.scope.app.state.room_scripts
+
 
 def get_request_provider(request: Request) -> FixtureProvider:
     return FixtureProvider(request)
@@ -84,6 +88,13 @@ admin_router = APIRouter(prefix="/admin", tags=["admin"])
 @admin_router.get("/fixtures")
 async def fixture_summary(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
     return provider.cache["summary"]
+
+
+@admin_router.post("/reload-scripts")
+async def reload_room_scripts(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
+    scripts = provider.room_scripts
+    scripts.reload_scripts()
+    return {"status": "ok", "reloads": scripts.reloads}
 
 
 def create_app() -> FastAPI:
