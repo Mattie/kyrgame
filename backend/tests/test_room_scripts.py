@@ -6,7 +6,7 @@ import pytest
 from kyrgame import fixtures
 from kyrgame.rooms import RoomScriptEngine
 from kyrgame.scheduler import SchedulerService
-from kyrgame.webapp import create_app
+from kyrgame.webapp import DEFAULT_ADMIN_TOKEN, create_app
 
 
 class FakeGateway:
@@ -18,6 +18,9 @@ class FakeGateway:
 
     async def direct(self, room_id: int, player_id: str, message: dict):
         self.messages.append({"room": room_id, "scope": "direct", "player": player_id, **message})
+
+
+ADMIN_HEADERS = {"Authorization": f"Bearer {DEFAULT_ADMIN_TOKEN}"}
 
 
 @pytest.mark.anyio
@@ -138,8 +141,8 @@ async def test_admin_endpoint_reloads_room_scripts_without_restart():
 
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            first = await client.post("/admin/reload-scripts")
-            second = await client.post("/admin/reload-scripts")
+            first = await client.post("/admin/reload-scripts", headers=ADMIN_HEADERS)
+            second = await client.post("/admin/reload-scripts", headers=ADMIN_HEADERS)
 
             assert first.status_code == 200
             assert second.status_code == 200

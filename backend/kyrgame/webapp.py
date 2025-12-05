@@ -1,7 +1,11 @@
 import asyncio
+import json
 import logging
+import os
 import secrets
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from enum import Enum
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
@@ -11,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
-from . import commands, constants, models, repositories
+from . import commands, constants, fixtures, models, repositories
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
@@ -50,6 +54,26 @@ class LogoutResponse(BaseModel):
     status: str
 
 
+class AdminRole(str, Enum):
+    PLAYER = "player_admin"
+    CONTENT = "content_admin"
+    MESSAGES = "message_admin"
+
+
+class AdminFlag(str, Enum):
+    ALLOW_DELETE = "allow_delete_players"
+    ALLOW_RENAME = "allow_player_rename"
+
+
+@dataclass
+class AdminGrant:
+    roles: set[str]
+    flags: set[str]
+
+
+DEFAULT_ADMIN_TOKEN = "dev-admin-token"
+
+
 def get_db_session(request: Request) -> OrmSession:
     session_factory = request.app.state.session_factory
     db = session_factory()
@@ -68,6 +92,84 @@ def _extract_bearer_token(request: Request) -> str:
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
 
 
+def _all_admin_roles() -> set[str]:
+    return {role.value for role in AdminRole}
+
+
+def _all_admin_flags() -> set[str]:
+    return {flag.value for flag in AdminFlag}
+
+
+def _load_admin_grants() -> dict[str, AdminGrant]:
+    grants: dict[str, AdminGrant] = {}
+
+    raw_map = os.getenv("KYRGAME_ADMIN_TOKENS")
+    if raw_map:
+        try:
+            token_map = json.loads(raw_map)
+        except json.JSONDecodeError as exc:  # pragma: no cover - defensive
+            raise RuntimeError("KYRGAME_ADMIN_TOKENS must be valid JSON") from exc
+        for token, settings in token_map.items():
+            grants[token] = AdminGrant(
+                roles=set(settings.get("roles", [])), flags=set(settings.get("flags", []))
+            )
+
+    default_token = os.getenv("KYRGAME_ADMIN_TOKEN")
+    if default_token:
+        grants.setdefault(default_token, AdminGrant(_all_admin_roles(), _all_admin_flags()))
+
+    if not grants:
+        grants[DEFAULT_ADMIN_TOKEN] = AdminGrant(_all_admin_roles(), _all_admin_flags())
+
+    return grants
+
+
+def require_admin(
+    request: Request,
+    roles: set[AdminRole] | None = None,
+    flags: set[AdminFlag] | None = None,
+):
+    token = _extract_bearer_token(request)
+    grants: dict[str, AdminGrant] = request.app.state.admin_grants
+    grant = grants.get(token)
+    if grant is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized admin token")
+
+    required_roles = {role.value for role in roles or set()}
+    if required_roles and not required_roles.issubset(grant.roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient admin role")
+
+    required_flags = {flag.value for flag in flags or set()}
+    if required_flags and not required_flags.issubset(grant.flags):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing admin privileges")
+
+    return grant
+
+
+def require_player_admin(request: Request):
+    return require_admin(request, roles={AdminRole.PLAYER})
+
+
+def require_content_admin(request: Request):
+    return require_admin(request, roles={AdminRole.CONTENT})
+
+
+def require_message_admin(request: Request):
+    return require_admin(request, roles={AdminRole.MESSAGES})
+
+
+def require_any_admin_role(request: Request, roles: set[AdminRole]):
+    grant = require_admin(request)
+    allowed = {role.value for role in roles}
+    if not allowed.intersection(grant.roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient admin role")
+    return grant
+
+
+def require_player_or_content_admin(request: Request):
+    return require_any_admin_role(request, {AdminRole.PLAYER, AdminRole.CONTENT})
+
+
 async def require_active_session(
     request: Request, db: Annotated[OrmSession, Depends(get_db_session)]
 ):
@@ -84,6 +186,95 @@ async def require_active_session(
     repo.mark_seen(token)
     db.commit()
     return session_record, player
+
+
+def _player_model_from_record(record: models.Player) -> models.PlayerModel:
+    return models.PlayerModel(
+        uidnam=record.uidnam,
+        plyrid=record.plyrid,
+        altnam=record.altnam,
+        attnam=record.attnam,
+        gpobjs=record.gpobjs,
+        nmpdes=record.nmpdes,
+        modno=record.modno,
+        level=record.level,
+        gamloc=record.gamloc,
+        pgploc=record.pgploc,
+        flags=record.flags,
+        gold=record.gold,
+        npobjs=record.npobjs,
+        obvals=record.obvals,
+        nspells=record.nspells,
+        spts=record.spts,
+        hitpts=record.hitpts,
+        offspls=record.offspls,
+        defspls=record.defspls,
+        othspls=record.othspls,
+        charms=record.charms,
+        spells=record.spells,
+        gemidx=record.gemidx,
+        stones=record.stones,
+        macros=record.macros,
+        stumpi=record.stumpi,
+        spouse=record.spouse,
+    )
+
+
+def _replace_cached_model(collection, new_model, *, key_attr: str = "id"):
+    replaced = False
+    for idx, existing in enumerate(collection):
+        if getattr(existing, key_attr) == getattr(new_model, key_attr):
+            collection[idx] = new_model
+            replaced = True
+            break
+    if not replaced:
+        collection.append(new_model)
+
+
+def _set_player_in_cache(app: FastAPI, player: models.PlayerModel, *, original_alias: str | None = None):
+    cache: list[models.PlayerModel] = app.state.fixture_cache["players"]
+    lookup = original_alias or player.plyrid
+    replaced = False
+    for idx, existing in enumerate(cache):
+        if existing.plyrid == lookup:
+            cache[idx] = player
+            replaced = True
+            break
+    if not replaced:
+        cache.append(player)
+    app.state.fixture_cache["summary"]["players"] = len(cache)
+
+
+def _remove_player_from_cache(app: FastAPI, alias: str):
+    cache: list[models.PlayerModel] = app.state.fixture_cache["players"]
+    app.state.fixture_cache["players"] = [player for player in cache if player.plyrid != alias]
+    app.state.fixture_cache["summary"]["players"] = len(app.state.fixture_cache["players"])
+
+
+async def _disconnect_sessions(app: FastAPI, tokens: list[str]):
+    connections = app.state.session_connections
+    for token in tokens:
+        socket = connections.pop(token, None)
+        previous_room = await app.state.presence.remove(token)
+        if previous_room is not None and socket is not None:
+            await app.state.gateway.unregister(previous_room, socket)
+        if socket is not None and socket.application_state == WebSocketState.CONNECTED:
+            await socket.close(code=status.WS_1008_POLICY_VIOLATION)
+
+
+def _update_message_cache(app: FastAPI, bundle: models.MessageBundleModel):
+    cache = app.state.fixture_cache
+    cache["message_bundles"][bundle.locale] = bundle
+    if bundle.locale == fixtures.DEFAULT_LOCALE:
+        cache["messages"] = bundle
+        app.state.command_vocabulary = commands.CommandVocabulary(cache["commands"], bundle)
+    cache["summary"]["messages"] = len(bundle.messages)
+
+
+def _persist_message_bundle(db: OrmSession, bundle: models.MessageBundleModel):
+    db.query(models.Message).delete()
+    db.add_all([models.Message(id=key, text=value) for key, value in bundle.messages.items()])
+    db.commit()
 
 
 class FixtureProvider:
@@ -380,15 +571,207 @@ players_router = APIRouter(prefix="/players", tags=["players"])
 
 
 @admin_router.get("/fixtures")
-async def fixture_summary(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
+async def fixture_summary(
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+):
     return provider.cache["summary"]
 
 
 @admin_router.post("/reload-scripts")
-async def reload_room_scripts(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
+async def reload_room_scripts(
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    admin: Annotated[AdminGrant, Depends(require_content_admin)],
+):
     scripts = provider.room_scripts
     scripts.reload_scripts()
     return {"status": "ok", "reloads": scripts.reloads}
+
+
+@admin_router.get("/players")
+async def admin_list_players(
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    admin: Annotated[AdminGrant, Depends(require_player_admin)],
+):
+    return {"players": [player.model_dump() for player in provider.players]}
+
+
+@admin_router.get("/players/{player_id}")
+async def admin_get_player(
+    player_id: str,
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_admin)],
+):
+    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+    model = _player_model_from_record(record)
+    return {"player": model.model_dump()}
+
+
+@admin_router.post("/players", status_code=status.HTTP_201_CREATED)
+async def admin_create_player(
+    player: models.PlayerModel,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_admin)],
+):
+    existing = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
+    if existing:
+        raise HTTPException(status_code=409, detail="Player alias already exists")
+
+    db.add(models.Player(**player.model_dump()))
+    db.commit()
+    _set_player_in_cache(provider.scope.app, player)
+    return {"status": "created", "player": player.model_dump()}
+
+
+@admin_router.put("/players/{player_id}")
+async def admin_update_player(
+    player_id: str,
+    player: models.PlayerModel,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_admin)],
+):
+    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    if player.plyrid != player_id and AdminFlag.ALLOW_RENAME.value not in admin.flags:
+        raise HTTPException(status_code=403, detail="Rename not permitted for this admin token")
+
+    if player.plyrid != player_id:
+        conflict = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
+        if conflict and conflict.id != record.id:
+            raise HTTPException(status_code=409, detail="Player alias already exists")
+
+    for field, value in player.model_dump().items():
+        setattr(record, field, value)
+
+    db.commit()
+    updated = _player_model_from_record(record)
+    _set_player_in_cache(provider.scope.app, updated, original_alias=player_id if player.plyrid != player_id else None)
+    return {"status": "updated", "player": updated.model_dump()}
+
+
+@admin_router.delete("/players/{player_id}")
+async def admin_delete_player(
+    player_id: str,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_admin)],
+):
+    if AdminFlag.ALLOW_DELETE.value not in admin.flags:
+        raise HTTPException(status_code=403, detail="Delete not permitted for this admin token")
+
+    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    session_repo = repositories.PlayerSessionRepository(db)
+    tokens = session_repo.deactivate_all(record.id)
+
+    db.delete(record)
+    db.commit()
+
+    await _disconnect_sessions(provider.scope.app, tokens)
+    _remove_player_from_cache(provider.scope.app, player_id)
+    return {"status": "deleted", "player_id": player_id}
+
+
+@admin_router.put("/content/locations/{location_id}")
+async def admin_update_location(
+    location_id: int,
+    location: models.LocationModel,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_content_admin)],
+):
+    if location.id != location_id:
+        raise HTTPException(status_code=400, detail="Location id mismatch")
+
+    record = db.get(models.Location, location_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    for field, value in location.model_dump().items():
+        setattr(record, field, value)
+    db.commit()
+
+    _replace_cached_model(provider.cache["locations"], location)
+    provider.scope.app.state.location_index[location_id] = location
+    return {"status": "updated", "location": location.model_dump()}
+
+
+@admin_router.put("/content/objects/{object_id}")
+async def admin_update_object(
+    object_id: int,
+    payload: models.GameObjectModel,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_content_admin)],
+):
+    if payload.id != object_id:
+        raise HTTPException(status_code=400, detail="Object id mismatch")
+
+    record = db.get(models.GameObject, object_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Object not found")
+
+    record.name = payload.name
+    record.objdes = payload.objdes
+    record.auxmsg = payload.auxmsg
+    record.flags = ",".join(payload.flags)
+    record.objrou = payload.objrou
+    db.commit()
+
+    _replace_cached_model(provider.cache["objects"], payload)
+    return {"status": "updated", "object": payload.model_dump()}
+
+
+@admin_router.put("/content/spells/{spell_id}")
+async def admin_update_spell(
+    spell_id: int,
+    payload: models.SpellModel,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_content_admin)],
+):
+    if payload.id != spell_id:
+        raise HTTPException(status_code=400, detail="Spell id mismatch")
+
+    record = db.get(models.Spell, spell_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Spell not found")
+
+    record.name = payload.name
+    record.sbkref = payload.sbkref
+    record.bitdef = payload.bitdef
+    record.level = payload.level
+    record.splrou = payload.splrou
+    db.commit()
+
+    _replace_cached_model(provider.cache["spells"], payload)
+    return {"status": "updated", "spell": payload.model_dump()}
+
+
+@admin_router.put("/i18n/{locale}")
+async def admin_update_message_bundle(
+    locale: str,
+    payload: models.MessageBundleModel,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_message_admin)],
+):
+    if payload.locale != locale:
+        raise HTTPException(status_code=400, detail="Locale does not match payload")
+
+    _update_message_cache(provider.scope.app, payload)
+    if locale == fixtures.DEFAULT_LOCALE:
+        _persist_message_bundle(db, payload)
+
+    return {"status": "updated", "bundle": payload.model_dump()}
 
 
 @players_router.get("/example")
@@ -409,6 +792,8 @@ def create_app() -> FastAPI:
         await shutdown_app(app)
 
     app = FastAPI(title="Kyrgame API", lifespan=lifespan)
+
+    app.state.admin_grants = _load_admin_grants()
 
     app.include_router(auth_router)
     app.include_router(commands_router)
