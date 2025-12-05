@@ -231,6 +231,7 @@ async def start_session(
         if not existing or existing.player_id != player.id:
             raise HTTPException(status_code=404, detail="Session not found or expired")
         repo.mark_seen(payload.resume_token)
+        db.commit()
         room_id = existing.room_id
         token = existing.session_token
         resumed = True
@@ -263,9 +264,6 @@ async def start_session(
                 # Use WS_1008_POLICY_VIOLATION for concurrent session replacement
                 await old_socket.close(code=status.WS_1008_POLICY_VIOLATION)
             await request.app.state.presence.remove(old_token)
-    elif payload.resume_token:
-        # Commit for resume case
-        db.commit()
 
     await request.app.state.presence.set_location(player.plyrid, room_id, token)
 
