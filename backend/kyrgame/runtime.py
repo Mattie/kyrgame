@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from . import database, fixtures, loader, rooms
 from .gateway import RoomGateway
 from .scheduler import SchedulerService
+from .presence import PresenceService
 
 
 async def bootstrap_app(app: FastAPI):
@@ -20,6 +21,7 @@ async def bootstrap_app(app: FastAPI):
 
     app.state.engine = engine
     app.state.gateway = RoomGateway()
+    app.state.presence = PresenceService()
     app.state.scheduler = SchedulerService()
     await app.state.scheduler.start()
 
@@ -35,6 +37,7 @@ async def bootstrap_app(app: FastAPI):
         "message_bundles": message_bundles,
         "summary": fixtures.fixture_summary(),
     }
+    app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
 
     app.state.room_scripts = rooms.RoomScriptEngine(
         gateway=app.state.gateway,

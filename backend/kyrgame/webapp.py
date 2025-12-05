@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSock
 from pydantic import BaseModel
 
 from .gateway import RoomGateway
+from .presence import PresenceService
+from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
 
 
@@ -30,8 +32,16 @@ class FixtureProvider:
         return self.scope.app.state.gateway
 
     @property
+    def presence(self) -> PresenceService:
+        return self.scope.app.state.presence
+
+    @property
     def room_scripts(self):
         return self.scope.app.state.room_scripts
+
+    @property
+    def location_index(self):
+        return self.scope.app.state.location_index
 
     @property
     def message_bundles(self):
@@ -140,24 +150,121 @@ def create_app() -> FastAPI:
     gateway: RoomGateway | None = None
 
     @app.websocket("/ws/rooms/{room_id}")
-    async def room_socket(websocket: WebSocket, room_id: int, provider: Annotated[FixtureProvider, Depends(get_websocket_provider)]):
+    async def room_socket(
+        websocket: WebSocket,
+        room_id: int,
+        provider: Annotated[FixtureProvider, Depends(get_websocket_provider)],
+    ):
         nonlocal gateway
         if gateway is None:
             gateway = provider.gateway
-        await gateway.register(room_id, websocket)
+
+        player_id = websocket.query_params.get("player_id")
+        if not player_id:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        locations = provider.location_index
+        limiter = RateLimiter(max_events=2, window_seconds=0.5)
+        current_room = room_id
+
+        await provider.presence.set_location(player_id, current_room)
+        await gateway.register(current_room, websocket)
+
+        await gateway.broadcast(
+            current_room,
+            {
+                "type": "room_broadcast",
+                "room": current_room,
+                "payload": {"event": "player_enter", "player": player_id},
+            },
+            sender=websocket,
+        )
+
         try:
             while True:
                 payload = await websocket.receive_json()
-                if payload.get("type") == "command":
-                    await websocket.send_json({"type": "command_response", "room": room_id, "echo": payload})
+                if not limiter.allow():
+                    await websocket.send_json(
+                        {"type": "rate_limited", "detail": "Too many commands, slow down."}
+                    )
+                    continue
+
+                if payload.get("type") != "command":
+                    await websocket.send_json({"type": "noop", "room": current_room})
+                    continue
+
+                command = payload.get("command")
+                args = payload.get("args", {}) or {}
+
+                if command == "move":
+                    direction = args.get("direction")
+                    try:
+                        target_room = _resolve_room_from_direction(current_room, direction, locations)
+                    except ValueError as exc:
+                        await websocket.send_json(
+                            {"type": "command_error", "room": current_room, "detail": str(exc)}
+                        )
+                        continue
+
+                    if target_room != current_room:
+                        await gateway.register(target_room, websocket, announce=False)
+                        await provider.presence.set_location(player_id, target_room)
+                        current_room = target_room
+
+                        await gateway.broadcast(
+                            current_room,
+                            {
+                                "type": "room_broadcast",
+                                "room": current_room,
+                                "payload": {"event": "player_enter", "player": player_id},
+                            },
+                            sender=websocket,
+                        )
+
+                    await websocket.send_json(
+                        {"type": "command_response", "room": current_room, "payload": payload}
+                    )
+                elif command == "chat":
+                    await websocket.send_json(
+                        {"type": "command_response", "room": current_room, "payload": payload}
+                    )
                     await gateway.broadcast(
-                        room_id,
-                        {"type": "room_broadcast", "room": room_id, "payload": payload},
+                        current_room,
+                        {
+                            "type": "room_broadcast",
+                            "room": current_room,
+                            "payload": {"event": "chat", "player": player_id, "args": args},
+                        },
                         sender=websocket,
                     )
                 else:
-                    await websocket.send_json({"type": "noop", "room": room_id})
+                    await websocket.send_json({"type": "command_response", "room": current_room, "payload": payload})
         except WebSocketDisconnect:
-            await gateway.unregister(room_id, websocket)
+            await provider.presence.remove(player_id)
+            await gateway.unregister(current_room, websocket)
 
     return app
+
+
+_DIRECTION_FIELDS = {
+    "north": "gi_north",
+    "south": "gi_south",
+    "east": "gi_east",
+    "west": "gi_west",
+}
+
+
+def _resolve_room_from_direction(current_room: int, direction: str | None, locations):
+    if not direction or direction not in _DIRECTION_FIELDS:
+        raise ValueError(f"Unknown direction: {direction}")
+
+    try:
+        location = locations[current_room]
+    except KeyError:
+        raise ValueError(f"Unknown room id: {current_room}") from None
+
+    target_id = getattr(location, _DIRECTION_FIELDS[direction])
+    if target_id < 0 or target_id not in locations:
+        raise ValueError(f"No exit {direction} from location {current_room}")
+    return target_id

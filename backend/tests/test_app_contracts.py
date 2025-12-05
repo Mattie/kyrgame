@@ -87,27 +87,32 @@ async def test_websocket_gateway_broadcasts_and_echoes_commands():
     server_task = asyncio.create_task(server.serve())
     while not server.started:
         await asyncio.sleep(0.05)
-    uri = f"ws://{host}:{port}/ws/rooms/7"
+    uri1 = f"ws://{host}:{port}/ws/rooms/7?player_id=alpha"
+    uri2 = f"ws://{host}:{port}/ws/rooms/7?player_id=bravo"
 
-    async with websockets.connect(uri) as ws1:
+    async with websockets.connect(uri1) as ws1:
         welcome1 = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
         assert welcome1["type"] == "room_welcome"
 
-        async with websockets.connect(uri) as ws2:
+        async with websockets.connect(uri2) as ws2:
             welcome2 = json.loads(await asyncio.wait_for(ws2.recv(), timeout=1))
             assert welcome2["type"] == "room_welcome"
 
-            payload = {"type": "command", "command": "say", "args": {"text": "hi"}}
+            join_notice = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
+            assert join_notice["type"] == "room_broadcast"
+            assert join_notice["payload"]["event"] == "player_enter"
+
+            payload = {"type": "command", "command": "chat", "args": {"text": "hi"}}
             await ws1.send(json.dumps(payload))
 
             self_response = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
             fan_out = json.loads(await asyncio.wait_for(ws2.recv(), timeout=1))
 
             assert self_response["type"] == "command_response"
-            assert self_response["echo"] == payload
+            assert self_response["payload"] == payload
             assert fan_out["type"] == "room_broadcast"
             assert fan_out["room"] == 7
-            assert fan_out["payload"] == payload
+            assert fan_out["payload"]["args"]["text"] == "hi"
 
     server.should_exit = True
     await server_task
