@@ -21,6 +21,7 @@
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
 - [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures.
+- [ ] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling.
 
 ## Remaining Implementation Task Plan
 
@@ -118,6 +119,7 @@
 1. **Lock in client contracts**
    - Document the minimal payloads the UI will consume: session creation shape, location listing (IDs, exits, descriptions), object catalog, and room broadcast envelope (`room_broadcast`, `command_response`).
    - Add an `/auth/session` convenience option for specifying a starting room to simplify navigating fixtures without gameplay gates.
+   - Capture token lifetime/refresh requirements (currently missing from HTTP responses even though the repository stores `expires_at`).
 2. **Bootstrap the front-end workspace**
    - Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards.
    - Wire shared configuration for API base URL and WebSocket endpoint, including bearer token injection.
