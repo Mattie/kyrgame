@@ -125,10 +125,12 @@ async def test_websocket_gateway_broadcasts_and_echoes_commands():
             await ws1.send(json.dumps(payload))
 
             self_response = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
-            fan_out = json.loads(await asyncio.wait_for(ws2.recv(), timeout=1))
+            fan_out = json.loads(await asyncio.wait_for(ws2.recv(), timeout=2))
+            while fan_out.get("type") != "room_broadcast":
+                fan_out = json.loads(await asyncio.wait_for(ws2.recv(), timeout=2))
 
             assert self_response["type"] == "command_response"
-            assert self_response["payload"] == payload
+            assert self_response["payload"]["command_id"] == 53
             assert fan_out["type"] == "room_broadcast"
             assert fan_out["room"] == 7
             assert fan_out["payload"]["args"]["text"] == "hi"

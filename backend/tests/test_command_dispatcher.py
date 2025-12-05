@@ -106,3 +106,38 @@ async def test_cooldown_prevents_spam(base_state):
     assert any(
         event["type"] == "chat" and event["text"] == "hello later" for event in result.events
     )
+
+
+def test_vocabulary_maps_aliases_to_canonical_commands():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed_move = vocabulary.parse_text("n")
+    parsed_chat = vocabulary.parse_text("say hello there")
+
+    assert parsed_move.verb == "move"
+    assert parsed_move.args["direction"] == "north"
+    assert parsed_move.command_id == 37  # legacy command id for "n"
+
+    assert parsed_chat.verb == "chat"
+    assert parsed_chat.args["text"] == "hello there"
+    assert parsed_chat.args["mode"] == "say"
+    assert parsed_chat.command_id == 53  # legacy command id for "say"
+
+
+@pytest.mark.anyio
+async def test_payonl_commands_require_live_flag(base_state):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player.flags = 0
+    parsed = vocabulary.parse_text("aim goblin")
+
+    with pytest.raises(commands.FlagRequirementError) as excinfo:
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert excinfo.value.message_id == "CMPCMD1"
