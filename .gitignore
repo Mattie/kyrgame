@@ -481,4 +481,9 @@ FodyWeavers.xsd
 # ZIP files in the Dist folder
 legacy/Dist/*.zip
 
+# Python virtual environment
+.venv/
+venv/
+env/
+
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c,c++

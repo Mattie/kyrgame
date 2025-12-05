@@ -32,9 +32,9 @@ async def test_http_endpoints_expose_fixture_shapes():
             session_resp = await client.post("/auth/session", json={"player_id": "hero"})
             assert session_resp.status_code == 201
             session_data = session_resp.json()
-            assert session_data["status"] == "ok"
+            assert session_data["status"] == "created"
             assert session_data["session"]["player_id"] == "hero"
-            assert "message" in session_data["session"]
+            assert session_data["session"]["token"]
 
             commands_resp = await client.get("/commands")
             assert commands_resp.status_code == 200
@@ -106,34 +106,47 @@ async def test_websocket_gateway_broadcasts_and_echoes_commands():
     server_task = asyncio.create_task(server.serve())
     while not server.started:
         await asyncio.sleep(0.05)
-    uri1 = f"ws://{host}:{port}/ws/rooms/7?player_id=alpha"
-    uri2 = f"ws://{host}:{port}/ws/rooms/7?player_id=bravo"
 
-    async with websockets.connect(uri1) as ws1:
-        welcome1 = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
-        assert welcome1["type"] == "room_welcome"
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        alpha_session = await client.post(
+            "/auth/session", json={"player_id": "alpha", "room_id": 7}
+        )
+        alpha_token = alpha_session.json()["session"]["token"]
+        room_id = alpha_session.json()["session"]["room_id"]
 
-        async with websockets.connect(uri2) as ws2:
-            welcome2 = json.loads(await asyncio.wait_for(ws2.recv(), timeout=1))
-            assert welcome2["type"] == "room_welcome"
+        bravo_session = await client.post(
+            "/auth/session", json={"player_id": "bravo", "room_id": room_id}
+        )
+        bravo_token = bravo_session.json()["session"]["token"]
 
-            join_notice = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
-            assert join_notice["type"] == "room_broadcast"
-            assert join_notice["payload"]["event"] == "player_enter"
+        uri1 = f"ws://{host}:{port}/ws/rooms/{room_id}?token={alpha_token}"
+        uri2 = f"ws://{host}:{port}/ws/rooms/{room_id}?token={bravo_token}"
 
-            payload = {"type": "command", "command": "chat", "args": {"text": "hi"}}
-            await ws1.send(json.dumps(payload))
+        async with websockets.connect(uri1) as ws1:
+            welcome1 = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
+            assert welcome1["type"] == "room_welcome"
 
-            self_response = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
-            fan_out = json.loads(await asyncio.wait_for(ws2.recv(), timeout=2))
-            while fan_out.get("type") != "room_broadcast":
+            async with websockets.connect(uri2) as ws2:
+                welcome2 = json.loads(await asyncio.wait_for(ws2.recv(), timeout=1))
+                assert welcome2["type"] == "room_welcome"
+
+                join_notice = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
+                assert join_notice["type"] == "room_broadcast"
+                assert join_notice["payload"]["event"] == "player_enter"
+
+                payload = {"type": "command", "command": "chat", "args": {"text": "hi"}}
+                await ws1.send(json.dumps(payload))
+
+                self_response = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
                 fan_out = json.loads(await asyncio.wait_for(ws2.recv(), timeout=2))
+                while fan_out.get("type") != "room_broadcast":
+                    fan_out = json.loads(await asyncio.wait_for(ws2.recv(), timeout=2))
 
-            assert self_response["type"] == "command_response"
-            assert self_response["payload"]["command_id"] == 53
-            assert fan_out["type"] == "room_broadcast"
-            assert fan_out["room"] == 7
-            assert fan_out["payload"]["args"]["text"] == "hi"
+                assert self_response["type"] == "command_response"
+                assert self_response["payload"]["command_id"] == 53
+                assert fan_out["type"] == "room_broadcast"
+                assert fan_out["room"] == room_id
+                assert fan_out["payload"]["args"]["text"] == "hi"
 
     server.should_exit = True
     await server_task

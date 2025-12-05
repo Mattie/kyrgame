@@ -242,6 +242,7 @@ class PlayerSession(Base):
     last_seen = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
 
 
 class PlayerInventory(Base):
