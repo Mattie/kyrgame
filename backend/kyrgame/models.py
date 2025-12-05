@@ -1,7 +1,18 @@
 from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import BigInteger, Column, Integer, JSON, String
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import declarative_base
 
 from . import constants
@@ -215,3 +226,58 @@ class Message(Base):
 
     id = Column(String(64), primary_key=True)
     text = Column(String(255), nullable=False)
+
+
+class PlayerSession(Base):
+    __tablename__ = "player_sessions"
+
+    id = Column(Integer, primary_key=True)
+    player_id = Column(
+        Integer, ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    session_token = Column(String(128), nullable=False, unique=True)
+    room_id = Column(Integer, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_seen = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class PlayerInventory(Base):
+    __tablename__ = "player_inventories"
+    __table_args__ = (UniqueConstraint("player_id", "slot_index", name="uq_player_slot"),)
+
+    id = Column(Integer, primary_key=True)
+    player_id = Column(
+        Integer, ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    slot_index = Column(Integer, nullable=False)
+    object_id = Column(Integer, nullable=False)
+    object_value = Column(Integer, nullable=False)
+
+
+class SpellTimer(Base):
+    __tablename__ = "spell_timers"
+    __table_args__ = (
+        UniqueConstraint("player_id", "spell_id", name="uq_player_spell_timer"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    player_id = Column(
+        Integer, ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    spell_id = Column(Integer, nullable=False)
+    remaining_ticks = Column(Integer, nullable=False)
+
+
+class RoomOccupant(Base):
+    __tablename__ = "room_occupants"
+    __table_args__ = (UniqueConstraint("room_id", "player_id", name="uq_room_player"),)
+
+    id = Column(Integer, primary_key=True)
+    room_id = Column(Integer, nullable=False, index=True)
+    player_id = Column(
+        Integer, ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    entered_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
