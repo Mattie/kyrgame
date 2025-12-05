@@ -130,3 +130,76 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_session_token_expiration():
+    """Test that expired tokens are rejected"""
+    from datetime import datetime, timedelta, timezone
+    from kyrgame import models, repositories
+    
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # Create a session with very short expiration (simulated by directly manipulating DB)
+            create_resp = await client.post("/auth/session", json={"player_id": "tempuser"})
+            assert create_resp.status_code == 201
+            token = create_resp.json()["session"]["token"]
+            
+            # Verify the token works initially
+            validate_resp = await client.get(
+                "/auth/session", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert validate_resp.status_code == 200
+            
+            # Now manually expire the token by setting expires_at to the past
+            db_session = app.state.session_factory()
+            try:
+                repo = repositories.PlayerSessionRepository(db_session)
+                session_record = repo.get_by_token(token, active_only=False)
+                session_record.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+                db_session.commit()
+            finally:
+                db_session.close()
+            
+            # Verify the expired token is rejected
+            validate_expired = await client.get(
+                "/auth/session", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert validate_expired.status_code == 401
+            
+            # Resume with expired token should also fail
+            resume_resp = await client.post(
+                "/auth/session", json={"player_id": "tempuser", "resume_token": token}
+            )
+            assert resume_resp.status_code == 404
+            assert "not found or expired" in resume_resp.json()["detail"].lower()
+
+
+@pytest.mark.anyio
+async def test_session_creation_rate_limiting():
+    """Test that rate limiting prevents abuse"""
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            # Create sessions until rate limit is hit (limit is 5 per second)
+            responses = []
+            for i in range(7):
+                resp = await client.post("/auth/session", json={"player_id": f"user{i}"})
+                responses.append(resp)
+            
+            # First 5 should succeed, subsequent should be rate limited
+            success_count = sum(1 for r in responses if r.status_code == 201)
+            rate_limited_count = sum(1 for r in responses if r.status_code == 429)
+            
+            assert success_count == 5
+            assert rate_limited_count == 2
+            
+            # Verify rate limit error message
+            for resp in responses:
+                if resp.status_code == 429:
+                    assert "too many" in resp.json()["detail"].lower()
