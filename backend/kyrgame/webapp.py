@@ -1,10 +1,11 @@
 import asyncio
+import logging
 import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
@@ -15,6 +16,8 @@ from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
+
+logger = logging.getLogger(__name__)
 
 
 class LogoResponse(BaseModel):
@@ -431,8 +434,10 @@ def create_app() -> FastAPI:
 
         session_token = websocket.query_params.get("token")
         if not session_token:
-            # Missing token
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            # Missing token - reject connection during handshake
+            await websocket.send_denial_response(
+                Response(status_code=status.HTTP_403_FORBIDDEN, content="Missing token")
+            )
             return
 
         db_session = provider.scope.app.state.session_factory()
@@ -440,14 +445,18 @@ def create_app() -> FastAPI:
             session_repo = repositories.PlayerSessionRepository(db_session)
             session_record = session_repo.get_by_token(session_token)
             if not session_record:
-                # Invalid or expired token
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                # Invalid or expired token - reject connection during handshake
+                await websocket.send_denial_response(
+                    Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Invalid or expired token")
+                )
                 return
 
             player = db_session.get(models.Player, session_record.player_id)
             if not player:
-                # Player not found
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                # Player not found - reject connection during handshake
+                await websocket.send_denial_response(
+                    Response(status_code=status.HTTP_404_NOT_FOUND, content="Player not found")
+                )
                 return
 
             session_repo.mark_seen(session_token)
@@ -455,12 +464,21 @@ def create_app() -> FastAPI:
             player_id = player.plyrid
             current_room = session_record.room_id
         except Exception as e:
-            # Database or other error during validation
-            db_session.rollback()
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            # Database or other error during validation - reject connection during handshake
+            logger.error(f"WebSocket connection error during validation: {type(e).__name__}")
+            await websocket.send_denial_response(
+                Response(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content="Service temporarily unavailable")
+            )
+            try:
+                db_session.rollback()
+            except Exception:
+                pass  # Ignore rollback errors as we're already in error handling
             return
         finally:
             db_session.close()
+
+        # All validation passed - now accept the WebSocket connection
+        await websocket.accept()
 
         session_connections = provider.scope.app.state.session_connections
         existing_socket = session_connections.get(session_token)
