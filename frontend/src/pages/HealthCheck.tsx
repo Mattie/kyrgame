@@ -10,7 +10,7 @@ type HealthState =
 export const HealthCheck = () => {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), [])
   const locationsUrl = useMemo(
-    () => `${apiBaseUrl.replace(/\/$/, '')}/world/locations`,
+    () => `${apiBaseUrl}/world/locations`,
     [apiBaseUrl]
   )
   const [state, setState] = useState<HealthState>({ status: 'loading' })
@@ -37,7 +37,8 @@ export const HealthCheck = () => {
           if (!cancelled) {
             setState({
               status: 'error',
-              detail: `${response.status} ${response.statusText}${detail}`.trim(),
+              detail:
+                `${response.status} ${response.statusText}${detail}`.trim(),
             })
           }
           return
@@ -51,7 +52,8 @@ export const HealthCheck = () => {
         }
       } catch (error) {
         if (!cancelled) {
-          const detail = error instanceof Error ? error.message : 'Unknown error'
+          const detail =
+            error instanceof Error ? error.message : 'Unknown error'
           setState({ status: 'error', detail })
         }
       }

@@ -17,6 +17,12 @@ describe('endpoints configuration', () => {
     expect(getApiBaseUrl()).toBe('https://api.example.com')
   })
 
+  it('removes trailing slashes from VITE_API_BASE_URL', () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com/')
+
+    expect(getApiBaseUrl()).toBe('https://api.example.com')
+  })
+
   it('falls back to window location when API base env is missing', () => {
     vi.unstubAllEnvs()
 
@@ -27,6 +33,12 @@ describe('endpoints configuration', () => {
     vi.stubEnv('VITE_WS_URL', 'wss://ws.example.com/rooms')
 
     expect(getWebSocketUrl()).toBe('wss://ws.example.com/rooms')
+  })
+
+  it('removes trailing slashes from VITE_WS_URL', () => {
+    vi.stubEnv('VITE_WS_URL', 'wss://ws.example.com/')
+
+    expect(getWebSocketUrl()).toBe('wss://ws.example.com')
   })
 
   it('builds websocket url from the API base when no override is set', () => {

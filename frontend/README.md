@@ -1,30 +1,136 @@
-# React + TypeScript + Vite
+# Kyrandia Navigator Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A view-only navigator UI for exploring Kyrandia game fixtures. Built with Vite, React, and TypeScript, this frontend provides a health check interface to validate backend API connectivity.
 
-Currently, two official plugins are available:
+## Purpose
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The frontend serves as a read-only navigator for the Kyrandia game world, starting with a health check page that validates connectivity to the backend API endpoints. It exercises the `/world/locations` endpoint at startup to verify that the backend is reachable and returning expected data.
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+### Prerequisites
 
-- Configure the top-level `parserOptions` property like this:
+- Node.js (v18 or later recommended)
+- npm or yarn
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
+### Installation
+
+```bash
+npm install
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+### Environment Configuration
+
+Copy `.env.example` to `.env.local` and configure your backend endpoints:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` to point to your backend:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_WS_URL=ws://localhost:8000/ws
+```
+
+See `.env.example` for all available configuration options.
+
+## Development
+
+### Run the Development Server
+
+```bash
+npm run dev
+```
+
+This starts the Vite development server with hot module replacement (HMR). The application will be available at `http://localhost:5173` by default.
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+Outputs optimized static files to the `dist/` directory.
+
+### Preview Production Build
+
+```bash
+npm run preview
+```
+
+Serves the production build locally for testing.
+
+## Testing
+
+### Run Tests
+
+```bash
+npm test
+```
+
+Runs the Vitest test suite in watch mode.
+
+### Run Tests Once
+
+```bash
+npm run test:ci
+```
+
+Runs the test suite once and exits (useful for CI/CD pipelines).
+
+## Code Quality
+
+### Linting
+
+```bash
+npm run lint
+```
+
+Runs ESLint to check for code style and quality issues.
+
+### Formatting
+
+```bash
+npm run format
+```
+
+Runs Prettier to format all code files according to the project style guide.
+
+## Backend API Connection
+
+The frontend connects to the backend API using endpoints configured via environment variables:
+
+- **HTTP API**: Used for RESTful requests (e.g., `/world/locations`, `/auth/session`)
+- **WebSocket**: Used for real-time room broadcasts (future feature)
+
+The health check page validates that the backend is reachable by fetching the location catalog at startup. If the backend is unavailable or returns an error, the UI displays diagnostic information.
+
+## Project Structure
+
+```
+frontend/
+├── public/          # Static assets
+├── src/
+│   ├── assets/      # Images, fonts, etc.
+│   ├── config/      # Configuration modules (endpoints, etc.)
+│   ├── pages/       # React page components
+│   ├── App.tsx      # Root application component
+│   ├── App.css      # Application styles
+│   └── main.tsx     # Application entry point
+├── .env.example     # Example environment configuration
+├── index.html       # HTML entry point
+├── package.json     # Dependencies and scripts
+├── tsconfig.json    # TypeScript configuration
+└── vite.config.ts   # Vite configuration
+```
+
+## Technology Stack
+
+- **Vite**: Build tool and development server
+- **React**: UI library
+- **TypeScript**: Type-safe JavaScript
+- **Vitest**: Unit testing framework
+- **ESLint**: Code linting
+- **Prettier**: Code formatting
