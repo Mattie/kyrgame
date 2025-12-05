@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
@@ -15,6 +16,8 @@ from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
+
+logger = logging.getLogger(__name__)
 
 
 class LogoResponse(BaseModel):
@@ -462,9 +465,10 @@ def create_app() -> FastAPI:
             current_room = session_record.room_id
         except Exception as e:
             # Database or other error during validation - reject connection during handshake
+            logger.error(f"WebSocket connection error during validation: {type(e).__name__}: {str(e)}")
             db_session.rollback()
             await websocket.send_denial_response(
-                Response(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content="Internal error")
+                Response(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content="Service temporarily unavailable")
             )
             return
         finally:
