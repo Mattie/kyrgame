@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "name": "bronze token",
+    "objdes": 1001,
+    "auxmsg": 0,
+    "flags": ["VISIBL", "PICKUP"],
+    "objrou": "obj_default"
+  },
+  {
+    "id": 2,
+    "name": "spell tome",
+    "objdes": 1002,
+    "auxmsg": 0,
+    "flags": ["VISIBL", "REDABL"],
+    "objrou": "obj_default"
+  },
+  {
+    "id": 3,
+    "name": "healing draught",
+    "objdes": 1003,
+    "auxmsg": 1004,
+    "flags": ["VISIBL", "DRIABL"],
+    "objrou": "obj_default"
+  }
+]

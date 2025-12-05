@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "name": "flare",
+    "sbkref": 0,
+    "bitdef": 1,
+    "level": 1,
+    "splrou": "spl_light"
+  },
+  {
+    "id": 2,
+    "name": "ward",
+    "sbkref": 0,
+    "bitdef": 2,
+    "level": 2,
+    "splrou": "spl_shield"
+  }
+]
