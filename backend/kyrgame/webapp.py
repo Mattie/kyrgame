@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
 
 from .gateway import RoomGateway
@@ -32,6 +32,10 @@ class FixtureProvider:
     @property
     def room_scripts(self):
         return self.scope.app.state.room_scripts
+
+    @property
+    def message_bundles(self):
+        return self.scope.app.state.fixture_cache["message_bundles"]
 
 
 def get_request_provider(request: Request) -> FixtureProvider:
@@ -82,6 +86,25 @@ async def list_spells(provider: Annotated[FixtureProvider, Depends(get_request_p
     return [spell.model_dump() for spell in provider.cache["spells"]]
 
 
+i18n_router = APIRouter(prefix="/i18n", tags=["i18n"])
+
+
+@i18n_router.get("/locales")
+async def list_locales(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
+    return sorted(provider.message_bundles.keys())
+
+
+@i18n_router.get("/{locale}/messages")
+async def fetch_message_bundle(
+    locale: str, provider: Annotated[FixtureProvider, Depends(get_request_provider)]
+):
+    try:
+        bundle = provider.message_bundles[locale]
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Locale {locale} not available")
+    return bundle.model_dump()
+
+
 admin_router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -111,6 +134,7 @@ def create_app() -> FastAPI:
     app.include_router(world_router)
     app.include_router(objects_router)
     app.include_router(spells_router)
+    app.include_router(i18n_router)
     app.include_router(admin_router)
 
     gateway: RoomGateway | None = None

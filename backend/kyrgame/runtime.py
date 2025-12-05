@@ -23,12 +23,16 @@ async def bootstrap_app(app: FastAPI):
     app.state.scheduler = SchedulerService()
     await app.state.scheduler.start()
 
+    message_bundles = fixtures.load_message_bundles()
+    default_messages = message_bundles[fixtures.DEFAULT_LOCALE]
+
     app.state.fixture_cache = {
         "locations": fixtures.load_locations(),
         "objects": fixtures.load_objects(),
         "spells": fixtures.load_spells(),
         "commands": fixtures.load_commands(),
-        "messages": fixtures.load_messages(),
+        "messages": default_messages,
+        "message_bundles": message_bundles,
         "summary": fixtures.fixture_summary(),
     }
 
@@ -36,7 +40,7 @@ async def bootstrap_app(app: FastAPI):
         gateway=app.state.gateway,
         scheduler=app.state.scheduler,
         locations=app.state.fixture_cache["locations"],
-        messages=app.state.fixture_cache["messages"],
+        messages=default_messages,
     )
 
     app.state.background_tasks = [asyncio.create_task(_heartbeat_task(app))]

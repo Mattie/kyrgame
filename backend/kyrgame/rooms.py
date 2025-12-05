@@ -3,7 +3,7 @@ from typing import Awaitable, Callable, Dict, Iterable, Optional
 
 from .gateway import RoomGateway
 from .scheduler import ScheduledHandle, SchedulerService
-from .models import MessageCatalogModel
+from .models import MessageBundleModel
 
 
 RoomCallback = Callable[["RoomContext", str], Awaitable[None]]
@@ -64,7 +64,7 @@ class RoomScriptEngine:
         gateway: RoomGateway,
         scheduler: SchedulerService,
         locations: Iterable,
-        messages: MessageCatalogModel,
+        messages: MessageBundleModel,
     ):
         self.gateway = gateway
         self.scheduler = scheduler

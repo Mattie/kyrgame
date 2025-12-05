@@ -29,7 +29,7 @@ def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
     objects = fixtures.load_objects(fixture_root)
     spells = fixtures.load_spells(fixture_root)
     commands = fixtures.load_commands(fixture_root)
-    messages = fixtures.load_messages(fixture_root)
+    messages = fixtures.load_message_bundle(path=fixture_root)
 
     _persist_all(
         session,

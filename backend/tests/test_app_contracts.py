@@ -61,6 +61,15 @@ async def test_http_endpoints_expose_fixture_shapes():
             assert len(spells) == summary["spells"]
             assert {"id", "name", "level"} <= set(spells[0])
 
+            locales_resp = await client.get("/i18n/locales")
+            assert locales_resp.status_code == 200
+            assert summary["locales"] == locales_resp.json()
+
+            bundle_resp = await client.get("/i18n/en-US/messages")
+            assert bundle_resp.status_code == 200
+            assert bundle_resp.json()["locale"] == "en-US"
+            assert len(bundle_resp.json()["messages"]) == summary["messages"]
+
             admin_resp = await client.get("/admin/fixtures")
             assert admin_resp.status_code == 200
             admin_summary = admin_resp.json()

@@ -41,3 +41,13 @@ If you want to run the broader fixture tests after installing the dependencies, 
 ```bash
 pytest backend/tests
 ```
+
+## Build an offline content bundle
+
+To package localized messages and other fixtures for offline-capable clients, run:
+
+```bash
+python -m kyrgame.scripts.package_content --output Dist/offline-content.json
+```
+
+The command emits a single JSON file with the default locale message bundle, static content fixtures, and a timestamp clients can use to validate cache freshness.
