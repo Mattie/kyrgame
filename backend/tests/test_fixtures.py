@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from kyrgame import constants
@@ -16,11 +15,6 @@ FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 def load_json(name: str):
     with open(FIXTURE_DIR / name, "r", encoding="utf-8") as handle:
         return json.load(handle)
-
-
-def load_yaml(name: str):
-    with open(FIXTURE_DIR / name, "r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle)
 
 
 def test_location_fixture_constraints():
@@ -82,8 +76,10 @@ def test_command_fixture_constraints():
 
 
 def test_messages_fixture_shape():
-    catalog = load_yaml("messages.yaml")
-    parsed = models.MessageCatalogModel(**catalog)
+    catalog = load_json("messages/en-US.legacy.json")
+    parsed = models.MessageBundleModel(**catalog)
+    assert parsed.locale == "en-US"
+    assert parsed.version.startswith("legacy-")
     assert "FOREST" in parsed.messages
     assert len(parsed.messages) > 100
 
@@ -99,4 +95,5 @@ def test_loader_populates_database(tmp_path):
     assert session.query(models.GameObject).count() == len(load_json("objects.json"))
     assert session.query(models.Command).count() == len(load_json("commands.json"))
     assert session.query(models.Spell).count() == len(load_json("spells.json"))
-    assert session.query(models.Message).count() == len(load_yaml("messages.yaml")['messages'])
+    bundle = load_json("messages/en-US.legacy.json")
+    assert session.query(models.Message).count() == len(bundle["messages"])

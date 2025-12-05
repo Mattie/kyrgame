@@ -102,10 +102,17 @@ class CommandModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
 
-class MessageCatalogModel(BaseModel):
+class MessageBundleModel(BaseModel):
+    version: str
+    locale: str
+    catalog_id: str
     messages: Dict[str, str]
 
     model_config = ConfigDict(extra="forbid")
+
+
+class MessageCatalogModel(MessageBundleModel):
+    """Backward compatible alias for legacy naming."""
 
 
 # SQLAlchemy ORM models ---------------------------------------------------
