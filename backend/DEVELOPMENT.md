@@ -47,7 +47,7 @@ pytest backend/tests
 To package localized messages and other fixtures for offline-capable clients, run:
 
 ```bash
-python -m kyrgame.scripts.package_content --output Dist/offline-content.json
+python -m kyrgame.scripts.package_content --output legacy/Dist/offline-content.json
 ```
 
 The command emits a single JSON file with the default locale message bundle, static content fixtures, and a timestamp clients can use to validate cache freshness.

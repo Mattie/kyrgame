@@ -479,6 +479,6 @@ FodyWeavers.xsd
 *.bak
 
 # ZIP files in the Dist folder
-Dist/*.zip
+legacy/Dist/*.zip
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c,c++
