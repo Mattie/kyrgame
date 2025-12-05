@@ -22,21 +22,30 @@ class PlayerSessionRepository:
         return player_session
 
     def mark_seen(self, session_token: str, timestamp: Optional[datetime] = None):
-        player_session = self.session.scalar(
-            select(models.PlayerSession).where(models.PlayerSession.session_token == session_token)
-        )
+        player_session = self.get_by_token(session_token, active_only=False)
         if player_session:
             player_session.last_seen = timestamp or datetime.now(timezone.utc)
         return player_session
 
     def deactivate(self, session_token: str, timestamp: Optional[datetime] = None):
-        player_session = self.session.scalar(
-            select(models.PlayerSession).where(models.PlayerSession.session_token == session_token)
-        )
+        player_session = self.get_by_token(session_token, active_only=False)
         if player_session:
             player_session.is_active = False
             player_session.last_seen = timestamp or datetime.now(timezone.utc)
         return player_session
+
+    def deactivate_all(self, player_id: int, timestamp: Optional[datetime] = None) -> List[str]:
+        tokens: List[str] = []
+        for session in self.session.scalars(
+            select(models.PlayerSession).where(
+                models.PlayerSession.player_id == player_id,
+                models.PlayerSession.is_active.is_(True),
+            )
+        ).all():
+            session.is_active = False
+            session.last_seen = timestamp or datetime.now(timezone.utc)
+            tokens.append(session.session_token)
+        return tokens
 
     def list_active(self, player_id: int) -> List[models.PlayerSession]:
         return list(
@@ -47,6 +56,18 @@ class PlayerSessionRepository:
                 )
             ).all()
         )
+
+    def get_by_token(self, session_token: str, active_only: bool = True):
+        stmt = select(models.PlayerSession).where(models.PlayerSession.session_token == session_token)
+        if active_only:
+            stmt = stmt.where(models.PlayerSession.is_active.is_(True))
+        return self.session.scalar(stmt)
+
+    def set_room(self, session_token: str, room_id: int):
+        player_session = self.get_by_token(session_token, active_only=False)
+        if player_session:
+            player_session.room_id = room_id
+        return player_session
 
 
 class InventoryRepository:

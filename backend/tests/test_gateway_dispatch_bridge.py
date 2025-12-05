@@ -2,6 +2,7 @@ import asyncio
 import json
 import socket
 
+import httpx
 import pytest
 import uvicorn
 import websockets
@@ -29,36 +30,48 @@ async def test_websocket_bridge_emits_legacy_command_metadata():
     while not server.started:
         await asyncio.sleep(0.05)
 
-    uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?player_id=hero"
-    uri_room0_seer = f"ws://{host}:{port}/ws/rooms/0?player_id=seer"
-    uri_room1_mystic = f"ws://{host}:{port}/ws/rooms/1?player_id=mystic"
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        hero_token = hero_session.json()["session"]["token"]
+        room_zero = hero_session.json()["session"]["room_id"]
 
-    async with websockets.connect(uri_room0_hero) as hero_ws:
-        await asyncio.wait_for(hero_ws.recv(), timeout=1)
-        async with websockets.connect(uri_room0_seer) as seer_ws:
-            await asyncio.wait_for(seer_ws.recv(), timeout=1)
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": room_zero})
+        seer_token = seer_session.json()["session"]["token"]
+
+        mystic_session = await client.post("/auth/session", json={"player_id": "mystic", "room_id": 1})
+        mystic_token = mystic_session.json()["session"]["token"]
+        room_one = mystic_session.json()["session"]["room_id"]
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={hero_token}"
+        uri_room0_seer = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={seer_token}"
+        uri_room1_mystic = f"ws://{host}:{port}/ws/rooms/{room_one}?token={mystic_token}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
             await asyncio.wait_for(hero_ws.recv(), timeout=1)
-            async with websockets.connect(uri_room1_mystic) as mystic_ws:
-                await asyncio.wait_for(mystic_ws.recv(), timeout=1)
+            async with websockets.connect(uri_room0_seer) as seer_ws:
+                await asyncio.wait_for(seer_ws.recv(), timeout=1)
+                await asyncio.wait_for(hero_ws.recv(), timeout=1)
+                async with websockets.connect(uri_room1_mystic) as mystic_ws:
+                    await asyncio.wait_for(mystic_ws.recv(), timeout=1)
 
-                await hero_ws.send(json.dumps({"type": "command", "command": "say hello room"}))
+                    await hero_ws.send(json.dumps({"type": "command", "command": "say hello room"}))
 
-                hero_ack = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
-                assert hero_ack["type"] == "command_response"
-                assert hero_ack["payload"]["command_id"] == 53
+                    hero_ack = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+                    assert hero_ack["type"] == "command_response"
+                    assert hero_ack["payload"]["command_id"] == 53
 
-                seer_broadcast = json.loads(await asyncio.wait_for(seer_ws.recv(), timeout=1))
-                assert seer_broadcast["type"] == "room_broadcast"
-                assert seer_broadcast["payload"]["command_id"] == 53
-                assert seer_broadcast["payload"]["message_id"] == "CMD053"
+                    seer_broadcast = json.loads(await asyncio.wait_for(seer_ws.recv(), timeout=1))
+                    assert seer_broadcast["type"] == "room_broadcast"
+                    assert seer_broadcast["payload"]["command_id"] == 53
+                    assert seer_broadcast["payload"]["message_id"] == "CMD053"
 
-                await hero_ws.send(json.dumps({"type": "command", "command": "north"}))
+                    await hero_ws.send(json.dumps({"type": "command", "command": "north"}))
 
-                move_ack = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
-                assert move_ack["payload"]["command_id"] == 38
-                move_broadcast = json.loads(await asyncio.wait_for(mystic_ws.recv(), timeout=1))
-                assert move_broadcast["payload"]["command_id"] == 38
-                assert move_broadcast["payload"]["event"] == "player_enter"
+                    move_ack = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+                    assert move_ack["payload"]["command_id"] == 38
+                    move_broadcast = json.loads(await asyncio.wait_for(mystic_ws.recv(), timeout=1))
+                    assert move_broadcast["payload"]["command_id"] == 38
+                    assert move_broadcast["payload"]["event"] == "player_enter"
 
     server.should_exit = True
     await server_task

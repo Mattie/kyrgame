@@ -1,23 +1,85 @@
+import secrets
 from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.orm import Session as OrmSession
+from starlette.websockets import WebSocketState
 
-from . import commands, models
+from . import commands, constants, models, repositories
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
 
 
+class LogoResponse(BaseModel):
+    message: str
+    lines: list[str]
+
+
 class SessionRequest(BaseModel):
     player_id: str
+    resume_token: str | None = None
+    allow_multiple: bool = False
+    room_id: int | None = None
+
+
+class SessionData(BaseModel):
+    token: str
+    player_id: str
+    room_id: int
+    first_login: bool = False
+    resumed: bool = False
+    replaced_sessions: int = 0
 
 
 class SessionResponse(BaseModel):
     status: str
-    session: dict
+    session: SessionData
+
+
+class LogoutResponse(BaseModel):
+    status: str
+
+
+def get_db_session(request: Request) -> OrmSession:
+    session_factory = request.app.state.session_factory
+    db = session_factory()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def _extract_bearer_token(request: Request) -> str:
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+        if token:
+            return token
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
+
+
+async def require_active_session(
+    request: Request, db: Annotated[OrmSession, Depends(get_db_session)]
+):
+    token = _extract_bearer_token(request)
+    repo = repositories.PlayerSessionRepository(db)
+    session_record = repo.get_by_token(token)
+    if not session_record:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
+
+    player = db.get(models.Player, session_record.player_id)
+    if player is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session token")
+
+    repo.mark_seen(token)
+    db.commit()
+    return session_record, player
 
 
 class FixtureProvider:
@@ -69,12 +131,159 @@ def get_websocket_provider(websocket: WebSocket) -> FixtureProvider:
     return FixtureProvider(websocket)
 
 
+def _persist_player_from_template(
+    db: OrmSession, alias: str, template: models.PlayerModel, room_id: int | None
+) -> models.Player:
+    data = template.model_dump()
+    data.update(
+        {
+            "uidnam": alias[: constants.UIDSIZ],
+            "plyrid": alias[: constants.ALSSIZ],
+            "altnam": alias[: constants.APNSIZ],
+            "attnam": alias[: constants.APNSIZ],
+            "spouse": (data.get("spouse") or alias)[: constants.ALSSIZ],
+            "gamloc": room_id if room_id is not None else template.gamloc,
+            "pgploc": room_id if room_id is not None else template.pgploc,
+        }
+    )
+    player = models.Player(**data)
+    db.add(player)
+    db.flush([player])
+    return player
+
+
+def _session_payload(
+    token: str,
+    player: models.Player,
+    room_id: int,
+    *,
+    first_login: bool = False,
+    resumed: bool = False,
+    replaced_sessions: int = 0,
+):
+    return {
+        "token": token,
+        "player_id": player.plyrid,
+        "room_id": room_id,
+        "first_login": first_login,
+        "resumed": resumed,
+        "replaced_sessions": replaced_sessions,
+    }
+
+
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@auth_router.post("/session", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
-async def start_session(payload: SessionRequest):
-    return {"status": "ok", "session": {"player_id": payload.player_id, "message": "Session established"}}
+@auth_router.get("/logo", response_model=LogoResponse)
+async def fetch_logo():
+    lines = [
+        " _  __                 _           _     _      ",
+        "| |/ /___  _   _  ___ | |__   __ _| |__ (_) ___ ",
+        "| ' // _ \\| | | |/ _ \\| '_ \\ / _` | '_ \\| |/ __|",
+        "| . \\ (_) | |_| | (_) | | | | (_| | | | | | (__ ",
+        "|_|\\_\\___/ \\__, |\\___/|_| |_|\\__,_|_| |_|_|\\___|",
+        "             |___/                                   ",
+    ]
+    return {"message": "Welcome to Kyrandia", "lines": lines}
+
+
+@auth_router.post("/session", response_model=SessionResponse)
+async def start_session(
+    payload: SessionRequest,
+    request: Request,
+    db: Annotated[OrmSession, Depends(get_db_session)],
+):
+    template = request.app.state.fixture_cache["player_template"]
+    repo = repositories.PlayerSessionRepository(db)
+
+    player = db.scalar(select(models.Player).where(models.Player.plyrid == payload.player_id))
+    first_login = False
+    if player is None:
+        player = _persist_player_from_template(db, payload.player_id, template, payload.room_id)
+        first_login = True
+    elif payload.room_id is not None:
+        player.gamloc = payload.room_id
+        player.pgploc = payload.room_id
+
+    room_id = payload.room_id if payload.room_id is not None else player.gamloc
+
+    replaced_tokens: list[str] = []
+    resumed = False
+    status_code = status.HTTP_201_CREATED
+
+    if payload.resume_token:
+        existing = repo.get_by_token(payload.resume_token)
+        if not existing or existing.player_id != player.id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        repo.mark_seen(payload.resume_token)
+        room_id = existing.room_id
+        token = existing.session_token
+        resumed = True
+        status_code = status.HTTP_200_OK
+    else:
+        if not payload.allow_multiple:
+            replaced_tokens = repo.deactivate_all(player.id)
+        token = secrets.token_urlsafe(24)
+        repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+
+    db.commit()
+
+    session_connections = request.app.state.session_connections
+    for old_token in replaced_tokens:
+        old_socket = session_connections.pop(old_token, None)
+        previous_room = request.app.state.presence.session_rooms.get(old_token)
+        if previous_room is not None and old_socket is not None:
+            await request.app.state.gateway.unregister(previous_room, old_socket)
+        if old_socket is not None and old_socket.application_state == WebSocketState.CONNECTED:
+            await old_socket.close(code=status.WS_1011_INTERNAL_ERROR)
+        await request.app.state.presence.remove(old_token)
+
+    await request.app.state.presence.set_location(player.plyrid, room_id, token)
+
+    body = {
+        "status": "recovered" if resumed else "created",
+        "session": _session_payload(
+            token,
+            player,
+            room_id,
+            first_login=first_login,
+            resumed=resumed,
+            replaced_sessions=len(replaced_tokens),
+        ),
+    }
+    return JSONResponse(content=body, status_code=status_code)
+
+
+@auth_router.get("/session", response_model=SessionResponse)
+async def validate_session(
+    session_context: Annotated[tuple[models.PlayerSession, models.Player], Depends(require_active_session)]
+):
+    session_record, player = session_context
+    return {
+        "status": "active",
+        "session": _session_payload(
+            session_record.session_token, player, session_record.room_id, first_login=False
+        ),
+    }
+
+
+@auth_router.post("/logout", response_model=LogoutResponse)
+async def logout(
+    session_context: Annotated[tuple[models.PlayerSession, models.Player], Depends(require_active_session)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    request: Request,
+):
+    session_record, _ = session_context
+    repo = repositories.PlayerSessionRepository(db)
+    repo.deactivate(session_record.session_token)
+    db.commit()
+    connections = request.app.state.session_connections
+    active_socket = connections.pop(session_record.session_token, None)
+    if active_socket is not None and active_socket.application_state == WebSocketState.CONNECTED:
+        await request.app.state.gateway.unregister(session_record.room_id, active_socket)
+        await active_socket.close(code=status.WS_1000_NORMAL_CLOSURE)
+    await request.app.state.presence.remove(session_record.session_token)
+    return LogoutResponse(status="logged_out")
 
 
 commands_router = APIRouter(tags=["commands"])
@@ -175,6 +384,7 @@ def create_app() -> FastAPI:
     app.include_router(players_router)
 
     gateway: RoomGateway | None = None
+    app.state.session_connections = {}
 
     @app.websocket("/ws/rooms/{room_id}")
     async def room_socket(
@@ -186,14 +396,39 @@ def create_app() -> FastAPI:
         if gateway is None:
             gateway = provider.gateway
 
-        player_id = websocket.query_params.get("player_id")
-        if not player_id:
+        session_token = websocket.query_params.get("token")
+        if not session_token:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        locations = provider.location_index
+        db_session = provider.scope.app.state.session_factory()
+        try:
+            session_repo = repositories.PlayerSessionRepository(db_session)
+            session_record = session_repo.get_by_token(session_token)
+            if not session_record:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            player = db_session.get(models.Player, session_record.player_id)
+            if not player:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            session_repo.mark_seen(session_token)
+            db_session.commit()
+            player_id = player.plyrid
+            current_room = session_record.room_id
+        finally:
+            db_session.close()
+
+        session_connections = provider.scope.app.state.session_connections
+        existing_socket = session_connections.get(session_token)
+        if existing_socket is not None and existing_socket.application_state == WebSocketState.CONNECTED:
+            await gateway.unregister(current_room, existing_socket)
+            await existing_socket.close(code=status.WS_1013_TRY_AGAIN_LATER)
+        session_connections[session_token] = websocket
+
         limiter = RateLimiter(max_events=2, window_seconds=0.5)
-        current_room = room_id
 
         player_state = provider.cache["player_template"].model_copy(deep=True)
         player_state.plyrid = player_id
@@ -205,7 +440,7 @@ def create_app() -> FastAPI:
             objects={obj.id: obj for obj in provider.cache["objects"]},
         )
 
-        await provider.presence.set_location(player_id, current_room)
+        await provider.presence.set_location(player_id, current_room, session_token)
         await gateway.register(current_room, websocket)
 
         await gateway.broadcast(
@@ -269,7 +504,12 @@ def create_app() -> FastAPI:
                 target_room = state.player.gamloc
                 if target_room != current_room:
                     await gateway.register(target_room, websocket, announce=False)
-                    await provider.presence.set_location(player_id, target_room)
+                    await provider.presence.set_location(player_id, target_room, session_token)
+                    with provider.scope.app.state.session_factory() as db:
+                        repo = repositories.PlayerSessionRepository(db)
+                        repo.set_room(session_token, target_room)
+                        repo.mark_seen(session_token)
+                        db.commit()
                     current_room = target_room
 
                 ack_payload = {
@@ -297,8 +537,13 @@ def create_app() -> FastAPI:
                             {"type": "command_response", "room": current_room, "payload": event}
                         )
         except WebSocketDisconnect:
-            await provider.presence.remove(player_id)
+            await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)
+            if session_connections.get(session_token) is websocket:
+                session_connections.pop(session_token, None)
+        finally:
+            if session_connections.get(session_token) is websocket:
+                session_connections.pop(session_token, None)
 
     return app
 

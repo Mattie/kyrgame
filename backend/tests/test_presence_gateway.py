@@ -1,7 +1,10 @@
 import asyncio
 import json
+import asyncio
+import json
 import socket
 
+import httpx
 import pytest
 import uvicorn
 import websockets
@@ -52,9 +55,17 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
     while not server.started:
         await asyncio.sleep(0.05)
 
-    uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?player_id=hero"
-    uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?player_id=rogue"
-    uri_room1_seer = f"ws://{host}:{port}/ws/rooms/1?player_id=seer"
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        hero_token = hero_session.json()["session"]["token"]
+        rogue_session = await client.post("/auth/session", json={"player_id": "rogue", "room_id": 0})
+        rogue_token = rogue_session.json()["session"]["token"]
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 1})
+        seer_token = seer_session.json()["session"]["token"]
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
+        uri_room1_seer = f"ws://{host}:{port}/ws/rooms/1?token={seer_token}"
 
     async with websockets.connect(uri_room0_hero) as hero_ws:
         await asyncio.wait_for(hero_ws.recv(), timeout=1)
@@ -111,19 +122,23 @@ async def test_rate_limiting_blocks_chat_spam():
     while not server.started:
         await asyncio.sleep(0.05)
 
-    uri = f"ws://{host}:{port}/ws/rooms/0?player_id=hero"
-    async with websockets.connect(uri) as ws:
-        await asyncio.wait_for(ws.recv(), timeout=1)
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        token = session.json()["session"]["token"]
 
-        chat_payload = {"type": "command", "command": "chat", "args": {"text": "spam"}}
-        await ws.send(json.dumps(chat_payload))
-        await asyncio.wait_for(ws.recv(), timeout=1)
-        await ws.send(json.dumps(chat_payload))
-        await ws.send(json.dumps(chat_payload))
+        uri = f"ws://{host}:{port}/ws/rooms/0?token={token}"
+        async with websockets.connect(uri) as ws:
+            await asyncio.wait_for(ws.recv(), timeout=1)
 
-        responses = [json.loads(await asyncio.wait_for(ws.recv(), timeout=1)) for _ in range(2)]
-        assert any(message["type"] == "rate_limited" for message in responses)
-        assert any("Too many commands" in message.get("detail", "") for message in responses)
+            chat_payload = {"type": "command", "command": "chat", "args": {"text": "spam"}}
+            await ws.send(json.dumps(chat_payload))
+            await asyncio.wait_for(ws.recv(), timeout=1)
+            await ws.send(json.dumps(chat_payload))
+            await ws.send(json.dumps(chat_payload))
+
+            responses = [json.loads(await asyncio.wait_for(ws.recv(), timeout=1)) for _ in range(2)]
+            assert any(message["type"] == "rate_limited" for message in responses)
+            assert any("Too many commands" in message.get("detail", "") for message in responses)
 
     server.should_exit = True
     await server_task
