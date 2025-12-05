@@ -9,7 +9,7 @@ import websockets
 
 from kyrgame import fixtures
 from kyrgame import models
-from kyrgame.webapp import create_app
+from kyrgame.webapp import DEFAULT_ADMIN_TOKEN, create_app
 
 
 
@@ -19,6 +19,9 @@ def _get_open_port() -> int:
     _, port = sock.getsockname()
     sock.close()
     return port
+
+
+ADMIN_HEADERS = {"Authorization": f"Bearer {DEFAULT_ADMIN_TOKEN}"}
 
 
 @pytest.mark.anyio
@@ -71,7 +74,7 @@ async def test_http_endpoints_expose_fixture_shapes():
             assert bundle_resp.json()["locale"] == "en-US"
             assert len(bundle_resp.json()["messages"]) == summary["messages"]
 
-            admin_resp = await client.get("/admin/fixtures")
+            admin_resp = await client.get("/admin/fixtures", headers=ADMIN_HEADERS)
             assert admin_resp.status_code == 200
             admin_summary = admin_resp.json()
             assert admin_summary == summary

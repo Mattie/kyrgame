@@ -18,7 +18,7 @@
 - [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
 - [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects.
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
-- [ ] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
+- [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
 - [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures.
 
