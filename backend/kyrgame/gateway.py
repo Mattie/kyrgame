@@ -36,6 +36,9 @@ class RoomGateway:
                 continue
             await connection.send_json(message)
 
+    async def direct(self, room_id: int, player_id: str, message: dict):
+        await self.broadcast(room_id, {"player": player_id, **message})
+
     async def close_all(self):
         async with self._lock:
             rooms = list(self.rooms.items())
