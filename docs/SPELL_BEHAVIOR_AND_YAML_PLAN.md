@@ -216,11 +216,8 @@ spells:
           text_target: "You resist {caster_name}'s fireball!"
           text_room: "{target_name} resists {caster_name}'s fireball!"
     
-    # Cooldown and charm tracking
+    # Cooldown (no lasting charm effects)
     cooldown_sec: 12
-    charm:
-      apply_flag: none
-      duration_ticks: 0
 ```
 
 **Behavioral notes:**
@@ -286,8 +283,10 @@ spells:
         format_with: caster_name
         text: "{caster_name}'s possessions glow briefly!"
     
-    # Cooldown and charm tracking
-    cooldown_sec: 0  # Can be cast repeatedly
+    # Cooldown (can be cast repeatedly)
+    cooldown_sec: 0
+    
+    # Charm tracking
     charm:
       apply_flag: OBJPRO
       duration_ticks: 6
@@ -415,11 +414,8 @@ spells:
                 format_with: [caster_name, caster_possessive]
                 text: "{caster_name} waves {caster_possessive} hands frantically, but nothing happens!"
     
-    # Cooldown and charm tracking
+    # Cooldown (no lasting charm effects)
     cooldown_sec: 30
-    charm:
-      apply_flag: none
-      duration_ticks: 0
 ```
 
 **Behavioral notes:**
@@ -497,8 +493,10 @@ spells:
         charm_type: ALTNAM  # alternate name charm
         charm_duration: 2
     
-    # Cooldown and charm tracking
+    # Cooldown
     cooldown_sec: 15
+    
+    # Charm tracking
     charm:
       apply_flag: ALTNAM
       duration_ticks: 2
@@ -628,11 +626,8 @@ spells:
               - type: broadcast_action
                 action_text: "casting at phantoms!"
     
-    # Cooldown and charm tracking
+    # Cooldown (no lasting charm effects)
     cooldown_sec: 5
-    charm:
-      apply_flag: none
-      duration_ticks: 0
 ```
 
 **Behavioral notes:**
@@ -657,7 +652,7 @@ The spell YAML engine requires sophisticated runtime support to handle the diver
 
 **Example validation model:**
 ```python
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Literal
 
 class SpellCost(BaseModel):
@@ -686,7 +681,7 @@ class SpellDefinition(BaseModel):
     effects: List[SpellEffect]
     cooldown_sec: int = Field(ge=0)
     
-    @validator('invocation')
+    @field_validator('invocation')
     def invocation_lowercase(cls, v):
         return v.lower()
 ```
@@ -994,9 +989,10 @@ class SpellCooldownManager:
     
     def can_cast(self, player_id: int, spell_id: int) -> bool:
         """Check if spell is off cooldown."""
+        from datetime import timezone
         key = (player_id, spell_id)
         if key in self.cooldowns:
-            if datetime.now() < self.cooldowns[key]:
+            if datetime.now(timezone.utc) < self.cooldowns[key]:
                 return False
             del self.cooldowns[key]
         return True
@@ -1008,8 +1004,9 @@ class SpellCooldownManager:
         cooldown_sec: int
     ):
         """Start cooldown timer."""
+        from datetime import timezone
         key = (player_id, spell_id)
-        self.cooldowns[key] = datetime.now() + timedelta(seconds=cooldown_sec)
+        self.cooldowns[key] = datetime.now(timezone.utc) + timedelta(seconds=cooldown_sec)
 ```
 
 #### 5. Message System Integration
@@ -1232,7 +1229,7 @@ backend/tests/test_spell_yaml_engine.py    # Engine tests
 3. **All healing spells** (3 spells)
    - noouch, thedoc, allbettoo
 
-4. **All detection spells** (5 spells)
+4. **All detection spells** (7 spells)
    - howru, cuseme, whoub, nosey, cadabra, iseeyou, icutwo
 
 **Validation:**
