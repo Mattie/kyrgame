@@ -1,10 +1,10 @@
 import './App.css'
-import { HealthCheck } from './pages/HealthCheck'
+import { Navigator } from './pages/Navigator'
 
 function App() {
   return (
     <div className="app-shell">
-      <HealthCheck />
+      <Navigator />
     </div>
   )
 }
