@@ -69,9 +69,16 @@ describe('Navigator flow', () => {
 
   const objects = [{ id: 0, name: 'ruby' }]
 
-  const commands = [{ id: 1, verb: 'move' }]
+  const commands = [
+    { id: 1, command: 'move' },
+    { id: 2, command: 'look' },
+  ]
 
-  const messages = { WELCOME: 'Welcome to Kyrandia!' }
+  const messages = {
+    WELCOME: 'Welcome to Kyrandia!',
+    KRD007: 'A long description of the temple.',
+    KRD008: 'A long description of the clearing.',
+  }
 
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -122,6 +129,13 @@ describe('Navigator flow', () => {
 
     await waitFor(() =>
       expect(screen.getByText(/Edge of the forest/)).toBeInTheDocument()
+    )
+
+    const commandList = within(screen.getByTestId('room-commands'))
+    expect(commandList.getByText(/move/i)).toBeInTheDocument()
+    expect(commandList.getByText(/look/i)).toBeInTheDocument()
+    expect(screen.getByTestId('room-look-description')).toHaveTextContent(
+      /temple/i
     )
 
     expect(screen.getAllByText(/player_enter/).length).toBeGreaterThan(0)
@@ -176,6 +190,12 @@ describe('Navigator flow', () => {
       expect(
         screen.getByRole('heading', { name: /Deep forest clearing/i })
       ).toBeInTheDocument()
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('room-look-description')).toHaveTextContent(
+        /clearing/i
+      )
     )
 
     const exits = within(screen.getByTestId('room-exits'))

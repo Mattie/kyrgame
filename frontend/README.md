@@ -88,6 +88,18 @@ npm run test:ci
 
 Runs the test suite once and exits (useful for CI/CD pipelines).
 
+### Playwright setup
+
+The frontend uses Playwright for browser-based testing and visual verification. Install the test runner and bundled browsers with:
+
+```bash
+npm install
+npm install --save-dev @playwright/test
+npx playwright install --with-deps chromium
+```
+
+If the CDN fallback is blocked in your environment, rerun the `npx playwright install` step—Playwright will retry with an alternate mirror after an initial 403.
+
 ## Code Quality
 
 ### Linting
