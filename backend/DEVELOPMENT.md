@@ -1,6 +1,12 @@
 # Backend Development Environment
 
-This guide captures the minimal steps to install the PyYAML, Pydantic, and SQLAlchemy tooling we rely on for fixture validation and database tests.
+This guide captures the minimal steps to install dependencies, set up the development environment, and run the backend API service for local development and testing.
+
+## Prerequisites
+
+- **Python 3.9+** (Python 3.10 or 3.11 recommended)
+- **pip** for package management
+- A terminal with shell access (bash, zsh, etc.)
 
 ## Install dependencies
 
@@ -9,18 +15,56 @@ These packages are already pinned in `requirements.txt` for use by both the appl
 - `PyYAML>=6.0,<7`
 - `pydantic>=2.6,<3`
 - `SQLAlchemy>=2.0,<3`
+- `uvicorn` (for running the ASGI server)
 
 Set up a fresh virtual environment and install everything with pip:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r backend/requirements.txt
-python -m pip install pytest
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -r backend/requirements.txt
+python3 -m pip install pytest
+python3 -m pip install "uvicorn[standard]"
 ```
 
-The final `pytest` install ensures the test runner itself is available locally even though the core dependencies are already listed for production use.
+The `pytest` install ensures the test runner itself is available locally. The `uvicorn[standard]` package installs the ASGI server with optional performance dependencies (websockets, httptools, uvloop).
+
+## Starting the Backend Service
+
+To run the backend API server for local development, use uvicorn with the following command:
+
+```bash
+uvicorn kyrgame.webapp:create_app --app-dir backend --factory --reload --host 0.0.0.0 --port 8000
+```
+
+**Command breakdown:**
+- `kyrgame.webapp:create_app` — the application factory function to call
+- `--app-dir backend` — tells uvicorn to look for the `kyrgame` module in the `backend/` directory
+- `--factory` — indicates `create_app` is a factory function that returns an app instance
+- `--reload` — enables auto-reload on code changes (development only)
+- `--host 0.0.0.0` — binds to all network interfaces (allows external access)
+- `--port 8000` — listens on port 8000 (default for this project)
+
+Once running, the API will be available at:
+- `http://localhost:8000` (local access)
+- `http://0.0.0.0:8000` (network access from other machines)
+
+### Verifying the Server is Running
+
+You can verify the backend is running by checking the health endpoints:
+
+```bash
+# Check if the server is responding
+curl http://localhost:8000/world/locations | jq '.[0].brfdes'
+
+# Or simply check the root endpoint
+curl http://localhost:8000/
+```
+
+### Stopping the Server
+
+Press `Ctrl+C` in the terminal where uvicorn is running to stop the server.
 
 ## Sanity checks
 
