@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import List
 
+import yaml
+
 from . import constants, models
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures"
@@ -102,6 +104,33 @@ def load_message_bundles(path: Path | None = None) -> dict[str, models.MessageBu
 
 def load_messages(path: Path | None = None) -> models.MessageBundleModel:
     return load_message_bundle(path=path)
+
+
+def load_room_scripts(path: Path | None = None) -> dict:
+    fixture_root = (path or FIXTURE_ROOT) / "room_scripts"
+
+    if fixture_root.is_file():
+        with open(fixture_root, "r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle)
+
+    if not fixture_root.exists():
+        raise FileNotFoundError(f"No room scripts found at {fixture_root}")
+
+    rooms: list[dict] = []
+    for script_path in sorted(fixture_root.glob("*.yaml")):
+        with open(script_path, "r", encoding="utf-8") as handle:
+            content = yaml.safe_load(handle)
+            if not content:
+                continue
+            if "rooms" in content:
+                rooms.extend(content.get("rooms") or [])
+            else:
+                rooms.append(content)
+
+    if not rooms:
+        raise FileNotFoundError(f"No room scripts found under {fixture_root}")
+
+    return {"rooms": rooms}
 
 
 def fixture_summary(path: Path | None = None) -> dict:

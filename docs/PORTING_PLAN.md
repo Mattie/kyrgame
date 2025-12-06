@@ -38,7 +38,7 @@
    - Wire dispatcher results into the WebSocket gateway so server-side state updates drive broadcasts (movement, chat, combat outcomes) and error semantics mirror legacy text.
    - Create fixture-driven tests that assert behavior against known message IDs and location/object relationships.
 4. **World, object, and spell services**
-   - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests.
+   - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests. (Progress: added YAML-driven routines for rooms 8, 9, 10, 12, 14, and 16.)
    - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.
    - Captured Tashanna's heart-and-soul ritual (room 101) and the willowisp/pegasus transformation spells; flesh out remaining spellbook and room routines with legacy gating (inventory limits, level costs) and persistence hooks.
    - Expose APIs for content lookups (descriptions, auxiliary text) that reference the legacy message catalogs.

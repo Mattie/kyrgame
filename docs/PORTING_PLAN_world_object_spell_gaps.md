@@ -5,12 +5,12 @@ This appendix enumerates the missing parity items for the world/object/spell ser
 ## Room routines still to port
 The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (temple), 32 (spring), 38 (magic fountain), and 101 (heart-and-soul ritual). Check off the remaining legacy routines as parity is implemented:
 
-- [ ] Room 8: `getgol` (gem-for-gold exchange)【F:legacy/KYRLOCS.C†L60-L90】
-- [ ] Room 9: `buyspl` (spell vendor)【F:legacy/KYRLOCS.C†L60-L90】
-- [ ] Room 10: `vhealr` (healer)【F:legacy/KYRLOCS.C†L60-L90】
-- [ ] Room 12: `gquest` (quest board)【F:legacy/KYRLOCS.C†L60-L90】
-- [ ] Room 14: `gpcone` (pinecone grove interactions)【F:legacy/KYRLOCS.C†L60-L90】
-- [ ] Room 16: `fearno` (fearsome forest obstacle)【F:legacy/KYRLOCS.C†L60-L90】
+- [x] Room 8: `getgol` (gem-for-gold exchange)【F:legacy/KYRLOCS.C†L60-L90】
+- [x] Room 9: `buyspl` (spell vendor)【F:legacy/KYRLOCS.C†L60-L90】
+- [x] Room 10: `vhealr` (healer)【F:legacy/KYRLOCS.C†L60-L90】
+- [x] Room 12: `gquest` (quest board)【F:legacy/KYRLOCS.C†L60-L90】
+- [x] Room 14: `gpcone` (pinecone grove interactions)【F:legacy/KYRLOCS.C†L60-L90】
+- [x] Room 16: `fearno` (fearsome forest obstacle)【F:legacy/KYRLOCS.C†L60-L90】
 - [ ] Room 18: `stumpr` (stump puzzle)【F:legacy/KYRLOCS.C†L76-L98】
 - [ ] Room 19: `fthick` (thicket)【F:legacy/KYRLOCS.C†L76-L98】
 - [ ] Room 20: `rubies` (ruby cache)【F:legacy/KYRLOCS.C†L76-L98】
