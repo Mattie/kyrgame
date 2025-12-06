@@ -40,6 +40,7 @@ class SpellEffect:
     requires_target: bool
     animation: Optional[str] = None
     message_id: Optional[str] = None
+    handler: Optional[Callable[[models.PlayerModel, Optional[str], "SpellEffect"], EffectResult]] = None
 
 
 class SpellEffectEngine:
@@ -70,6 +71,26 @@ class SpellEffectEngine:
                 animation=animation,
                 message_id=f"SPL{spell.id:03d}",
             )
+
+        if 16 in effects:
+            # Legacy transformation: flyaway turns the caster into a pegasus (legacy/KYRSPEL.C lines 644-651).
+            effects[16].message_id = "S16M00"
+            effects[16].requires_target = False
+            effects[16].handler = self._transformation_handler(
+                flag=constants.PlayerFlag.PEGASU,
+                direct_key="S16M00",
+                broadcast_key="S16M01",
+            )
+
+        if 62 in effects:
+            # Legacy transformation: weewillo grants willowisp wings (legacy/KYRSPEL.C lines 1188-1195).
+            effects[62].message_id = "S62M00"
+            effects[62].requires_target = False
+            effects[62].handler = self._transformation_handler(
+                flag=constants.PlayerFlag.WILLOW,
+                direct_key="S62M00",
+                broadcast_key="S62M01",
+            )
         return effects
 
     def cast_spell(
@@ -96,6 +117,9 @@ class SpellEffectEngine:
         player.spts -= effect.cost
         player_cooldowns[spell_id] = now
 
+        if effect.handler:
+            return effect.handler(player, target, effect)
+
         text = self.messages.messages.get(
             effect.message_id or "", self.messages.messages.get("PRAYER", "")
         )
@@ -106,6 +130,33 @@ class SpellEffectEngine:
             animation=effect.animation,
             context={"target": target} if target else {},
         )
+
+    def _transformation_handler(
+        self,
+        flag: constants.PlayerFlag,
+        direct_key: str,
+        broadcast_key: str,
+    ) -> Callable[[models.PlayerModel, Optional[str], SpellEffect], EffectResult]:
+        def _handler(player: models.PlayerModel, target: Optional[str], effect: SpellEffect) -> EffectResult:  # noqa: ARG001
+            player.flags |= flag
+
+            direct_text = self.messages.messages.get(direct_key, "")
+            broadcast_text = self.messages.messages.get(broadcast_key, "")
+
+            return EffectResult(
+                success=True,
+                message_id=direct_key,
+                text=direct_text,
+                animation=effect.animation,
+                context={
+                    "broadcast": broadcast_text % getattr(player, "plyrid", "")
+                    if "%s" in broadcast_text
+                    else broadcast_text,
+                    "target": target,
+                },
+            )
+
+        return _handler
 
 
 @dataclass

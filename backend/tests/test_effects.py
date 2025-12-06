@@ -1,7 +1,6 @@
 import pytest
 
-from kyrgame import fixtures
-from kyrgame import models
+from kyrgame import constants, fixtures, models
 from kyrgame.effects import (
     CooldownActiveError,
     ObjectEffectEngine,
@@ -72,3 +71,17 @@ def test_object_effects_apply_cooldowns_and_require_targets():
 
     with pytest.raises(CooldownActiveError):
         engine.use_object(player_id="hero", object_id=32, room_id=38)
+
+
+def test_transformation_spells_toggle_player_flags(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+
+    result = engine.cast_spell(player=sample_player, spell_id=16, target=None)
+    assert result.message_id == "S16M00"
+    assert constants.PlayerFlag.PEGASU & sample_player.flags
+
+    willow = engine.cast_spell(player=sample_player, spell_id=62, target=None)
+    assert willow.message_id == "S62M00"
+    assert constants.PlayerFlag.WILLOW & sample_player.flags
