@@ -16,7 +16,7 @@
 - [x] Expand player modeling to cover the full legacy state (timers, spell slots, inventories, gems) with validation and serialization parity to `gmplyr`.
 - [x] Persist player sessions and runtime state in a real database (PostgreSQL) with migrations, replacing the current in-memory SQLite bootstrap.
 - [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
-- [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring room routines plus object/spell effect engines with cooldowns and costs.)*
+- [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring room routines plus object/spell effect engines with cooldowns and costs; expanded RoomScriptEngine coverage for `KYRLOCS.C` vendors/obstacles and began wiring `KYRSPEL.C` timers into the spell service.)*
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
@@ -41,6 +41,13 @@
    - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests.
    - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.
    - Expose APIs for content lookups (descriptions, auxiliary text) that reference the legacy message catalogs.
+
+   **Room/spell parity tracker (legacy coverage):**
+   - [x] Room vendors and healers from `KYRLOCS.C` (`getgol`, `buyspl`, `vhealr`) mirror legacy pricing and stamina/HP recovery hooks.
+   - [x] Obstacle/entry routines (`fearno`, `stumpr`, `fthick`) enforce the original flag checks and exit blocking semantics within `RoomScriptEngine`.
+   - [x] Quest/treasure interactions (`gquest`, `gpcone`, `rubies`) update server-side progression flags and broadcast room text in parity with the C routines.
+   - [x] Spellbook-management effects from `KYRSPEL.C` (`bookworm`, `dumdum`, `cuseme`, `sapspel`) are wired into the spell timer service with spell-point adjustments and cooldown scheduling.
+   - [ ] Add remaining location-specific spell hooks (e.g., altar resurrection and sanctuary exit handling) once corresponding routines from `KYRANIM.C` are mapped to backend events.
 5. **Auth/session lifecycle**
    - Implement login/session establishment matching `kyloin` expectations (logo display, first-time character creation), session tokens, and reconnection handling.
    - Track active sessions in persistence + presence service, enforcing single-session or multi-session policies from the original module.
