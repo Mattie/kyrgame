@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from kyrgame import constants, fixtures, yaml_rooms
@@ -54,6 +56,7 @@ def test_room_scripts_fixture_is_split_into_files():
 
     room_files = sorted(fixture_dir.glob("*.yaml"))
     assert len(room_files) >= 6
+    assert all(re.fullmatch(r"room_\d{4}\.yaml", path.name) for path in room_files)
     assert {8, 9, 10, 12, 14, 16}.issubset(
         {int(path.stem.split("_")[-1]) for path in room_files}
     )
