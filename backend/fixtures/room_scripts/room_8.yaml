@@ -1,0 +1,210 @@
+id: 8
+name: getgol
+# Room summary: Gem cutter's hut where a jeweler quietly evaluates offered stones and pays out discreetly.
+# Mechanics: trade verbs convert known gems into fixed gold payouts, swap a kyragem for a soulstone, and reject anything else.
+# Tone: hush-hush dealings with private conversations signaled by the broadcast “move off by themselves” messages.
+# Legacy: legacy/KYRROUS.C lines 198-239
+triggers:
+  - verbs: [give, sell, trade]
+    actions:
+      - type: branch_by_item
+        target_arg: 0
+        default_requires_item: true
+        cases:
+          ruby:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 22
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          emerald:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 25
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          garnet:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 2
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          pearl:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 6
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          aquamarine:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 9
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          moonstone:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 32
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          sapphire:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 16
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          diamond:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 30
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          amethyst:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 10
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          onyx:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 28
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          opal:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 12
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          bloodstone:
+            actions:
+              - type: remove_item
+              - type: add_gold
+                amount: 20
+                context_key: trade_value
+              - type: message
+                scope: direct
+                message_id: TRDM00
+                format: [trade_value]
+              - type: message
+                scope: broadcast
+                message_id: TRDM01
+                format: [player_altnam, item_article, trade_value]
+          kyragem:
+            actions:
+              - type: remove_item
+              - type: grant_object
+                object: soulstone
+              - type: message
+                scope: direct
+                message_id: TRDM02
+              - type: message
+                scope: broadcast
+                message_id: TRDM03
+                format: [player_altnam]
+        default_actions:
+          - type: message
+            scope: direct
+            message_id: TRDM04
+          - type: message
+            scope: broadcast
+            message_id: TRDM03
+            format: [player_altnam]
+        missing_actions:
+          - type: message
+            scope: direct
+            message_id: TRDM05
+          - type: message
+            scope: broadcast
+            message_id: TRDM03
+            format: [player_altnam]
+

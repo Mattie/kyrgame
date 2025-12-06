@@ -1,0 +1,53 @@
+id: 9
+name: buyspl
+# Room summary: Spell shop whose keeper haggles cheerfully inside the spell shop hutch.
+# Mechanics: buy/order/pay/purchase verbs look up one of 16 stocked spells, charge gold if affordable, and set the spell flag; otherwise deliver broke or missing-stock banter.
+# Tone: playful merchant jokes about back orders and bargaining before casting a glow over the buyer's spellbook.
+# Legacy: legacy/KYRROUS.C lines 242-286
+triggers:
+  - verbs: [buy, order, pay, purchase]
+    actions:
+      - type: purchase_spell
+        target_arg: 0
+        stock:
+          - {name: burnup, price: 80}
+          - {name: cantcmeha, price: 100}
+          - {name: clutzopho, price: 50}
+          - {name: cuseme, price: 40}
+          - {name: fpandl, price: 60}
+          - {name: hocus, price: 400}
+          - {name: howru, price: 25}
+          - {name: koolit, price: 60}
+          - {name: noouch, price: 30}
+          - {name: pocus, price: 45}
+          - {name: sunglass, price: 35}
+          - {name: thedoc, price: 75}
+          - {name: tiltowait, price: 1000}
+          - {name: weewillo, price: 120}
+          - {name: whereami, price: 100}
+          - {name: zapher, price: 50}
+        success:
+          - type: message
+            scope: direct
+            message_id: BUYM02
+          - type: message
+            scope: broadcast
+            message_id: BUYM03
+            format: [player_altnam, player_pronoun_poss, player_altnam]
+        insufficient:
+          - type: message
+            scope: direct
+            message_id: BUYM00
+          - type: message
+            scope: broadcast
+            message_id: BUYM01
+            format: [player_altnam, player_pronoun_obj]
+        missing:
+          - type: message
+            scope: direct
+            message_id: BUYM04
+          - type: message
+            scope: broadcast
+            message_id: BUYM01
+            format: [player_altnam, player_pronoun_obj]
+

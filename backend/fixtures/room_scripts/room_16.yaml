@@ -1,0 +1,37 @@
+id: 16
+name: fearno
+# Room summary: Dead wooded glade shadowed by fear until a secret phrase banishes it.
+# Mechanics: saying the EGLADE phrase triggers a level gate to exactly level 5, leveling the player if matched, otherwise refusing for too high/low levels.
+# Tone: dramatic courage test rewarded by the Goddess with wisdom and power when fear is cast aside.
+# Legacy: legacy/KYRROUS.C lines 660-676
+triggers:
+  - verbs: [fear]
+    match_phrase_key: EGLADE
+    actions:
+      - type: level_gate
+        target_level: 5
+        level_up: true
+        on_success:
+          - type: message
+            scope: direct
+            message_id: FEAR01
+          - type: message
+            scope: broadcast
+            message_id: FEAR02
+            format: [player_altnam]
+        on_too_high:
+          - type: message
+            scope: direct
+            message_id: LVLM00
+          - type: message
+            scope: broadcast
+            message_id: LVLM01
+            format: [player_altnam]
+        on_too_low:
+          - type: message
+            scope: direct
+            message_id: LVLM02
+          - type: message
+            scope: broadcast
+            message_id: LVLM03
+            format: [player_altnam]

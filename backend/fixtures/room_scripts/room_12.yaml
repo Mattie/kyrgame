@@ -1,0 +1,67 @@
+id: 12
+name: gquest
+# Room summary: Bubbling brook quest spot where adventurers sift through water and flowers.
+# Mechanics: dig/search/hunt/look at the brook can reveal 2–101 gold on low rolls if the player is under 101 gold; otherwise nothing, plus water drinking and rose-picking helpers with inventory limits.
+# Tone: tranquil brookside scavenging with occasional small finds and fragrant lavender roses nearby.
+# Legacy: legacy/KYRROUS.C lines 439-469
+triggers:
+  - verbs: [dig, hunt, look, search]
+    target_in: [gold, brook, water, stream]
+    actions:
+      - type: message
+        scope: broadcast
+        text: "searching the brook for something."
+      - type: random_range
+        start: 2
+        stop: 102
+        context_key: found_gold
+      - type: conditional
+        conditions:
+          - context_lt: {key: found_gold, value: 10}
+          - gold_lt: 101
+        then:
+          - type: add_gold
+            amount: found_gold
+          - type: message
+            scope: direct
+            message_id: FNDGOL
+            format: [found_gold]
+        else:
+          - type: message
+            scope: direct
+            message_id: NOFNDG
+  - verbs: [drink]
+    target_in: [water]
+    actions:
+      - type: message
+        scope: direct
+        message_id: DRINK0
+      - type: message
+        scope: broadcast
+        message_id: DRINK1
+        format: [player_altnam]
+  - verbs: [get, grab, pick, take]
+    target_in: [rose]
+    actions:
+      - type: conditional
+        conditions:
+          - inventory_lt: 6
+        then:
+          - type: grant_object
+            object: rose
+          - type: message
+            scope: direct
+            message_id: GROSE1
+          - type: message
+            scope: broadcast
+            message_id: GROSE2
+            format: [player_altnam]
+        else:
+          - type: message
+            scope: direct
+            message_id: GROSE3
+          - type: message
+            scope: broadcast
+            message_id: GROSE4
+            format: [player_altnam]
+
