@@ -144,6 +144,9 @@ def build_default_routines(messages: MessageBundleModel) -> Dict[int, RoomRoutin
             on_exit=_willow_on_exit,
             on_command=_fountain_on_command(messages),
         ),
+        101: RoomRoutine(
+            on_command=_heart_and_soul_on_command(messages),
+        ),
     }
 
 
@@ -423,3 +426,52 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
 
 async def _broadcast_message(context: RoomContext, event: str, text: str):
     await context.broadcast(event, text=text)
+
+
+def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    async def _handler(
+        context: RoomContext,
+        player_id: str,
+        command: str,
+        args: list[str],
+        player_level: Optional[int],
+    ) -> bool:
+        if command.lower() != "offer":
+            return False
+
+        words = [arg.lower() for arg in args]
+        if len(words) < 5 or words[0] != "heart" or words[2] != "soul" or words[-1] != "tashanna":
+            return False
+
+        # Legacy: offering heart and soul to Tashanna grants the willowisp spell at level 7+.
+        # Source: legacy/KYRROUS.C lines 821-837 (hnsrou).
+        level = player_level or 0
+        if level < 7:
+            await context.direct(
+                player_id,
+                "room_message",
+                text="...A whisper reminds you that true devotion requires greater strength.",
+            )
+            return True
+
+        rewarded = context.state.flags.setdefault("hns_rewards", set())
+        if player_id in rewarded:
+            await context.direct(player_id, "room_message", text=messages.messages.get("HNSYOU", ""))
+            return True
+
+        rewarded.add(player_id)
+        await context.direct(
+            player_id,
+            "room_message",
+            text=messages.messages.get(
+                "HNSYOU", "...As you offer your heart and soul, you feel newly empowered."
+            ),
+        )
+        await context.broadcast(
+            "room_message",
+            text=messages.messages.get("HNSOTH", "%s is filled with new strength!") % player_id,
+            player=player_id,
+        )
+        return True
+
+    return _handler

@@ -1,5 +1,7 @@
 import asyncio
 
+import asyncio
+
 import httpx
 import pytest
 
@@ -219,6 +221,45 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
     assert messages.messages["MAGF05"] in direct_texts
 
     assert not engine.get_room_state(38).timers
+
+
+@pytest.mark.anyio
+async def test_heart_and_soul_offering_awards_willowisp_spell():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+
+    await scheduler.start()
+    await engine.enter_room(player_id="hero", room_id=101)
+    await engine.handle_command(
+        "hero",
+        101,
+        command="offer",
+        args=["heart", "and", "soul", "to", "tashanna"],
+        player_level=8,
+    )
+    await asyncio.sleep(0.02)
+    await scheduler.stop()
+
+    direct_texts = [
+        msg["text"]
+        for msg in gateway.messages
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
+    ]
+    assert messages.messages["HNSYOU"] in direct_texts
+
+    broadcast_texts = [
+        msg["text"]
+        for msg in gateway.messages
+        if msg.get("scope") == "broadcast" and "text" in msg
+    ]
+    assert messages.messages["HNSOTH"] % "hero" in broadcast_texts
 
 
 @pytest.mark.anyio

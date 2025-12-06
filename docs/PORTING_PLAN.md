@@ -16,7 +16,7 @@
 - [x] Expand player modeling to cover the full legacy state (timers, spell slots, inventories, gems) with validation and serialization parity to `gmplyr`.
 - [x] Persist player sessions and runtime state in a real database (PostgreSQL) with migrations, replacing the current in-memory SQLite bootstrap.
 - [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
-- [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring room routines plus object/spell effect engines with cooldowns and costs.)*
+- [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring/heart-and-soul room routines plus object/spell effect engines with cooldowns, transformations, and costs.)*
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
@@ -40,6 +40,7 @@
 4. **World, object, and spell services**
    - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests.
    - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.
+   - Captured Tashanna's heart-and-soul ritual (room 101) and the willowisp/pegasus transformation spells; flesh out remaining spellbook and room routines with legacy gating (inventory limits, level costs) and persistence hooks.
    - Expose APIs for content lookups (descriptions, auxiliary text) that reference the legacy message catalogs.
 5. **Auth/session lifecycle**
    - Implement login/session establishment matching `kyloin` expectations (logo display, first-time character creation), session tokens, and reconnection handling.
