@@ -58,7 +58,7 @@ class SpellEffectEngine:
     def _build_effects(self) -> Dict[int, SpellEffect]:
         effects: Dict[int, SpellEffect] = {}
         for spell in self.spells.values():
-            cost = max(5, spell.level // 2)
+            cost = spell.level  # Legacy: gmpptr->spts -= (SHORT)splptr->level
             cooldown = 2.5 if spell.sbkref == constants.OFFENS else 1.5
             requires_target = spell.sbkref == constants.OFFENS
             animation = spell.splrou

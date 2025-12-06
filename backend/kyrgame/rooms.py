@@ -137,6 +137,7 @@ def build_default_routines(messages: MessageBundleModel) -> Dict[int, RoomRoutin
         32: RoomRoutine(
             on_enter=_spring_on_enter(messages),
             on_exit=_willow_on_exit,
+            on_command=_spring_on_command(messages),
         ),
         38: RoomRoutine(
             on_enter=_fountain_on_enter(messages),
@@ -219,15 +220,68 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         command: str,
         args: list[str],
         player_level: Optional[int],
-    ) -> bool:  # noqa: ARG001
-        if command.lower() != "pray":
-            return False
-        text = messages.messages.get("PRAYER", "...You whisper a quiet prayer...")
-        await context.direct(player_id, "room_message", text=text)
-        await context.broadcast(
-            "room_message", text=text, player=player_id, message_id="PRAYER"
-        )
-        return True
+    ) -> bool:
+        verb = command.lower()
+        
+        # Legacy: PUT object handling for level-up donations
+        if verb == "put" and args:
+            obj_arg = args[0].lower()
+            # Check if chant requirement is met (chantd == 5 in legacy)
+            chant_ready = context.state.flags.get("chant_count", 0) >= 5
+            
+            if chant_ready:
+                # Legacy: case 18 - requires level 9
+                if obj_arg in {"amulet", "18"}:
+                    level = player_level or 0
+                    if level >= 9:
+                        await context.direct(player_id, "room_message", 
+                                           text=messages.messages.get("LVL9M0", "You have achieved level 9!"))
+                        await context.broadcast("room_message", 
+                                              text=messages.messages.get("LVL9M1", ""),
+                                              player=player_id)
+                        return True
+                # Legacy: case 21 - requires level 10
+                elif obj_arg in {"crystal", "21"}:
+                    level = player_level or 0
+                    if level >= 10:
+                        await context.direct(player_id, "room_message",
+                                           text=messages.messages.get("LV10M0", "You have achieved level 10!"))
+                        await context.broadcast("room_message",
+                                              text=messages.messages.get("LVL9M1", ""),
+                                              player=player_id)
+                        return True
+                # Default offering response
+                await context.direct(player_id, "room_message", 
+                                   text=messages.messages.get("OFFER0", "The altar accepts your offering."))
+                await context.broadcast("room_message",
+                                      text=messages.messages.get("OFFER1", ""),
+                                      player=player_id)
+                return True
+        
+        # Legacy: CHANT TASHANNA command
+        if verb == "chant" and args and args[0].lower() == "tashanna":
+            chant_count = context.state.flags.get("chant_count", 0)
+            chant_count += 1
+            context.state.flags["chant_count"] = chant_count
+            
+            if chant_count == 1:
+                await context.broadcast("ambient", 
+                                      text="*** The altar begins to glow dimly.")
+            else:
+                await context.broadcast("ambient",
+                                      text="*** The altar glows even brighter!")
+            return True
+        
+        # Legacy: PRAY/MEDITATE commands
+        if verb in {"pray", "meditate"}:
+            text = messages.messages.get("PRAYER", "...You whisper a quiet prayer...")
+            await context.direct(player_id, "room_message", text=text)
+            await context.broadcast(
+                "room_message", text=text, player=player_id, message_id="PRAYER"
+            )
+            return True
+
+        return False
 
     return _handler
 
@@ -243,6 +297,32 @@ def _spring_on_enter(messages: MessageBundleModel) -> RoomCallback:
                 ),
                 interval=20.0,
             )
+
+    return _handler
+
+
+def _spring_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    async def _handler(
+        context: RoomContext,
+        player_id: str,
+        command: str,
+        args: list[str],
+        player_level: Optional[int],
+    ) -> bool:  # noqa: ARG001
+        verb = command.lower()
+        
+        # Legacy: GET ROSE command gives player object 40
+        if verb in {"get", "take", "pick"} and args and args[0].lower() == "rose":
+            # Note: Legacy checks npobjs >= MXPOBS for inventory full
+            # Simplified here without inventory check
+            await context.direct(player_id, "room_message",
+                               text=messages.messages.get("GROSE1", "You pick a beautiful rose."))
+            await context.broadcast("room_message",
+                                  text=messages.messages.get("GROSE2", "") % player_id,
+                                  player=player_id)
+            return True
+        
+        return False
 
     return _handler
 
@@ -277,38 +357,64 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
 
         offering = args[0].lower()
         state = context.state
+        
+        # Legacy: case 32 (pinecone) - requires 3 donations to spawn scroll
         if offering == "pinecone":
-            state.flags["fountain_donations"] = state.flags.get("fountain_donations", 0) + 1
-            await context.direct(player_id, "room_message", text=messages.messages["MAGF00"])
-            await context.broadcast(
-                "room_message",
-                text=messages.messages["MAGF01"] % player_id,
-                player=player_id,
-            )
-            return True
-
-        if offering == "shard":
-            if state.flags.get("fountain_donations", 0):
-                await context.direct(
-                    player_id, "room_message", text=messages.messages["MAGF05"]
+            scroll_count = state.flags.get("scroll_count", 0)
+            # Note: Legacy checks BLESSD flag for bonus increment; simplified here
+            scroll_count += 1
+            
+            if scroll_count >= 3:
+                state.flags["scroll_count"] = 0
+                # Legacy spawns scroll (object 35) at random location
+                await context.direct(player_id, "room_message", text=messages.messages["MAGF00"])
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages["MAGF01"] % player_id,
+                    player=player_id,
                 )
             else:
-                await context.direct(
-                    player_id, "room_message", text=messages.messages["MAGF06"]
+                state.flags["scroll_count"] = scroll_count
+                await context.direct(player_id, "room_message", text=messages.messages["MAGF04"])
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages["MAGF07"] % player_id,
+                    player=player_id,
                 )
-            template = messages.messages.get("MAGF07")
-            broadcast_text = (
-                template % player_id if template and "%s" in template else template
-            )
-            await context.broadcast(
-                "room_message",
-                text=broadcast_text or messages.messages.get("MAGF06", ""),
-                player=player_id,
-            )
             return True
 
+        # Legacy: case 43 (shard) - requires 6 donations to grant object 16
+        if offering == "shard":
+            shard_count = state.flags.get("shard_count", 0)
+            shard_count += 1
+            
+            if shard_count >= 6:
+                state.flags["shard_count"] = 0
+                # Legacy gives player object 16
+                await context.direct(player_id, "room_message", text=messages.messages["MAGF05"])
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages["MAGF03"] % player_id,
+                    player=player_id,
+                )
+            else:
+                state.flags["shard_count"] = shard_count
+                await context.direct(player_id, "room_message", text=messages.messages["MAGF06"])
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages["MAGF03"] % player_id,
+                    player=player_id,
+                )
+            return True
+
+        # Default case for other objects
         await context.direct(
-            player_id, "room_message", text=messages.messages.get("MAGF04", "")
+            player_id, "room_message", text=messages.messages.get("MAGF02", "")
+        )
+        await context.broadcast(
+            "room_message",
+            text=messages.messages.get("MAGF03", "") % player_id,
+            player=player_id,
         )
         return True
 

@@ -188,8 +188,15 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
     await engine.enter_room(player_id="hero", room_id=38)
     await asyncio.sleep(0.07)
 
+    # Legacy: pinecone requires 3 donations to trigger MAGF00/MAGF01
     await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
-    await engine.handle_command("hero", 38, command="toss", args=["shard"])
+    await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
+    await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
+    
+    # Legacy: shard requires 6 donations to trigger MAGF05
+    for _ in range(6):
+        await engine.handle_command("hero", 38, command="toss", args=["shard"])
+    
     await asyncio.sleep(0.02)
     await engine.exit_room("hero", 38)
     await scheduler.stop()
@@ -206,7 +213,9 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
         for msg in gateway.messages
         if msg.get("scope") == "direct" and msg.get("player") == "hero"
     ]
+    # After 3 pinecones, should get success message
     assert messages.messages["MAGF00"] in direct_texts
+    # After 6 shards, should get success message  
     assert messages.messages["MAGF05"] in direct_texts
 
     assert not engine.get_room_state(38).timers
