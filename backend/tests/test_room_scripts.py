@@ -135,6 +135,84 @@ async def test_multiple_players_receive_room_broadcasts_and_state_updates():
 
 
 @pytest.mark.anyio
+async def test_temple_room_schedules_prayer_prompt_and_prayer_command():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+
+    await scheduler.start()
+    await engine.enter_room(player_id="acolyte", room_id=7)
+    await asyncio.sleep(0.06)
+
+    await engine.handle_command("acolyte", 7, command="pray", player_level=5)
+    await asyncio.sleep(0.02)
+    await engine.exit_room("acolyte", 7)
+    await scheduler.stop()
+
+    prayer_prompts = [
+        msg["text"]
+        for msg in gateway.messages
+        if msg["scope"] == "broadcast" and "text" in msg
+    ]
+    assert messages.messages["TMPRAY"] in prayer_prompts
+
+    blessings = [
+        msg["text"]
+        for msg in gateway.messages
+        if msg.get("scope") == "direct" and msg.get("player") == "acolyte"
+    ]
+    assert messages.messages["PRAYER"] in blessings
+
+    assert not engine.get_room_state(7).timers
+
+
+@pytest.mark.anyio
+async def test_fountain_routine_tracks_donations_and_schedules_ambience():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+
+    await scheduler.start()
+    await engine.enter_room(player_id="hero", room_id=38)
+    await asyncio.sleep(0.07)
+
+    await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
+    await engine.handle_command("hero", 38, command="toss", args=["shard"])
+    await asyncio.sleep(0.02)
+    await engine.exit_room("hero", 38)
+    await scheduler.stop()
+
+    ambient_texts = [
+        msg["text"]
+        for msg in gateway.messages
+        if msg.get("event") == "ambient" and msg.get("scope") == "broadcast"
+    ]
+    assert messages.messages["KRD038"] in ambient_texts
+
+    direct_texts = [
+        msg["text"]
+        for msg in gateway.messages
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
+    ]
+    assert messages.messages["MAGF00"] in direct_texts
+    assert messages.messages["MAGF05"] in direct_texts
+
+    assert not engine.get_room_state(38).timers
+
+
+@pytest.mark.anyio
 async def test_admin_endpoint_reloads_room_scripts_without_restart():
     app = create_app()
     transport = httpx.ASGITransport(app=app)

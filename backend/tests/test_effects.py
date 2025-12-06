@@ -1,0 +1,74 @@
+import pytest
+
+from kyrgame import fixtures
+from kyrgame import models
+from kyrgame.effects import (
+    CooldownActiveError,
+    ObjectEffectEngine,
+    ResourceCostError,
+    SpellEffectEngine,
+    TargetingError,
+)
+
+
+@pytest.fixture
+def sample_player():
+    player = fixtures.build_player()
+    player.spts = 50
+    player.level = max(player.level, 10)
+    return player
+
+
+def test_spell_effects_respect_costs_and_cooldowns(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    now = 0.0
+
+    def clock():
+        return now
+
+    engine = SpellEffectEngine(spells=spells, messages=messages, clock=clock)
+    base_points = sample_player.spts
+
+    result = engine.cast_spell(player=sample_player, spell_id=2, target="goblin")
+    assert sample_player.spts < base_points
+    assert result.animation == spells[2].splrou
+
+    with pytest.raises(CooldownActiveError):
+        engine.cast_spell(player=sample_player, spell_id=2, target="goblin")
+
+    now += engine.effects[2].cooldown
+    repeat = engine.cast_spell(player=sample_player, spell_id=2, target="ogre")
+    assert repeat.context["target"] == "ogre"
+
+
+def test_spell_effects_require_targets_and_resources(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    sample_player.spts = 20
+
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+
+    with pytest.raises(TargetingError):
+        engine.cast_spell(player=sample_player, spell_id=5, target=None)
+
+    sample_player.spts = 1
+    with pytest.raises(ResourceCostError):
+        engine.cast_spell(player=sample_player, spell_id=5, target="ogre")
+
+
+def test_object_effects_apply_cooldowns_and_require_targets():
+    objects = fixtures.load_objects()
+    messages = fixtures.load_messages()
+
+    engine = ObjectEffectEngine(objects=objects, messages=messages)
+    player = fixtures.build_player()
+
+    toss_result = engine.use_object(player_id="hero", object_id=32, room_id=38)
+    assert toss_result.animation == "obj32"
+
+    with pytest.raises(TargetingError):
+        engine.use_object(player_id="hero", object_id=33, room_id=1)
+
+    with pytest.raises(CooldownActiveError):
+        engine.use_object(player_id="hero", object_id=32, room_id=38)

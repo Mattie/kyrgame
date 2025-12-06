@@ -318,6 +318,10 @@ class FixtureProvider:
         return self.scope.app.state.fixture_cache["players"]
 
     @property
+    def content_mappings(self):
+        return self.scope.app.state.fixture_cache["content_mappings"]
+
+    @property
     def command_dispatcher(self) -> commands.CommandDispatcher:
         return self.scope.app.state.command_dispatcher
 
@@ -551,6 +555,25 @@ spells_router = APIRouter(tags=["spells"])
 @spells_router.get("/spells")
 async def list_spells(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
     return [spell.model_dump() for spell in provider.cache["spells"]]
+
+
+content_router = APIRouter(prefix="/content", tags=["content"])
+
+
+@content_router.get("/lookup")
+async def lookup_content(
+    type: str, id: int, provider: Annotated[FixtureProvider, Depends(get_request_provider)]
+):
+    try:
+        mapping = provider.content_mappings[f"{type}s"]
+        message_id = mapping[str(id)]
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Content mapping not found")
+
+    text = provider.cache["messages"].messages.get(message_id)
+    if text is None:
+        raise HTTPException(status_code=404, detail="Message not available")
+    return {"id": id, "message_id": message_id, "text": text}
 
 
 i18n_router = APIRouter(prefix="/i18n", tags=["i18n"])
@@ -817,6 +840,7 @@ def create_app() -> FastAPI:
     app.include_router(world_router)
     app.include_router(objects_router)
     app.include_router(spells_router)
+    app.include_router(content_router)
     app.include_router(i18n_router)
     app.include_router(admin_router)
     app.include_router(players_router)

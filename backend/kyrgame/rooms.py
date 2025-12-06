@@ -70,7 +70,7 @@ class RoomScriptEngine:
         self.scheduler = scheduler
         self.locations = {location.id: location for location in locations}
         self.messages = messages
-        self.routines: Dict[int, RoomRoutine] = build_default_routines()
+        self.routines: Dict[int, RoomRoutine] = build_default_routines(messages)
         self.states: Dict[int, RoomState] = {}
         self.reloads = 0
 
@@ -103,7 +103,7 @@ class RoomScriptEngine:
             await self.gateway.broadcast(room_id, {"event": "room_empty"})
 
     def reload_scripts(self):
-        self.routines = build_default_routines()
+        self.routines = build_default_routines(self.messages)
         self.reloads += 1
 
     async def handle_command(
@@ -122,12 +122,26 @@ class RoomScriptEngine:
         return False
 
 
-def build_default_routines() -> Dict[int, RoomRoutine]:
+def build_default_routines(messages: MessageBundleModel) -> Dict[int, RoomRoutine]:
     return {
         0: RoomRoutine(
             on_enter=_willow_on_enter,
             on_exit=_willow_on_exit,
             on_command=_willow_on_command,
+        ),
+        7: RoomRoutine(
+            on_enter=_temple_on_enter(messages),
+            on_exit=_willow_on_exit,
+            on_command=_temple_on_command(messages),
+        ),
+        32: RoomRoutine(
+            on_enter=_spring_on_enter(messages),
+            on_exit=_willow_on_exit,
+        ),
+        38: RoomRoutine(
+            on_enter=_fountain_on_enter(messages),
+            on_exit=_willow_on_exit,
+            on_command=_fountain_on_command(messages),
         ),
     }
 
@@ -181,3 +195,125 @@ async def _willow_on_command(
         return True
 
     return False
+
+
+def _temple_on_enter(messages: MessageBundleModel) -> RoomCallback:
+    async def _handler(context: RoomContext, player_id: str):  # noqa: ARG001
+        if "prayer_prompt" not in context.state.timers:
+            context.schedule(
+                "prayer_prompt",
+                0.05,
+                lambda: _broadcast_message(
+                    context, "ambient", messages.messages.get("TMPRAY", "")
+                ),
+                interval=30.0,
+            )
+
+    return _handler
+
+
+def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    async def _handler(
+        context: RoomContext,
+        player_id: str,
+        command: str,
+        args: list[str],
+        player_level: Optional[int],
+    ) -> bool:  # noqa: ARG001
+        if command.lower() != "pray":
+            return False
+        text = messages.messages.get("PRAYER", "...You whisper a quiet prayer...")
+        await context.direct(player_id, "room_message", text=text)
+        await context.broadcast(
+            "room_message", text=text, player=player_id, message_id="PRAYER"
+        )
+        return True
+
+    return _handler
+
+
+def _spring_on_enter(messages: MessageBundleModel) -> RoomCallback:
+    async def _handler(context: RoomContext, player_id: str):  # noqa: ARG001
+        if "spring_ambience" not in context.state.timers:
+            context.schedule(
+                "spring_ambience",
+                0.05,
+                lambda: _broadcast_message(
+                    context, "ambient", messages.messages.get("KRD032", "")
+                ),
+                interval=20.0,
+            )
+
+    return _handler
+
+
+def _fountain_on_enter(messages: MessageBundleModel) -> RoomCallback:
+    async def _handler(context: RoomContext, player_id: str):  # noqa: ARG001
+        state = context.state
+        state.flags.setdefault("fountain_donations", 0)
+        if "fountain_ambience" not in state.timers:
+            context.schedule(
+                "fountain_ambience",
+                0.05,
+                lambda: _broadcast_message(
+                    context, "ambient", messages.messages.get("KRD038", "")
+                ),
+                interval=25.0,
+            )
+
+    return _handler
+
+
+def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    async def _handler(
+        context: RoomContext,
+        player_id: str,
+        command: str,
+        args: list[str],
+        player_level: Optional[int],
+    ) -> bool:  # noqa: ARG001
+        if command.lower() != "toss" or not args:
+            return False
+
+        offering = args[0].lower()
+        state = context.state
+        if offering == "pinecone":
+            state.flags["fountain_donations"] = state.flags.get("fountain_donations", 0) + 1
+            await context.direct(player_id, "room_message", text=messages.messages["MAGF00"])
+            await context.broadcast(
+                "room_message",
+                text=messages.messages["MAGF01"] % player_id,
+                player=player_id,
+            )
+            return True
+
+        if offering == "shard":
+            if state.flags.get("fountain_donations", 0):
+                await context.direct(
+                    player_id, "room_message", text=messages.messages["MAGF05"]
+                )
+            else:
+                await context.direct(
+                    player_id, "room_message", text=messages.messages["MAGF06"]
+                )
+            template = messages.messages.get("MAGF07")
+            broadcast_text = (
+                template % player_id if template and "%s" in template else template
+            )
+            await context.broadcast(
+                "room_message",
+                text=broadcast_text or messages.messages.get("MAGF06", ""),
+                player=player_id,
+            )
+            return True
+
+        await context.direct(
+            player_id, "room_message", text=messages.messages.get("MAGF04", "")
+        )
+        return True
+
+    return _handler
+
+
+async def _broadcast_message(context: RoomContext, event: str, text: str):
+    await context.broadcast(event, text=text)

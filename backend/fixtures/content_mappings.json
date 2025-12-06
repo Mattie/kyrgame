@@ -1,0 +1,14 @@
+{
+  "locations": {
+    "7": "KRD007",
+    "32": "KRD032",
+    "38": "KRD038"
+  },
+  "objects": {
+    "32": "MAGF02",
+    "43": "MAGF06"
+  },
+  "spells": {
+    "61": "SAPRAY"
+  }
+}
