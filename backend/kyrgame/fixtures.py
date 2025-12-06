@@ -26,6 +26,12 @@ def load_spells(path: Path | None = None) -> List[models.SpellModel]:
     return [models.SpellModel(**item) for item in data]
 
 
+def load_content_mappings(path: Path | None = None) -> dict:
+    fixture_path = (path or FIXTURE_ROOT) / "content_mappings.json"
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    return data
+
+
 def _spell_bitmasks(spells: dict[int, models.SpellModel], memorized: List[int]):
     offspls = defspls = othspls = 0
     for spell_id in memorized:
@@ -107,6 +113,7 @@ def fixture_summary(path: Path | None = None) -> dict:
     players = load_players(path)
     message_bundles = load_message_bundles(path)
     default_bundle = message_bundles[DEFAULT_LOCALE]
+    content_map = load_content_mappings(path)
     return {
         "locations": len(location_models),
         "objects": len(object_models),
@@ -115,4 +122,5 @@ def fixture_summary(path: Path | None = None) -> dict:
         "players": len(players),
         "messages": len(default_bundle.messages),
         "locales": sorted(message_bundles.keys()),
+        "content_mappings": {k: len(v) for k, v in content_map.items()},
     }

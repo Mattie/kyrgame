@@ -76,6 +76,7 @@ async def bootstrap_app(app: FastAPI):
 
     message_bundles = fixtures.load_message_bundles(seed_root)
     default_messages = message_bundles[fixtures.DEFAULT_LOCALE]
+    content_mappings = fixtures.load_content_mappings(seed_root)
 
     app.state.fixture_cache = {
         "locations": fixtures.load_locations(seed_root),
@@ -86,6 +87,7 @@ async def bootstrap_app(app: FastAPI):
         "player_template": fixtures.build_player(seed_root),
         "messages": default_messages,
         "message_bundles": message_bundles,
+        "content_mappings": content_mappings,
         "summary": fixtures.fixture_summary(seed_root),
     }
     app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
