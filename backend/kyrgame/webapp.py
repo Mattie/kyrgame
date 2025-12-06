@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -72,6 +73,13 @@ class AdminGrant:
 
 
 DEFAULT_ADMIN_TOKEN = "dev-admin-token"
+
+
+def _cors_origins_from_env() -> list[str]:
+    configured = os.getenv("KYRGAME_CORS_ORIGINS")
+    if not configured:
+        return ["*"]
+    return [origin.strip() for origin in configured.split(",") if origin.strip()]
 
 
 def get_db_session(request: Request) -> OrmSession:
@@ -794,6 +802,15 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Kyrgame API", lifespan=lifespan)
 
     app.state.admin_grants = _load_admin_grants()
+
+    cors_origins = _cors_origins_from_env()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.include_router(auth_router)
     app.include_router(commands_router)

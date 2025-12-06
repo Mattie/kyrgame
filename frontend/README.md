@@ -38,7 +38,15 @@ See `.env.example` for all available configuration options.
 
 ## Development
 
+### Prerequisites: Starting the Backend Service
+
+Before running the frontend development server, you need to start the backend API service. The frontend health check and API calls depend on the backend being available.
+
+**See [`backend/DEVELOPMENT.md`](../backend/DEVELOPMENT.md) for detailed instructions on installing dependencies and starting the backend service.**
+
 ### Run the Development Server
+
+Once the backend is running, start the frontend development server:
 
 ```bash
 npm run dev

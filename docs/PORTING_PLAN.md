@@ -123,6 +123,7 @@
 2. **Bootstrap the front-end workspace**
    - [x] Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards.
    - [x] Wire shared configuration for API base URL and WebSocket endpoint (token injection to follow).
+   - [x] Enable CORS defaults for the navigator dev origin (`localhost:5173`) with an environment override knob (`KYRGAME_CORS_ORIGINS`).
 3. **Implement a "view-only" navigator flow**
    - Simple session form that requests a token for a chosen player ID and optional room ID; persist token in memory for the session.
    - Fetch world data on load (`/world/locations`, `/objects`, `/commands`, `/i18n/<locale>/messages`) and cache in state for rendering labels/tooltips.
