@@ -38,7 +38,27 @@ See `.env.example` for all available configuration options.
 
 ## Development
 
+### Prerequisites: Starting the Backend Service
+
+Before running the frontend development server, you need to start the backend API service. The frontend health check and API calls depend on the backend being available.
+
+**See [`backend/DEVELOPMENT.md`](../backend/DEVELOPMENT.md) for detailed instructions on installing dependencies and starting the backend service.**
+
+Quick start for the backend (from the repository root):
+
+```bash
+# Install uvicorn if not already installed
+python3 -m pip install "uvicorn[standard]"
+
+# Start the backend API server
+uvicorn kyrgame.webapp:create_app --app-dir backend --factory --reload --host 0.0.0.0 --port 8000
+```
+
+The backend will be available at `http://localhost:8000`.
+
 ### Run the Development Server
+
+Once the backend is running, start the frontend development server:
 
 ```bash
 npm run dev
