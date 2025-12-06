@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
@@ -83,6 +83,14 @@ describe('Navigator flow', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     MockWebSocket.instances.length = 0
+    const originalError = console.error
+    vi.spyOn(console, 'error').mockImplementation((...args) => {
+      const [first] = args
+      if (typeof first === 'string' && first.includes('act(...')) {
+        return
+      }
+      originalError(...args)
+    })
   })
 
   it('creates a session, caches world data, and streams room activity', async () => {
@@ -206,5 +214,124 @@ describe('Navigator flow', () => {
       command: 'move',
       args: { direction: 'south' },
     })
+  })
+
+  it('enables navigation mode to route WASD keys to movement', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ] as const
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/player id/i), 'hero')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    const compass = await screen.findByRole('button', { name: /navigation mode/i })
+    await user.click(compass)
+
+    const consolePanel = screen.getByTestId('command-console')
+
+    await act(async () => {
+      fireEvent.keyDown(consolePanel, { key: 'w' })
+    })
+
+    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toMatchObject({
+      command: 'move',
+      args: { direction: 'north' },
+    })
+
+    const commandInput = screen.getByLabelText(/command prompt/i)
+    await user.click(commandInput)
+    await act(async () => {
+      fireEvent.keyDown(consolePanel, { key: 'a' })
+    })
+
+    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toMatchObject({
+      command: 'move',
+      args: { direction: 'north' },
+    })
+  })
+
+  it('reveals the status card after a status payload is received', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ] as const
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/player id/i), 'hero')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    expect(screen.queryByTestId('status-card')).not.toBeInTheDocument()
+
+    act(() => {
+      socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'status',
+          hitpoints: 14,
+          spell_points: 9,
+          description: 'You are carrying a torch and a dagger.',
+          inventory: ['torch', 'dagger'],
+          effects: ['blessed'],
+          spellbook: ['spark', 'heal'],
+        },
+      })
+    })
+
+    const statusCard = await screen.findByTestId('status-card')
+    expect(statusCard).toBeInTheDocument()
+    expect(statusCard).toHaveTextContent(/Hitpoints\s+14/i)
+    expect(statusCard).toHaveTextContent(/Spell points\s+9/i)
+    expect(within(statusCard).getAllByText(/torch|dagger/i)[0].tagName).toBe('STRONG')
+    expect(statusCard).toHaveTextContent(/spark/i)
+    expect(statusCard).toHaveTextContent(/blessed/i)
   })
 })

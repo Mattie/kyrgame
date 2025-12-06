@@ -52,6 +52,15 @@ export type ActivityEntry = {
   payload?: unknown
 }
 
+export type CharacterStatus = {
+  hitpoints?: number
+  spellPoints?: number
+  description?: string
+  inventory?: string[]
+  effects?: string[]
+  spellbook?: string[]
+}
+
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
 type NavigatorContextValue = {
@@ -61,10 +70,13 @@ type NavigatorContextValue = {
   currentRoom: number | null
   occupants: string[]
   activity: ActivityEntry[]
+  characterStatus: CharacterStatus | null
+  statusRevealed: boolean
   connectionStatus: ConnectionStatus
   error: string | null
   startSession: (playerId: string, roomId?: number | null) => Promise<void>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
+  sendCommand: (input: string) => void
 }
 
 const NavigatorContext = createContext<NavigatorContextValue | undefined>(undefined)
@@ -87,6 +99,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [occupants, setOccupants] = useState<string[]>([])
+  const [characterStatus, setCharacterStatus] = useState<CharacterStatus | null>(null)
+  const [statusRevealed, setStatusRevealed] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
 
   const resetSocket = useCallback(() => {
@@ -104,6 +118,50 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     const unique = Array.from(new Set(players))
     setOccupants(unique)
   }, [])
+
+  const updateStatusFromPayload = useCallback(
+    (payload: unknown) => {
+      if (!payload || typeof payload !== 'object') return
+      const record = payload as Record<string, unknown>
+      const hasStatusFields =
+        record.hitpoints !== undefined ||
+        record.spell_points !== undefined ||
+        record.description !== undefined ||
+        record.inventory !== undefined ||
+        record.effects !== undefined ||
+        record.spellbook !== undefined
+
+      if (!hasStatusFields) return
+
+      const normalized: CharacterStatus = {
+        hitpoints:
+          typeof record.hitpoints === 'number'
+            ? record.hitpoints
+            : characterStatus?.hitpoints,
+        spellPoints:
+          typeof record.spell_points === 'number'
+            ? record.spell_points
+            : characterStatus?.spellPoints,
+        description:
+          typeof record.description === 'string'
+            ? record.description
+            : characterStatus?.description,
+        inventory: Array.isArray(record.inventory)
+          ? (record.inventory as string[])
+          : characterStatus?.inventory,
+        effects: Array.isArray(record.effects)
+          ? (record.effects as string[])
+          : characterStatus?.effects,
+        spellbook: Array.isArray(record.spellbook)
+          ? (record.spellbook as string[])
+          : characterStatus?.spellbook,
+      }
+
+      setCharacterStatus(normalized)
+      setStatusRevealed(true)
+    },
+    [characterStatus]
+  )
 
   const handleRoomChange = useCallback(
     (roomId: number | null, origin: string) => {
@@ -139,6 +197,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             summary,
             payload: message.payload,
           })
+          updateStatusFromPayload(message.payload)
           if (message.payload?.event === 'player_enter' && message.payload.player) {
             setOccupants((current) =>
               Array.from(new Set([...(current || []), message.payload.player]))
@@ -154,6 +213,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             summary,
             payload: message.payload,
           })
+          updateStatusFromPayload(message.payload)
           if (message.payload?.event === 'location_update') {
             handleRoomChange(message.payload.location ?? null, 'location_update')
           }
@@ -172,7 +232,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
       }
     },
-    [appendActivity, handleRoomChange, updateOccupants]
+    [appendActivity, handleRoomChange, updateOccupants, updateStatusFromPayload]
   )
 
   const connectWebSocket = useCallback(
@@ -295,6 +355,25 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     [appendActivity]
   )
 
+  const sendCommand = useCallback(
+    (input: string) => {
+      const sanitized = input.trim()
+      if (sanitized === '') return
+      if (!socketRef.current) {
+        appendActivity({
+          type: 'command_error',
+          summary: 'WebSocket not connected',
+        })
+        return
+      }
+      appendActivity({ type: 'command', summary: `> ${sanitized}` })
+      socketRef.current.send(
+        JSON.stringify({ type: 'command', command: 'raw', input: sanitized })
+      )
+    },
+    [appendActivity]
+  )
+
   const value = useMemo(
     () => ({
       apiBaseUrl,
@@ -303,20 +382,26 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       currentRoom,
       occupants,
       activity,
+      characterStatus,
+      statusRevealed,
       connectionStatus,
       error,
       startSession,
       sendMove,
+      sendCommand,
     }),
     [
       activity,
       apiBaseUrl,
+      characterStatus,
       connectionStatus,
       currentRoom,
       error,
       occupants,
+      sendCommand,
       sendMove,
       session,
+      statusRevealed,
       startSession,
       world,
     ]
