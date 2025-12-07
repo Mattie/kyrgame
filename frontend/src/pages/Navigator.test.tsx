@@ -108,6 +108,8 @@ describe('Navigator flow', () => {
 
     render(<App />)
 
+    expect(screen.getByRole('main')).toHaveClass('dev-layout')
+
     const user = userEvent.setup()
     await act(async () => {
       await user.type(screen.getByLabelText(/player id/i), 'hero')
@@ -136,6 +138,7 @@ describe('Navigator flow', () => {
     const commandList = within(screen.getByTestId('room-commands'))
     expect(commandList.getByText(/move/i)).toBeInTheDocument()
     expect(commandList.getByText(/look/i)).toBeInTheDocument()
+    expect(screen.getByTestId('room-commands')).toHaveStyle({ overflowY: 'auto' })
     expect(screen.getByTestId('room-look-description')).toHaveTextContent(
       /temple/i
     )
@@ -143,6 +146,32 @@ describe('Navigator flow', () => {
     expect(screen.getAllByText(/player_enter/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/seer/).length).toBeGreaterThan(0)
     expect(screen.getByText(/ruby/)).toBeInTheDocument()
+  })
+
+  it('collapses dev helper panels to reclaim space', async () => {
+    render(<App />)
+    const user = userEvent.setup()
+
+    const sessionToggle = screen.getByRole('button', {
+      name: /collapse session panel/i,
+    })
+    await user.click(sessionToggle)
+    expect(screen.queryByLabelText(/player id/i)).not.toBeInTheDocument()
+
+    const roomToggle = screen.getByRole('button', {
+      name: /collapse room panel/i,
+    })
+    await user.click(roomToggle)
+    expect(screen.queryByTestId('room-panel-body')).not.toBeInTheDocument()
+
+    const activityToggle = screen.getByRole('button', {
+      name: /collapse room activity panel/i,
+    })
+    await user.click(activityToggle)
+    expect(screen.queryByTestId('activity-log-body')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /expand session panel/i }))
+    expect(screen.getByLabelText(/player id/i)).toBeInTheDocument()
   })
 
   it('dispatches move commands and updates room details on location change', async () => {

@@ -2,12 +2,13 @@ import { ActivityLog } from '../components/ActivityLog'
 import { MudConsole } from '../components/MudConsole'
 import { RoomPanel } from '../components/RoomPanel'
 import { SessionForm } from '../components/SessionForm'
+import { isDevEnvironment } from '../config/devMode'
 import { NavigatorProvider } from '../context/NavigatorContext'
 
 export const Navigator = () => {
   return (
     <NavigatorProvider>
-      <main className="navigator">
+      <main className={`navigator ${isDevEnvironment ? 'dev-layout' : ''}`}>
         <header className="masthead">
           <p className="eyebrow">Fantasy world console</p>
           <h1>Kyrandia Explorer</h1>

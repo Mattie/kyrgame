@@ -7,6 +7,8 @@
   display: flex;
   justify-content: center;
   color: #c7ffda;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .navigator {
@@ -15,6 +17,13 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  height: 100%;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.navigator.dev-layout {
+  max-width: none;
 }
 
 .masthead h1 {
@@ -26,8 +35,10 @@
 
 .layout {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 1.25rem;
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 960px) {
@@ -38,12 +49,15 @@
 
 .primary {
   min-width: 0;
+  min-height: 0;
 }
 
 .secondary {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow: auto;
+  min-height: 0;
 }
 
 .panel {
@@ -55,11 +69,40 @@
   color: #d8ffe7;
 }
 
-.panel header {
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.panel-header > div {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  margin-bottom: 0.75rem;
+}
+
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.panel-toggle {
+  background: #0d1b27;
+  color: #c7ffda;
+  border: 1px solid rgba(124, 244, 161, 0.4);
+  border-radius: 10px;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: inset 0 0 4px rgba(124, 244, 161, 0.2);
+}
+
+.panel.collapsed {
+  opacity: 0.8;
 }
 
 .eyebrow {
@@ -168,6 +211,12 @@ p {
   margin: 0;
   display: grid;
   gap: 0.25rem;
+}
+
+.command-list {
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 .muted {
