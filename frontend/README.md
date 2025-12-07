@@ -17,7 +17,10 @@ The frontend serves as a read-only navigator for the Kyrandia game world, starti
 
 ```bash
 npm install
+npm run playwright:install
 ```
+
+This installs npm dependencies along with the Playwright browser bundle required for frontend end-to-end tests.
 
 ### Environment Configuration
 
