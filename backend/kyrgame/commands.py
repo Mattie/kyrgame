@@ -9,6 +9,10 @@ from . import constants, fixtures, models
 class CommandError(Exception):
     """Base exception for command dispatch problems."""
 
+    def __init__(self, message: str, message_id: str | None = None):
+        super().__init__(message)
+        self.message_id = message_id
+
 
 class UnknownCommandError(CommandError):
     def __init__(self, verb: str, message_id: str | None = None):
@@ -75,6 +79,8 @@ class GameState:
     player: models.PlayerModel
     locations: Dict[int, models.LocationModel]
     objects: Dict[int, models.GameObjectModel] = field(default_factory=dict)
+    messages: models.MessageBundleModel | None = None
+    content_mappings: dict[str, dict[str, str]] | None = None
     cooldowns: Dict[str, float] = field(default_factory=dict)
 
 
@@ -188,6 +194,8 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
     state.player.gamloc = target_id
     destination = state.locations[target_id]
 
+    description_id, long_description = _location_description(state, destination)
+
     return CommandResult(
         state=state,
         events=[
@@ -208,9 +216,19 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
                 "type": "location_update",
                 "location": destination.id,
                 "description": destination.brfdes,
+                "description_id": description_id,
+                "long_description": long_description,
                 "command_id": command_id,
                 "message_id": message_id,
-            }
+            },
+            {
+                "scope": "player",
+                "event": "location_description",
+                "type": "location_description",
+                "location": destination.id,
+                "message_id": description_id,
+                "text": long_description or destination.brfdes,
+            },
         ],
     )
 
@@ -240,15 +258,10 @@ def _handle_chat(state: GameState, args: dict) -> CommandResult:
 
 
 def _handle_inventory(state: GameState, args: dict) -> CommandResult:  # noqa: ARG001
-    objects = state.objects or {}
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
-    items = []
-    for obj_id in state.player.gpobjs:
-        entry = {"id": obj_id}
-        if obj_id in objects:
-            entry["name"] = objects[obj_id].name
-        items.append(entry)
+
+    items = _inventory_items(state)
 
     return CommandResult(
         state=state,
@@ -263,6 +276,193 @@ def _handle_inventory(state: GameState, args: dict) -> CommandResult:  # noqa: A
             }
         ],
     )
+
+
+def _handle_get(state: GameState, args: dict) -> CommandResult:
+    # Ported from getter in legacy/KYRCMDS.C for picking up room objects.【F:legacy/KYRCMDS.C†L633-L651】
+    command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    target = (args.get("target") or "").strip().lower()
+
+    if not target:
+        raise CommandError("Specify an item to pick up", message_id=message_id)
+
+    location = state.locations[state.player.gamloc]
+    objects = state.objects or {}
+    object_id = _find_object_in_location(location, objects, target)
+    if object_id is None:
+        raise CommandError(f"No {target} here", message_id=message_id)
+
+    if len(state.player.gpobjs) >= constants.MXPOBS:
+        raise CommandError("You cannot carry any more", message_id=message_id)
+
+    obj = objects.get(object_id)
+    if obj is None or "PICKUP" not in obj.flags:
+        raise CommandError("You cannot pick that up", message_id=message_id)
+
+    remaining_objects = [oid for oid in location.objects if oid != object_id]
+    location = location.model_copy(
+        update={"objects": remaining_objects, "nlobjs": len(remaining_objects)}
+    )
+    state.locations[location.id] = location
+
+    state.player.gpobjs.append(object_id)
+    state.player.obvals.append(0)
+    state.player.npobjs = len(state.player.gpobjs)
+
+    return CommandResult(
+        state=state,
+        events=[
+            _inventory_event(state, command_id, message_id),
+            _room_objects_event(location, objects, command_id, message_id),
+            {
+                "scope": "player",
+                "event": "pickup_result",
+                "type": "pickup",
+                "object_id": object_id,
+                "object_name": obj.name if obj else str(object_id),
+                "message_id": message_id,
+                "command_id": command_id,
+            },
+        ],
+    )
+
+
+def _handle_drop(state: GameState, args: dict) -> CommandResult:
+    # Ported from dropit in legacy/KYRCMDS.C when moving items back to the room.【F:legacy/KYRCMDS.C†L862-L892】
+    command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    target = (args.get("target") or "").strip().lower()
+
+    if not target:
+        raise CommandError("Specify an item to drop", message_id=message_id)
+
+    objects = state.objects or {}
+    location = state.locations[state.player.gamloc]
+    if len(location.objects) >= constants.MXLOBS:
+        raise CommandError("There is no room to drop that here", message_id=message_id)
+
+    inventory_index = _find_inventory_index(state.player, target, objects)
+    if inventory_index is None:
+        raise CommandError("You are not carrying that", message_id=message_id)
+
+    object_id = state.player.gpobjs.pop(inventory_index)
+    if len(state.player.obvals) > inventory_index:
+        state.player.obvals.pop(inventory_index)
+    state.player.npobjs = len(state.player.gpobjs)
+
+    updated_objects = list(location.objects) + [object_id]
+    location = location.model_copy(
+        update={"objects": updated_objects, "nlobjs": len(updated_objects)}
+    )
+    state.locations[location.id] = location
+
+    obj = objects.get(object_id)
+
+    return CommandResult(
+        state=state,
+        events=[
+            _inventory_event(state, command_id, message_id),
+            _room_objects_event(location, objects, command_id, message_id),
+            {
+                "scope": "room",
+                "event": "drop",
+                "type": "drop",
+                "player": state.player.plyrid,
+                "object_id": object_id,
+                "object_name": obj.name if obj else str(object_id),
+                "location": location.id,
+                "message_id": message_id,
+                "command_id": command_id,
+            },
+        ],
+    )
+
+
+def _location_message_id(location_id: int, content_mappings: dict[str, dict[str, str]] | None) -> str:
+    if content_mappings and "locations" in content_mappings:
+        mapping = content_mappings["locations"]
+        if str(location_id) in mapping:
+            return mapping[str(location_id)]
+    return f"KRD{location_id:03d}"
+
+
+def _location_description(state: GameState, location: models.LocationModel) -> tuple[str, str | None]:
+    message_id = _location_message_id(location.id, state.content_mappings)
+    text = None
+    if state.messages:
+        text = state.messages.messages.get(message_id)
+    # Ported from entrgp in legacy/KYRUTIL.C, which printed either the brief description
+    # or the full lcrous text when entering a room.【F:legacy/KYRUTIL.C†L236-L255】
+    return message_id, text
+
+
+def _inventory_items(state: GameState) -> list[dict]:
+    objects = state.objects or {}
+    items: list[dict] = []
+    for obj_id, value in zip(state.player.gpobjs, state.player.obvals or []):
+        entry = {"id": obj_id, "value": value}
+        if obj_id in objects:
+            entry["name"] = objects[obj_id].name
+        items.append(entry)
+    return items
+
+
+def _inventory_event(state: GameState, command_id: int | None, message_id: str | None) -> dict:
+    return {
+        "scope": "player",
+        "event": "inventory",
+        "type": "inventory",
+        "items": _inventory_items(state),
+        "command_id": command_id,
+        "message_id": message_id,
+    }
+
+
+def _room_objects_event(
+    location: models.LocationModel,
+    objects: dict[int, models.GameObjectModel],
+    command_id: int | None,
+    message_id: str | None,
+) -> dict:
+    visible = []
+    for obj_id in location.objects:
+        entry = {"id": obj_id}
+        obj = objects.get(obj_id)
+        if obj:
+            entry["name"] = obj.name
+        visible.append(entry)
+    return {
+        "scope": "player",
+        "event": "room_objects",
+        "type": "room_objects",
+        "objects": visible,
+        "location": location.id,
+        "command_id": command_id,
+        "message_id": message_id,
+    }
+
+
+def _find_object_in_location(
+    location: models.LocationModel, objects: dict[int, models.GameObjectModel], target: str
+) -> int | None:
+    target_lower = target.lower()
+    for obj_id in location.objects:
+        obj = objects.get(obj_id)
+        if obj and obj.name.lower() == target_lower:
+            return obj_id
+    return None
+
+
+def _find_inventory_index(
+    player: models.PlayerModel, target: str, objects: dict[int, models.GameObjectModel]
+) -> int | None:
+    target_lower = target.lower()
+    for idx, obj_id in enumerate(player.gpobjs):
+        obj = objects.get(obj_id)
+        if obj and obj.name.lower() == target_lower:
+            return idx
+    return None
 
 
 def _handle_stub(state: GameState, args: dict) -> CommandResult:  # noqa: ARG001
@@ -370,6 +570,17 @@ class CommandVocabulary:
                 pay_only=pay_only,
             )
 
+        if verb in {"get", "grab", "drop"}:
+            command_id = command_id or self._lookup_command_id(verb)
+            message_id = message_id or self._message_for_command(command_id)
+            return ParsedCommand(
+                verb=verb,
+                args={"target": remainder},
+                command_id=command_id,
+                message_id=message_id,
+                pay_only=pay_only,
+            )
+
         return ParsedCommand(
             verb=verb,
             args={"raw": remainder},
@@ -391,6 +602,36 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
     registry.register(CommandMetadata(verb="move", required_level=1), _handle_move)
     registry.register(CommandMetadata(verb="chat", cooldown_seconds=1.5), _handle_chat)
     registry.register(CommandMetadata(verb="inventory"), _handle_inventory)
+    registry.register(
+        CommandMetadata(
+            verb="get",
+            command_id=vocabulary._lookup_command_id("get"),
+            required_level=1,
+            required_flags=int(constants.PlayerFlag.LOADED),
+            failure_message_id="CMPCMD1",
+        ),
+        _handle_get,
+    )
+    registry.register(
+        CommandMetadata(
+            verb="grab",
+            command_id=vocabulary._lookup_command_id("grab"),
+            required_level=1,
+            required_flags=int(constants.PlayerFlag.LOADED),
+            failure_message_id="CMPCMD1",
+        ),
+        _handle_get,
+    )
+    registry.register(
+        CommandMetadata(
+            verb="drop",
+            command_id=vocabulary._lookup_command_id("drop"),
+            required_level=1,
+            required_flags=int(constants.PlayerFlag.LOADED),
+            failure_message_id="CMPCMD1",
+        ),
+        _handle_drop,
+    )
 
     for command in vocabulary.iter_commands():
         verb = command.command.lower()
@@ -399,6 +640,8 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         if vocabulary._direction_from_alias(verb) or verb in vocabulary.chat_aliases:
             continue
         if verb in {"inv", "inventory"}:
+            continue
+        if verb in {"get", "grab", "drop"}:
             continue
 
         registry.register(
