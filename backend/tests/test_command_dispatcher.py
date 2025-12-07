@@ -19,7 +19,13 @@ def base_state():
     locations = {location.id: location for location in fixtures.load_locations()}
     objects = {obj.id: obj for obj in fixtures.load_objects()}
     player = fixtures.build_player()
-    return commands.GameState(player=player, locations=locations, objects=objects)
+    return commands.GameState(
+        player=player,
+        locations=locations,
+        objects=objects,
+        messages=fixtures.load_messages(),
+        content_mappings=fixtures.load_content_mappings(),
+    )
 
 
 def test_registry_exposes_command_metadata():
@@ -68,6 +74,21 @@ async def test_move_tracks_previous_location(base_state):
 
 
 @pytest.mark.anyio
+async def test_move_emits_default_description(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    result = await dispatcher.dispatch("move", {"direction": "north"}, base_state)
+
+    descriptions = [evt for evt in result.events if evt.get("type") == "location_description"]
+    assert descriptions, "expected a location description event"
+
+    description = descriptions[0]
+    assert description["message_id"] == "KRD001"
+    assert description["text"].startswith("...You're on a north/south path")
+
+
+@pytest.mark.anyio
 async def test_insufficient_level_blocks_execution(base_state):
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
@@ -106,6 +127,64 @@ async def test_cooldown_prevents_spam(base_state):
     assert any(
         event["type"] == "chat" and event["text"] == "hello later" for event in result.events
     )
+
+
+@pytest.mark.anyio
+async def test_get_moves_object_from_room_to_inventory(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [], "obvals": [], "npobjs": 0}
+    )
+
+    location = base_state.locations[base_state.player.gamloc]
+    target_id = next(
+        obj_id
+        for obj_id in location.objects
+        if "PICKUP" in base_state.objects[obj_id].flags
+    )
+    target_name = base_state.objects[target_id].name
+
+    result = await dispatcher.dispatch("get", {"target": target_name}, base_state)
+
+    location = base_state.locations[base_state.player.gamloc]
+    assert target_id in base_state.player.gpobjs
+    assert base_state.player.npobjs == 1
+    assert target_id not in location.objects
+    assert location.nlobjs == len(location.objects)
+
+    inventory_events = [evt for evt in result.events if evt.get("type") == "inventory"]
+    assert inventory_events
+    assert any(item["id"] == target_id for item in inventory_events[0]["items"])
+
+
+@pytest.mark.anyio
+async def test_drop_places_object_in_room(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    location = base_state.locations[base_state.player.gamloc]
+    target_id = location.objects[0]
+    target_name = base_state.objects[target_id].name
+
+    base_state.locations[location.id] = location.model_copy(update={"objects": [], "nlobjs": 0})
+    location = base_state.locations[location.id]
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [target_id], "obvals": [0], "npobjs": 1}
+    )
+
+    result = await dispatcher.dispatch("drop", {"target": target_name}, base_state)
+
+    location = base_state.locations[location.id]
+    assert target_id in location.objects
+    assert location.nlobjs == len(location.objects)
+    assert target_id not in base_state.player.gpobjs
+    assert base_state.player.npobjs == 0
+
+    object_events = [evt for evt in result.events if evt.get("type") == "room_objects"]
+    assert object_events
+    assert any(obj["id"] == target_id for obj in object_events[0]["objects"])
 
 
 def test_vocabulary_maps_aliases_to_canonical_commands():
