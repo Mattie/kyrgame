@@ -112,17 +112,13 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     (roomId: number | null, origin: string) => {
       if (roomId !== null) {
         setCurrentRoom(roomId)
-        appendActivity({
-          type: origin,
-          room: roomId,
-          summary: `${origin} (room ${roomId})`,
-        })
+        // Don't append activity here - let the specific event handlers decide what to show
       }
       if (session?.playerId) {
         updateOccupants([session.playerId])
       }
     },
-    [appendActivity, session?.playerId, updateOccupants]
+    [session?.playerId, updateOccupants]
   )
 
   const handleIncoming = useCallback(
