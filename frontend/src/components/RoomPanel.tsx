@@ -2,14 +2,16 @@ import { useMemo } from 'react'
 
 import { LocationRecord, useNavigator } from '../context/NavigatorContext'
 
-const directionFields: Record<string, keyof LocationRecord> = {
+type DirectionKey = 'north' | 'south' | 'east' | 'west'
+
+const directionFields: Record<DirectionKey, keyof LocationRecord> = {
   north: 'gi_north',
   south: 'gi_south',
   east: 'gi_east',
   west: 'gi_west',
 }
 
-const humanDirection: Record<string, string> = {
+const humanDirection: Record<DirectionKey, string> = {
   north: 'North',
   south: 'South',
   east: 'East',
@@ -25,8 +27,8 @@ export const RoomPanel = () => {
   }, [currentRoom, world])
 
   const exits = useMemo(() => {
-    if (!location) return [] as { direction: string; target: number }[]
-    return Object.entries(directionFields)
+    if (!location) return [] as { direction: DirectionKey; target: number }[]
+    return (Object.entries(directionFields) as [DirectionKey, keyof LocationRecord][])
       .map(([direction, field]) => ({ direction, target: location[field] ?? -1 }))
       .filter(({ target }) => typeof target === 'number' && target >= 0)
   }, [location])
@@ -113,7 +115,7 @@ export const RoomPanel = () => {
                 <button
                   key={exit.direction}
                   type="button"
-                  onClick={() => sendMove(exit.direction as keyof typeof directionFields)}
+                  onClick={() => sendMove(exit.direction)}
                 >
                   {humanDirection[exit.direction]}
                 </button>

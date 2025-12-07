@@ -86,7 +86,7 @@ describe('Navigator flow', () => {
   })
 
   it('creates a session, caches world data, and streams room activity', async () => {
-    const responses = [
+    let responses = [
       {
         ok: true,
         json: async () => ({
@@ -98,7 +98,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => objects },
       { ok: true, json: async () => commands },
       { ok: true, json: async () => ({ messages }) },
-    ] as const
+    ]
 
     vi.spyOn(global, 'fetch').mockImplementation(() => {
       const next = responses.shift()
@@ -128,7 +128,9 @@ describe('Navigator flow', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText(/Edge of the forest/)).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: /Edge of the forest/i })
+      ).toBeInTheDocument()
     )
 
     const commandList = within(screen.getByTestId('room-commands'))
@@ -144,7 +146,7 @@ describe('Navigator flow', () => {
   })
 
   it('dispatches move commands and updates room details on location change', async () => {
-    const responses = [
+    let responses = [
       {
         ok: true,
         json: async () => ({
@@ -156,7 +158,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => objects },
       { ok: true, json: async () => commands },
       { ok: true, json: async () => ({ messages }) },
-    ] as const
+    ]
 
     vi.spyOn(global, 'fetch').mockImplementation(() => {
       const next = responses.shift()

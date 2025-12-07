@@ -15,6 +15,7 @@ export type LocationRecord = {
   brfdes: string
   objlds?: string
   objects?: number[]
+  londes?: number | string
   gi_north?: number
   gi_south?: number
   gi_east?: number
@@ -29,6 +30,7 @@ export type GameObject = {
 export type CommandRecord = {
   id?: number
   verb?: string
+  command?: string
 }
 
 export type SessionRecord = {
@@ -49,7 +51,7 @@ export type ActivityEntry = {
   type: string
   room?: number
   summary: string
-  payload?: unknown
+  payload?: Record<string, unknown> | string | number | boolean | null
 }
 
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
@@ -65,6 +67,7 @@ type NavigatorContextValue = {
   error: string | null
   startSession: (playerId: string, roomId?: number | null) => Promise<void>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
+  sendCommand: (command: string) => void
 }
 
 const NavigatorContext = createContext<NavigatorContextValue | undefined>(undefined)
@@ -295,6 +298,26 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     [appendActivity]
   )
 
+  const sendCommand = useCallback(
+    (command: string) => {
+      const trimmed = command.trim()
+      if (trimmed === '') return
+      if (!socketRef.current) {
+        appendActivity({
+          type: 'command_error',
+          summary: 'WebSocket not connected',
+        })
+        return
+      }
+
+      appendActivity({ type: 'command', summary: `> ${trimmed}` })
+      socketRef.current.send(
+        JSON.stringify({ type: 'command', command: trimmed, args: { input: trimmed } })
+      )
+    },
+    [appendActivity]
+  )
+
   const value = useMemo(
     () => ({
       apiBaseUrl,
@@ -307,6 +330,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       error,
       startSession,
       sendMove,
+      sendCommand,
     }),
     [
       activity,
@@ -316,6 +340,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       error,
       occupants,
       sendMove,
+      sendCommand,
       session,
       startSession,
       world,
