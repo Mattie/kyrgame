@@ -25,6 +25,7 @@ export type LocationRecord = {
 export type GameObject = {
   id: number
   name: string
+  flags?: string[]
 }
 
 export type CommandRecord = {
@@ -52,6 +53,7 @@ export type ActivityEntry = {
   room?: number
   summary: string
   payload?: Record<string, unknown> | string | number | boolean | null
+  extraLines?: string[]
 }
 
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
@@ -80,6 +82,58 @@ const createActivityId = (() => {
   }
 })()
 
+const articleizedName = (object: GameObject | undefined): string => {
+  if (!object) return 'an object'
+  const needsAn = object.flags?.includes('NEEDAN')
+  const article = needsAn ? 'an' : 'a'
+  return `${article} ${object.name}`
+}
+
+const formatRoomObjectsLine = (
+  location: LocationRecord | null,
+  objects: GameObject[] | null
+): string | null => {
+  if (!location) return null
+  const objectsById = new Map(objects?.map((obj) => [obj.id, obj]) ?? [])
+  const visibleNames = (location.objects ?? [])
+    .map((id) => objectsById.get(id))
+    .filter((obj) => !obj || !obj.flags || obj.flags.includes('VISIBL'))
+    .map((obj) => articleizedName(obj))
+
+  const landing = location.objlds ?? 'here'
+
+  // Mirrors locobjs formatting from legacy/KYRUTIL.C for ground objects.【F:legacy/KYRUTIL.C†L256-L311】
+  switch (visibleNames.length) {
+    case 0:
+      return `There is nothing lying ${landing}.`
+    case 1:
+      return `There is ${visibleNames[0]} lying ${landing}.`
+    case 2:
+      return `There is ${visibleNames[0]} and ${visibleNames[1]} lying ${landing}.`
+    default: {
+      const [last, ...rest] = visibleNames.reverse()
+      return `There is ${rest.reverse().join(', ')}, and ${last} lying ${landing}.`
+    }
+  }
+}
+
+const formatOccupantsLine = (players: string[], currentPlayerId?: string | null): string | null => {
+  const others = players.filter((name) => name !== currentPlayerId)
+  if (others.length === 0) return null
+
+  // Mirrors locogps formatting from legacy/KYRUTIL.C for players in the room.【F:legacy/KYRUTIL.C†L332-L402】
+  if (others.length === 1) {
+    return `${others[0]} is here.`
+  }
+
+  if (others.length === 2) {
+    return `${others[0]} and ${others[1]} are here.`
+  }
+
+  const [last, ...rest] = others.reverse()
+  return `${rest.reverse().join(', ')}, and ${last} are here.`
+}
+
 export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), [])
   const wsBaseUrl = useMemo(() => getWebSocketUrl(), [])
@@ -92,6 +146,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [occupants, setOccupants] = useState<string[]>([])
   const socketRef = useRef<WebSocket | null>(null)
   const worldRef = useRef<WorldData | null>(null)
+  const occupantsRef = useRef<string[]>([])
 
   const resetSocket = useCallback(() => {
     if (socketRef.current) {
@@ -106,6 +161,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
   const updateOccupants = useCallback((players: string[]) => {
     const unique = Array.from(new Set(players))
+    occupantsRef.current = unique
     setOccupants(unique)
   }, [])
 
@@ -140,22 +196,27 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             payload: message.payload,
           })
           if (message.payload?.event === 'player_enter' && message.payload.player) {
-            setOccupants((current) =>
-              Array.from(new Set([...(current || []), message.payload.player]))
-            )
+            setOccupants((current) => {
+              const next = Array.from(new Set([...(current || []), message.payload.player]))
+              occupantsRef.current = next
+              return next
+            })
           }
           break
         }
         case 'command_response': {
           let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
           let payload = message.payload
-          
+          let extraLines: string[] | undefined
+
           // Format movement events to match legacy client behavior
           // Legacy shows: "...{full_description}\nThere is a {object} lying on the {objlds}."
           if (message.payload?.event === 'location_description') {
             // Look up the full description from world.messages using message_id, just like RoomPanel does
             let text = message.payload?.text ?? message.payload?.description
-            
+            const locationId =
+              message.payload?.location ?? currentRoom ?? session?.roomId ?? null
+
             // Use worldRef for immediate access to loaded data (avoids race condition on first load)
             if (message.payload?.message_id && worldRef.current?.messages) {
               const fullDescription = worldRef.current.messages[message.payload.message_id]
@@ -163,14 +224,25 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
                 text = fullDescription
               }
             }
-            
+
             if (text) {
               // Match legacy format: "...{description}"
               summary = `...${text}`
             } else {
               summary = 'You look around.'
             }
-            payload = null // Don't show raw JSON for descriptions
+            payload = { event: 'location_description', location: locationId }
+
+            const locationRecord =
+              locationId !== null
+                ? worldRef.current?.locations.find((loc) => loc.id === locationId) ?? null
+                : null
+            const objectLine = formatRoomObjectsLine(locationRecord, worldRef.current?.objects ?? null)
+            const occupantsLine = formatOccupantsLine(
+              occupantsRef.current,
+              session?.playerId ?? null
+            )
+            extraLines = [objectLine, occupantsLine].filter(Boolean) as string[]
           } else if (message.payload?.event === 'location_update') {
             // Don't show location_update event separately - it will be followed by location_description
             handleRoomChange(message.payload.location ?? null, 'location_update')
@@ -185,6 +257,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             room: message.room,
             summary,
             payload,
+            extraLines,
           })
           break
         }
@@ -201,7 +274,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
       }
     },
-    [appendActivity, handleRoomChange, updateOccupants]
+    [appendActivity, currentRoom, handleRoomChange, session?.playerId, updateOccupants]
   )
 
   const connectWebSocket = useCallback(
