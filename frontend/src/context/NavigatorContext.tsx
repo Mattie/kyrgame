@@ -150,16 +150,28 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
         }
         case 'command_response': {
-          const summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
+          let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
+          let payload = message.payload
+          
+          // Format movement events with cleaner summaries
+          if (message.payload?.event === 'location_update') {
+            summary = `You arrive at: ${message.payload?.description ?? 'a new location'}`
+            payload = null // Don't show raw JSON for movement
+            handleRoomChange(message.payload.location ?? null, 'location_update')
+          } else if (message.payload?.event === 'location_description') {
+            summary = message.payload?.text ?? message.payload?.description ?? 'You look around.'
+            payload = null // Don't show raw JSON for descriptions
+          } else if (message.payload?.verb === 'move') {
+            summary = 'move'
+            payload = null // Don't show raw JSON for move acknowledgment
+          }
+          
           appendActivity({
             type: 'command_response',
             room: message.room,
             summary,
-            payload: message.payload,
+            payload,
           })
-          if (message.payload?.event === 'location_update') {
-            handleRoomChange(message.payload.location ?? null, 'location_update')
-          }
           break
         }
         case 'command_error': {
