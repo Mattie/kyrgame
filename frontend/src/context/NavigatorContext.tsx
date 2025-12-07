@@ -153,17 +153,24 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
           let payload = message.payload
           
-          // Format movement events with cleaner summaries
-          if (message.payload?.event === 'location_update') {
-            summary = `You arrive at: ${message.payload?.description ?? 'a new location'}`
-            payload = null // Don't show raw JSON for movement
-            handleRoomChange(message.payload.location ?? null, 'location_update')
-          } else if (message.payload?.event === 'location_description') {
-            summary = message.payload?.text ?? message.payload?.description ?? 'You look around.'
+          // Format movement events to match legacy client behavior
+          // Legacy shows: "...{full_description}\nThere is a {object} lying on the {objlds}."
+          if (message.payload?.event === 'location_description') {
+            const text = message.payload?.text ?? message.payload?.description
+            if (text) {
+              // Match legacy format: "...{description}"
+              summary = `...${text}`
+            } else {
+              summary = 'You look around.'
+            }
             payload = null // Don't show raw JSON for descriptions
+          } else if (message.payload?.event === 'location_update') {
+            // Don't show location_update event separately - it will be followed by location_description
+            handleRoomChange(message.payload.location ?? null, 'location_update')
+            break // Skip adding this event to activity
           } else if (message.payload?.verb === 'move') {
-            summary = 'move'
-            payload = null // Don't show raw JSON for move acknowledgment
+            // Don't show move acknowledgment - just skip it
+            break
           }
           
           appendActivity({
