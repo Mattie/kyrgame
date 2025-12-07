@@ -152,7 +152,17 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           // Format movement events to match legacy client behavior
           // Legacy shows: "...{full_description}\nThere is a {object} lying on the {objlds}."
           if (message.payload?.event === 'location_description') {
-            const text = message.payload?.text ?? message.payload?.description
+            // Look up the full description from world.messages using message_id, just like RoomPanel does
+            let text = message.payload?.text ?? message.payload?.description
+            
+            // If we have a message_id and world data, try to get the full description
+            if (message.payload?.message_id && world?.messages) {
+              const fullDescription = world.messages[message.payload.message_id]
+              if (fullDescription) {
+                text = fullDescription
+              }
+            }
+            
             if (text) {
               // Match legacy format: "...{description}"
               summary = `...${text}`
@@ -190,7 +200,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
       }
     },
-    [appendActivity, handleRoomChange, updateOccupants]
+    [appendActivity, handleRoomChange, updateOccupants, world]
   )
 
   const connectWebSocket = useCallback(
