@@ -94,19 +94,6 @@ export const MudConsole = () => {
     return world.locations.find((loc) => loc.id === currentRoom) ?? null
   }, [currentRoom, world])
 
-  const lookDescription = useMemo(() => {
-    if (!world || !location) return null
-    const baseKey = (() => {
-      if (location.londes !== undefined) {
-        const raw = String(location.londes)
-        if (raw.startsWith('KRD')) return raw
-        return `KRD${raw.padStart(3, '0')}`
-      }
-      return `KRD${String(location.id).padStart(3, '0')}`
-    })()
-    return world.messages?.[baseKey] ?? null
-  }, [location, world])
-
   useEffect(() => {
     const node = logRef.current
     if (!node) return
@@ -154,13 +141,12 @@ export const MudConsole = () => {
     if (!session) {
       return ['Connect to begin exploring the world of Kyrandia.']
     }
-    const roomName = location?.brfdes ?? 'Unknown room'
+    // Only show connection message, no room info or descriptions at top
     return [
       `Player ${session.playerId} connected.`,
-      `Room ${currentRoom}: ${roomName}`,
-      lookDescription ?? '',
-    ].filter(Boolean)
-  }, [currentRoom, location?.brfdes, lookDescription, session])
+      '',  // Empty line for spacing
+    ]
+  }, [session])
 
   return (
     <section className="mud-shell">

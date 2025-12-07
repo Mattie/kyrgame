@@ -91,6 +91,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [error, setError] = useState<string | null>(null)
   const [occupants, setOccupants] = useState<string[]>([])
   const socketRef = useRef<WebSocket | null>(null)
+  const worldRef = useRef<WorldData | null>(null)
 
   const resetSocket = useCallback(() => {
     if (socketRef.current) {
@@ -112,17 +113,13 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     (roomId: number | null, origin: string) => {
       if (roomId !== null) {
         setCurrentRoom(roomId)
-        appendActivity({
-          type: origin,
-          room: roomId,
-          summary: `${origin} (room ${roomId})`,
-        })
+        // Don't append activity here - let the specific event handlers decide what to show
       }
       if (session?.playerId) {
         updateOccupants([session.playerId])
       }
     },
-    [appendActivity, session?.playerId, updateOccupants]
+    [session?.playerId, updateOccupants]
   )
 
   const handleIncoming = useCallback(
@@ -150,16 +147,45 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
         }
         case 'command_response': {
-          const summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
+          let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
+          let payload = message.payload
+          
+          // Format movement events to match legacy client behavior
+          // Legacy shows: "...{full_description}\nThere is a {object} lying on the {objlds}."
+          if (message.payload?.event === 'location_description') {
+            // Look up the full description from world.messages using message_id, just like RoomPanel does
+            let text = message.payload?.text ?? message.payload?.description
+            
+            // Use worldRef for immediate access to loaded data (avoids race condition on first load)
+            if (message.payload?.message_id && worldRef.current?.messages) {
+              const fullDescription = worldRef.current.messages[message.payload.message_id]
+              if (fullDescription) {
+                text = fullDescription
+              }
+            }
+            
+            if (text) {
+              // Match legacy format: "...{description}"
+              summary = `...${text}`
+            } else {
+              summary = 'You look around.'
+            }
+            payload = null // Don't show raw JSON for descriptions
+          } else if (message.payload?.event === 'location_update') {
+            // Don't show location_update event separately - it will be followed by location_description
+            handleRoomChange(message.payload.location ?? null, 'location_update')
+            break // Skip adding this event to activity
+          } else if (message.payload?.verb === 'move') {
+            // Don't show move acknowledgment - just skip it
+            break
+          }
+          
           appendActivity({
             type: 'command_response',
             room: message.room,
             summary,
-            payload: message.payload,
+            payload,
           })
-          if (message.payload?.event === 'location_update') {
-            handleRoomChange(message.payload.location ?? null, 'location_update')
-          }
           break
         }
         case 'command_error': {
@@ -235,6 +261,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       commands,
       messages: messages?.messages ?? {},
     }
+    worldRef.current = worldData  // Store in ref for immediate access
     setWorld(worldData)
     return worldData
   }, [apiBaseUrl, fetchJson])
@@ -271,6 +298,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         setSession(record)
         setCurrentRoom(record.roomId)
         updateOccupants([record.playerId])
+        // Load world data first and wait for it to complete before connecting WebSocket
+        // worldRef.current is set immediately by loadWorldData, so messages will be available
         await loadWorldData()
         connectWebSocket(record.token, record.roomId)
       } catch (err) {
