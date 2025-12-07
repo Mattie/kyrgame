@@ -37,6 +37,7 @@
    - Expand `commands.py` to cover the full verb set from `KYRCMDS.C` (movement variants, speech, trading, object interactions, spell casting, system commands) and encode level/flag/condition checks.
    - Wire dispatcher results into the WebSocket gateway so server-side state updates drive broadcasts (movement, chat, combat outcomes) and error semantics mirror legacy text.
    - Create fixture-driven tests that assert behavior against known message IDs and location/object relationships.
+   - Progress update: movement commands now emit default room descriptions on entry and the dispatcher handles inventory inspection plus basic get/drop flows.
 4. **World, object, and spell services**
    - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests. (Progress: added YAML-driven routines for rooms 8, 9, 10, 12, 14, and 16.)
    - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.

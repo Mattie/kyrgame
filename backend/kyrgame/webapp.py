@@ -923,6 +923,8 @@ def create_app() -> FastAPI:
             player=player_state,
             locations=provider.location_index,
             objects={obj.id: obj for obj in provider.cache["objects"]},
+            messages=provider.cache["messages"],
+            location_mappings=provider.cache["content_mappings"].get("locations"),
         )
 
         await provider.presence.set_location(player_id, current_room, session_token)

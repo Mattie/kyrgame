@@ -19,7 +19,15 @@ def base_state():
     locations = {location.id: location for location in fixtures.load_locations()}
     objects = {obj.id: obj for obj in fixtures.load_objects()}
     player = fixtures.build_player()
-    return commands.GameState(player=player, locations=locations, objects=objects)
+    messages = fixtures.load_messages()
+    mappings = fixtures.load_content_mappings().get("locations", {})
+    return commands.GameState(
+        player=player,
+        locations=locations,
+        objects=objects,
+        messages=messages,
+        location_mappings=mappings,
+    )
 
 
 def test_registry_exposes_command_metadata():
@@ -65,6 +73,17 @@ async def test_move_tracks_previous_location(base_state):
 
     assert base_state.player.pgploc == 0
     assert base_state.player.gamloc == 1
+
+
+@pytest.mark.anyio
+async def test_move_emits_default_description(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("move", {"direction": "north"}, base_state)
+
+    update = next(evt for evt in result.events if evt["event"] == "location_update")
+    assert update["description"].startswith("...You're on a north/south path")
 
 
 @pytest.mark.anyio
@@ -141,3 +160,52 @@ async def test_payonl_commands_require_live_flag(base_state):
         await dispatcher.dispatch_parsed(parsed, base_state)
 
     assert excinfo.value.message_id == "CMPCMD1"
+
+
+@pytest.mark.anyio
+async def test_inventory_command_lists_named_items(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("inventory", {}, base_state)
+
+    event = next(evt for evt in result.events if evt["event"] == "inventory")
+    assert event["inventory"] == ["a ruby", "an emerald"]
+    assert event["gold"] == base_state.player.gold
+
+
+@pytest.mark.anyio
+async def test_get_moves_visible_object_into_inventory(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player.gamloc = 0
+
+    result = await dispatcher.dispatch("get", {"raw": "garnet"}, base_state)
+
+    assert 2 in base_state.player.gpobjs
+    assert base_state.player.npobjs == len(base_state.player.gpobjs)
+    assert 2 not in base_state.locations[0].objects
+
+    inventory_event = next(evt for evt in result.events if evt["event"] == "inventory")
+    assert any("garnet" in item for item in inventory_event["inventory"])
+
+
+@pytest.mark.anyio
+async def test_drop_removes_object_from_inventory(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player.gamloc = 0
+    base_state.player.gpobjs[:] = [2]
+    base_state.player.obvals[:] = [0]
+    base_state.player.npobjs = 1
+    base_state.locations[0].objects[:] = []
+    base_state.locations[0].nlobjs = 0
+
+    await dispatcher.dispatch("drop", {"raw": "garnet"}, base_state)
+
+    assert 2 not in base_state.player.gpobjs
+    assert base_state.player.npobjs == len(base_state.player.gpobjs)
+    assert 2 in base_state.locations[0].objects
+    assert base_state.locations[0].nlobjs == len(base_state.locations[0].objects)

@@ -150,15 +150,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
         }
         case 'command_response': {
-          const summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
+          const payload = message.payload
+          let summary = payload?.event ?? payload?.verb ?? 'command_response'
+          if (payload?.event === 'location_update' && payload.description) {
+            summary = String(payload.description)
+          }
           appendActivity({
             type: 'command_response',
             room: message.room,
             summary,
-            payload: message.payload,
+            payload,
           })
-          if (message.payload?.event === 'location_update') {
-            handleRoomChange(message.payload.location ?? null, 'location_update')
+          if (payload?.event === 'location_update') {
+            handleRoomChange(payload.location ?? null, 'location_update')
           }
           break
         }

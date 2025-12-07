@@ -88,4 +88,45 @@ describe('MudConsole', () => {
 
     expect(screen.getAllByText(/Hitpoints: 10\/12/i).length).toBeGreaterThan(0)
   })
+
+  it('shows inventory readouts when present in activity payloads', () => {
+    const { rerender } = renderConsole()
+
+    mockState.activity = [
+      ...mockState.activity,
+      {
+        id: '2',
+        type: 'command_response',
+        summary: 'inventory',
+        payload: { event: 'inventory', inventory: ['a ruby', 'an emerald'] },
+      },
+    ]
+
+    rerender(<MudConsole />)
+
+    expect(screen.getByText(/Inventory/i)).toBeInTheDocument()
+    expect(screen.getByText(/a ruby/i)).toBeInTheDocument()
+    expect(screen.getByText(/an emerald/i)).toBeInTheDocument()
+  })
+
+  it('prints location descriptions received from movement updates', () => {
+    const { rerender } = renderConsole()
+
+    mockState.activity = [
+      ...mockState.activity,
+      {
+        id: '3',
+        type: 'command_response',
+        summary: "...You're on a north/south path.",
+        payload: {
+          event: 'location_update',
+          description: "...You're on a north/south path.",
+        },
+      },
+    ]
+
+    rerender(<MudConsole />)
+
+    expect(screen.getByText(/north\/south path/i)).toBeInTheDocument()
+  })
 })

@@ -1,7 +1,7 @@
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Dict, List, Protocol
+from typing import Awaitable, Callable, Dict, List, Mapping, Protocol
 
 from . import constants, fixtures, models
 
@@ -75,6 +75,8 @@ class GameState:
     player: models.PlayerModel
     locations: Dict[int, models.LocationModel]
     objects: Dict[int, models.GameObjectModel] = field(default_factory=dict)
+    messages: models.MessageBundleModel | None = None
+    location_mappings: Mapping[int | str, str] | None = None
     cooldowns: Dict[str, float] = field(default_factory=dict)
 
 
@@ -172,6 +174,50 @@ def _command_message_id(command_id: int | None) -> str | None:
     return f"CMD{command_id:03d}"
 
 
+def _location_message_key(state: GameState, location_id: int) -> str:
+    if state.location_mappings:
+        mapped = state.location_mappings.get(location_id) or state.location_mappings.get(
+            str(location_id)
+        )
+        if mapped:
+            return mapped
+    return f"KRD{location_id:03d}"
+
+
+def _location_description(state: GameState, location_id: int) -> str | None:
+    if not state.messages:
+        return None
+    key = _location_message_key(state, location_id)
+    return state.messages.messages.get(key)
+
+
+def _article_for_object(obj: models.GameObjectModel) -> str:
+    prefix = "an" if "NEEDAN" in obj.flags else "a"
+    return f"{prefix} {obj.name}"
+
+
+def _inventory_event(state: GameState, command_id: int | None, message_id: str | None) -> dict:
+    objects = state.objects or {}
+    items = []
+    for obj_id in state.player.gpobjs:
+        if obj := objects.get(obj_id):
+            items.append(_article_for_object(obj))
+        else:
+            items.append(f"object {obj_id}")
+
+    return {
+        "scope": "player",
+        "event": "inventory",
+        "type": "inventory",
+        # Legacy reference: KYRUTIL.C lines 323-356 format inventory with
+        # indefinite articles and gold totals.
+        "inventory": items,
+        "gold": state.player.gold,
+        "command_id": command_id,
+        "message_id": message_id,
+    }
+
+
 def _handle_move(state: GameState, args: dict) -> CommandResult:
     direction = args.get("direction")
     if direction not in _DIRECTION_FIELDS:
@@ -187,6 +233,7 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
     state.player.pgploc = state.player.gamloc
     state.player.gamloc = target_id
     destination = state.locations[target_id]
+    description = _location_description(state, destination.id) or destination.brfdes
 
     return CommandResult(
         state=state,
@@ -198,7 +245,7 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
                 "player": state.player.plyrid,
                 "from": current.id,
                 "to": destination.id,
-                "description": destination.brfdes,
+                "description": description,
                 "command_id": command_id,
                 "message_id": message_id,
             },
@@ -207,7 +254,10 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
                 "event": "location_update",
                 "type": "location_update",
                 "location": destination.id,
-                "description": destination.brfdes,
+                "description": description,
+                "brief_description": destination.brfdes,
+                # Legacy reference: KYRUTIL.C lines 236-254 print the room's default
+                # description (brief or long) when entering a location.
                 "command_id": command_id,
                 "message_id": message_id,
             }
@@ -240,27 +290,113 @@ def _handle_chat(state: GameState, args: dict) -> CommandResult:
 
 
 def _handle_inventory(state: GameState, args: dict) -> CommandResult:  # noqa: ARG001
-    objects = state.objects or {}
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
-    items = []
-    for obj_id in state.player.gpobjs:
-        entry = {"id": obj_id}
-        if obj_id in objects:
-            entry["name"] = objects[obj_id].name
-        items.append(entry)
+
+    return CommandResult(
+        state=state,
+        events=[_inventory_event(state, command_id, message_id)],
+    )
+
+
+def _handle_get(state: GameState, args: dict) -> CommandResult:
+    target = (args.get("object") or args.get("raw") or "").strip().lower()
+    if not target:
+        raise CommandError("Specify an object to pick up")
+
+    command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    location = state.locations[state.player.gamloc]
+
+    obj_id = next(
+        (
+            candidate
+            for candidate in location.objects
+            if (obj := state.objects.get(candidate))
+            and obj.name.lower() == target
+        ),
+        None,
+    )
+    if obj_id is None:
+        raise CommandError(f"No {target} available here")
+
+    obj = state.objects[obj_id]
+    if "PICKUP" not in obj.flags:
+        raise CommandError(f"{obj.name} cannot be picked up")
+    if len(state.player.gpobjs) >= constants.MXPOBS:
+        raise CommandError("Inventory is full")
+
+    if obj_id in location.objects:
+        location.objects.remove(obj_id)
+        location.nlobjs = len(location.objects)
+
+    state.player.gpobjs.append(obj_id)
+    state.player.obvals.append(0)
+    state.player.npobjs = len(state.player.gpobjs)
 
     return CommandResult(
         state=state,
         events=[
             {
-                "scope": "player",
-                "event": "inventory",
-                "type": "inventory",
-                "items": items,
+                "scope": "room",
+                "event": "player_pickup",
+                "type": "inventory_update",
+                # Legacy reference: KYRCMDS.C lines 702-736 guard pickup rules
+                # (visibility, pickup flag, capacity) before moving an object.
+                "player": state.player.plyrid,
+                "object": obj.name,
                 "command_id": command_id,
                 "message_id": message_id,
-            }
+            },
+            _inventory_event(state, command_id, message_id),
+        ],
+    )
+
+
+def _handle_drop(state: GameState, args: dict) -> CommandResult:
+    target = (args.get("object") or args.get("raw") or "").strip().lower()
+    if not target:
+        raise CommandError("Specify an object to drop")
+
+    command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    location = state.locations[state.player.gamloc]
+
+    try:
+        idx = next(
+            i
+            for i, obj_id in enumerate(state.player.gpobjs)
+            if state.objects.get(obj_id) and state.objects[obj_id].name.lower() == target
+        )
+    except StopIteration as exc:
+        raise CommandError(f"You are not carrying {target}") from exc
+
+    if len(location.objects) >= constants.MXLOBS:
+        raise CommandError("There is no room to drop that here")
+
+    obj_id = state.player.gpobjs.pop(idx)
+    state.player.obvals.pop(idx)
+    state.player.npobjs = len(state.player.gpobjs)
+
+    location.objects.append(obj_id)
+    location.nlobjs = len(location.objects)
+
+    obj = state.objects.get(obj_id)
+    return CommandResult(
+        state=state,
+        events=[
+            {
+                "scope": "room",
+                "event": "player_drop",
+                "type": "inventory_update",
+                # Legacy reference: KYRCMDS.C lines 862-892 enforce room capacity
+                # when dropping items before updating shared state.
+                "player": state.player.plyrid,
+                "object": obj.name if obj else target,
+                "command_id": command_id,
+                "message_id": message_id,
+            },
+            _inventory_event(state, command_id, message_id),
         ],
     )
 
@@ -391,6 +527,37 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
     registry.register(CommandMetadata(verb="move", required_level=1), _handle_move)
     registry.register(CommandMetadata(verb="chat", cooldown_seconds=1.5), _handle_chat)
     registry.register(CommandMetadata(verb="inventory"), _handle_inventory)
+
+    get_entry = vocabulary.commands.get("get")
+    drop_entry = vocabulary.commands.get("drop")
+
+    if get_entry:
+        registry.register(
+            CommandMetadata(
+                verb="get",
+                command_id=get_entry.id,
+                required_level=1 if get_entry.payonl else 0,
+                required_flags=int(constants.PlayerFlag.LOADED)
+                if get_entry.payonl
+                else 0,
+                failure_message_id="CMPCMD1" if get_entry.payonl else None,
+            ),
+            _handle_get,
+        )
+
+    if drop_entry:
+        registry.register(
+            CommandMetadata(
+                verb="drop",
+                command_id=drop_entry.id,
+                required_level=1 if drop_entry.payonl else 0,
+                required_flags=int(constants.PlayerFlag.LOADED)
+                if drop_entry.payonl
+                else 0,
+                failure_message_id="CMPCMD1" if drop_entry.payonl else None,
+            ),
+            _handle_drop,
+        )
 
     for command in vocabulary.iter_commands():
         verb = command.command.lower()
