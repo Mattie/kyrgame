@@ -1,6 +1,6 @@
 import pytest
 
-from kyrgame import commands, fixtures, models
+from kyrgame import commands, constants, fixtures, models
 
 
 class FakeClock:
@@ -74,6 +74,24 @@ async def test_move_tracks_previous_location(base_state):
 
 
 @pytest.mark.anyio
+async def test_move_blocks_missing_exit_and_sets_message_id(base_state):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player.gamloc = 7
+    parsed = vocabulary.parse_text("east")
+
+    with pytest.raises(commands.BlockedExitError) as excinfo:
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert excinfo.value.message_id == "MOVUTL"
+    assert base_state.player.gamloc == 7
+
+
+@pytest.mark.anyio
 async def test_move_emits_default_description(base_state):
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
@@ -86,6 +104,65 @@ async def test_move_emits_default_description(base_state):
     description = descriptions[0]
     assert description["message_id"] == "KRD001"
     assert description["text"].startswith("...You're on a north/south path")
+
+
+@pytest.mark.anyio
+async def test_move_respects_brief_flag_for_room_entry(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player.flags |= int(constants.PlayerFlag.BRFSTF)
+
+    result = await dispatcher.dispatch("move", {"direction": "north"}, base_state)
+
+    description_events = [
+        evt for evt in result.events if evt.get("type") == "location_description"
+    ]
+    assert description_events
+    assert description_events[0]["text"] == base_state.locations[1].brfdes
+    assert description_events[0]["message_id"] is None
+
+
+@pytest.mark.parametrize(
+    "input_text,direction,expected_command_id",
+    [
+        ("n", "north", 37),
+        ("north", "north", 38),
+        ("s", "south", 52),
+        ("south", "south", 63),
+        ("e", "east", 13),
+        ("east", "east", 14),
+        ("w", "west", 73),
+        ("west", "west", 74),
+    ],
+)
+@pytest.mark.anyio
+async def test_move_aliases_require_loaded_and_emit_message_ids(
+    base_state, input_text, direction, expected_command_id
+):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player.flags = 0
+    parsed = vocabulary.parse_text(input_text)
+
+    with pytest.raises(commands.FlagRequirementError):
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+    base_state.player.flags = int(constants.PlayerFlag.LOADED)
+    parsed = vocabulary.parse_text(input_text)
+
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert base_state.player.gamloc == base_state.locations[0].__getattribute__(
+        commands._DIRECTION_FIELDS[direction]
+    )
+    location_events = [evt for evt in result.events if evt.get("type") == "location_update"]
+    assert location_events
+    assert location_events[0]["message_id"] == f"CMD{expected_command_id:03d}"
 
 
 @pytest.mark.anyio

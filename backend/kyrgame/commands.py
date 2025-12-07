@@ -187,13 +187,16 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
     message_id = args.get("message_id") or _command_message_id(command_id)
     current = state.locations[state.player.gamloc]
     target_id = getattr(current, _DIRECTION_FIELDS[direction])
-    if target_id < 0 or target_id not in state.locations:
-        raise BlockedExitError(f"No exit {direction} from location {current.id}")
+    if target_id == -1 or target_id not in state.locations:
+        raise BlockedExitError(
+            f"No exit {direction} from location {current.id}", message_id="MOVUTL"
+        )
 
     state.player.pgploc = state.player.gamloc
     state.player.gamloc = target_id
     destination = state.locations[target_id]
 
+    # Mirrors movutl/entrgp in legacy/KYRCMDS.C and KYRUTIL.C for movement flow.【F:legacy/KYRCMDS.C†L328-L366】【F:legacy/KYRUTIL.C†L236-L255】
     description_id, long_description = _location_description(state, destination)
 
     return CommandResult(
@@ -388,6 +391,10 @@ def _location_message_id(location_id: int, content_mappings: dict[str, dict[str,
 
 
 def _location_description(state: GameState, location: models.LocationModel) -> tuple[str, str | None]:
+    if state.player.flags & constants.PlayerFlag.BRFSTF:
+        # Ported from entrgp in legacy/KYRUTIL.C, which printed the brief description when BRFSTF is set.【F:legacy/KYRUTIL.C†L236-L255】
+        return None, None
+
     message_id = _location_message_id(location.id, state.content_mappings)
     text = None
     if state.messages:
@@ -599,7 +606,15 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
     )
 
     registry = CommandRegistry()
-    registry.register(CommandMetadata(verb="move", required_level=1), _handle_move)
+    registry.register(
+        CommandMetadata(
+            verb="move",
+            required_level=1,
+            required_flags=int(constants.PlayerFlag.LOADED),
+            failure_message_id="CMPCMD1",
+        ),
+        _handle_move,
+    )
     registry.register(CommandMetadata(verb="chat", cooldown_seconds=1.5), _handle_chat)
     registry.register(CommandMetadata(verb="inventory"), _handle_inventory)
     registry.register(
