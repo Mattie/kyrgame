@@ -21,5 +21,10 @@
 - Panels use dark glassmorphism with faint gradients to keep surrounding tools (session form, room info, activity log) readable without detracting from the console.
 - Mode hints remind users when navigation is mapped to WASD versus free typing.
 
+## Development Helpers
+- Dev/test builds stretch the navigator across the viewport so the CRT console can breathe on ultra-wide screens while page-level scrollbars stay hidden.
+- The SESSION, ROOM, and ROOM ACTIVITY helper cards are collapsible to keep the console dominant; the room command list scrolls within its card so it does not overwhelm the layout.
+- CRT styling, prompt focus, and the navigation compass are mirrored in tests via the `MudConsole` component to ensure the development shell aligns with the retro experience.
+
 ## Screenshots
 - Screenshot capture pending; the console layout features the command prompt, navigation toggle, and HUD after stats have been revealed.
