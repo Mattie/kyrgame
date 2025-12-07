@@ -91,6 +91,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [error, setError] = useState<string | null>(null)
   const [occupants, setOccupants] = useState<string[]>([])
   const socketRef = useRef<WebSocket | null>(null)
+  const worldRef = useRef<WorldData | null>(null)
 
   const resetSocket = useCallback(() => {
     if (socketRef.current) {
@@ -155,9 +156,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             // Look up the full description from world.messages using message_id, just like RoomPanel does
             let text = message.payload?.text ?? message.payload?.description
             
-            // If we have a message_id and world data, try to get the full description
-            if (message.payload?.message_id && world?.messages) {
-              const fullDescription = world.messages[message.payload.message_id]
+            // Use worldRef for immediate access to loaded data (avoids race condition on first load)
+            if (message.payload?.message_id && worldRef.current?.messages) {
+              const fullDescription = worldRef.current.messages[message.payload.message_id]
               if (fullDescription) {
                 text = fullDescription
               }
@@ -200,7 +201,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
       }
     },
-    [appendActivity, handleRoomChange, updateOccupants, world]
+    [appendActivity, handleRoomChange, updateOccupants]
   )
 
   const connectWebSocket = useCallback(
@@ -260,6 +261,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       commands,
       messages: messages?.messages ?? {},
     }
+    worldRef.current = worldData  // Store in ref for immediate access
     setWorld(worldData)
     return worldData
   }, [apiBaseUrl, fetchJson])
@@ -296,6 +298,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         setSession(record)
         setCurrentRoom(record.roomId)
         updateOccupants([record.playerId])
+        // Load world data first and wait for it to complete before connecting WebSocket
+        // worldRef.current is set immediately by loadWorldData, so messages will be available
         await loadWorldData()
         connectWebSocket(record.token, record.roomId)
       } catch (err) {
