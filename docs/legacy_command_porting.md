@@ -16,7 +16,7 @@ This document enumerates the legacy Kyrandia player commands so the modern dispa
 | `concentrate`, `meditate`, `think` | `thinkr` | Thinks about an item (or telepathically via amulet), delegating to item logic when allowed. | [ ] | [ ] |
 | `drink`, `swallow` | `drinkr` | Consumes a drinkable item, triggering its effect when allowed. | [ ] | [ ] |
 | `drop` | `dropit` | Drops an item from inventory into the room, with checks for ownership, curses, and room capacity. | [ ] | [ ] |
-| `east`, `e`, `west`, `w`, `north`, `n`, `south`, `s` | `gi_east` / `gi_west` / `gi_north` / `gi_south` | Moves the player via room exits using `movutl`, broadcasting departure/arrival text. | [ ] | [ ] |
+| `east`, `e`, `west`, `w`, `north`, `n`, `south`, `s` | `gi_east` / `gi_west` / `gi_north` / `gi_south` | Moves the player via room exits using `movutl`, broadcasting departure/arrival text. | [x] | [ ] |
 | `examine`, `look`, `see` | `looker` | Describes objects, players, or room state (including brief descriptions) depending on arguments. | [ ] | [ ] |
 | `fly` | `flyrou` | Handles flight attempts, delegating to will-o-wisp or pegasus routines when available. | [ ] | [ ] |
 | `get`, `grab`, `pickpocket`, `pilfer`, `snatch`, `steal`, `take` | `getter` | Gets items from the room or another player with theft chance handling and inventory limits. | [ ] | [ ] |
