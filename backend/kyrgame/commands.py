@@ -264,20 +264,10 @@ def _handle_inventory(state: GameState, args: dict) -> CommandResult:  # noqa: A
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
 
-    items = _inventory_items(state)
-
+    # Mirrors gi_invrou/gi_invutl from legacy/KYRUTIL.C for inventory listing output.【F:legacy/KYRUTIL.C†L311-L338】
     return CommandResult(
         state=state,
-        events=[
-            {
-                "scope": "player",
-                "event": "inventory",
-                "type": "inventory",
-                "items": items,
-                "command_id": command_id,
-                "message_id": message_id,
-            }
-        ],
+        events=[_inventory_event(state, command_id, message_id)],
     )
 
 
@@ -407,23 +397,56 @@ def _location_description(state: GameState, location: models.LocationModel) -> t
 def _inventory_items(state: GameState) -> list[dict]:
     objects = state.objects or {}
     items: list[dict] = []
-    for obj_id, value in zip(state.player.gpobjs, state.player.obvals or []):
-        entry = {"id": obj_id, "value": value}
-        if obj_id in objects:
-            entry["name"] = objects[obj_id].name
+    for idx, obj_id in enumerate(state.player.gpobjs):
+        obj = objects.get(obj_id)
+        value = state.player.obvals[idx] if idx < len(state.player.obvals) else 0
+        needs_an = bool(obj and "NEEDAN" in obj.flags)
+        name = obj.name if obj else str(obj_id)
+        entry = {
+            "id": obj_id,
+            "value": value,
+            "name": name,
+            "display_name": f"{'an' if needs_an else 'a'} {name}",
+        }
         items.append(entry)
     return items
 
 
 def _inventory_event(state: GameState, command_id: int | None, message_id: str | None) -> dict:
+    items = _inventory_items(state)
+    text, text_message_id = _inventory_text(state, items)
+
     return {
         "scope": "player",
         "event": "inventory",
         "type": "inventory",
-        "items": _inventory_items(state),
+        "items": items,
+        "inventory": [item["display_name"] for item in items],
+        "gold": state.player.gold,
+        "text": text,
+        "text_message_id": text_message_id,
         "command_id": command_id,
         "message_id": message_id,
     }
+
+
+def _inventory_text(state: GameState, items: list[dict]) -> tuple[str, str | None]:
+    gold = state.player.gold
+    plural = "" if gold == 1 else "s"
+    if state.messages and "KUTM07" in state.messages.messages:
+        suffix = state.messages.messages["KUTM07"] % (gold, plural)
+        message_id = "KUTM07"
+    else:
+        suffix = f"your spellbook and {gold} piece{plural} of gold."
+        message_id = None
+
+    prefix = "...You have "
+    item_names = [
+        item.get("display_name") or item.get("name") or "" for item in items if item
+    ]
+    if item_names:
+        prefix = prefix + ", ".join(item_names) + ", "
+    return prefix + suffix, message_id
 
 
 def _room_objects_event(
