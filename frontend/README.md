@@ -103,6 +103,30 @@ npx playwright install --with-deps chromium
 
 If the CDN fallback is blocked in your environment, rerun the `npx playwright install` step—Playwright will retry with an alternate mirror after an initial 403.
 
+### Capturing Screenshots
+
+To capture screenshots of the frontend UI for documentation or PR descriptions:
+
+1. **Prerequisites**: Make sure the backend API is running (see backend/DEVELOPMENT.md) and Playwright is installed:
+   ```bash
+   npm run playwright:install
+   ```
+
+2. **Run the screenshot script**:
+   ```bash
+   npm run screenshot
+   ```
+
+3. **Find the screenshot**: The screenshot will be saved to `frontend/screenshots/mudconsole-ui.png`
+
+The screenshot script automatically:
+- Starts the development server (if not already running)
+- Navigates to the main application page
+- Waits for the page to fully load
+- Captures a full-page screenshot
+
+You can then attach the screenshot to pull requests or documentation updates.
+
 ## Code Quality
 
 ### Linting
