@@ -10,11 +10,11 @@ export const Navigator = () => {
     <NavigatorProvider>
       <main className={`navigator ${isDevEnvironment ? 'dev-layout' : ''}`}>
         <header className="masthead">
-          <p className="eyebrow">Starlit forest console</p>
-          <h1>Emerald Tides Navigator</h1>
+          <p className="eyebrow">Fantasy world console</p>
+          <h1>Kyrandia Explorer</h1>
           <p className="muted">
-            A luminous, shrine-like overlay inspired by Kyrandia's marble stairs, lagoon banks, and shimmering
-            chambers. Type commands below to wander, chat, and inspect with the same cadence as the legacy flow.
+            A MUD-style interface inspired by the original BBS client. Type commands below to walk, chat,
+            and inspect just like the legacy flow.
           </p>
         </header>
         <div className="layout">
