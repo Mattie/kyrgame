@@ -86,6 +86,7 @@ const articleizedName = (object: GameObject | undefined): string => {
   if (!object) return 'an object'
   const needsAn = object.flags?.includes('NEEDAN')
   const article = needsAn ? 'an' : 'a'
+  // Return plain name - GemstoneText will add emoji and color when rendering
   return `${article} ${object.name}`
 }
 
@@ -260,7 +261,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             const inventoryList =
               message.payload?.inventory ??
               payloadItems
-                .map((item: any) => item?.display_name ?? item?.name)
+                .map((item: any) => {
+                  const name = item?.display_name ?? item?.name
+                  // Return plain name - GemstoneText will add emoji and color when rendering
+                  return name || null
+                })
                 .filter(Boolean)
             const inventoryText = message.payload?.text ?? summary
 

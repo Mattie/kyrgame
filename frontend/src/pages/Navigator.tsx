@@ -1,6 +1,6 @@
 import { ActivityLog } from '../components/ActivityLog'
 import { MudConsole } from '../components/MudConsole'
-import { RoomPanel } from '../components/RoomPanel'
+// import { RoomPanel } from '../components/RoomPanel' // Deprecated - not needed anymore
 import { SessionForm } from '../components/SessionForm'
 import { isDevEnvironment } from '../config/devMode'
 import { NavigatorProvider } from '../context/NavigatorContext'
@@ -23,7 +23,7 @@ export const Navigator = () => {
           </div>
           <div className="secondary">
             <SessionForm />
-            <RoomPanel />
+            {/* <RoomPanel /> */}
             <ActivityLog />
           </div>
         </div>
