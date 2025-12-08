@@ -7,7 +7,6 @@ import {
 } from 'react'
 
 import { ActivityEntry, useNavigator } from '../context/NavigatorContext'
-import { formatGemstoneLabel } from '../data/gemstonePalette'
 import { GemstoneText } from './GemstoneText'
 
 const articleizedName = (object?: { name: string; flags?: string[] }) => {

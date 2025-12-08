@@ -9,7 +9,6 @@ import {
 } from 'react'
 
 import { getApiBaseUrl, getWebSocketUrl } from '../config/endpoints'
-import { formatGemstoneLabel } from '../data/gemstonePalette'
 
 export type LocationRecord = {
   id: number
