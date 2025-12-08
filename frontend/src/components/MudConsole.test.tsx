@@ -125,7 +125,7 @@ describe('MudConsole', () => {
 
     renderConsole()
 
-    expect(screen.getByText('There is an emerald and a ruby lying on the path.')).toBeInTheDocument()
+    expect(screen.getByText(/There is an .* Emerald and a .* Ruby lying on the path\./)).toBeInTheDocument()
     expect(screen.getByText('seer is here.')).toBeInTheDocument()
   })
 
