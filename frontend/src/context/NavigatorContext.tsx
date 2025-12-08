@@ -9,6 +9,7 @@ import {
 } from 'react'
 
 import { getApiBaseUrl, getWebSocketUrl } from '../config/endpoints'
+import { formatGemstoneLabel } from '../data/gemstonePalette'
 
 export type LocationRecord = {
   id: number
@@ -86,7 +87,8 @@ const articleizedName = (object: GameObject | undefined): string => {
   if (!object) return 'an object'
   const needsAn = object.flags?.includes('NEEDAN')
   const article = needsAn ? 'an' : 'a'
-  return `${article} ${object.name}`
+  const displayName = formatGemstoneLabel(object.name)
+  return `${article} ${displayName}`
 }
 
 const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
