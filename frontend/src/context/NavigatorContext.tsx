@@ -172,7 +172,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   }, [])
 
   const handleRoomChange = useCallback(
-    (roomId: number | null, origin: string) => {
+    (roomId: number | null, _origin: string) => {
       if (roomId !== null) {
         setCurrentRoom(roomId)
         // Don't append activity here - let the specific event handlers decide what to show
