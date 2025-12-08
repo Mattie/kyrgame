@@ -17,10 +17,9 @@ The frontend serves as a read-only navigator for the Kyrandia game world, starti
 
 ```bash
 npm install
-npm run playwright:install
 ```
 
-This installs npm dependencies along with the Playwright browser bundle required for frontend end-to-end tests.
+This installs the npm dependencies required for development.
 
 ### Environment Configuration
 
@@ -93,24 +92,13 @@ Runs the test suite once and exits (useful for CI/CD pipelines).
 
 ### Playwright setup
 
-The frontend uses Playwright for browser-based testing and visual verification. Install the test runner and bundled browsers with:
-
-```bash
-npm install
-npm install --save-dev @playwright/test
-npx playwright install --with-deps chromium
-```
-
-If the CDN fallback is blocked in your environment, rerun the `npx playwright install` step—Playwright will retry with an alternate mirror after an initial 403.
+The frontend uses Playwright for browser-based testing and visual verification. The repository environment already includes the Playwright runner and browsers needed for screenshot capture, so no additional installation steps are required.
 
 ### Capturing Screenshots
 
 To capture screenshots of the frontend UI for documentation or PR descriptions:
 
-1. **Prerequisites**: Make sure the backend API is running (see backend/DEVELOPMENT.md) and Playwright is installed:
-   ```bash
-   npm run playwright:install
-   ```
+1. **Prerequisites**: Make sure the backend API is running (see backend/DEVELOPMENT.md).
 
 2. **Run the screenshot script**:
    ```bash
