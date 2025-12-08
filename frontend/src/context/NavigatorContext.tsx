@@ -262,7 +262,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             const inventoryList =
               message.payload?.inventory ??
               payloadItems
-                .map((item: any) => item?.display_name ?? item?.name)
+                .map((item: any) => {
+                  const name = item?.display_name ?? item?.name
+                  return name ? formatGemstoneLabel(name) : null
+                })
                 .filter(Boolean)
             const inventoryText = message.payload?.text ?? summary
 
