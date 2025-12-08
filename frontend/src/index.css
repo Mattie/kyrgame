@@ -1,11 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Press+Start+2P&family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=DM+Mono:wght@300;400;500&family=Press+Start+2P&family=VT323&display=swap');
 
 :root {
   font-family: 'DM Mono', 'VT323', 'Press Start 2P', monospace;
   line-height: 1.6;
   font-weight: 400;
-  color: #e2fbe8;
-  background-color: #01060e;
+  color: #e9f4ff;
+  background-color: #050910;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -13,18 +13,18 @@
 }
 
 a {
-  color: #67e8f9;
+  color: #f7c879;
   text-decoration: none;
 }
 
 a:hover {
-  color: #bae6fd;
+  color: #ffdca6;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #01060e;
+  background-color: #050910;
   overflow: hidden;
 }
 
