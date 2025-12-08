@@ -125,7 +125,11 @@ describe('MudConsole', () => {
 
     renderConsole()
 
-    expect(screen.getByText(/There is an .* emerald and a .* ruby lying on the path\./)).toBeInTheDocument()
+    // Text is now broken up by GemstoneText component, so we check for parts
+    expect(screen.getByText(/There is an/i)).toBeInTheDocument()
+    expect(screen.getByText(/emerald/i)).toBeInTheDocument()
+    expect(screen.getByText(/ruby/i)).toBeInTheDocument()
+    expect(screen.getByText(/lying on the path/i)).toBeInTheDocument()
     expect(screen.getByText('seer is here.')).toBeInTheDocument()
   })
 
@@ -217,6 +221,7 @@ describe('MudConsole', () => {
     const scoped = within(hudPanel as HTMLElement)
 
     expect(scoped.getByText(/Inventory:/i)).toBeInTheDocument()
-    expect(scoped.getByText(/a ruby/i)).toBeInTheDocument()
+    // Inventory text is now broken up by GemstoneText spans, just check for 'ruby'
+    expect(scoped.getByText(/ruby/i)).toBeInTheDocument()
   })
 })

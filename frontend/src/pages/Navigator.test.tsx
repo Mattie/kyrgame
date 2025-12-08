@@ -129,25 +129,20 @@ describe('Navigator flow', () => {
       })
     })
 
+    // RoomPanel is disabled, so we check MudConsole header instead
     await waitFor(() =>
       expect(
-        screen.getByRole('heading', { name: /Edge of the forest/i })
-      ).toBeInTheDocument()
+        screen.getAllByText(/Edge of the forest/i).length
+      ).toBeGreaterThan(0)
     )
 
-    const commandList = within(screen.getByTestId('room-commands'))
-    expect(commandList.getByText(/move/i)).toBeInTheDocument()
-    expect(commandList.getByText(/look/i)).toBeInTheDocument()
-    expect(screen.getByTestId('room-commands')).toHaveStyle({ overflowY: 'auto' })
-    expect(screen.getByTestId('room-look-description')).toHaveTextContent(
-      /temple/i
-    )
+    // RoomPanel components are no longer rendered (room-commands, room-look-description)
+    // The room information is now only shown in MudConsole
 
     expect(screen.getAllByText(/player_enter/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/seer/).length).toBeGreaterThan(0)
-    // ruby appears in both MudConsole (initial room description) and RoomPanel (ground objects)
+    // ruby appears in MudConsole (initial room description with GemstoneText styling)
     expect(screen.getAllByText(/ruby/i).length).toBeGreaterThan(0)
-    expect(screen.getByTestId('gemstone-badge-ruby')).toBeInTheDocument()
   })
 
   it('collapses dev helper panels to reclaim space', async () => {
@@ -160,11 +155,12 @@ describe('Navigator flow', () => {
     await user.click(sessionToggle)
     expect(screen.queryByLabelText(/player id/i)).not.toBeInTheDocument()
 
-    const roomToggle = screen.getByRole('button', {
-      name: /collapse room panel/i,
-    })
-    await user.click(roomToggle)
-    expect(screen.queryByTestId('room-panel-body')).not.toBeInTheDocument()
+    // RoomPanel has been deprecated/disabled
+    // const roomToggle = screen.getByRole('button', {
+    //   name: /collapse room panel/i,
+    // })
+    // await user.click(roomToggle)
+    // expect(screen.queryByTestId('room-panel-body')).not.toBeInTheDocument()
 
     const activityToggle = screen.getByRole('button', {
       name: /collapse room activity panel/i,
@@ -219,25 +215,14 @@ describe('Navigator flow', () => {
       })
     })
 
+    // RoomPanel is disabled, check MudConsole header text instead
     await waitFor(() =>
       expect(
-        screen.getByRole('heading', { name: /Deep forest clearing/i })
-      ).toBeInTheDocument()
+        screen.getAllByText(/Deep forest clearing/i).length
+      ).toBeGreaterThan(0)
     )
 
-    await waitFor(() =>
-      expect(screen.getByTestId('room-look-description')).toHaveTextContent(
-        /clearing/i
-      )
-    )
-
-    const exits = within(screen.getByTestId('room-exits'))
-    await user.click(exits.getByRole('button', { name: /south/i }))
-
-    expect(JSON.parse(socket.sent.at(-1) ?? '{}')).toMatchObject({
-      type: 'command',
-      command: 'move',
-      args: { direction: 'south' },
-    })
+    // RoomPanel components no longer rendered (room-look-description, room-exits)
+    // Move commands are now sent via compass/WASD keys or typing commands, not via RoomPanel exit buttons
   })
 })
