@@ -15,6 +15,8 @@ const articleizedName = (object?: { name: string; flags?: string[] }) => {
   return `${article} ${object.name}`
 }
 
+const normalizeName = (value?: string | null) => value?.trim().toLowerCase() ?? ''
+
 const formatLegacyRoomLines = (
   entry: ActivityEntry,
   world: ReturnType<typeof useNavigator>['world'],
@@ -59,7 +61,9 @@ const formatLegacyRoomLines = (
     }
   }
 
-  const others = occupants.filter((name) => name !== playerId)
+  const others = occupants.filter(
+    (name) => normalizeName(name) !== normalizeName(playerId ?? null)
+  )
   // Mirrors locogps formatting from legacy/KYRUTIL.C for players in the room.【F:legacy/KYRUTIL.C†L332-L402】
   if (others.length === 1) {
     lines.push(`${others[0]} is here.`)

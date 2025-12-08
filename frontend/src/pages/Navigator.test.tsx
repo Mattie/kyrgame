@@ -145,7 +145,7 @@ describe('Navigator flow', () => {
 
     expect(screen.getAllByText(/player_enter/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/seer/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/ruby/)).toBeInTheDocument()
+    expect(screen.getAllByText(/ruby/).length).toBeGreaterThan(0)
   })
 
   it('collapses dev helper panels to reclaim space', async () => {

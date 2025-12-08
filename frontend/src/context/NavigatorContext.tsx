@@ -89,6 +89,8 @@ const articleizedName = (object: GameObject | undefined): string => {
   return `${article} ${object.name}`
 }
 
+const normalizeName = (value?: string | null) => value?.trim().toLowerCase() ?? ''
+
 const formatRoomObjectsLine = (
   location: LocationRecord | null,
   objects: GameObject[] | null
@@ -118,7 +120,9 @@ const formatRoomObjectsLine = (
 }
 
 const formatOccupantsLine = (players: string[], currentPlayerId?: string | null): string | null => {
-  const others = players.filter((name) => name !== currentPlayerId)
+  const others = players.filter(
+    (name) => normalizeName(name) !== normalizeName(currentPlayerId ?? null)
+  )
   if (others.length === 0) return null
 
   // Mirrors locogps formatting from legacy/KYRUTIL.C for players in the room.【F:legacy/KYRUTIL.C†L332-L402】
@@ -147,6 +151,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const socketRef = useRef<WebSocket | null>(null)
   const worldRef = useRef<WorldData | null>(null)
   const occupantsRef = useRef<string[]>([])
+  const playerIdRef = useRef<string | null>(null)
 
   const resetSocket = useCallback(() => {
     if (socketRef.current) {
@@ -165,6 +170,81 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     setOccupants(unique)
   }, [])
 
+  const resolveLocationMessageKey = useCallback((location: LocationRecord | null) => {
+    if (!location) return null
+    if (location.londes !== undefined) {
+      const raw = String(location.londes)
+      if (raw.startsWith('KRD')) return raw
+      return `KRD${raw.padStart(3, '0')}`
+    }
+    return `KRD${String(location.id).padStart(3, '0')}`
+  }, [])
+
+  const normalizeDescription = useCallback((text: string | null | undefined) => {
+    if (!text) return 'You look around.'
+    const trimmed = text.trim()
+    if (trimmed.startsWith('...')) return trimmed
+    return `...${trimmed}`
+  }, [])
+
+  const appendLocationDescription = useCallback(
+    (locationId: number | null, payload?: Record<string, unknown>) => {
+      const locationRecord =
+        locationId !== null
+          ? worldRef.current?.locations.find((loc) => loc.id === locationId) ?? null
+          : null
+
+      const messageKey =
+        (payload?.message_id as string | undefined | null) ??
+        resolveLocationMessageKey(locationRecord)
+
+      const descriptionText = (() => {
+        if (payload?.text || payload?.description) {
+          return (payload.text as string) ?? (payload.description as string)
+        }
+        if (messageKey && worldRef.current?.messages[messageKey]) {
+          return worldRef.current.messages[messageKey]
+        }
+        if (locationRecord?.brfdes) return locationRecord.brfdes
+        return null
+      })()
+
+      const summary = normalizeDescription(descriptionText)
+      const objectLine = formatRoomObjectsLine(locationRecord, worldRef.current?.objects ?? null)
+      const occupantsLine = formatOccupantsLine(
+        occupantsRef.current,
+        playerIdRef.current ?? session?.playerId ?? null
+      )
+
+      const entry = {
+        type: 'command_response',
+        room: locationId ?? undefined,
+        summary,
+        payload: {
+          event: 'location_description',
+          location: locationId,
+          message_id: messageKey,
+          text: descriptionText,
+        },
+        extraLines: [objectLine, occupantsLine].filter(Boolean) as string[],
+      }
+
+      setActivity((prev) => {
+        const last = prev[prev.length - 1]
+        const lastPayload = last?.payload as { event?: string; location?: number } | undefined
+        if (
+          lastPayload?.event === 'location_description' &&
+          (lastPayload.location ?? null) === (locationId ?? null)
+        ) {
+          return prev
+        }
+
+        return [...prev, { ...entry, id: createActivityId() }]
+      })
+    },
+    [normalizeDescription, resolveLocationMessageKey, session?.playerId]
+  )
+
   const handleRoomChange = useCallback(
     (roomId: number | null, origin: string) => {
       if (roomId !== null) {
@@ -182,7 +262,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     (message: any) => {
       if (!message || typeof message !== 'object') return
       switch (message.type) {
-        case 'room_welcome':
+        case 'room_welcome': {
+          handleRoomChange(message.room ?? null, 'room_welcome')
+          appendLocationDescription(message.room ?? null, { location: message.room ?? null })
+          break
+        }
         case 'room_change': {
           handleRoomChange(message.room ?? null, message.type)
           break
@@ -212,37 +296,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           // Format movement events to match legacy client behavior
           // Legacy shows: "...{full_description}\nThere is a {object} lying on the {objlds}."
           if (message.payload?.event === 'location_description') {
-            // Look up the full description from world.messages using message_id, just like RoomPanel does
-            let text = message.payload?.text ?? message.payload?.description
-            const locationId =
-              message.payload?.location ?? currentRoom ?? session?.roomId ?? null
-
-            // Use worldRef for immediate access to loaded data (avoids race condition on first load)
-            if (message.payload?.message_id && worldRef.current?.messages) {
-              const fullDescription = worldRef.current.messages[message.payload.message_id]
-              if (fullDescription) {
-                text = fullDescription
-              }
-            }
-
-            if (text) {
-              // Match legacy format: "...{description}"
-              summary = `...${text}`
-            } else {
-              summary = 'You look around.'
-            }
-            payload = { event: 'location_description', location: locationId }
-
-            const locationRecord =
-              locationId !== null
-                ? worldRef.current?.locations.find((loc) => loc.id === locationId) ?? null
-                : null
-            const objectLine = formatRoomObjectsLine(locationRecord, worldRef.current?.objects ?? null)
-            const occupantsLine = formatOccupantsLine(
-              occupantsRef.current,
-              session?.playerId ?? null
-            )
-            extraLines = [objectLine, occupantsLine].filter(Boolean) as string[]
+            const locationId = message.payload?.location ?? currentRoom ?? session?.roomId ?? null
+            appendLocationDescription(locationId, message.payload)
+            break
           } else if (message.payload?.event === 'location_update') {
             // Don't show location_update event separately - it will be followed by location_description
             handleRoomChange(message.payload.location ?? null, 'location_update')
@@ -287,7 +343,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
       }
     },
-    [appendActivity, currentRoom, handleRoomChange, session?.playerId, updateOccupants]
+    [
+      appendActivity,
+      appendLocationDescription,
+      currentRoom,
+      handleRoomChange,
+      session?.playerId,
+      updateOccupants,
+    ]
   )
 
   const connectWebSocket = useCallback(
@@ -381,12 +444,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           playerId: sessionPayload.player_id,
           roomId: sessionPayload.room_id,
         }
+        playerIdRef.current = record.playerId
         setSession(record)
         setCurrentRoom(record.roomId)
         updateOccupants([record.playerId])
         // Load world data first and wait for it to complete before connecting WebSocket
         // worldRef.current is set immediately by loadWorldData, so messages will be available
         await loadWorldData()
+        appendLocationDescription(record.roomId, { location: record.roomId })
         connectWebSocket(record.token, record.roomId)
       } catch (err) {
         setConnectionStatus('error')
@@ -394,7 +459,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         throw err
       }
     },
-    [apiBaseUrl, connectWebSocket, loadWorldData, resetSocket, updateOccupants]
+    [
+      apiBaseUrl,
+      appendLocationDescription,
+      connectWebSocket,
+      loadWorldData,
+      resetSocket,
+      updateOccupants,
+    ]
   )
 
   const sendMove = useCallback(
