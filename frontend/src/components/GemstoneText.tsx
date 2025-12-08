@@ -32,11 +32,11 @@ export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
     const visual = getGemstoneVisual(matchedText)
 
     if (visual) {
-      // Render gemstone with emoji and color
+      // Render gemstone with emoji and light color for visibility on dark background
       parts.push(
         <span
           key={`gem-${matchIndex}`}
-          style={{ color: visual.darkColor }}
+          style={{ color: visual.lightColor }}
           className="gemstone-inline"
         >
           {visual.emoji} {matchedText}

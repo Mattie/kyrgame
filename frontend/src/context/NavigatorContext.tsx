@@ -87,8 +87,8 @@ const articleizedName = (object: GameObject | undefined): string => {
   if (!object) return 'an object'
   const needsAn = object.flags?.includes('NEEDAN')
   const article = needsAn ? 'an' : 'a'
-  const displayName = formatGemstoneLabel(object.name)
-  return `${article} ${displayName}`
+  // Return plain name - GemstoneText will add emoji and color when rendering
+  return `${article} ${object.name}`
 }
 
 const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
@@ -264,7 +264,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               payloadItems
                 .map((item: any) => {
                   const name = item?.display_name ?? item?.name
-                  return name ? formatGemstoneLabel(name) : null
+                  // Return plain name - GemstoneText will add emoji and color when rendering
+                  return name || null
                 })
                 .filter(Boolean)
             const inventoryText = message.payload?.text ?? summary

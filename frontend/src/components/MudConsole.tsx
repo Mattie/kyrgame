@@ -14,8 +14,8 @@ const articleizedName = (object?: { name: string; flags?: string[] }) => {
   if (!object) return 'an object'
   const needsAn = object.flags?.includes('NEEDAN')
   const article = needsAn ? 'an' : 'a'
-  const displayName = formatGemstoneLabel(object.name)
-  return `${article} ${displayName}`
+  // Return plain name - GemstoneText will add emoji and color when rendering
+  return `${article} ${object.name}`
 }
 
 const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
