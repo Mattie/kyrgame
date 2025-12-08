@@ -129,6 +129,69 @@ describe('MudConsole', () => {
     expect(screen.getByText('seer is here.')).toBeInTheDocument()
   })
 
+  it('omits the current player from occupant listings even with casing differences', () => {
+    mockState.world = {
+      locations: [
+        {
+          id: 1,
+          brfdes: 'inside the hall of champions',
+          objlds: 'here',
+          objects: [],
+          gi_north: -1,
+          gi_south: -1,
+          gi_east: -1,
+          gi_west: -1,
+        },
+      ],
+      objects: [],
+      commands: [],
+      messages: {},
+    }
+
+    mockState.occupants = ['zonk']
+    mockState.activity = [
+      {
+        id: 'loc-1',
+        type: 'command_response',
+        summary: '...The great hall is silent.',
+        payload: { event: 'location_description', location: 1 },
+      },
+    ]
+
+    renderConsole()
+
+    expect(screen.queryByText(/zonk is here/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the starting room description when world data is loaded', () => {
+    mockState.world = {
+      locations: [
+        {
+          id: 1,
+          brfdes: 'at the edge of a cliff',
+          objlds: 'here',
+          objects: [],
+          londes: 'LOC001',
+          gi_north: -1,
+          gi_south: -1,
+          gi_east: -1,
+          gi_west: -1,
+        },
+      ],
+      objects: [],
+      commands: [],
+      messages: {
+        LOC001: '...You stand on a windswept ledge.',
+      },
+    }
+
+    renderConsole()
+
+    expect(screen.getByText(/You stand on a windswept ledge./i)).toBeInTheDocument()
+    expect(screen.getByText(/There is nothing lying here./i)).toBeInTheDocument()
+    expect(screen.queryByText(/\.\.\.\.\./)).not.toBeInTheDocument()
+  })
+
   it('shows inventory details after issuing an inventory command', () => {
     const { rerender } = renderConsole()
 

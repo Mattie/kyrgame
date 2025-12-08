@@ -89,6 +89,8 @@ const articleizedName = (object: GameObject | undefined): string => {
   return `${article} ${object.name}`
 }
 
+const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+
 const formatRoomObjectsLine = (
   location: LocationRecord | null,
   objects: GameObject[] | null
@@ -118,7 +120,11 @@ const formatRoomObjectsLine = (
 }
 
 const formatOccupantsLine = (players: string[], currentPlayerId?: string | null): string | null => {
-  const others = players.filter((name) => name !== currentPlayerId)
+  const current = normalizePlayerName(currentPlayerId)
+  const others = players
+    .map((name) => ({ raw: name, normalized: normalizePlayerName(name) }))
+    .filter((entry) => entry.normalized && entry.normalized !== current)
+    .map((entry) => entry.raw)
   if (others.length === 0) return null
 
   // Mirrors locogps formatting from legacy/KYRUTIL.C for players in the room.【F:legacy/KYRUTIL.C†L332-L402】
@@ -209,8 +215,6 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let payload = message.payload
           let extraLines: string[] | undefined
 
-          // Format movement events to match legacy client behavior
-          // Legacy shows: "...{full_description}\nThere is a {object} lying on the {objlds}."
           if (message.payload?.event === 'location_description') {
             // Look up the full description from world.messages using message_id, just like RoomPanel does
             let text = message.payload?.text ?? message.payload?.description
@@ -225,13 +229,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               }
             }
 
-            if (text) {
-              // Match legacy format: "...{description}"
-              summary = `...${text}`
-            } else {
-              summary = 'You look around.'
-            }
-            payload = { event: 'location_description', location: locationId }
+            summary = text ?? 'You look around.'
+            payload = { event: 'location_description', location: locationId, text }
 
             const locationRecord =
               locationId !== null

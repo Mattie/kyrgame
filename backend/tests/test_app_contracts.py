@@ -176,3 +176,41 @@ async def test_websocket_gateway_broadcasts_and_echoes_commands():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_sends_location_description_on_connect():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        session_resp = await client.post("/auth/session", json={"player_id": "scout"})
+        token = session_resp.json()["session"]["token"]
+        room_id = session_resp.json()["session"]["room_id"]
+
+        uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={token}"
+
+        async with websockets.connect(uri) as ws:
+            welcome = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
+            assert welcome["type"] == "room_welcome"
+
+            first_event = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
+            description_event = first_event
+
+            if first_event["payload"].get("event") != "location_description":
+                description_event = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
+
+            assert description_event["type"] == "command_response"
+            assert description_event["room"] == room_id
+            assert description_event["payload"]["event"] == "location_description"
+            assert description_event["payload"]["location"] == room_id
+
+    server.should_exit = True
+    await server_task
