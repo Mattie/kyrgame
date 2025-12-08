@@ -4,12 +4,27 @@
   font-family: 'DM Mono', 'VT323', 'Press Start 2P', monospace;
   line-height: 1.6;
   font-weight: 400;
-  color: #e2fbe8;
-  background-color: #01060e;
+  color: #e8f9f0;
+  background-color: #050712;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --obsidian: #050712;
+  --midnight: #0b1030;
+  --deep-forest: #0f231c;
+  --lagoon: #0f3d46;
+  --amethyst: #2b1a3f;
+  --aurora: #3c2f6d;
+  --starlight: #e9f5ff;
+  --moonlit: #c2d9ff;
+  --rose-gold: #f6d38c;
+  --coral: #fba3c7;
+  --emerald: #6cf7c5;
+  --glow-outline: rgba(108, 247, 197, 0.4);
+  --panel: rgba(10, 17, 41, 0.8);
+  --panel-strong: rgba(14, 39, 44, 0.9);
 }
 
 a {
@@ -24,7 +39,10 @@ a:hover {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: #01060e;
+  background: radial-gradient(circle at 10% 15%, rgba(255, 255, 255, 0.05), transparent 28%),
+    radial-gradient(circle at 85% 10%, rgba(255, 204, 146, 0.08), transparent 26%),
+    radial-gradient(circle at 20% 70%, rgba(102, 255, 215, 0.05), transparent 30%),
+    linear-gradient(145deg, #0a0f2b 0%, #0d1c2d 45%, #11242f 100%);
   overflow: hidden;
 }
 

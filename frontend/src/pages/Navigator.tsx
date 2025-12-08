@@ -10,11 +10,14 @@ export const Navigator = () => {
     <NavigatorProvider>
       <main className={`navigator ${isDevEnvironment ? 'dev-layout' : ''}`}>
         <header className="masthead">
-          <p className="eyebrow">Fantasy world console</p>
-          <h1>Kyrandia Explorer</h1>
+          <p className="eyebrow">Echoes of Kyrandia</p>
+          <h1>Marble Canopy Navigator</h1>
           <p className="muted">
-            A MUD-style interface inspired by the original BBS client. Type commands below to walk, chat,
-            and inspect just like the legacy flow.
+            Glide from abandoned camps to aurora-lit chambers, following the lagoon shimmer and marble stair glow that
+            define Kyrandia&apos;s dreamlike wilderness.
+          </p>
+          <p className="muted">
+            This console keeps the BBS feel while wrapping it in the same twilight palette the world descriptions paint.
           </p>
         </header>
         <div className="layout">
