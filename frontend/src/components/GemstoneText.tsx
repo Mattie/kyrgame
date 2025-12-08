@@ -1,40 +1,27 @@
-import { Fragment, ReactNode } from 'react'
+import { ReactNode } from 'react'
 
-import { getGemstoneVisual } from '../data/gemstonePalette'
+import { gemstonePalette, getGemstoneVisual } from '../data/gemstonePalette'
 
 /**
  * Parses text and renders gemstone names with their emoji and color styling.
  * Matches gemstone names case-insensitively and replaces them with styled spans.
  */
 export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
-  // List of gemstone names to search for (case-insensitive)
-  const gemstoneNames = [
-    'ruby',
-    'emerald',
-    'garnet',
-    'pearl',
-    'aquamarine',
-    'moonstone',
-    'sapphire',
-    'diamond',
-    'amethyst',
-    'onyx',
-    'opal',
-    'bloodstone',
-    'kyragem',
-    'soulstone',
-  ]
+  // Get gemstone names from the palette to maintain single source of truth
+  const gemstoneNames = Object.keys(gemstonePalette)
 
   // Create a regex pattern that matches any gemstone name (case-insensitive, word boundaries)
   const pattern = new RegExp(`\\b(${gemstoneNames.join('|')})\\b`, 'gi')
 
   const parts: ReactNode[] = []
   let lastIndex = 0
-  let match: RegExpExecArray | null
 
-  while ((match = pattern.exec(text)) !== null) {
+  // Use matchAll for safer iteration
+  const matches = text.matchAll(pattern)
+
+  for (const match of matches) {
     const matchedText = match[0]
-    const matchIndex = match.index
+    const matchIndex = match.index!
 
     // Add text before the match
     if (matchIndex > lastIndex) {
@@ -60,7 +47,7 @@ export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
       parts.push(matchedText)
     }
 
-    lastIndex = pattern.lastIndex
+    lastIndex = matchIndex + matchedText.length
   }
 
   // Add remaining text
@@ -68,5 +55,6 @@ export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
     parts.push(text.slice(lastIndex))
   }
 
-  return <>{parts.map((part, i) => (typeof part === 'string' ? <Fragment key={i}>{part}</Fragment> : part))}</>
+  // Return parts directly without unnecessary Fragment wrappers
+  return <>{parts}</>
 }
