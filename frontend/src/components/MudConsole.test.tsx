@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
@@ -127,5 +127,33 @@ describe('MudConsole', () => {
 
     expect(screen.getByText('There is an emerald and a ruby lying on the path.')).toBeInTheDocument()
     expect(screen.getByText('seer is here.')).toBeInTheDocument()
+  })
+
+  it('shows inventory details after issuing an inventory command', () => {
+    const { rerender } = renderConsole()
+
+    expect(screen.queryByText(/Inventory/i)).toBeNull()
+
+    mockState.activity = [
+      ...mockState.activity,
+      {
+        id: '2',
+        type: 'command_response',
+        summary: '...You have a ruby, your spellbook and 10 pieces of gold.',
+        payload: {
+          event: 'inventory',
+          inventory: ['a ruby'],
+        },
+      },
+    ]
+
+    rerender(<MudConsole />)
+
+    const hudPanel = screen.getByText(/Character readout/i).closest('aside')
+    expect(hudPanel).not.toBeNull()
+    const scoped = within(hudPanel as HTMLElement)
+
+    expect(scoped.getByText(/Inventory:/i)).toBeInTheDocument()
+    expect(scoped.getByText(/a ruby/i)).toBeInTheDocument()
   })
 })

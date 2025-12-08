@@ -313,10 +313,7 @@ export const MudConsole = () => {
           {hud.description && <p className="hud-line">{hud.description}</p>}
           {hud.inventory && hud.inventory.length > 0 && (
             <p className="hud-line">
-              Inventory:{' '}
-              {hud.inventory.map((item) => (
-                <strong key={item}>{item}</strong>
-              ))}
+              Inventory: <strong>{hud.inventory.join(', ')}</strong>
             </p>
           )}
           {hud.effects && hud.effects.length > 0 && (

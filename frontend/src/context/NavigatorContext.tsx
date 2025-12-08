@@ -250,6 +250,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           } else if (message.payload?.verb === 'move') {
             // Don't show move acknowledgment - just skip it
             break
+          } else if (message.payload?.event === 'inventory') {
+            const payloadItems = Array.isArray(message.payload?.items)
+              ? message.payload.items
+              : []
+            const inventoryList =
+              message.payload?.inventory ??
+              payloadItems
+                .map((item: any) => item?.display_name ?? item?.name)
+                .filter(Boolean)
+            const inventoryText = message.payload?.text ?? summary
+
+            summary = inventoryText
+            payload = { ...message.payload, inventory: inventoryList, text: inventoryText }
           }
           
           appendActivity({

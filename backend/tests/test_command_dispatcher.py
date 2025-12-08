@@ -123,6 +123,62 @@ async def test_move_respects_brief_flag_for_room_entry(base_state):
     assert description_events[0]["message_id"] is None
 
 
+@pytest.mark.anyio
+async def test_inventory_reports_empty_pack_and_gold_total(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [], "obvals": [], "npobjs": 0, "gold": 1}
+    )
+
+    result = await dispatcher.dispatch("inventory", {}, base_state)
+
+    inventory_events = [evt for evt in result.events if evt.get("type") == "inventory"]
+    assert inventory_events
+
+    inventory = inventory_events[0]
+    assert inventory["items"] == []
+    assert inventory["text"] == "...You have your spellbook and 1 piece of gold."
+
+
+@pytest.mark.anyio
+async def test_inventory_lists_items_in_order_with_values(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [1, 0], "obvals": [7, 3], "npobjs": 2}
+    )
+
+    result = await dispatcher.dispatch("inventory", {}, base_state)
+
+    inventory_events = [evt for evt in result.events if evt.get("type") == "inventory"]
+    assert inventory_events
+
+    inventory = inventory_events[0]
+    assert [item["id"] for item in inventory["items"]] == [1, 0]
+    assert [item["value"] for item in inventory["items"]] == [7, 3]
+    assert [item["name"] for item in inventory["items"]] == ["emerald", "ruby"]
+    assert inventory["text"].startswith("...You have an emerald, a ruby, your spellbook")
+
+
+@pytest.mark.anyio
+async def test_inventory_message_id_travels_with_command(base_state):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    parsed = vocabulary.parse_text("inv")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    inventory_events = [evt for evt in result.events if evt.get("type") == "inventory"]
+    assert inventory_events
+    assert inventory_events[0]["message_id"] == "CMD029"
+
+
 @pytest.mark.parametrize(
     "input_text,direction,expected_command_id",
     [

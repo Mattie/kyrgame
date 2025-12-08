@@ -23,7 +23,7 @@ This document enumerates the legacy Kyrandia player commands so the modern dispa
 | `give`, `hand`, `pass`, `toss` | `giveit` | Gives items or gold to another player, handling currency parsing and item transfers. | [ ] | [ ] |
 | `gold` | `gldcnt` | Shortcut to display current gold total with singular/plural handling. | [ ] | [ ] |
 | `hits` | `hitctr` | Displays hit point totals/status. | [ ] | [ ] |
-| `inv` | `gi_invrou` | Shows the player’s inventory contents. | [ ] | [ ] |
+| `inv` | `gi_invrou` | Shows the player’s inventory contents. | [x] | [x] |
 | `learn`, `memorize` | `memori` | Learns or memorizes spells through the spellbook logic. | [ ] | [ ] |
 | `note`, `say`, `comment` | `speakr` | Sends a spoken message to the room with local echo and nearby broadcast text. | [ ] | [ ] |
 | `pray` | `prayer` | Performs the prayer routine. | [ ] | [ ] |
