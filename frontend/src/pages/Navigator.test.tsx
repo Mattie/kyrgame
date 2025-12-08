@@ -146,7 +146,7 @@ describe('Navigator flow', () => {
     expect(screen.getAllByText(/player_enter/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/seer/).length).toBeGreaterThan(0)
     // ruby appears in both MudConsole (initial room description) and RoomPanel (ground objects)
-    expect(screen.getAllByText(/ruby/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/ruby/i).length).toBeGreaterThan(0)
     expect(screen.getByTestId('gemstone-badge-ruby')).toBeInTheDocument()
   })
 

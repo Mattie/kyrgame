@@ -7,12 +7,14 @@ import {
 } from 'react'
 
 import { ActivityEntry, useNavigator } from '../context/NavigatorContext'
+import { formatGemstoneLabel } from '../data/gemstonePalette'
 
 const articleizedName = (object?: { name: string; flags?: string[] }) => {
   if (!object) return 'an object'
   const needsAn = object.flags?.includes('NEEDAN')
   const article = needsAn ? 'an' : 'a'
-  return `${article} ${object.name}`
+  const displayName = formatGemstoneLabel(object.name)
+  return `${article} ${displayName}`
 }
 
 const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
