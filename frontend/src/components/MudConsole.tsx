@@ -8,6 +8,71 @@ import {
 
 import { ActivityEntry, useNavigator } from '../context/NavigatorContext'
 
+const articleizedName = (object?: { name: string; flags?: string[] }) => {
+  if (!object) return 'an object'
+  const needsAn = object.flags?.includes('NEEDAN')
+  const article = needsAn ? 'an' : 'a'
+  return `${article} ${object.name}`
+}
+
+const formatLegacyRoomLines = (
+  entry: ActivityEntry,
+  world: ReturnType<typeof useNavigator>['world'],
+  defaultRoom: number | null,
+  occupants: string[],
+  playerId: string | null
+): string[] => {
+  if (!world) return []
+  if (!entry.payload || typeof entry.payload !== 'object') return []
+  if ((entry.payload as Record<string, unknown>).event !== 'location_description') return []
+
+  const locationId =
+    (entry.payload as Record<string, number | null | undefined>).location ?? defaultRoom
+  const location = world.locations.find((loc) => loc.id === locationId)
+  if (!location) return []
+
+  const visibleNames = (location.objects ?? [])
+    .map((id) => world.objects.find((obj) => obj.id === id))
+    .filter((obj): obj is { name: string; flags?: string[] } =>
+      Boolean(obj && (!obj.flags || obj.flags.includes('VISIBL')))
+    )
+    .map((obj) => articleizedName(obj))
+
+  const landing = location.objlds ?? 'here'
+  const lines: string[] = []
+
+  // Mirrors locobjs formatting from legacy/KYRUTIL.C for ground objects.【F:legacy/KYRUTIL.C†L256-L311】
+  switch (visibleNames.length) {
+    case 0:
+      lines.push(`There is nothing lying ${landing}.`)
+      break
+    case 1:
+      lines.push(`There is ${visibleNames[0]} lying ${landing}.`)
+      break
+    case 2:
+      lines.push(`There is ${visibleNames[0]} and ${visibleNames[1]} lying ${landing}.`)
+      break
+    default: {
+      const [last, ...rest] = visibleNames.reverse()
+      lines.push(`There is ${rest.reverse().join(', ')}, and ${last} lying ${landing}.`)
+      break
+    }
+  }
+
+  const others = occupants.filter((name) => name !== playerId)
+  // Mirrors locogps formatting from legacy/KYRUTIL.C for players in the room.【F:legacy/KYRUTIL.C†L332-L402】
+  if (others.length === 1) {
+    lines.push(`${others[0]} is here.`)
+  } else if (others.length === 2) {
+    lines.push(`${others[0]} and ${others[1]} are here.`)
+  } else if (others.length > 2) {
+    const [last, ...rest] = others.reverse()
+    lines.push(`${rest.reverse().join(', ')}, and ${last} are here.`)
+  }
+
+  return lines
+}
+
 const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
   w: 'north',
   a: 'west',
@@ -17,6 +82,11 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
 
 const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   if (payload === undefined || payload === null) return null
+  if (typeof payload === 'object' && 'event' in payload) {
+    if ((payload as Record<string, unknown>).event === 'location_description') {
+      return null
+    }
+  }
   if (typeof payload === 'string') return payload
   if (typeof payload === 'number' || typeof payload === 'boolean') {
     return String(payload)
@@ -171,24 +241,30 @@ export const MudConsole = () => {
                   {line}
                 </p>
               ))}
-              {activity.map((entry) => (
-                <p key={entry.id} className={`crt-line ${entry.type}`}>
-                  {formatPayload(entry.payload) && (
-                    <span className="prompt-symbol" aria-hidden>
-                      &gt;
-                    </span>
-                  )}
-                  <span className="prompt-symbol">&gt;</span> {entry.summary}
-                  {formatPayload(entry.payload) && (
-                    <span className="payload-inline">{formatPayload(entry.payload)}</span>
-                  )}
-                </p>
-              ))}
-              {occupants.length > 0 && (
-                <p className="crt-line occupants">
-                  <span className="prompt-symbol">*</span> Occupants: {occupants.join(', ')}
-                </p>
-              )}
+              {activity.map((entry) => {
+                const payloadText = formatPayload(entry.payload)
+                const legacyLines =
+                  entry.extraLines ??
+                  formatLegacyRoomLines(entry, world, currentRoom, occupants, session?.playerId ?? null)
+                return (
+                  <div key={entry.id} className="crt-entry">
+                    <p className={`crt-line ${entry.type}`}>
+                      {payloadText && (
+                        <span className="prompt-symbol" aria-hidden>
+                          &gt;
+                        </span>
+                      )}
+                      <span className="prompt-symbol">&gt;</span> {entry.summary}
+                      {payloadText && <span className="payload-inline">{payloadText}</span>}
+                    </p>
+                    {legacyLines?.map((line, index) => (
+                      <p key={`${entry.id}-extra-${index}`} className={`crt-line ${entry.type} detail`}>
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                )
+              })}
             </div>
           </div>
 
