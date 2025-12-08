@@ -7,14 +7,14 @@ import {
 } from 'react'
 
 import { ActivityEntry, useNavigator } from '../context/NavigatorContext'
-import { formatGemstoneLabel } from '../data/gemstonePalette'
+import { GemstoneText } from './GemstoneText'
 
 const articleizedName = (object?: { name: string; flags?: string[] }) => {
   if (!object) return 'an object'
   const needsAn = object.flags?.includes('NEEDAN')
   const article = needsAn ? 'an' : 'a'
-  const displayName = formatGemstoneLabel(object.name)
-  return `${article} ${displayName}`
+  // Return plain name - GemstoneText will add emoji and color when rendering
+  return `${article} ${object.name}`
 }
 
 const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
@@ -305,12 +305,12 @@ export const MudConsole = () => {
                           &gt;
                         </span>
                       )}
-                      <span className="prompt-symbol">&gt;</span> {entry.summary}
+                      <span className="prompt-symbol">&gt;</span> <GemstoneText text={entry.summary} />
                       {payloadText && <span className="payload-inline">{payloadText}</span>}
                     </p>
                     {legacyLines?.map((line, index) => (
                       <p key={`${entry.id}-extra-${index}`} className={`crt-line ${entry.type} detail`}>
-                        {line}
+                        <GemstoneText text={line} />
                       </p>
                     ))}
                   </div>
@@ -364,7 +364,7 @@ export const MudConsole = () => {
           {hud.description && <p className="hud-line">{hud.description}</p>}
           {hud.inventory && hud.inventory.length > 0 && (
             <p className="hud-line">
-              Inventory: <strong>{hud.inventory.join(', ')}</strong>
+              Inventory: <strong><GemstoneText text={hud.inventory.join(', ')} /></strong>
             </p>
           )}
           {hud.effects && hud.effects.length > 0 && (
