@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 
 import { isDevEnvironment } from '../config/devMode'
 import { LocationRecord, useNavigator } from '../context/NavigatorContext'
+import { GameObjectBadge } from './GameObjectBadge'
 
 type DirectionKey = 'north' | 'south' | 'east' | 'west'
 
@@ -36,9 +37,12 @@ export const RoomPanel = () => {
   }, [location])
 
   const groundObjects = useMemo(() => {
-    if (!location || !world) return [] as string[]
+    if (!location || !world) return [] as { id: number; name: string }[]
     const objectNames = new Map(world.objects.map((obj) => [obj.id, obj.name]))
-    return (location.objects ?? []).map((id) => objectNames.get(id) ?? `Object ${id}`)
+    return (location.objects ?? []).map((id) => ({
+      id,
+      name: objectNames.get(id) ?? `Object ${id}`,
+    }))
   }, [location, world])
 
   const availableCommands = useMemo(() => {
@@ -160,9 +164,11 @@ export const RoomPanel = () => {
               <h3>Ground objects</h3>
               {groundObjects.length === 0 && <p className="muted">None</p>}
               {groundObjects.length > 0 && (
-                <ul>
-                  {groundObjects.map((name) => (
-                    <li key={name}>{name}</li>
+                <ul className="object-badge-list">
+                  {groundObjects.map((object) => (
+                    <li key={`${object.id}-${object.name}`}>
+                      <GameObjectBadge name={object.name} />
+                    </li>
                   ))}
                 </ul>
               )}

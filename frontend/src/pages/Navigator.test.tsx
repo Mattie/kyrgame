@@ -147,6 +147,11 @@ describe('Navigator flow', () => {
     expect(screen.getAllByText(/seer/).length).toBeGreaterThan(0)
     // ruby appears in both MudConsole (initial room description) and RoomPanel (ground objects)
     expect(screen.getAllByText(/ruby/).length).toBeGreaterThan(0)
+
+    const rubyBadge = screen.getByTestId('object-badge-ruby')
+    expect(rubyBadge).toHaveTextContent('ruby')
+    expect(rubyBadge).toHaveTextContent('❤️')
+    expect(rubyBadge).toHaveAttribute('data-gemstone', 'ruby')
   })
 
   it('collapses dev helper panels to reclaim space', async () => {

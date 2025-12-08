@@ -467,3 +467,44 @@ p {
   padding-left: 1rem;
   margin: 0.25rem 0 0;
 }
+
+.object-badge-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0;
+}
+
+.object-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(3, 7, 18, 0.5);
+  color: #e2fbe8;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  font-weight: 700;
+}
+
+.object-badge .object-emoji {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.object-badge .object-name {
+  text-transform: capitalize;
+}
+
+.object-badge.gemstone {
+  color: #f8fafc;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.object-badge.gemstone .object-name {
+  letter-spacing: 0.02em;
+}
