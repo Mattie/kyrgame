@@ -35,7 +35,7 @@ const formatLegacyRoomLines = (
 
   const visibleNames = (location.objects ?? [])
     .map((id) => world.objects.find((obj) => obj.id === id))
-    .filter((obj): obj is { name: string; flags?: string[] } =>
+    .filter((obj): obj is { id: number; name: string; flags?: string[] } =>
       Boolean(obj && (!obj.flags || obj.flags.includes('VISIBL')))
     )
     .map((obj) => articleizedName(obj))

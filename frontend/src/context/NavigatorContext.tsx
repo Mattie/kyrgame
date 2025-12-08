@@ -165,7 +165,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   }, [])
 
   const updateOccupants = useCallback((players: string[]) => {
-    const unique = Array.from(new Set(players))
+    const unique = players.reduce<string[]>((acc, name) => {
+      if (!name) return acc
+      const normalized = normalizeName(name)
+      if (normalized && !acc.some((existing) => normalizeName(existing) === normalized)) {
+        acc.push(name)
+      }
+      return acc
+    }, [])
+
     occupantsRef.current = unique
     setOccupants(unique)
   }, [])
@@ -209,10 +217,20 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         return null
       })()
 
+      const descriptionOccupants = Array.isArray(payload?.occupants)
+        ? (payload?.occupants as string[])
+        : null
+      if (descriptionOccupants) {
+        const merged = Array.from(
+          new Set([...(descriptionOccupants ?? []), playerIdRef.current ?? session?.playerId ?? ''])
+        ).filter(Boolean) as string[]
+        updateOccupants(merged)
+      }
+
       const summary = normalizeDescription(descriptionText)
       const objectLine = formatRoomObjectsLine(locationRecord, worldRef.current?.objects ?? null)
       const occupantsLine = formatOccupantsLine(
-        occupantsRef.current,
+        descriptionOccupants ?? occupantsRef.current,
         playerIdRef.current ?? session?.playerId ?? null
       )
 
@@ -231,22 +249,34 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
       setActivity((prev) => {
         const last = prev[prev.length - 1]
-        const lastPayload = last?.payload as { event?: string; location?: number } | undefined
-        if (
-          lastPayload?.event === 'location_description' &&
-          (lastPayload.location ?? null) === (locationId ?? null)
-        ) {
-          return prev
+        const lastPayload = last?.payload as
+          | { event?: string; location?: number; message_id?: string | null; text?: string }
+          | undefined
+        const lastLines = (last?.extraLines ?? []).filter(Boolean)
+        const nextLines = (entry.extraLines ?? []).filter(Boolean)
+        if (lastPayload?.event === 'location_description') {
+          const sameLocation = (lastPayload.location ?? null) === (locationId ?? null)
+          const sameSummary = last?.summary === summary
+          const sameMessage = (lastPayload.message_id ?? null) === (messageKey ?? null)
+          const lastText = lastPayload.text ?? (lastPayload as any)?.description ?? null
+          const sameText = (lastText ?? null) === (descriptionText ?? null)
+          const sameLines =
+            lastLines.length === nextLines.length &&
+            lastLines.every((line, idx) => line === nextLines[idx])
+
+          if (sameLocation && sameSummary && sameMessage && sameText && sameLines) {
+            return prev
+          }
         }
 
         return [...prev, { ...entry, id: createActivityId() }]
       })
     },
-    [normalizeDescription, resolveLocationMessageKey, session?.playerId]
+    [normalizeDescription, resolveLocationMessageKey, session?.playerId, updateOccupants]
   )
 
   const handleRoomChange = useCallback(
-    (roomId: number | null, origin: string) => {
+    (roomId: number | null) => {
       if (roomId !== null) {
         setCurrentRoom(roomId)
         // Don't append activity here - let the specific event handlers decide what to show
@@ -263,12 +293,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       if (!message || typeof message !== 'object') return
       switch (message.type) {
         case 'room_welcome': {
-          handleRoomChange(message.room ?? null, 'room_welcome')
+          handleRoomChange(message.room ?? null)
           appendLocationDescription(message.room ?? null, { location: message.room ?? null })
           break
         }
         case 'room_change': {
-          handleRoomChange(message.room ?? null, message.type)
+          handleRoomChange(message.room ?? null)
           break
         }
         case 'room_broadcast': {
@@ -279,9 +309,22 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             summary,
             payload: message.payload,
           })
-          if (message.payload?.event === 'player_enter' && message.payload.player) {
+          const payloadPlayers =
+            (message.payload?.players as string[] | undefined | null) ??
+            (message.payload?.occupants as string[] | undefined | null)
+          if (payloadPlayers && Array.isArray(payloadPlayers)) {
+            updateOccupants(payloadPlayers)
+          } else if (message.payload?.event === 'player_enter' && message.payload.player) {
             setOccupants((current) => {
               const next = Array.from(new Set([...(current || []), message.payload.player]))
+              occupantsRef.current = next
+              return next
+            })
+          } else if (message.payload?.event === 'player_exit' && message.payload.player) {
+            setOccupants((current) => {
+              const next = (current || []).filter(
+                (name) => normalizeName(name) !== normalizeName(message.payload.player)
+              )
               occupantsRef.current = next
               return next
             })
@@ -301,7 +344,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             break
           } else if (message.payload?.event === 'location_update') {
             // Don't show location_update event separately - it will be followed by location_description
-            handleRoomChange(message.payload.location ?? null, 'location_update')
+            handleRoomChange(message.payload.location ?? null)
             break // Skip adding this event to activity
           } else if (message.payload?.verb === 'move') {
             // Don't show move acknowledgment - just skip it

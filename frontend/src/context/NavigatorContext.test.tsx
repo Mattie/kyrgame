@@ -103,4 +103,96 @@ describe('NavigatorProvider', () => {
     expect(locationEntry?.summary).toBe('...A misty clearing')
     expect(locationEntry?.extraLines?.some((line) => /is here\./i.test(line))).toBe(false)
   })
+
+  it('refreshes occupant lists from room broadcasts and re-renders location descriptions when they change', async () => {
+    enqueueResponse({
+      session: { token: 'abc', player_id: 'Zonk', room_id: 1 },
+    })
+    enqueueResponse([
+      {
+        id: 1,
+        brfdes: 'A brief description',
+        objlds: 'on the path',
+        objects: [1],
+      },
+    ])
+    enqueueResponse([{ id: 1, name: 'emerald', flags: ['VISIBL', 'NEEDAN'] }])
+    enqueueResponse([])
+    enqueueResponse({ messages: { KRD001: '...A misty clearing' } })
+
+    const { result } = renderHook(() => useNavigator(), { wrapper })
+
+    await act(async () => {
+      await result.current.startSession('Zonk')
+    })
+
+    const socket = MockWebSocket.instances[0]
+    expect(socket).toBeDefined()
+
+    act(() => {
+      socket.emit({ type: 'room_welcome', room: 1 })
+      socket.emit({
+        type: 'room_broadcast',
+        room: 1,
+        payload: { event: 'player_enter', player: 'Seer' },
+      })
+    })
+
+    act(() => {
+      socket.emit({
+        type: 'command_response',
+        room: 1,
+        payload: {
+          event: 'location_description',
+          location: 1,
+          description: 'A misty clearing',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      const locationEntries = result.current.activity.filter(
+        (entry) => entry.payload && (entry.payload as any).event === 'location_description'
+      )
+      expect(locationEntries.length).toBeGreaterThanOrEqual(2)
+    })
+
+    const lastWithSeer = result.current.activity
+      .slice()
+      .reverse()
+      .find((entry) => entry.payload && (entry.payload as any).event === 'location_description')
+    expect(lastWithSeer?.extraLines?.some((line) => /Seer is here\./i.test(line))).toBe(true)
+
+    act(() => {
+      socket.emit({
+        type: 'room_broadcast',
+        room: 1,
+        payload: { event: 'player_exit', player: 'Seer' },
+      })
+    })
+
+    await waitFor(() => {
+      expect(result.current.occupants.some((name) => /seer/i.test(name))).toBe(false)
+    })
+
+    act(() => {
+      socket.emit({
+        type: 'command_response',
+        room: 1,
+        payload: {
+          event: 'location_description',
+          location: 1,
+          description: 'A misty clearing',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      const latest = result.current.activity
+        .slice()
+        .reverse()
+        .find((entry) => entry.payload && (entry.payload as any).event === 'location_description')
+      expect(latest?.extraLines?.some((line) => /Seer is here\./i.test(line))).toBe(false)
+    })
+  })
 })
