@@ -177,11 +177,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         setCurrentRoom(roomId)
         // Don't append activity here - let the specific event handlers decide what to show
       }
-      if (session?.playerId) {
-        updateOccupants([session.playerId])
-      }
+      // Reset occupants to empty - the current player should never be in the occupants list
+      // matching legacy behavior from KYRUTIL.C locogps() which excludes current player
+      updateOccupants([])
     },
-    [session?.playerId, updateOccupants]
+    [updateOccupants]
   )
 
   const handleIncoming = useCallback(
@@ -202,11 +202,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             payload: message.payload,
           })
           if (message.payload?.event === 'player_enter' && message.payload.player) {
-            setOccupants((current) => {
-              const next = Array.from(new Set([...(current || []), message.payload.player]))
-              occupantsRef.current = next
-              return next
-            })
+            const enteringPlayer = message.payload.player
+            // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
+            if (normalizePlayerName(enteringPlayer) !== normalizePlayerName(session?.playerId)) {
+              setOccupants((current) => {
+                const next = Array.from(new Set([...(current || []), enteringPlayer]))
+                occupantsRef.current = next
+                return next
+              })
+            }
           }
           break
         }
