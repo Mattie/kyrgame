@@ -22,12 +22,8 @@ export type GemstoneVisual = {
   displayName?: string
 }
 
-const formatDisplayName = (name: string): string =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(' ')
+// Preserves the original casing of the name
+const formatDisplayName = (name: string): string => name
 
 export const gemstonePalette: Record<GemstoneName, GemstoneVisual> = {
   ruby: {

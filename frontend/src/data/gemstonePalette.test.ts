@@ -41,11 +41,11 @@ describe('gemstonePalette', () => {
     expect(colorPairs.size).toBe(visuals.length)
   })
 
-  it('formats gemstone labels with an emoji prefix and a capitalized name', () => {
+  it('formats gemstone labels with an emoji prefix and preserves original casing', () => {
     const rubyVisual = getGemstoneVisual('ruby')!
     expect(formatGemstoneLabel('ruby')).toContain(rubyVisual.emoji)
-    expect(formatGemstoneLabel('ruby')).toContain('Ruby')
+    expect(formatGemstoneLabel('ruby')).toContain('ruby')
 
-    expect(formatGemstoneLabel('unknown')).toBe('Unknown')
+    expect(formatGemstoneLabel('unknown')).toBe('unknown')
   })
 })

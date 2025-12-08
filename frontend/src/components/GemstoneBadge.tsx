@@ -9,7 +9,8 @@ type GemstoneBadgeProps = {
 const badgeStyle = (light?: string, dark?: string): CSSProperties => ({
   '--gem-light': light ?? '#0ea5e9',
   '--gem-dark': dark ?? '#0b1020',
-})
+  color: dark ?? '#c7ffda',
+} as CSSProperties)
 
 export const GemstoneBadge = ({ name }: GemstoneBadgeProps) => {
   const visual = getGemstoneVisual(name)
