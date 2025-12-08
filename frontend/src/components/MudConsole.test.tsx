@@ -11,9 +11,9 @@ const sendMove = vi.fn()
 const mockState = {
   apiBaseUrl: 'http://localhost',
   session: { token: 't', playerId: 'Zonk', roomId: 1 },
-  world: null,
+  world: null as any,
   currentRoom: 1,
-  occupants: [],
+  occupants: [] as string[],
   activity: [] as ActivityEntry[],
   connectionStatus: 'connected' as const,
   error: null,
@@ -33,6 +33,8 @@ describe('MudConsole', () => {
     sendCommand.mockClear()
     sendMove.mockClear()
     mockState.activity = []
+    mockState.world = null
+    mockState.occupants = []
   })
 
   it('sends typed commands through the prompt', async () => {
@@ -87,6 +89,44 @@ describe('MudConsole', () => {
     rerender(<MudConsole />)
 
     expect(screen.getAllByText(/Hitpoints: 10\/12/i).length).toBeGreaterThan(0)
+  })
+
+  it('renders legacy-style room objects and occupants for location descriptions', () => {
+    mockState.world = {
+      locations: [
+        {
+          id: 1,
+          brfdes: 'on a north/south path',
+          objlds: 'on the path',
+          objects: [1, 2],
+          gi_north: -1,
+          gi_south: -1,
+          gi_east: -1,
+          gi_west: -1,
+        },
+      ],
+      objects: [
+        { id: 1, name: 'emerald', flags: ['VISIBL', 'NEEDAN'] },
+        { id: 2, name: 'ruby', flags: ['VISIBL'] },
+      ],
+      commands: [],
+      messages: {},
+    }
+
+    mockState.occupants = ['Zonk', 'seer']
+    mockState.activity = [
+      {
+        id: 'loc-1',
+        type: 'command_response',
+        summary: '...A long temple description',
+        payload: { event: 'location_description', location: 1 },
+      },
+    ]
+
+    renderConsole()
+
+    expect(screen.getByText('There is an emerald and a ruby lying on the path.')).toBeInTheDocument()
+    expect(screen.getByText('seer is here.')).toBeInTheDocument()
   })
 
   it('shows inventory details after issuing an inventory command', () => {

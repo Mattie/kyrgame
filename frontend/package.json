@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:watch": "vitest watch",
-    "playwright:install": "playwright install --with-deps chromium"
+    "playwright:install": "playwright install --with-deps chromium",
+    "screenshot": "playwright test tests/screenshot.spec.ts"
   },
   "dependencies": {
     "react": "^18.2.0",
