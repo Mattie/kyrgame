@@ -923,10 +923,47 @@ def create_app() -> FastAPI:
             player=player_state,
             locations=provider.location_index,
             objects={obj.id: obj for obj in provider.cache["objects"]},
+            messages=provider.message_bundles.get("en-US"),
+            content_mappings=provider.content_mappings,
         )
 
         await provider.presence.set_location(player_id, current_room, session_token)
         await gateway.register(current_room, websocket)
+
+        # Immediately send the player their current room description to mirror move command behavior.
+        location = state.locations.get(current_room)
+        if location is not None:
+            description_id, long_description = commands._location_description(state, location)
+            await websocket.send_json(
+                {
+                    "type": "command_response",
+                    "room": current_room,
+                    "payload": {
+                        "scope": "player",
+                        "event": "location_update",
+                        "type": "location_update",
+                        "location": location.id,
+                        "description": location.brfdes,
+                        "description_id": description_id,
+                        "long_description": long_description,
+                        "message_id": description_id,
+                    },
+                }
+            )
+            await websocket.send_json(
+                {
+                    "type": "command_response",
+                    "room": current_room,
+                    "payload": {
+                        "scope": "player",
+                        "event": "location_description",
+                        "type": "location_description",
+                        "location": location.id,
+                        "message_id": description_id,
+                        "text": long_description or location.brfdes,
+                    },
+                }
+            )
 
         await gateway.broadcast(
             current_room,

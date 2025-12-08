@@ -89,6 +89,8 @@ const articleizedName = (object: GameObject | undefined): string => {
   return `${article} ${object.name}`
 }
 
+const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+
 const formatRoomObjectsLine = (
   location: LocationRecord | null,
   objects: GameObject[] | null
@@ -118,7 +120,11 @@ const formatRoomObjectsLine = (
 }
 
 const formatOccupantsLine = (players: string[], currentPlayerId?: string | null): string | null => {
-  const others = players.filter((name) => name !== currentPlayerId)
+  const current = normalizePlayerName(currentPlayerId)
+  const others = players
+    .map((name) => ({ raw: name, normalized: normalizePlayerName(name) }))
+    .filter((entry) => entry.normalized && entry.normalized !== current)
+    .map((entry) => entry.raw)
   if (others.length === 0) return null
 
   // Mirrors locogps formatting from legacy/KYRUTIL.C for players in the room.【F:legacy/KYRUTIL.C†L332-L402】
@@ -171,11 +177,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         setCurrentRoom(roomId)
         // Don't append activity here - let the specific event handlers decide what to show
       }
-      if (session?.playerId) {
-        updateOccupants([session.playerId])
-      }
+      // Reset occupants to empty - the current player should never be in the occupants list
+      // matching legacy behavior from KYRUTIL.C locogps() which excludes current player
+      updateOccupants([])
     },
-    [session?.playerId, updateOccupants]
+    [updateOccupants]
   )
 
   const handleIncoming = useCallback(
@@ -196,11 +202,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             payload: message.payload,
           })
           if (message.payload?.event === 'player_enter' && message.payload.player) {
-            setOccupants((current) => {
-              const next = Array.from(new Set([...(current || []), message.payload.player]))
-              occupantsRef.current = next
-              return next
-            })
+            const enteringPlayer = message.payload.player
+            // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
+            if (normalizePlayerName(enteringPlayer) !== normalizePlayerName(session?.playerId)) {
+              setOccupants((current) => {
+                const next = Array.from(new Set([...(current || []), enteringPlayer]))
+                occupantsRef.current = next
+                return next
+              })
+            }
           }
           break
         }
@@ -209,8 +219,6 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let payload = message.payload
           let extraLines: string[] | undefined
 
-          // Format movement events to match legacy client behavior
-          // Legacy shows: "...{full_description}\nThere is a {object} lying on the {objlds}."
           if (message.payload?.event === 'location_description') {
             // Look up the full description from world.messages using message_id, just like RoomPanel does
             let text = message.payload?.text ?? message.payload?.description
@@ -225,13 +233,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               }
             }
 
-            if (text) {
-              // Match legacy format: "...{description}"
-              summary = `...${text}`
-            } else {
-              summary = 'You look around.'
-            }
-            payload = { event: 'location_description', location: locationId }
+            summary = text ?? 'You look around.'
+            payload = { event: 'location_description', location: locationId, text }
 
             const locationRecord =
               locationId !== null

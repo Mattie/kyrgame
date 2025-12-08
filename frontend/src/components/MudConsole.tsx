@@ -15,6 +15,8 @@ const articleizedName = (object?: { name: string; flags?: string[] }) => {
   return `${article} ${object.name}`
 }
 
+const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+
 const formatLegacyRoomLines = (
   entry: ActivityEntry,
   world: ReturnType<typeof useNavigator>['world'],
@@ -59,7 +61,11 @@ const formatLegacyRoomLines = (
     }
   }
 
-  const others = occupants.filter((name) => name !== playerId)
+  const current = normalizeName(playerId)
+  const others = occupants
+    .map((name) => ({ raw: name, normalized: normalizeName(name) }))
+    .filter((entry) => entry.normalized && entry.normalized !== current)
+    .map((entry) => entry.raw)
   // Mirrors locogps formatting from legacy/KYRUTIL.C for players in the room.【F:legacy/KYRUTIL.C†L332-L402】
   if (others.length === 1) {
     lines.push(`${others[0]} is here.`)
@@ -218,6 +224,49 @@ export const MudConsole = () => {
     ]
   }, [session])
 
+  const hasLocationDescription = useMemo(
+    () =>
+      activity.some((entry) => {
+        if (!entry.payload || typeof entry.payload !== 'object') return false
+        return (entry.payload as Record<string, unknown>).event === 'location_description'
+      }),
+    [activity]
+  )
+
+  const initialDescriptionEntry: ActivityEntry | null = useMemo(() => {
+    if (!location || !world) return null
+    if (hasLocationDescription) return null
+
+    const messageId =
+      typeof location.londes === 'string' || typeof location.londes === 'number'
+        ? String(location.londes)
+        : null
+    const description = (messageId && world.messages?.[messageId]) || location.brfdes
+
+    const payload = { event: 'location_description', location: location.id }
+    const entry: ActivityEntry = {
+      id: 'initial-room-description',
+      type: 'command_response',
+      summary: description ?? location.brfdes,
+      payload,
+    }
+
+    entry.extraLines = formatLegacyRoomLines(
+      entry,
+      world,
+      location.id,
+      occupants,
+      session?.playerId ?? null
+    )
+
+    return entry
+  }, [hasLocationDescription, location, occupants, session?.playerId, world])
+
+  const entriesToRender = useMemo(
+    () => (initialDescriptionEntry ? [initialDescriptionEntry, ...activity] : activity),
+    [activity, initialDescriptionEntry]
+  )
+
   return (
     <section className="mud-shell">
       <div className="mud-grid">
@@ -241,7 +290,7 @@ export const MudConsole = () => {
                   {line}
                 </p>
               ))}
-              {activity.map((entry) => {
+              {entriesToRender.map((entry) => {
                 const payloadText = formatPayload(entry.payload)
                 const legacyLines =
                   entry.extraLines ??
