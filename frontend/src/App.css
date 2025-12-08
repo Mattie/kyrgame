@@ -232,6 +232,10 @@ p {
   letter-spacing: 0.01em;
 }
 
+.gemstone-inline {
+  white-space: nowrap;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
