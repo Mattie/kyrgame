@@ -10,7 +10,6 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:watch": "vitest watch",
-    "playwright:install": "playwright install --with-deps chromium",
     "screenshot": "playwright test tests/screenshot.spec.ts"
   },
   "dependencies": {
@@ -18,7 +17,6 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^14.3.1",
     "@testing-library/user-event": "^14.6.1",
