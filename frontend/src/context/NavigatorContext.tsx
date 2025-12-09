@@ -195,15 +195,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
         }
         case 'room_broadcast': {
-          const summary = message.payload?.event ?? 'room_broadcast'
+          const payload = message.payload ?? {}
+          const summary =
+            payload.event === 'room_message' && payload.text
+              ? payload.text
+              : payload.event ?? 'room_broadcast'
           appendActivity({
             type: 'room_broadcast',
             room: message.room,
             summary,
-            payload: message.payload,
+            payload,
           })
-          if (message.payload?.event === 'player_enter' && message.payload.player) {
-            const enteringPlayer = message.payload.player
+          if (payload.event === 'player_enter' && payload.player) {
+            const enteringPlayer = payload.player
             // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
             if (normalizePlayerName(enteringPlayer) !== normalizePlayerName(session?.playerId)) {
               setOccupants((current) => {
@@ -216,9 +220,29 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
         }
         case 'command_response': {
+          const payloadEvent = message.payload?.event
           let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
           let payload = message.payload
           let extraLines: string[] | undefined
+
+          if (payloadEvent === 'room_occupants') {
+            const occupants = Array.isArray(message.payload?.occupants)
+              ? (message.payload?.occupants as string[]).filter(Boolean)
+              : []
+            updateOccupants(occupants)
+            summary =
+              message.payload?.text ??
+              formatOccupantsLine(occupants, session?.playerId ?? null) ??
+              'No one else is here.'
+            payload = { ...message.payload, occupants }
+            appendActivity({
+              type: 'command_response',
+              room: message.room,
+              summary,
+              payload,
+            })
+            break
+          }
 
           if (message.payload?.event === 'location_description') {
             // Look up the full description from world.messages using message_id, just like RoomPanel does
@@ -391,7 +415,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         setSession(record)
         setCurrentRoom(record.roomId)
-        updateOccupants([record.playerId])
+        updateOccupants([])
         // Load world data first and wait for it to complete before connecting WebSocket
         // worldRef.current is set immediately by loadWorldData, so messages will be available
         await loadWorldData()

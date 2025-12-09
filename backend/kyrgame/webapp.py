@@ -815,6 +815,77 @@ async def echo_player(player: models.PlayerModel):
     return {"player": player.model_dump()}
 
 
+def _format_room_occupants(occupants: list[str], messages: models.MessageBundleModel | None):
+    """Format the occupant list shown when entering a room.
+
+    Mirrors ``locogps`` from the legacy engine, which lists other visible players
+    in the room using the KUTM11/KUTM12 strings.【F:legacy/KYRUTIL.C†L271-L314】
+    """
+
+    if not occupants:
+        return None, None
+
+    catalog = messages.messages if messages else {}
+    message_id = None
+
+    if len(occupants) == 1:
+        suffix = catalog.get("KUTM11", "is here.")
+        message_id = "KUTM11" if "KUTM11" in catalog else None
+        return f"{occupants[0]} {suffix}", message_id
+
+    suffix = catalog.get("KUTM12", "are here.")
+    message_id = "KUTM12" if "KUTM12" in catalog else None
+    if len(occupants) == 2:
+        names = f"{occupants[0]} and {occupants[1]}"
+    else:
+        names = ", ".join(occupants[:-1]) + f", and {occupants[-1]}"
+    return f"{names} {suffix}", message_id
+
+
+async def _room_occupants_event(
+    presence: PresenceService,
+    player_id: str,
+    room_id: int,
+    messages: models.MessageBundleModel | None,
+):
+    occupants = await presence.players_in_room(room_id)
+    others = sorted(occupant for occupant in occupants if occupant != player_id)
+    text, message_id = _format_room_occupants(others, messages)
+    if not others or not text:
+        return None
+
+    return {
+        "scope": "player",
+        "event": "room_occupants",
+        "type": "room_occupants",
+        "location": room_id,
+        "occupants": others,
+        "text": text,
+        "message_id": message_id,
+    }
+
+
+def _entrance_room_message(player_id: str, room_id: int) -> dict:
+    """Legacy-style entrance broadcast when a player appears in a room.
+
+    Mirrors ``entrgp`` in ``KYRUTIL.C`` when a player logs in or is placed into
+    the world with the APPEARCLOUDMIST text from ``KYRANDIA.C``.【F:legacy/KYRUTIL.C†L236-L260】【F:legacy/KYRANDIA.C†L135-L211】
+    """
+
+    return {
+        "scope": "room",
+        "event": "room_message",
+        "type": "room_message",
+        "player": player_id,
+        "from": None,
+        "to": room_id,
+        "direction": None,
+        "text": f"*** {player_id} has just appeared in a cloud of mists!",
+        "message_id": None,
+        "command_id": None,
+    }
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -965,12 +1036,33 @@ def create_app() -> FastAPI:
                 }
             )
 
+        occupants_event = await _room_occupants_event(
+            provider.presence, player_id, current_room, state.messages
+        )
+        if occupants_event:
+            await websocket.send_json(
+                {
+                    "type": "command_response",
+                    "room": current_room,
+                    "payload": occupants_event,
+                }
+            )
+
         await gateway.broadcast(
             current_room,
             {
                 "type": "room_broadcast",
                 "room": current_room,
                 "payload": {"event": "player_enter", "player": player_id},
+            },
+            sender=websocket,
+        )
+        await gateway.broadcast(
+            current_room,
+            {
+                "type": "room_broadcast",
+                "room": current_room,
+                "payload": _entrance_room_message(player_id, current_room),
             },
             sender=websocket,
         )
@@ -1024,6 +1116,7 @@ def create_app() -> FastAPI:
                     continue
 
                 target_room = state.player.gamloc
+                occupant_event = None
                 if target_room != current_room:
                     await gateway.register(target_room, websocket, announce=False)
                     await provider.presence.set_location(player_id, target_room, session_token)
@@ -1033,6 +1126,12 @@ def create_app() -> FastAPI:
                         repo.mark_seen(session_token)
                         db.commit()
                     current_room = target_room
+                    occupant_event = await _room_occupants_event(
+                        provider.presence, player_id, current_room, state.messages
+                    )
+
+                if occupant_event:
+                    result.events.append(occupant_event)
 
                 ack_payload = {
                     "type": "command_response",
