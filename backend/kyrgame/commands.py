@@ -178,6 +178,25 @@ def _command_message_id(command_id: int | None) -> str | None:
     return f"CMD{command_id:03d}"
 
 
+def _arrival_text(direction: str) -> str:
+    """Return the arrival phrase used when a player enters a room.
+
+    Mirrors the "has just <enttxt>" formatting in ``entrgp`` when movement
+    transitions are announced to the new room.【F:legacy/KYRCMDS.C†L330-L368】【F:legacy/KYRUTIL.C†L236-L260】
+    """
+
+    origin_map = {
+        "north": "south",
+        "south": "north",
+        "east": "west",
+        "west": "east",
+    }
+    source = origin_map.get(direction)
+    if source:
+        return f"appeared from the {source}"
+    return "arrived"
+
+
 def _handle_move(state: GameState, args: dict) -> CommandResult:
     direction = args.get("direction")
     if direction not in _DIRECTION_FIELDS:
@@ -198,6 +217,8 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     # Mirrors movutl/entrgp in legacy/KYRCMDS.C and KYRUTIL.C for movement flow.【F:legacy/KYRCMDS.C†L328-L366】【F:legacy/KYRUTIL.C†L236-L255】
     description_id, long_description = _location_description(state, destination)
+    arrival_phrase = _arrival_text(direction)
+    arrival_text = f"*** {state.player.plyrid} has just {arrival_phrase}!"
 
     return CommandResult(
         state=state,
@@ -212,6 +233,18 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
                 "description": destination.brfdes,
                 "command_id": command_id,
                 "message_id": message_id,
+            },
+            {
+                "scope": "room",
+                "event": "room_message",
+                "type": "room_message",
+                "player": state.player.plyrid,
+                "from": current.id,
+                "to": destination.id,
+                "direction": direction,
+                "text": arrival_text,
+                "message_id": None,
+                "command_id": command_id,
             },
             {
                 "scope": "player",
