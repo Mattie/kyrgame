@@ -204,6 +204,7 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
+    objects = state.objects or {}
     current = state.locations[state.player.gamloc]
     target_id = getattr(current, _DIRECTION_FIELDS[direction])
     if target_id == -1 or target_id not in state.locations:
@@ -265,6 +266,13 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
                 "message_id": description_id,
                 "text": long_description or destination.brfdes,
             },
+            # Mirror locobjs call in legacy entrgp to describe visible room objects on entry.【F:legacy/KYRUTIL.C†L248-L266】
+            _room_objects_event(
+                destination,
+                objects,
+                command_id,
+                message_id,
+            ),
         ],
     )
 

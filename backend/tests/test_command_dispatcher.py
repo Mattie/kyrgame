@@ -320,6 +320,32 @@ async def test_drop_places_object_in_room(base_state):
     assert any(obj["id"] == target_id for obj in object_events[0]["objects"])
 
 
+@pytest.mark.anyio
+async def test_move_emits_room_objects_from_updated_state(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [], "obvals": [], "npobjs": 0}
+    )
+
+    starting_location = base_state.locations[base_state.player.gamloc]
+    target_id = next(
+        obj_id
+        for obj_id in starting_location.objects
+        if "PICKUP" in base_state.objects[obj_id].flags
+    )
+    target_name = base_state.objects[target_id].name
+
+    await dispatcher.dispatch("get", {"target": target_name}, base_state)
+    await dispatcher.dispatch("move", {"direction": "north"}, base_state)
+    result = await dispatcher.dispatch("move", {"direction": "south"}, base_state)
+
+    object_events = [evt for evt in result.events if evt.get("type") == "room_objects"]
+    assert object_events
+    assert all(obj["id"] != target_id for obj in object_events[0]["objects"])
+
+
 def test_vocabulary_maps_aliases_to_canonical_commands():
     vocabulary = commands.CommandVocabulary(
         fixtures.load_commands(), fixtures.load_messages()

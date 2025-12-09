@@ -1035,6 +1035,15 @@ def create_app() -> FastAPI:
                     },
                 }
             )
+            await websocket.send_json(
+                {
+                    "type": "command_response",
+                    "room": current_room,
+                    "payload": commands._room_objects_event(
+                        location, state.objects or {}, None, description_id
+                    ),
+                }
+            )
 
         occupants_event = await _room_occupants_event(
             provider.presence, player_id, current_room, state.messages
