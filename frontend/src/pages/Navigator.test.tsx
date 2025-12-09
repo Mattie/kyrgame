@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
@@ -123,9 +123,29 @@ describe('Navigator flow', () => {
     act(() => {
       socket.triggerMessage({ type: 'room_welcome', room: 7 })
       socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          scope: 'player',
+          event: 'room_occupants',
+          type: 'room_occupants',
+          location: 7,
+          occupants: ['seer'],
+          text: 'seer is here.',
+        },
+      })
+      socket.triggerMessage({
         type: 'room_broadcast',
         room: 7,
-        payload: { event: 'player_enter', player: 'seer' },
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          player: 'seer',
+          from: 6,
+          to: 7,
+          direction: 'east',
+          text: '*** seer has just appeared from the west!',
+        },
       })
     })
 
@@ -139,8 +159,8 @@ describe('Navigator flow', () => {
     // RoomPanel components are no longer rendered (room-commands, room-look-description)
     // The room information is now only shown in MudConsole
 
-    expect(screen.getAllByText(/player_enter/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/seer/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/seer is here/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/appeared from the west/i).length).toBeGreaterThan(0)
     // ruby appears in MudConsole (initial room description with GemstoneText styling)
     expect(screen.getAllByText(/ruby/i).length).toBeGreaterThan(0)
   })
