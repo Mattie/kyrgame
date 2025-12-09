@@ -242,7 +242,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let extraLines: string[] | undefined
           
           // Skip command acknowledgments that have no event - they're just metadata
-          if (!payloadEvent && message.payload?.verb) {
+          if (!message.payload?.event && message.payload?.verb) {
             break
           }
 
