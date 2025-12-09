@@ -54,6 +54,8 @@ export type ActivityEntry = {
   summary: string
   payload?: Record<string, unknown> | string | number | boolean | null
   extraLines?: string[]
+  hidden?: boolean
+  meta?: Record<string, unknown>
 }
 
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
@@ -69,7 +71,10 @@ type NavigatorContextValue = {
   error: string | null
   startSession: (playerId: string, roomId?: number | null) => Promise<void>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
-  sendCommand: (command: string) => void
+  sendCommand: (
+    command: string,
+    options?: { silent?: boolean; skipLog?: boolean; meta?: Record<string, unknown> }
+  ) => void
 }
 
 const NavigatorContext = createContext<NavigatorContextValue | undefined>(undefined)
@@ -188,6 +193,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const handleIncoming = useCallback(
     (message: any) => {
       if (!message || typeof message !== 'object') return
+      const meta = message.meta ?? {}
+      const hidden = Boolean(meta?.silent)
       switch (message.type) {
         case 'room_welcome':
         case 'room_change': {
@@ -240,7 +247,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
           let payload = message.payload
           let extraLines: string[] | undefined
-          
+
           // Skip command acknowledgments that have no event - they're just metadata
           if (!message.payload?.event && message.payload?.verb) {
             break
@@ -323,13 +330,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             summary = 'Sorry, that command exists, but it is not implemented (yet).'
             payload = { ...message.payload, text: summary }
           }
-          
+
           appendActivity({
             type: 'command_response',
             room: message.room,
             summary,
             payload,
             extraLines,
+            hidden,
+            meta,
           })
           break
         }
@@ -350,6 +359,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             room: message.room,
             summary: errorSummary,
             payload: message.payload,
+            hidden,
+            meta,
           })
           break
         }
@@ -484,7 +495,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   )
 
   const sendCommand = useCallback(
-    (command: string) => {
+    (command: string, options?: { silent?: boolean; skipLog?: boolean; meta?: Record<string, unknown> }) => {
       const trimmed = command.trim()
       if (trimmed === '') return
       if (!socketRef.current) {
@@ -495,10 +506,25 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         return
       }
 
-      appendActivity({ type: 'command', summary: `> ${trimmed}` })
-      socketRef.current.send(
-        JSON.stringify({ type: 'command', command: trimmed, args: { input: trimmed } })
-      )
+      const isSilent = Boolean(options?.silent)
+      const skipLog = Boolean(options?.skipLog)
+      const meta = {
+        ...(options?.meta ?? {}),
+        ...(isSilent ? { silent: true } : {}),
+      }
+
+      if (!skipLog) {
+        appendActivity({ type: 'command', summary: `> ${trimmed}` })
+      }
+      const outgoing: Record<string, unknown> = {
+        type: 'command',
+        command: trimmed,
+        args: { input: trimmed },
+      }
+      if (Object.keys(meta).length > 0) {
+        outgoing.meta = meta
+      }
+      socketRef.current.send(JSON.stringify(outgoing))
     },
     [appendActivity]
   )
