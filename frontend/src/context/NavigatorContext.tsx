@@ -196,6 +196,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         case 'room_broadcast': {
           const payload = message.payload ?? {}
+          
+          // Handle chat events
+          if (payload.event === 'chat' && payload.text && payload.from) {
+            const chatText = `${payload.from} says, "${payload.text}"`
+            appendActivity({
+              type: 'room_broadcast',
+              room: message.room,
+              summary: chatText,
+              payload,
+            })
+            break
+          }
+          
           const summary =
             payload.event === 'room_message' && payload.text
               ? payload.text
@@ -295,6 +308,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
             summary = inventoryText
             payload = { ...message.payload, inventory: inventoryList, text: inventoryText }
+          } else if (message.payload?.event === 'room_objects') {
+            // Don't display room_objects events in the console - they're for internal state only
+            break
+          } else if (message.payload?.event === 'pickup_result') {
+            // Don't display pickup_result events in the console - they're for internal state only
+            break
+          } else if (message.payload?.event === 'unimplemented') {
+            summary = 'Sorry, that command does exist, but it is not implemented (yet).'
+            payload = { ...message.payload, text: summary }
           }
           
           appendActivity({
@@ -307,10 +329,20 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
         }
         case 'command_error': {
+          let errorSummary = message.payload?.detail ?? 'command_error'
+          
+          // Look up message from message_id if available (e.g., HUH for unknown commands)
+          if (message.payload?.message_id && worldRef.current?.messages) {
+            const messageText = worldRef.current.messages[message.payload.message_id]
+            if (messageText) {
+              errorSummary = messageText
+            }
+          }
+          
           appendActivity({
             type: 'command_error',
             room: message.room,
-            summary: message.payload?.detail ?? 'command_error',
+            summary: errorSummary,
             payload: message.payload,
           })
           break
