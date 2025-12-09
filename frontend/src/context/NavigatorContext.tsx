@@ -316,8 +316,26 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
             summary = inventoryText
             payload = { ...message.payload, inventory: inventoryList, text: inventoryText }
-          } else if (['room_objects', 'pickup_result'].includes(message.payload?.event as string)) {
-            // Don't display these events in the console - they're for internal state only
+          } else if (message.payload?.event === 'room_objects') {
+            // Update world state with new room objects list
+            const locationId = message.payload?.location
+            const newObjects = Array.isArray(message.payload?.objects) 
+              ? (message.payload.objects as Array<{ id: number; name?: string }>).map(obj => obj.id)
+              : []
+            
+            if (locationId !== undefined && worldRef.current) {
+              // Update both the ref (for immediate access) and state (for re-renders)
+              const updatedLocations = worldRef.current.locations.map(loc =>
+                loc.id === locationId ? { ...loc, objects: newObjects } : loc
+              )
+              const updatedWorld = { ...worldRef.current, locations: updatedLocations }
+              worldRef.current = updatedWorld
+              setWorld(updatedWorld)
+            }
+            // Don't display these events in the console
+            break
+          } else if (message.payload?.event === 'pickup_result') {
+            // Don't display pickup_result events in the console - the inventory event shows the update
             break
           } else if (message.payload?.event === 'unimplemented') {
             summary = 'Sorry, that command exists, but it is not implemented (yet).'
