@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, List, Protocol
 
-from . import constants, fixtures, models
+from . import constants, fixtures, models, repositories
 
 
 class CommandError(Exception):
@@ -82,6 +82,7 @@ class GameState:
     messages: models.MessageBundleModel | None = None
     content_mappings: dict[str, dict[str, str]] | None = None
     cooldowns: Dict[str, float] = field(default_factory=dict)
+    db_session: any = None  # SQLAlchemy session for persistence
 
 
 @dataclass
@@ -340,6 +341,12 @@ def _handle_get(state: GameState, args: dict) -> CommandResult:
     )
     state.locations[location.id] = location
 
+    # Persist location changes to database so they survive server restarts
+    if state.db_session:
+        location_repo = repositories.LocationRepository(state.db_session)
+        location_repo.update_objects(location.id, remaining_objects)
+        state.db_session.commit()
+
     state.player.gpobjs.append(object_id)
     state.player.obvals.append(0)
     state.player.npobjs = len(state.player.gpobjs)
@@ -390,6 +397,12 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
         update={"objects": updated_objects, "nlobjs": len(updated_objects)}
     )
     state.locations[location.id] = location
+
+    # Persist location changes to database so they survive server restarts
+    if state.db_session:
+        location_repo = repositories.LocationRepository(state.db_session)
+        location_repo.update_objects(location.id, updated_objects)
+        state.db_session.commit()
 
     obj = objects.get(object_id)
 

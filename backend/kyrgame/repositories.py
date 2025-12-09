@@ -171,6 +171,28 @@ class SpellTimerRepository:
         )
 
 
+class LocationRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def update_objects(self, location_id: int, object_ids: List[int]):
+        """Update the objects list for a location in the database."""
+        location = self.session.scalar(
+            select(models.Location).where(models.Location.id == location_id)
+        )
+        if location:
+            location.objects = object_ids
+            location.nlobjs = len(object_ids)
+            self.session.flush([location])
+        return location
+
+    def get(self, location_id: int) -> Optional[models.Location]:
+        """Get a location record from the database."""
+        return self.session.scalar(
+            select(models.Location).where(models.Location.id == location_id)
+        )
+
+
 class RoomOccupantRepository:
     def __init__(self, session: Session):
         self.session = session
