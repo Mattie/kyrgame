@@ -209,16 +209,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             break
           }
           
-          const summary =
-            payload.event === 'room_message' && payload.text
-              ? payload.text
-              : payload.event ?? 'room_broadcast'
-          appendActivity({
-            type: 'room_broadcast',
-            room: message.room,
-            summary,
-            payload,
-          })
+          // Handle player_enter events - update occupants but don't display (the text comes in a separate room_message)
           if (payload.event === 'player_enter' && payload.player) {
             const enteringPlayer = payload.player
             // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
@@ -229,7 +220,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
                 return next
               })
             }
+            break // Don't display this event - the message text comes separately
           }
+          
+          const summary =
+            payload.event === 'room_message' && payload.text
+              ? payload.text
+              : payload.event ?? 'room_broadcast'
+          appendActivity({
+            type: 'room_broadcast',
+            room: message.room,
+            summary,
+            payload,
+          })
           break
         }
         case 'command_response': {
@@ -237,6 +240,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
           let payload = message.payload
           let extraLines: string[] | undefined
+          
+          // Skip command acknowledgments that have no event - they're just metadata
+          if (!payloadEvent && message.payload?.verb) {
+            break
+          }
 
           if (payloadEvent === 'room_occupants') {
             const occupants = Array.isArray(message.payload?.occupants)
