@@ -17,7 +17,7 @@ class CommandError(Exception):
 class UnknownCommandError(CommandError):
     def __init__(self, verb: str, message_id: str | None = None):
         super().__init__(verb)
-        self.message_id = message_id
+        self.message_id = message_id or "HUH"
 
 
 class LevelRequirementError(CommandError):
