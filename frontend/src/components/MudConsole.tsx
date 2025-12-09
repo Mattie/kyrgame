@@ -421,7 +421,7 @@ export const MudConsole = () => {
 
     const interval = window.setInterval(() => {
       requestStatusRefresh()
-    }, 2000)
+    }, 5000)
 
     return () => window.clearInterval(interval)
   }, [activeStatusCards, connectionStatus, requestStatusRefresh])
