@@ -308,11 +308,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
             summary = inventoryText
             payload = { ...message.payload, inventory: inventoryList, text: inventoryText }
-          } else if (message.payload?.event === 'room_objects') {
-            // Don't display room_objects events in the console - they're for internal state only
-            break
-          } else if (message.payload?.event === 'pickup_result') {
-            // Don't display pickup_result events in the console - they're for internal state only
+          } else if (['room_objects', 'pickup_result'].includes(message.payload?.event as string)) {
+            // Don't display these events in the console - they're for internal state only
             break
           } else if (message.payload?.event === 'unimplemented') {
             summary = 'Sorry, that command exists, but it is not implemented (yet).'
@@ -332,8 +329,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let errorSummary = message.payload?.detail ?? 'command_error'
           
           // Look up message from message_id if available (e.g., HUH for unknown commands)
-          if (message.payload?.message_id && worldRef.current?.messages) {
-            const messageText = worldRef.current.messages[message.payload.message_id]
+          const messages = worldRef.current?.messages
+          if (message.payload?.message_id && messages) {
+            const messageText = messages[message.payload.message_id]
             if (messageText) {
               errorSummary = messageText
             }
