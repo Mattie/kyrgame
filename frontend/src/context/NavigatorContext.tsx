@@ -196,16 +196,20 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         case 'room_broadcast': {
           const payload = message.payload ?? {}
-          const summary =
-            payload.event === 'room_message' && payload.text
-              ? payload.text
-              : payload.event ?? 'room_broadcast'
-          appendActivity({
-            type: 'room_broadcast',
-            room: message.room,
-            summary,
-            payload,
-          })
+          
+          // Handle chat events
+          if (payload.event === 'chat' && payload.text && payload.from) {
+            const chatText = `${payload.from} says, "${payload.text}"`
+            appendActivity({
+              type: 'room_broadcast',
+              room: message.room,
+              summary: chatText,
+              payload,
+            })
+            break
+          }
+          
+          // Handle player_enter events - update occupants but don't display (the text comes in a separate room_message)
           if (payload.event === 'player_enter' && payload.player) {
             const enteringPlayer = payload.player
             // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
@@ -216,7 +220,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
                 return next
               })
             }
+            break // Don't display this event - the message text comes separately
           }
+          
+          const summary =
+            payload.event === 'room_message' && payload.text
+              ? payload.text
+              : payload.event ?? 'room_broadcast'
+          appendActivity({
+            type: 'room_broadcast',
+            room: message.room,
+            summary,
+            payload,
+          })
           break
         }
         case 'command_response': {
@@ -224,6 +240,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let summary = message.payload?.event ?? message.payload?.verb ?? 'command_response'
           let payload = message.payload
           let extraLines: string[] | undefined
+          
+          // Skip command acknowledgments that have no event - they're just metadata
+          if (!message.payload?.event && message.payload?.verb) {
+            break
+          }
 
           if (payloadEvent === 'room_occupants') {
             const occupants = Array.isArray(message.payload?.occupants)
@@ -295,6 +316,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
             summary = inventoryText
             payload = { ...message.payload, inventory: inventoryList, text: inventoryText }
+          } else if (['room_objects', 'pickup_result'].includes(message.payload?.event as string)) {
+            // Don't display these events in the console - they're for internal state only
+            break
+          } else if (message.payload?.event === 'unimplemented') {
+            summary = 'Sorry, that command exists, but it is not implemented (yet).'
+            payload = { ...message.payload, text: summary }
           }
           
           appendActivity({
@@ -307,10 +334,21 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
         }
         case 'command_error': {
+          let errorSummary = message.payload?.detail ?? 'command_error'
+          
+          // Look up message from message_id if available (e.g., HUH for unknown commands)
+          const messages = worldRef.current?.messages
+          if (message.payload?.message_id && messages) {
+            const messageText = messages[message.payload.message_id]
+            if (messageText) {
+              errorSummary = messageText
+            }
+          }
+          
           appendActivity({
             type: 'command_error',
             room: message.room,
-            summary: message.payload?.detail ?? 'command_error',
+            summary: errorSummary,
             payload: message.payload,
           })
           break

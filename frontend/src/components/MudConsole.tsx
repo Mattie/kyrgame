@@ -94,12 +94,14 @@ const formatPayload = (payload: ActivityEntry['payload']): string | null => {
     if ((payload as Record<string, unknown>).event === 'location_description') {
       return null
     }
+    return null
   }
+
   if (typeof payload === 'string') return payload
   if (typeof payload === 'number' || typeof payload === 'boolean') {
     return String(payload)
   }
-  return JSON.stringify(payload)
+  return null
 }
 
 type HudState = {
@@ -297,15 +299,30 @@ export const MudConsole = () => {
                 const legacyLines =
                   entry.extraLines ??
                   formatLegacyRoomLines(entry, world, currentRoom, occupants, session?.playerId ?? null)
+                
+                // Only show > for user-initiated commands (command acknowledgments with verb)
+                const isUserCommand = entry.type === 'command_response' && 
+                  typeof entry.payload === 'object' && 
+                  entry.payload !== null &&
+                  'verb' in entry.payload &&
+                  !('event' in entry.payload)
+                
+                // Check if this is an unimplemented command
+                const isUnimplemented = entry.type === 'command_response' &&
+                  typeof entry.payload === 'object' &&
+                  entry.payload !== null &&
+                  'event' in entry.payload &&
+                  entry.payload.event === 'unimplemented'
+                
                 return (
                   <div key={entry.id} className="crt-entry">
-                    <p className={`crt-line ${entry.type}`}>
-                      {payloadText && (
+                    <p className={`crt-line ${entry.type}`} style={isUnimplemented ? { fontStyle: 'italic' } : undefined}>
+                      {isUserCommand && (
                         <span className="prompt-symbol" aria-hidden>
                           &gt;
                         </span>
                       )}
-                      <span className="prompt-symbol">&gt;</span> <GemstoneText text={entry.summary} />
+                      <GemstoneText text={entry.summary} />
                       {payloadText && <span className="payload-inline">{payloadText}</span>}
                     </p>
                     {legacyLines?.map((line, index) => (
