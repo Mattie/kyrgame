@@ -180,10 +180,11 @@ class LocationRepository:
         location = self.session.scalar(
             select(models.Location).where(models.Location.id == location_id)
         )
-        if location:
-            location.objects = object_ids
-            location.nlobjs = len(object_ids)
-            self.session.flush([location])
+        if not location:
+            raise ValueError(f"Location {location_id} not found in database")
+        location.objects = object_ids
+        location.nlobjs = len(object_ids)
+        self.session.flush([location])
         return location
 
     def get(self, location_id: int) -> Optional[models.Location]:

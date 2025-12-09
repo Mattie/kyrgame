@@ -93,8 +93,7 @@ async def bootstrap_app(app: FastAPI):
     
     # Load locations from database to get persisted object state, fallback to fixtures
     with session_factory() as db:
-        from . import models as db_models
-        location_records = db.query(db_models.Location).all()
+        location_records = db.query(models.Location).all()
         if location_records:
             # Convert database records to LocationModel instances
             db_locations = [

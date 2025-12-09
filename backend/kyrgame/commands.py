@@ -340,12 +340,7 @@ def _handle_get(state: GameState, args: dict) -> CommandResult:
         update={"objects": remaining_objects, "nlobjs": len(remaining_objects)}
     )
     state.locations[location.id] = location
-
-    # Persist location changes to database so they survive server restarts
-    if state.db_session:
-        location_repo = repositories.LocationRepository(state.db_session)
-        location_repo.update_objects(location.id, remaining_objects)
-        state.db_session.commit()
+    _persist_location_objects(state, location.id, remaining_objects)
 
     state.player.gpobjs.append(object_id)
     state.player.obvals.append(0)
@@ -397,12 +392,7 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
         update={"objects": updated_objects, "nlobjs": len(updated_objects)}
     )
     state.locations[location.id] = location
-
-    # Persist location changes to database so they survive server restarts
-    if state.db_session:
-        location_repo = repositories.LocationRepository(state.db_session)
-        location_repo.update_objects(location.id, updated_objects)
-        state.db_session.commit()
+    _persist_location_objects(state, location.id, updated_objects)
 
     obj = objects.get(object_id)
 
@@ -501,6 +491,14 @@ def _inventory_text(state: GameState, items: list[dict]) -> tuple[str, str | Non
     if item_names:
         prefix = prefix + ", ".join(item_names) + ", "
     return prefix + suffix, message_id
+
+
+def _persist_location_objects(state: GameState, location_id: int, object_ids: list[int]):
+    """Persist location object changes to database so they survive server restarts."""
+    if state.db_session:
+        location_repo = repositories.LocationRepository(state.db_session)
+        location_repo.update_objects(location_id, object_ids)
+        state.db_session.commit()
 
 
 def _room_objects_event(
