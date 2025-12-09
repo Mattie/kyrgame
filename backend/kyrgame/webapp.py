@@ -865,6 +865,27 @@ async def _room_occupants_event(
     }
 
 
+def _entrance_room_message(player_id: str, room_id: int) -> dict:
+    """Legacy-style entrance broadcast when a player appears in a room.
+
+    Mirrors ``entrgp`` in ``KYRUTIL.C`` when a player logs in or is placed into
+    the world with the APPEARCLOUDMIST text from ``KYRANDIA.C``.【F:legacy/KYRUTIL.C†L236-L260】【F:legacy/KYRANDIA.C†L135-L211】
+    """
+
+    return {
+        "scope": "room",
+        "event": "room_message",
+        "type": "room_message",
+        "player": player_id,
+        "from": None,
+        "to": room_id,
+        "direction": None,
+        "text": f"*** {player_id} has just appeared in a cloud of mists!",
+        "message_id": None,
+        "command_id": None,
+    }
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -1033,6 +1054,15 @@ def create_app() -> FastAPI:
                 "type": "room_broadcast",
                 "room": current_room,
                 "payload": {"event": "player_enter", "player": player_id},
+            },
+            sender=websocket,
+        )
+        await gateway.broadcast(
+            current_room,
+            {
+                "type": "room_broadcast",
+                "room": current_room,
+                "payload": _entrance_room_message(player_id, current_room),
             },
             sender=websocket,
         )
