@@ -94,12 +94,14 @@ const formatPayload = (payload: ActivityEntry['payload']): string | null => {
     if ((payload as Record<string, unknown>).event === 'location_description') {
       return null
     }
+    return null
   }
+
   if (typeof payload === 'string') return payload
   if (typeof payload === 'number' || typeof payload === 'boolean') {
     return String(payload)
   }
-  return JSON.stringify(payload)
+  return null
 }
 
 type HudState = {
