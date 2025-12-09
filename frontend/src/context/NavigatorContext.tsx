@@ -315,7 +315,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             // Don't display pickup_result events in the console - they're for internal state only
             break
           } else if (message.payload?.event === 'unimplemented') {
-            summary = 'Sorry, that command does exist, but it is not implemented (yet).'
+            summary = 'Sorry, that command exists, but it is not implemented (yet).'
             payload = { ...message.payload, text: summary }
           }
           
