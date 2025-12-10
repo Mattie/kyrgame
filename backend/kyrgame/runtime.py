@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI
 
-from . import commands, database, fixtures, loader, rooms
+from . import commands, database, fixtures, loader, models, rooms
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .scheduler import SchedulerService
@@ -90,7 +90,30 @@ async def bootstrap_app(app: FastAPI):
         "content_mappings": content_mappings,
         "summary": fixtures.fixture_summary(seed_root),
     }
-    app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
+    
+    # Load locations from database to get persisted object state, fallback to fixtures
+    with session_factory() as db:
+        location_records = db.query(models.Location).all()
+        if location_records:
+            # Convert database records to LocationModel instances
+            db_locations = [
+                models.LocationModel(
+                    id=rec.id,
+                    brfdes=rec.brfdes,
+                    objlds=rec.objlds,
+                    nlobjs=rec.nlobjs,
+                    objects=rec.objects,
+                    gi_north=rec.gi_north,
+                    gi_south=rec.gi_south,
+                    gi_east=rec.gi_east,
+                    gi_west=rec.gi_west,
+                )
+                for rec in location_records
+            ]
+            app.state.location_index = {loc.id: loc for loc in db_locations}
+        else:
+            # No database records yet, use fixtures
+            app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
 
     command_vocabulary = commands.CommandVocabulary(
         app.state.fixture_cache["commands"], default_messages

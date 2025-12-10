@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, List, Protocol
 
-from . import constants, fixtures, models
+from . import constants, fixtures, models, repositories
 
 
 class CommandError(Exception):
@@ -82,6 +82,7 @@ class GameState:
     messages: models.MessageBundleModel | None = None
     content_mappings: dict[str, dict[str, str]] | None = None
     cooldowns: Dict[str, float] = field(default_factory=dict)
+    db_session: any = None  # SQLAlchemy session for persistence
 
 
 @dataclass
@@ -204,6 +205,7 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
+    objects = state.objects or {}
     current = state.locations[state.player.gamloc]
     target_id = getattr(current, _DIRECTION_FIELDS[direction])
     if target_id == -1 or target_id not in state.locations:
@@ -265,6 +267,13 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
                 "message_id": description_id,
                 "text": long_description or destination.brfdes,
             },
+            # Mirror locobjs call in legacy entrgp to describe visible room objects on entry.【F:legacy/KYRUTIL.C†L248-L266】
+            _room_objects_event(
+                destination,
+                objects,
+                command_id,
+                message_id,
+            ),
         ],
     )
 
@@ -331,6 +340,7 @@ def _handle_get(state: GameState, args: dict) -> CommandResult:
         update={"objects": remaining_objects, "nlobjs": len(remaining_objects)}
     )
     state.locations[location.id] = location
+    _persist_location_objects(state, location.id, remaining_objects)
 
     state.player.gpobjs.append(object_id)
     state.player.obvals.append(0)
@@ -382,6 +392,7 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
         update={"objects": updated_objects, "nlobjs": len(updated_objects)}
     )
     state.locations[location.id] = location
+    _persist_location_objects(state, location.id, updated_objects)
 
     obj = objects.get(object_id)
 
@@ -480,6 +491,14 @@ def _inventory_text(state: GameState, items: list[dict]) -> tuple[str, str | Non
     if item_names:
         prefix = prefix + ", ".join(item_names) + ", "
     return prefix + suffix, message_id
+
+
+def _persist_location_objects(state: GameState, location_id: int, object_ids: list[int]):
+    """Persist location object changes to database so they survive server restarts."""
+    if state.db_session:
+        location_repo = repositories.LocationRepository(state.db_session)
+        location_repo.update_objects(location_id, object_ids)
+        state.db_session.commit()
 
 
 def _room_objects_event(

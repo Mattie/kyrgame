@@ -538,7 +538,9 @@ world_router = APIRouter(prefix="/world", tags=["world"])
 
 @world_router.get("/locations")
 async def list_locations(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
-    return [location.model_dump() for location in provider.cache["locations"]]
+    # Return locations from location_index (runtime state) not fixture cache (static initial state)
+    # This ensures frontend gets current object lists after pickups/drops
+    return [location.model_dump() for location in provider.location_index.values()]
 
 
 objects_router = APIRouter(tags=["objects"])
@@ -990,12 +992,17 @@ def create_app() -> FastAPI:
         player_state.plyrid = player_id
         player_state.gamloc = current_room
         player_state.pgploc = current_room
+        
+        # Create a persistent database session for this WebSocket connection
+        persistent_session = provider.scope.app.state.session_factory()
+        
         state = commands.GameState(
             player=player_state,
             locations=provider.location_index,
             objects={obj.id: obj for obj in provider.cache["objects"]},
             messages=provider.message_bundles.get("en-US"),
             content_mappings=provider.content_mappings,
+            db_session=persistent_session,
         )
 
         await provider.presence.set_location(player_id, current_room, session_token)
@@ -1033,6 +1040,15 @@ def create_app() -> FastAPI:
                         "message_id": description_id,
                         "text": long_description or location.brfdes,
                     },
+                }
+            )
+            await websocket.send_json(
+                {
+                    "type": "command_response",
+                    "room": current_room,
+                    "payload": commands._room_objects_event(
+                        location, state.objects or {}, None, description_id
+                    ),
                 }
             )
 
@@ -1163,6 +1179,9 @@ def create_app() -> FastAPI:
         finally:
             if session_connections.get(session_token) is websocket:
                 session_connections.pop(session_token, None)
+            # Close the persistent database session
+            if persistent_session:
+                persistent_session.close()
 
     return app
 
