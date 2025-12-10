@@ -203,22 +203,38 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         case 'room_broadcast': {
           const payload = message.payload ?? {}
-          
+
+          const resolvedRoomMessageText =
+            payload.event === 'room_message' && !payload.text
+              ? payload.message_id && worldRef.current?.messages
+                ? worldRef.current.messages[payload.message_id]
+                : undefined
+              : payload.text
+
+          const normalizedPayload =
+            payload.event === 'room_message' && resolvedRoomMessageText
+              ? { ...payload, text: resolvedRoomMessageText }
+              : payload
+
           // Handle chat events
-          if (payload.event === 'chat' && payload.text && payload.from) {
+          if (
+            normalizedPayload.event === 'chat' &&
+            normalizedPayload.text &&
+            normalizedPayload.from
+          ) {
             const chatText = `${payload.from} says, "${payload.text}"`
             appendActivity({
               type: 'room_broadcast',
               room: message.room,
               summary: chatText,
-              payload,
+              payload: normalizedPayload,
             })
             break
           }
-          
+
           // Handle player_enter events - update occupants but don't display (the text comes in a separate room_message)
-          if (payload.event === 'player_enter' && payload.player) {
-            const enteringPlayer = payload.player
+          if (normalizedPayload.event === 'player_enter' && normalizedPayload.player) {
+            const enteringPlayer = normalizedPayload.player
             // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
             if (normalizePlayerName(enteringPlayer) !== normalizePlayerName(session?.playerId)) {
               setOccupants((current) => {
@@ -231,14 +247,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           }
           
           const summary =
-            payload.event === 'room_message' && payload.text
-              ? payload.text
-              : payload.event ?? 'room_broadcast'
+            normalizedPayload.event === 'room_message' && normalizedPayload.text
+              ? normalizedPayload.text
+              : normalizedPayload.event ?? 'room_broadcast'
           appendActivity({
             type: 'room_broadcast',
             room: message.room,
             summary,
-            payload,
+            payload: normalizedPayload,
           })
           break
         }
