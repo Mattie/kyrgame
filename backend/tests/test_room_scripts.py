@@ -16,7 +16,10 @@ class FakeGateway:
         self.messages = []
 
     async def broadcast(self, room_id: int, message: dict, sender=None):  # noqa: ARG002
-        self.messages.append(message)
+        self.messages.append({"room": room_id, "scope": "broadcast", **message})
+
+    async def direct(self, room_id: int, player_id: str, message: dict):
+        self.messages.append({"room": room_id, "scope": "direct", "player": player_id, **message})
 
 
 ADMIN_HEADERS = {"Authorization": f"Bearer {DEFAULT_ADMIN_TOKEN}"}
@@ -57,8 +60,8 @@ async def test_room_scripts_trigger_on_entry_and_cleanup_on_exit():
     await asyncio.sleep(0.02)
     await scheduler.stop()
 
-    events = [msg for msg in gateway.messages if msg.get("room") == 0]
-    assert any(event.get("payload", {}).get("event") == "player_enter" for event in events)
+    events = [msg for msg in gateway.messages if msg["room"] == 0]
+    assert any(event["event"] == "player_enter" for event in events)
 
     state = engine.get_room_state(0)
     assert state.flags.get("entries") == 1
@@ -85,27 +88,24 @@ async def test_willow_routine_matches_legacy_prompts():
     await scheduler.stop()
 
     direct_texts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "direct"
-        and msg.get("payload", {}).get("player") == "hero"
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
     ]
     assert messages.messages["KID046"] in direct_texts
     assert messages.messages["LVL200"] in direct_texts
 
     broadcast_texts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "broadcast"
-        and "text" in msg.get("payload", {})
+        if msg.get("scope") == "broadcast" and "text" in msg
     ]
     assert messages.messages["GETLVL"] % "hero" in broadcast_texts
 
     rogue_texts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "direct"
-        and msg.get("payload", {}).get("player") == "rogue"
+        if msg.get("scope") == "direct" and msg.get("player") == "rogue"
     ]
     assert messages.messages["LVL200"] not in rogue_texts
 
@@ -131,11 +131,9 @@ async def test_multiple_players_receive_room_broadcasts_and_state_updates():
     assert state.occupants == {"hero", "rogue"}
     assert state.flags.get("entries") == 2
 
-    player_events = [
-        msg for msg in gateway.messages if msg.get("payload", {}).get("event") == "player_enter"
-    ]
-    assert any(msg.get("payload", {}).get("player") == "hero" for msg in player_events)
-    assert any(msg.get("payload", {}).get("player") == "rogue" for msg in player_events)
+    player_events = [msg for msg in gateway.messages if msg["event"] == "player_enter"]
+    assert any(msg["player"] == "hero" for msg in player_events)
+    assert any(msg["player"] == "rogue" for msg in player_events)
 
 
 @pytest.mark.anyio
@@ -160,18 +158,16 @@ async def test_temple_room_schedules_prayer_prompt_and_prayer_command():
     await scheduler.stop()
 
     prayer_prompts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "broadcast"
-        and "text" in msg.get("payload", {})
+        if msg["scope"] == "broadcast" and "text" in msg
     ]
     assert messages.messages["TMPRAY"] in prayer_prompts
 
     blessings = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "direct"
-        and msg.get("payload", {}).get("player") == "acolyte"
+        if msg.get("scope") == "direct" and msg.get("player") == "acolyte"
     ]
     assert messages.messages["PRAYER"] in blessings
 
@@ -208,18 +204,16 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
     await scheduler.stop()
 
     ambient_texts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("event") == "ambient"
-        and msg.get("payload", {}).get("scope") == "broadcast"
+        if msg.get("event") == "ambient" and msg.get("scope") == "broadcast"
     ]
     assert messages.messages["KRD038"] in ambient_texts
 
     direct_texts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "direct"
-        and msg.get("payload", {}).get("player") == "hero"
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
     ]
     # After 3 pinecones, should get success message
     assert messages.messages["MAGF00"] in direct_texts
@@ -254,18 +248,16 @@ async def test_heart_and_soul_offering_awards_willowisp_spell():
     await scheduler.stop()
 
     direct_texts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "direct"
-        and msg.get("payload", {}).get("player") == "hero"
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
     ]
     assert messages.messages["HNSYOU"] in direct_texts
 
     broadcast_texts = [
-        msg.get("payload", {}).get("text")
+        msg["text"]
         for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "broadcast"
-        and "text" in msg.get("payload", {})
+        if msg.get("scope") == "broadcast" and "text" in msg
     ]
     assert messages.messages["HNSOTH"] % "hero" in broadcast_texts
 
