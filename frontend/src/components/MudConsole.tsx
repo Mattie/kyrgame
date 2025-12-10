@@ -1,5 +1,6 @@
 import {
   FormEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -113,6 +114,63 @@ type HudState = {
   spellbook?: string[]
 }
 
+type StatusCardId = 'hitpoints' | 'inventory' | 'spellbook' | 'description' | 'effects'
+
+type StatusCardState = {
+  id: StatusCardId
+  title: string
+  command: string
+  autoRefresh: boolean
+  active: boolean
+  lastSummary?: string
+}
+
+const STATUS_CARD_CONFIG: Record<StatusCardId, { title: string; command: string }> = {
+  hitpoints: { title: 'Hitpoints', command: 'hitpoints' },
+  inventory: { title: 'Inventory', command: 'inv' },
+  spellbook: { title: 'Spellbook', command: 'spellbook' },
+  description: { title: 'Description', command: 'describe' },
+  effects: { title: 'Effects', command: 'effects' },
+}
+
+const STATUS_CARD_ORDER: StatusCardId[] = [
+  'hitpoints',
+  'inventory',
+  'spellbook',
+  'effects',
+  'description',
+]
+
+const createDefaultStatusCards = (): Record<StatusCardId, StatusCardState> =>
+  (Object.keys(STATUS_CARD_CONFIG) as StatusCardId[]).reduce(
+    (acc, id) => {
+      acc[id] = {
+        id,
+        title: STATUS_CARD_CONFIG[id].title,
+        command: STATUS_CARD_CONFIG[id].command,
+        autoRefresh: true,
+        active: false,
+      }
+      return acc
+    },
+    {} as Record<StatusCardId, StatusCardState>
+  )
+
+const normalizeInventoryFromPayload = (payload: any): string[] | undefined => {
+  if (!payload) return undefined
+  if (Array.isArray(payload.inventory)) return payload.inventory
+
+  const payloadItems = Array.isArray(payload.items) ? payload.items : []
+  const inventoryList = payloadItems
+    .map((item: any) => {
+      const name = item?.display_name ?? item?.name
+      return name || null
+    })
+    .filter(Boolean)
+
+  return inventoryList.length > 0 ? (inventoryList as string[]) : undefined
+}
+
 const extractHudFromEntry = (entry: { summary?: string; payload?: any }): HudState => {
   const updates: HudState = {}
   const payload = entry.payload ?? {}
@@ -129,12 +187,17 @@ const extractHudFromEntry = (entry: { summary?: string; payload?: any }): HudSta
     updates.spellbook = payload.spellbook
   }
 
+  const payloadEvent = typeof payload.event === 'string' ? payload.event : ''
+
   if (payload.description) {
     updates.description = payload.description
+  } else if (payloadEvent === 'description') {
+    updates.description = payload.description ?? payload.text
   }
 
-  if (payload.inventory) {
-    updates.inventory = payload.inventory
+  const inventoryList = normalizeInventoryFromPayload(payload)
+  if (inventoryList) {
+    updates.inventory = inventoryList
   }
 
   if (payload.effects) {
@@ -165,9 +228,26 @@ export const MudConsole = () => {
   const [input, setInput] = useState('')
   const [navMode, setNavMode] = useState(false)
   const [hud, setHud] = useState<HudState>({})
-  const [hudVisible, setHudVisible] = useState(false)
+  const [statusCards, setStatusCards] = useState<Record<StatusCardId, StatusCardState>>(
+    () => createDefaultStatusCards()
+  )
   const logRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const processedActivityRef = useRef(0)
+  const defaultStatusCardsRef = useRef(createDefaultStatusCards())
+
+  const hudVisible = useMemo(
+    () => Object.values(statusCards).some((card) => card.active),
+    [statusCards]
+  )
+
+  const activeStatusCards = useMemo(
+    () =>
+      STATUS_CARD_ORDER
+        .map((id) => statusCards[id])
+        .filter((card): card is StatusCardState => Boolean(card && card.active)),
+    [statusCards]
+  )
 
   const location = useMemo(() => {
     if (!world || currentRoom === null) return null
@@ -199,19 +279,157 @@ export const MudConsole = () => {
   }, [navMode, sendMove])
 
   useEffect(() => {
-    const latest = activity[activity.length - 1]
-    if (!latest) return
-    const updates = extractHudFromEntry(latest)
-    const hasUpdates = Object.keys(updates).length > 0
-    if (hasUpdates) {
-      setHud((prev) => ({ ...prev, ...updates }))
-      setHudVisible(true)
-    }
+    const newEntries = activity.slice(processedActivityRef.current)
+    if (newEntries.length === 0) return
+
+    newEntries.forEach((entry) => {
+      const updates = extractHudFromEntry(entry)
+      const hasUpdates = Object.keys(updates).length > 0
+      if (hasUpdates) {
+        setHud((prev) => ({ ...prev, ...updates }))
+      }
+
+      const payload = entry.payload ?? {}
+      const candidateCards: StatusCardId[] = []
+      if (updates.hitpoints || updates.spellPoints || payload.event === 'hitpoints') {
+        candidateCards.push('hitpoints')
+      }
+      if (updates.inventory || payload.event === 'inventory') {
+        candidateCards.push('inventory')
+      }
+      if (updates.spellbook || payload.event === 'spellbook') {
+        candidateCards.push('spellbook')
+      }
+      if (updates.description || payload.event === 'description') {
+        candidateCards.push('description')
+      }
+      if (updates.effects || payload.event === 'effects') {
+        candidateCards.push('effects')
+      }
+
+          if (candidateCards.length > 0) {
+            setStatusCards((prev) => {
+              const next = { ...prev }
+              candidateCards.forEach((id) => {
+                const base = next[id] ?? { ...defaultStatusCardsRef.current[id] }
+                const commandFromPayload =
+                  (typeof payload?.verb === 'string' && payload.verb.trim()) ||
+                  (typeof payload?.command === 'string' && payload.command.trim()) ||
+                  base.command
+
+                next[id] = {
+                  ...base,
+                  command: commandFromPayload,
+              autoRefresh: base.autoRefresh,
+              active: true,
+              lastSummary: entry.summary ?? base.lastSummary,
+            }
+          })
+          return next
+        })
+      }
+    })
+
+    processedActivityRef.current = activity.length
   }, [activity])
+
+  const renderCardContent = (card: StatusCardState) => {
+    switch (card.id) {
+      case 'hitpoints':
+        return (
+          <>
+            {hud.hitpoints && (
+              <p className="hud-line">Hitpoints: {hud.hitpoints.current}/{hud.hitpoints.max}</p>
+            )}
+            {hud.spellPoints && (
+              <p className="hud-line">
+                Spell points: {hud.spellPoints.current}/{hud.spellPoints.max}
+              </p>
+            )}
+            {!hud.hitpoints && !hud.spellPoints && (
+              <p className="muted">Use HITPOINTS to pin your vitals.</p>
+            )}
+          </>
+        )
+      case 'inventory':
+        return hud.inventory && hud.inventory.length > 0 ? (
+          <p className="hud-line">
+            Inventory: <strong><GemstoneText text={hud.inventory.join(', ')} /></strong>
+          </p>
+        ) : (
+          <p className="muted">Type INV to inspect your pack.</p>
+        )
+      case 'spellbook':
+        return hud.spellbook && hud.spellbook.length > 0 ? (
+          <div className="hud-line">
+            <p className="eyebrow">Spellbook</p>
+            <ul>
+              {hud.spellbook.map((spell) => (
+                <li key={spell}>{spell}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="muted">Cast or study spells to refresh your book.</p>
+        )
+      case 'description':
+        return (
+          <p className="hud-line">
+            <GemstoneText
+              text={
+                hud.description ??
+                card.lastSummary ??
+                'Look or DESCRIBE yourself to populate this panel.'
+              }
+            />
+          </p>
+        )
+      case 'effects':
+        return hud.effects && hud.effects.length > 0 ? (
+          <p className="hud-line">Effects: {hud.effects.join(', ')}</p>
+        ) : (
+          <p className="muted">Active buffs and curses will appear here.</p>
+        )
+      default:
+        return null
+    }
+  }
+
+  const toggleAutoRefresh = useCallback((id: StatusCardId) => {
+    setStatusCards((prev) => {
+      const base = prev[id] ?? { ...defaultStatusCardsRef.current[id] }
+      return { ...prev, [id]: { ...base, autoRefresh: !base.autoRefresh } }
+    })
+  }, [])
+
+  const requestStatusRefresh = useCallback(() => {
+    if (connectionStatus !== 'connected') return
+    activeStatusCards
+      .filter((card) => card.autoRefresh)
+      .forEach((card) =>
+        sendCommand(card.command, {
+          silent: true,
+          skipLog: true,
+          meta: { status_card: card.id },
+        })
+      )
+  }, [activeStatusCards, connectionStatus, sendCommand])
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return
+    if (!activeStatusCards.some((card) => card.autoRefresh)) return
+
+    const interval = window.setInterval(() => {
+      requestStatusRefresh()
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [activeStatusCards, connectionStatus, requestStatusRefresh])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     sendCommand(input)
+    requestStatusRefresh()
     setInput('')
   }
 
@@ -271,6 +489,11 @@ export const MudConsole = () => {
     [activity, initialDescriptionEntry]
   )
 
+  const visibleEntries = useMemo(
+    () => entriesToRender.filter((entry) => !entry.hidden),
+    [entriesToRender]
+  )
+
   return (
     <section className="mud-shell">
       <div className="mud-grid">
@@ -294,7 +517,7 @@ export const MudConsole = () => {
                   {line}
                 </p>
               ))}
-              {entriesToRender.map((entry) => {
+              {visibleEntries.map((entry) => {
                 const payloadText = formatPayload(entry.payload)
                 const legacyLines =
                   entry.extraLines ??
@@ -368,35 +591,29 @@ export const MudConsole = () => {
         </div>
 
         <aside className={`hud-panel ${hudVisible ? 'visible' : 'hidden'}`} aria-live="polite">
-          <p className="eyebrow">Status</p>
-          <h3>Character readout</h3>
-          {hud.hitpoints && (
-            <p className="hud-line">Hitpoints: {hud.hitpoints.current}/{hud.hitpoints.max}</p>
-          )}
-          {hud.spellPoints && (
-            <p className="hud-line">
-              Spell points: {hud.spellPoints.current}/{hud.spellPoints.max}
-            </p>
-          )}
-          {hud.description && <p className="hud-line">{hud.description}</p>}
-          {hud.inventory && hud.inventory.length > 0 && (
-            <p className="hud-line">
-              Inventory: <strong><GemstoneText text={hud.inventory.join(', ')} /></strong>
-            </p>
-          )}
-          {hud.effects && hud.effects.length > 0 && (
-            <p className="hud-line">Effects: {hud.effects.join(', ')}</p>
-          )}
-          {hud.spellbook && hud.spellbook.length > 0 && (
-            <div className="hud-line">
-              <p className="eyebrow">Spellbook</p>
-              <ul>
-                {hud.spellbook.map((spell) => (
-                  <li key={spell}>{spell}</li>
-                ))}
-              </ul>
+          <div className="hud-heading">
+            <p className="eyebrow">Status</p>
+            <h3>Character readout</h3>
+          </div>
+          {activeStatusCards.map((card) => (
+            <div key={card.id} className="hud-card">
+              <div className="hud-card-header">
+                <span className="hud-card-title">{card.title}</span>
+                <label className="refresh-toggle" title="Auto-refresh">
+                  <input
+                    type="checkbox"
+                    checked={card.autoRefresh}
+                    onChange={() => toggleAutoRefresh(card.id)}
+                    aria-label={`Enable auto-refresh for ${card.title}`}
+                  />
+                  <span role="img" aria-hidden>
+                    ♻️
+                  </span>
+                </label>
+              </div>
+              <div className="hud-card-body">{renderCardContent(card)}</div>
             </div>
-          )}
+          ))}
           {!hudVisible && <p className="muted">Cast or inspect to pin stats here.</p>}
         </aside>
       </div>
