@@ -3,7 +3,13 @@ from typing import Awaitable, Callable, Dict, Iterable, Optional
 
 from .gateway import RoomGateway
 from .scheduler import ScheduledHandle, SchedulerService
-from .models import MessageBundleModel
+from .models import (
+    GameObjectModel,
+    MessageBundleModel,
+    PlayerModel,
+    SpellModel,
+)
+from . import yaml_rooms
 
 
 RoomCallback = Callable[["RoomContext", str], Awaitable[None]]
@@ -35,17 +41,21 @@ class RoomContext:
         return self.engine.get_room_state(self.room_id)
 
     async def broadcast(self, event: str, **payload):
-        await self.engine.gateway.broadcast(self.room_id, {"event": event, **payload})
+        await self.engine.gateway.broadcast(
+            self.room_id,
+            self.engine.room_broadcast_envelope(
+                self.room_id, {"event": event, "scope": "broadcast", **payload}
+            ),
+        )
 
     async def direct(self, player_id: str, event: str, **payload):
-        if hasattr(self.engine.gateway, "direct"):
-            await self.engine.gateway.direct(
-                self.room_id, player_id, {"event": event, **payload}
-            )
-        else:
-            await self.engine.gateway.broadcast(
-                self.room_id, {"event": event, "player": player_id, **payload}
-            )
+        await self.engine.gateway.broadcast(
+            self.room_id,
+            self.engine.room_broadcast_envelope(
+                self.room_id,
+                {"event": event, "scope": "direct", "player": player_id, **payload},
+            ),
+        )
 
     def schedule(self, name: str, delay: float, callback: Callable[[], Awaitable[None] | None], interval: float | None = None):
         handle = self.engine.scheduler.schedule(delay, callback, interval=interval)
@@ -65,6 +75,10 @@ class RoomScriptEngine:
         scheduler: SchedulerService,
         locations: Iterable,
         messages: MessageBundleModel,
+        players: Iterable[PlayerModel] | None = None,
+        room_scripts: dict | None = None,
+        objects: Iterable[GameObjectModel] | None = None,
+        spells: Iterable[SpellModel] | None = None,
     ):
         self.gateway = gateway
         self.scheduler = scheduler
@@ -72,7 +86,20 @@ class RoomScriptEngine:
         self.messages = messages
         self.routines: Dict[int, RoomRoutine] = build_default_routines(messages)
         self.states: Dict[int, RoomState] = {}
+        self.players: Dict[str, PlayerModel] = {
+            player.plyrid: player for player in (players or [])
+        }
         self.reloads = 0
+        self.yaml_engine = (
+            yaml_rooms.YamlRoomEngine(
+                definitions=room_scripts,
+                messages=messages,
+                objects=objects or [],
+                spells=spells or [],
+            )
+            if room_scripts
+            else None
+        )
 
     def get_room_state(self, room_id: int) -> RoomState:
         if room_id not in self.states:
@@ -83,7 +110,13 @@ class RoomScriptEngine:
         state = self.get_room_state(room_id)
         state.occupants.add(player_id)
         state.flags["entries"] = state.flags.get("entries", 0) + 1
-        await self.gateway.broadcast(room_id, {"event": "player_enter", "player": player_id})
+        await self.gateway.broadcast(
+            room_id,
+            self.room_broadcast_envelope(
+                room_id,
+                {"event": "player_enter", "scope": "broadcast", "player": player_id},
+            ),
+        )
 
         routine = self.routines.get(room_id)
         if routine and routine.on_enter:
@@ -100,11 +133,24 @@ class RoomScriptEngine:
             for handle in list(state.timers.values()):
                 handle.cancel()
             state.timers.clear()
-            await self.gateway.broadcast(room_id, {"event": "room_empty"})
+            await self.gateway.broadcast(
+                room_id,
+                self.room_broadcast_envelope(
+                    room_id, {"event": "room_empty", "scope": "broadcast"}
+                ),
+            )
 
     def reload_scripts(self):
         self.routines = build_default_routines(self.messages)
         self.reloads += 1
+
+    def apply_damage(self, player_id: str, amount: int) -> Optional[int]:
+        player = self.players.get(player_id)
+        if player is None:
+            return None
+
+        player.hitpts = max(0, player.hitpts - amount)
+        return player.hitpts
 
     async def handle_command(
         self,
@@ -114,12 +160,34 @@ class RoomScriptEngine:
         args: Optional[list[str]] = None,
         player_level: Optional[int] = None,
     ) -> bool:
+        player = self.players.get(player_id)
         routine = self.routines.get(room_id)
         if routine and routine.on_command:
-            return await routine.on_command(
+            handled = await routine.on_command(
                 RoomContext(self, room_id), player_id, command, args or [], player_level
             )
+            if handled:
+                return True
+
+        if self.yaml_engine and player:
+            result = self.yaml_engine.handle(
+                player=player, room_id=room_id, command=command, args=args
+            )
+            if result.handled:
+                await self._dispatch_events(room_id, result.events)
+                return True
+
         return False
+
+    async def _dispatch_events(self, room_id: int, events: list[dict]):
+        for event in events:
+            await self.gateway.broadcast(
+                room_id, self.room_broadcast_envelope(room_id, event)
+            )
+
+    @staticmethod
+    def room_broadcast_envelope(room_id: int, payload: dict) -> dict:
+        return {"type": "room_broadcast", "room": room_id, "payload": payload}
 
 
 def build_default_routines(messages: MessageBundleModel) -> Dict[int, RoomRoutine]:
@@ -197,9 +265,6 @@ async def _willow_on_command(
             player=player_id,
         )
         return True
-
-    return False
-
 
 def _temple_on_enter(messages: MessageBundleModel) -> RoomCallback:
     async def _handler(context: RoomContext, player_id: str):  # noqa: ARG001
