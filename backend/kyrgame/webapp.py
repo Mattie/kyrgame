@@ -538,7 +538,9 @@ world_router = APIRouter(prefix="/world", tags=["world"])
 
 @world_router.get("/locations")
 async def list_locations(provider: Annotated[FixtureProvider, Depends(get_request_provider)]):
-    return [location.model_dump() for location in provider.cache["locations"]]
+    # Return locations from location_index (runtime state) not fixture cache (static initial state)
+    # This ensures frontend gets current object lists after pickups/drops
+    return [location.model_dump() for location in provider.location_index.values()]
 
 
 objects_router = APIRouter(tags=["objects"])
