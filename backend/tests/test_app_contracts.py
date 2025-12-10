@@ -151,14 +151,28 @@ async def test_websocket_gateway_broadcasts_and_echoes_commands():
         async with websockets.connect(uri1) as ws1:
             welcome1 = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
             assert welcome1["type"] == "room_welcome"
+            
+            # Consume initial room state messages (location_update, location_description, room_objects, occupants)
+            for _ in range(4):
+                msg = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
+                assert msg["type"] == "command_response"
 
             async with websockets.connect(uri2) as ws2:
                 welcome2 = json.loads(await asyncio.wait_for(ws2.recv(), timeout=1))
                 assert welcome2["type"] == "room_welcome"
+                
+                # Consume initial room state messages for ws2
+                for _ in range(4):
+                    msg = json.loads(await asyncio.wait_for(ws2.recv(), timeout=1))
+                    assert msg["type"] == "command_response"
 
+                # ws1 receives two broadcasts when ws2 joins: player_enter and entrance message
                 join_notice = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
                 assert join_notice["type"] == "room_broadcast"
                 assert join_notice["payload"]["event"] == "player_enter"
+                
+                entrance_msg = json.loads(await asyncio.wait_for(ws1.recv(), timeout=1))
+                assert entrance_msg["type"] == "room_broadcast"
 
                 payload = {"type": "command", "command": "chat", "args": {"text": "hi"}}
                 await ws1.send(json.dumps(payload))
