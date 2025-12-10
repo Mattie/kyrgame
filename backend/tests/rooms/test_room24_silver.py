@@ -10,7 +10,15 @@ class FakeGateway:
         self.messages = []
 
     async def broadcast(self, room_id: int, message: dict, sender=None):  # noqa: ARG002
-        self.messages.append({"room": room_id, "scope": "broadcast", **message})
+        payload = message.get("payload", {})
+        self.messages.append(
+            {
+                "room": room_id,
+                "scope": payload.get("scope", "broadcast"),
+                "player": payload.get("player"),
+                **payload,
+            }
+        )
 
     async def direct(self, room_id: int, player_id: str, message: dict):
         self.messages.append({"room": room_id, "scope": "direct", "player": player_id, **message})
