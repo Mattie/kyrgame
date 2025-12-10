@@ -110,3 +110,48 @@ async def test_websocket_bridge_emits_legacy_command_metadata():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_bridge_echoes_silent_metadata_on_responses():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        session_response = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        hero_token = session_response.json()["session"]["token"]
+        room_zero = session_response.json()["session"]["room_id"]
+
+        uri = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={hero_token}"
+
+        async with websockets.connect(uri) as hero_ws:
+            # Drain initial location + occupants payloads
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+
+            await hero_ws.send(
+                json.dumps(
+                    {
+                        "type": "command",
+                        "command": "inventory",
+                        "meta": {"silent": True, "status_card": "inventory"},
+                    }
+                )
+            )
+
+            ack = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+            assert ack["meta"] == {"silent": True, "status_card": "inventory"}
+
+            inventory_event = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+            assert inventory_event["meta"] == {"silent": True, "status_card": "inventory"}
+
+    server.should_exit = True
+    await server_task

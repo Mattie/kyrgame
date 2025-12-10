@@ -1086,6 +1086,7 @@ def create_app() -> FastAPI:
         try:
             while True:
                 payload = await websocket.receive_json()
+                meta = payload.get("meta") or None
                 if not limiter.allow():
                     await websocket.send_json(
                         {"type": "rate_limited", "detail": "Too many commands, slow down."}
@@ -1159,20 +1160,22 @@ def create_app() -> FastAPI:
                         "verb": parsed.verb,
                     },
                 }
+                if meta:
+                    ack_payload["meta"] = meta
                 await websocket.send_json(ack_payload)
 
                 for event in result.events:
                     scope = event.get("scope", "player")
                     if scope == "room":
-                        await gateway.broadcast(
-                            current_room,
-                            {"type": "room_broadcast", "room": current_room, "payload": event},
-                            sender=websocket,
-                        )
+                        envelope = {"type": "room_broadcast", "room": current_room, "payload": event}
+                        if meta:
+                            envelope["meta"] = meta
+                        await gateway.broadcast(current_room, envelope, sender=websocket)
                     else:
-                        await websocket.send_json(
-                            {"type": "command_response", "room": current_room, "payload": event}
-                        )
+                        envelope = {"type": "command_response", "room": current_room, "payload": event}
+                        if meta:
+                            envelope["meta"] = meta
+                        await websocket.send_json(envelope)
         except WebSocketDisconnect:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)
