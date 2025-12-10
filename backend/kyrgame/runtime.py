@@ -128,6 +128,10 @@ async def bootstrap_app(app: FastAPI):
         scheduler=app.state.scheduler,
         locations=app.state.fixture_cache["locations"],
         messages=default_messages,
+        players=app.state.fixture_cache["players"],
+        room_scripts=fixtures.load_room_scripts(seed_root),
+        objects=app.state.fixture_cache["objects"],
+        spells=app.state.fixture_cache["spells"],
     )
 
     app.state.background_tasks = [asyncio.create_task(_heartbeat_task(app))]
