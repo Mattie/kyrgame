@@ -96,7 +96,7 @@ class YamlRoomEngine:
             elif action_type == "heal":
                 self._action_heal(action, player)
             elif action_type == "damage":
-                self._action_damage(action, player, context)
+                self._action_damage(action, player)
             elif action_type == "random_chance":
                 self._action_random_chance(action, player, args, context, events)
             elif action_type == "random_range":
@@ -239,11 +239,9 @@ class YamlRoomEngine:
             cap = player.level * int(cap_per_level)
             player.hitpts = min(player.hitpts, cap)
 
-    def _action_damage(self, action: dict, player: models.PlayerModel, context: dict[str, Any]):
+    def _action_damage(self, action: dict, player: models.PlayerModel):
         amount = max(0, int(action.get("amount", 0)))
         player.hitpts = max(0, player.hitpts - amount)
-        if context_key := action.get("context_key"):
-            context[context_key] = amount
 
     def _action_random_chance(
         self,

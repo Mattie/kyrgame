@@ -78,6 +78,7 @@ describe('Navigator flow', () => {
     WELCOME: 'Welcome to Kyrandia!',
     KRD007: 'A long description of the temple.',
     KRD008: 'A long description of the clearing.',
+    SAPRAY: '*** hero is praying to the Goddess Tashanna.',
   }
 
   beforeEach(() => {
@@ -147,6 +148,16 @@ describe('Navigator flow', () => {
           text: '*** seer has just appeared from the west!',
         },
       })
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          player: 'hero',
+          message_id: 'SAPRAY',
+        },
+      })
     })
 
     // RoomPanel is disabled, so we check MudConsole header instead
@@ -163,6 +174,11 @@ describe('Navigator flow', () => {
     expect(screen.getAllByText(/appeared from the west/i).length).toBeGreaterThan(0)
     // ruby appears in MudConsole (initial room description with GemstoneText styling)
     expect(screen.getAllByText(/ruby/i).length).toBeGreaterThan(0)
+
+    // message_id fallback is resolved via cached world messages
+    expect(
+      screen.getAllByText(/praying to the Goddess Tashanna/i).length
+    ).toBeGreaterThan(0)
   })
 
   it('collapses dev helper panels to reclaim space', async () => {

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, Iterable, Optional
 
+from . import constants
+from . import fixtures
 from .gateway import RoomGateway
 from .scheduler import ScheduledHandle, SchedulerService
 from .models import (
@@ -13,7 +15,10 @@ from . import yaml_rooms
 
 
 RoomCallback = Callable[["RoomContext", str], Awaitable[None]]
-RoomCommandCallback = Callable[["RoomContext", str, str, list[str], Optional[int]], Awaitable[bool]]
+RoomCommandCallback = Callable[
+    ["RoomContext", str, str, list[str], Optional[int], Optional[PlayerModel]],
+    Awaitable[bool],
+]
 
 
 @dataclass
@@ -144,13 +149,8 @@ class RoomScriptEngine:
         self.routines = build_default_routines(self.messages)
         self.reloads += 1
 
-    def apply_damage(self, player_id: str, amount: int) -> Optional[int]:
-        player = self.players.get(player_id)
-        if player is None:
-            return None
-
-        player.hitpts = max(0, player.hitpts - amount)
-        return player.hitpts
+    def room_broadcast_envelope(self, room_id: int, payload: dict) -> dict:
+        return {"type": "room_broadcast", "room": room_id, "payload": payload}
 
     async def handle_command(
         self,
@@ -159,35 +159,39 @@ class RoomScriptEngine:
         command: str,
         args: Optional[list[str]] = None,
         player_level: Optional[int] = None,
+        player: Optional[PlayerModel] = None,
     ) -> bool:
-        player = self.players.get(player_id)
+        # Try YAML engine first if available
+        if self.yaml_engine:
+            player_obj = self.players.get(player_id) or player
+            if player_obj:
+                result = self.yaml_engine.handle(
+                    player=player_obj,
+                    room_id=room_id,
+                    command=command,
+                    args=args or [],
+                )
+                # Process events from YAML engine
+                ctx = RoomContext(self, room_id)
+                for event in result.events:
+                    event_type = event.get("event", "room_message")
+                    scope = event.get("scope", "broadcast")
+                    # Create a copy without event/scope keys to avoid duplication
+                    event_data = {k: v for k, v in event.items() if k not in ("event", "scope")}
+                    if scope == "direct":
+                        await ctx.direct(player_id, event_type, **event_data)
+                    else:
+                        await ctx.broadcast(event_type, **event_data)
+                if result.handled:
+                    return True
+        
+        # Fall back to Python routines
         routine = self.routines.get(room_id)
         if routine and routine.on_command:
-            handled = await routine.on_command(
-                RoomContext(self, room_id), player_id, command, args or [], player_level
+            return await routine.on_command(
+                RoomContext(self, room_id), player_id, command, args or [], player_level, player
             )
-            if handled:
-                return True
-
-        if self.yaml_engine and player:
-            result = self.yaml_engine.handle(
-                player=player, room_id=room_id, command=command, args=args
-            )
-            if result.handled:
-                await self._dispatch_events(room_id, result.events)
-                return True
-
         return False
-
-    async def _dispatch_events(self, room_id: int, events: list[dict]):
-        for event in events:
-            await self.gateway.broadcast(
-                room_id, self.room_broadcast_envelope(room_id, event)
-            )
-
-    @staticmethod
-    def room_broadcast_envelope(room_id: int, payload: dict) -> dict:
-        return {"type": "room_broadcast", "room": room_id, "payload": payload}
 
 
 def build_default_routines(messages: MessageBundleModel) -> Dict[int, RoomRoutine]:
@@ -201,6 +205,9 @@ def build_default_routines(messages: MessageBundleModel) -> Dict[int, RoomRoutin
             on_enter=_temple_on_enter(messages),
             on_exit=_willow_on_exit,
             on_command=_temple_on_command(messages),
+        ),
+        24: RoomRoutine(
+            on_command=_silver_on_command(messages),
         ),
         32: RoomRoutine(
             on_enter=_spring_on_enter(messages),
@@ -235,6 +242,7 @@ async def _willow_on_command(
     command: str,
     args: list[str],
     player_level: Optional[int],
+    player: Optional[PlayerModel],
 ):
     catalog = context.engine.messages.messages
     verb = command.lower()
@@ -266,6 +274,9 @@ async def _willow_on_command(
         )
         return True
 
+    return False
+
+
 def _temple_on_enter(messages: MessageBundleModel) -> RoomCallback:
     async def _handler(context: RoomContext, player_id: str):  # noqa: ARG001
         if "prayer_prompt" not in context.state.timers:
@@ -288,6 +299,7 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         command: str,
         args: list[str],
         player_level: Optional[int],
+        player: Optional[PlayerModel],
     ) -> bool:
         verb = command.lower()
         
@@ -376,6 +388,7 @@ def _spring_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         command: str,
         args: list[str],
         player_level: Optional[int],
+        player: Optional[PlayerModel],
     ) -> bool:  # noqa: ARG001
         verb = command.lower()
         
@@ -419,6 +432,7 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         command: str,
         args: list[str],
         player_level: Optional[int],
+        player: Optional[PlayerModel],
     ) -> bool:  # noqa: ARG001
         if command.lower() != "toss" or not args:
             return False
@@ -489,6 +503,101 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     return _handler
 
 
+def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    """Mirror the legacy ``silver`` routine (legacy/KYRROUS.C lines 555-589)."""
+
+    hotseat_spell_id = 32  # SBD033 / hotseat (ice protection I)
+    hotseat_bit = 0x00000100
+    objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
+
+    async def _handler(
+        context: RoomContext,
+        player_id: str,
+        command: str,
+        args: list[str],
+        player_level: Optional[int],
+        player: Optional[PlayerModel],
+    ) -> bool:
+        verb = command.lower()
+
+        if verb == "offer":
+            if player is None or not args:
+                return False
+
+            offered = _resolve_offering(args[0], objects_by_name)
+            if offered is None or offered not in player.gpobjs:
+                await context.direct(
+                    player_id, "room_message", text=messages.messages.get("TRDM05", "")
+                )
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages.get("SILVM5", "") % player_id,
+                    player=player_id,
+                )
+                return True
+
+            _remove_inventory_item(player, offered)
+            progress = player.gemidx or 0
+            expected = player.stones[progress] if progress < len(player.stones) else None
+
+            if expected is not None and offered == expected:
+                player.gemidx = progress + 1
+                if player.gemidx == len(player.stones):
+                    if (player_level or 0) >= 4:
+                        _grant_def_spell(player, hotseat_spell_id, hotseat_bit)
+                        await context.direct(
+                            player_id, "room_message", text=messages.messages.get("SILVM0", "")
+                        )
+                        await context.broadcast(
+                            "room_message",
+                            text=messages.messages.get("SILVM1", "") % player_id,
+                            player=player_id,
+                        )
+                    else:
+                        player.gemidx = 0
+                    return True
+
+                await context.direct(
+                    player_id, "room_message", text=messages.messages.get("SILVM2", "")
+                )
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages.get("SILVM3", "") % player_id,
+                    player=player_id,
+                )
+                return True
+
+            player.gemidx = 0
+            await context.direct(
+                player_id, "room_message", text=messages.messages.get("SILVM4", "")
+            )
+            await context.broadcast(
+                "room_message",
+                text=messages.messages.get("SILVM3", "") % player_id,
+                player=player_id,
+            )
+            return True
+
+        if verb in {"pray", "meditate"}:
+            # Legacy behavior: deliver SAPRAY to the player and a sndutl-style
+            # emote to the rest of the room (legacy/KYRROUS.C lines 555-589).
+            prayer_text = messages.messages.get("SAPRAY", "")
+            await context.direct(
+                player_id, "room_message", text=prayer_text, message_id="SAPRAY"
+            )
+
+            attnam = player.attnam if player else None
+            broadcast_text = f"*** {attnam or player_id} is praying to the Goddess Tashanna."
+            await context.broadcast(
+                "room_message", text=broadcast_text, player=player_id, message_id="SAPRAY"
+            )
+            return True
+
+        return False
+
+    return _handler
+
+
 async def _broadcast_message(context: RoomContext, event: str, text: str):
     await context.broadcast(event, text=text)
 
@@ -500,6 +609,7 @@ def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallb
         command: str,
         args: list[str],
         player_level: Optional[int],
+        player: Optional[PlayerModel],
     ) -> bool:
         if command.lower() != "offer":
             return False
@@ -540,3 +650,26 @@ def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallb
         return True
 
     return _handler
+
+
+def _resolve_offering(candidate: str, mapping: dict[str, int]) -> int | None:
+    try:
+        return int(candidate)
+    except ValueError:
+        return mapping.get(candidate.lower())
+
+
+def _remove_inventory_item(player: PlayerModel, object_id: int):
+    if object_id in player.gpobjs:
+        index = player.gpobjs.index(object_id)
+        player.gpobjs.pop(index)
+        if index < len(player.obvals):
+            player.obvals.pop(index)
+        player.npobjs = len(player.gpobjs)
+
+
+def _grant_def_spell(player: PlayerModel, spell_id: int, bitmask: int):
+    player.defspls |= bitmask
+    if spell_id not in player.spells and len(player.spells) < constants.MAXSPL:
+        player.spells.append(spell_id)
+        player.nspells = len(player.spells)

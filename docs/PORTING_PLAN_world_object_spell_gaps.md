@@ -3,7 +3,7 @@
 This appendix enumerates the missing parity items for the world/object/spell services that must be ported from the legacy C sources. It mirrors the routine vectors and spell/object tables in `legacy/KYRLOCS.C`, `legacy/KYROBJS.C`, and `legacy/KYRSPEL.C`.
 
 ## Room routines still to port
-The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (temple), 32 (spring), 38 (magic fountain), and 101 (heart-and-soul ritual). When adding new room behaviors, prefer authoring them in the YAML room scripts under `backend/fixtures/room_scripts/` so they run through the shared `YamlRoomEngine`; only fall back to bespoke Python handlers when the YAML actions cannot yet express the legacy logic. Check off the remaining legacy routines as parity is implemented:
+The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (temple), 32 (spring), 38 (magic fountain), and 101 (heart-and-soul ritual). When adding new room behaviors, prefer authoring them in the YAML room scripts under `backend/fixtures/room_scripts/` so they run through the shared `YamlRoomEngine`; only fall back to bespoke Python handlers when the YAML engine would be too complex to enhance to support some of the behavior. Check off the remaining legacy routines as parity is implemented:
 
 - [x] Room 8: `getgol` (gem-for-gold exchange)【F:legacy/KYRLOCS.C†L60-L90】
 - [x] Room 9: `buyspl` (spell vendor)【F:legacy/KYRLOCS.C†L60-L90】
@@ -14,7 +14,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] Room 18: `stumpr` (stump puzzle)【F:legacy/KYRLOCS.C†L76-L98】
 - [x] Room 19: `fthick` (thicket)【F:legacy/KYRLOCS.C†L76-L98】
 - [ ] Room 20: `rubies` (ruby cache)【F:legacy/KYRLOCS.C†L76-L98】
-- [ ] Room 24: `silver` (silver mine/event)【F:legacy/KYRLOCS.C†L82-L99】
+- [x] Room 24: `silver` (silver mine/event)【F:legacy/KYRLOCS.C†L82-L99】
 - [ ] Room 26: `ashtre` (ash tree)【F:legacy/KYRLOCS.C†L82-L99】
 - [ ] Room 27: `swrock` (switch rock)【F:legacy/KYRLOCS.C†L82-L99】
 - [ ] Room 34: `druids` (druid grove)【F:legacy/KYRLOCS.C†L92-L104】
