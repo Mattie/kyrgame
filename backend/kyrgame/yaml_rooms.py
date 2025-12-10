@@ -240,7 +240,7 @@ class YamlRoomEngine:
             player.hitpts = min(player.hitpts, cap)
 
     def _action_damage(self, action: dict, player: models.PlayerModel):
-        amount = int(action.get("amount", 0))
+        amount = max(0, int(action.get("amount", 0)))
         player.hitpts = max(0, player.hitpts - amount)
 
     def _action_random_chance(

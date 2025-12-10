@@ -174,12 +174,14 @@ class RoomScriptEngine:
                 # Process events from YAML engine
                 ctx = RoomContext(self, room_id)
                 for event in result.events:
-                    event_type = event.pop("event", "room_message")
-                    scope = event.pop("scope", "broadcast")
+                    event_type = event.get("event", "room_message")
+                    scope = event.get("scope", "broadcast")
+                    # Create a copy without event/scope keys to avoid duplication
+                    event_data = {k: v for k, v in event.items() if k not in ("event", "scope")}
                     if scope == "direct":
-                        await ctx.direct(player_id, event_type, **event)
+                        await ctx.direct(player_id, event_type, **event_data)
                     else:
-                        await ctx.broadcast(event_type, **event)
+                        await ctx.broadcast(event_type, **event_data)
                 if result.handled:
                     return True
         
