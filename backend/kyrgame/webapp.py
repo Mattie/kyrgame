@@ -154,6 +154,24 @@ def require_admin(
     return grant
 
 
+def _validate_admin_token(
+    app: FastAPI, token: str | None, roles: set[AdminRole] | None = None
+) -> AdminGrant:
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
+
+    grants: dict[str, AdminGrant] = app.state.admin_grants
+    grant = grants.get(token)
+    if grant is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized admin token")
+
+    required_roles = {role.value for role in roles or set()}
+    if required_roles and not required_roles.issubset(grant.roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient admin role")
+
+    return grant
+
+
 def require_player_admin(request: Request):
     return require_admin(request, roles={AdminRole.PLAYER})
 
@@ -920,6 +938,141 @@ def create_app() -> FastAPI:
 
     gateway: RoomGateway | None = None
     app.state.session_connections = {}
+
+    @app.websocket("/ws/admin/kyraedit")
+    async def kyraedit_socket(
+        websocket: WebSocket, provider: Annotated[FixtureProvider, Depends(get_websocket_provider)]
+    ):
+        """Minimal kyraedit-style editor flow for admins.
+
+        Mirrors the single-session guard and return-to-room behavior in the
+        legacy ``kyraedit`` state machine.【F:legacy/KYRSYSP.C†L78-L155】【F:legacy/KYRSYSP.C†L342-L379】
+        """
+
+        admin_token = websocket.headers.get("Authorization", "")
+        if admin_token.lower().startswith("bearer "):
+            admin_token = admin_token.split(" ", 1)[1]
+        else:
+            admin_token = websocket.query_params.get("admin_token")
+
+        try:
+            _validate_admin_token(provider.scope.app, admin_token, roles={AdminRole.PLAYER})
+        except HTTPException as exc:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail)
+            return
+
+        session_token = websocket.query_params.get("session_token")
+        db_session = provider.scope.app.state.session_factory()
+        try:
+            repo = repositories.PlayerSessionRepository(db_session)
+            session_record = repo.get_by_token(session_token or "")
+            if not session_record:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid session token")
+                return
+
+            player = db_session.get(models.Player, session_record.player_id)
+            if not player:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Player not found")
+                return
+
+            current_room = session_record.room_id
+            player_id = player.plyrid
+        finally:
+            db_session.close()
+
+        if not hasattr(provider.scope.app.state, "kyraedit_lock"):
+            provider.scope.app.state.kyraedit_lock = asyncio.Lock()
+        if not hasattr(provider.scope.app.state, "kyraedit_session"):
+            provider.scope.app.state.kyraedit_session = None
+
+        async with provider.scope.app.state.kyraedit_lock:
+            active = provider.scope.app.state.kyraedit_session
+            if active:
+                await websocket.close(
+                    code=status.WS_1013_TRY_AGAIN_LATER, reason="Another kyraedit session is active"
+                )
+                return
+            provider.scope.app.state.kyraedit_session = session_token
+
+        await websocket.accept()
+
+        await provider.presence.remove(session_token)
+        await provider.gateway.broadcast(
+            current_room,
+            {
+                "type": "room_broadcast",
+                "room": current_room,
+                "payload": {"event": "player_leave", "player": player_id},
+            },
+        )
+
+        await websocket.send_json({"type": "kyraedit_prompt", "detail": "Enter player id"})
+
+        try:
+            while True:
+                incoming = await websocket.receive_json()
+                if incoming.get("type") == "select_player":
+                    target_id = (incoming.get("player_id") or "").strip()
+                    if not target_id:
+                        await websocket.send_json(
+                            {"type": "kyraedit_error", "detail": "Player id required"}
+                        )
+                        continue
+
+                    db = provider.scope.app.state.session_factory()
+                    try:
+                        record = db.scalar(select(models.Player).where(models.Player.plyrid == target_id))
+                        if record:
+                            payload = _player_model_from_record(record)
+                        else:
+                            cached = next(
+                                (p for p in provider.players if p.plyrid == target_id), None
+                            )
+                            if cached:
+                                payload = cached
+                            else:
+                                await websocket.send_json(
+                                    {"type": "kyraedit_error", "detail": "Player not found"}
+                                )
+                                continue
+                        await websocket.send_json({"type": "kyraedit_record", "player": payload.model_dump()})
+                    finally:
+                        db.close()
+                elif incoming.get("type") == "exit":
+                    await websocket.send_json({"type": "kyraedit_exit", "room": current_room})
+                    break
+                else:
+                    await websocket.send_json({"type": "kyraedit_error", "detail": "Unknown command"})
+        finally:
+            await provider.presence.set_location(player_id, current_room, session_token)
+            await provider.gateway.broadcast(
+                current_room,
+                {
+                    "type": "room_broadcast",
+                    "room": current_room,
+                    "payload": {"event": "player_enter", "player": player_id},
+                },
+            )
+            await provider.gateway.broadcast(
+                current_room,
+                {
+                    "type": "room_broadcast",
+                    "room": current_room,
+                    "payload": _entrance_room_message(player_id, current_room),
+                },
+            )
+
+            occupant_event = await _room_occupants_event(
+                provider.presence, player_id, current_room, provider.message_bundles.get("en-US")
+            )
+            if occupant_event:
+                await provider.gateway.broadcast(
+                    current_room,
+                    {"type": "room_broadcast", "room": current_room, "payload": occupant_event},
+                )
+
+            async with provider.scope.app.state.kyraedit_lock:
+                provider.scope.app.state.kyraedit_session = None
 
     @app.websocket("/ws/rooms/{room_id}")
     async def room_socket(
