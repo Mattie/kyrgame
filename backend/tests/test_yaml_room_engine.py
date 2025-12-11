@@ -26,11 +26,13 @@ def room_engine():
     objects = fixtures.load_objects()
     spells = fixtures.load_spells()
     definitions = fixtures.load_room_scripts()
+    locations = fixtures.load_locations()
     return yaml_rooms.YamlRoomEngine(
         definitions=definitions,
         messages=messages,
         objects=objects,
         spells=spells,
+        locations=locations,
     )
 
 
@@ -190,11 +192,13 @@ def test_gquest_can_find_gold_and_handles_water_and_rose(base_player):
     objects = fixtures.load_objects()
     spells = fixtures.load_spells()
     definitions = fixtures.load_room_scripts()
+    locations = fixtures.load_locations()
     engine = yaml_rooms.YamlRoomEngine(
         definitions=definitions,
         messages=messages,
         objects=objects,
         spells=spells,
+        locations=locations,
         rng=StubRandom([5]),
     )
 
@@ -236,11 +240,13 @@ def test_gpcone_random_pinecone_requires_inventory_space(base_player):
     objects = fixtures.load_objects()
     spells = fixtures.load_spells()
     definitions = fixtures.load_room_scripts()
+    locations = fixtures.load_locations()
     engine = yaml_rooms.YamlRoomEngine(
         definitions=definitions,
         messages=messages,
         objects=objects,
         spells=spells,
+        locations=locations,
         rng=StubRandom([0.1]),
     )
 
@@ -268,6 +274,7 @@ def test_gpcone_random_pinecone_requires_inventory_space(base_player):
         messages=messages,
         objects=objects,
         spells=spells,
+        locations=locations,
         rng=StubRandom([0.9]),
     )
     base_player = base_player.model_copy(
@@ -293,12 +300,14 @@ def test_fearno_levels_player_when_phrase_matched(base_player):
     objects = fixtures.load_objects()
     spells = fixtures.load_spells()
     definitions = fixtures.load_room_scripts()
+    locations = fixtures.load_locations()
 
     engine = yaml_rooms.YamlRoomEngine(
         definitions=definitions,
         messages=messages,
         objects=objects,
         spells=spells,
+        locations=locations,
     )
 
     base_player.level = 4

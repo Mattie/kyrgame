@@ -1,0 +1,48 @@
+id: 27
+name: swrock
+# Room summary: Strange rock shrouded in mist that responds to prayers and a sword offering.
+# Mechanics: praying at the rock increments a shared counter and broadcasts swirling mists;
+# dropping a sword on the rock after any prayer consumes the sword, awards a tiara on the ground,
+# or rejects if the player lacks the sword. Requires the explicit "sword rock" phrasing.
+# Legacy: legacy/KYRROUS.C lines 678-711
+state:
+  rockpr: 0
+triggers:
+  - verbs: [pray]
+    actions:
+      - type: message
+        scope: direct
+        text: "...Your prayers are heard."
+      - type: message
+        scope: broadcast
+        text: "*** The mists around the rock begin to swirl magically!"
+      - type: increment_room_state
+        key: rockpr
+  - verbs: [drop, insert, put, stick, thrust]
+    arg_sequence: [sword, rock]
+    room_state_at_least:
+      rockpr: 1
+    actions:
+      - type: conditional
+        conditions:
+          - has_item: sword
+        then:
+          - type: remove_item
+            item: sword
+          - type: add_room_object
+            object: tiara
+          - type: message
+            scope: direct
+            message_id: ROCK00
+          - type: message
+            scope: broadcast
+            message_id: ROCK01
+            format: [player_id]
+        else:
+          - type: message
+            scope: direct
+            message_id: ROCK02
+          - type: message
+            scope: broadcast
+            message_id: ROCK01
+            format: [player_id]

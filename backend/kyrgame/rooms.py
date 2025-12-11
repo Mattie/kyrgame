@@ -101,6 +101,7 @@ class RoomScriptEngine:
                 messages=messages,
                 objects=objects or [],
                 spells=spells or [],
+                locations=self.locations.values(),
             )
             if room_scripts
             else None
