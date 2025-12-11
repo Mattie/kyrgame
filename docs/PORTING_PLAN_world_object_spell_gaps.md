@@ -11,7 +11,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] Room 12: `gquest` (quest board)【F:legacy/KYRLOCS.C†L60-L90】
 - [x] Room 14: `gpcone` (pinecone grove interactions)【F:legacy/KYRLOCS.C†L60-L90】
 - [x] Room 16: `fearno` (fearsome forest obstacle)【F:legacy/KYRLOCS.C†L60-L90】
-- [ ] Room 18: `stumpr` (stump puzzle)【F:legacy/KYRLOCS.C†L76-L98】
+- [x] Room 18: `stumpr` (stump puzzle)【F:legacy/KYRLOCS.C†L76-L98】
 - [x] Room 19: `fthick` (thicket)【F:legacy/KYRLOCS.C†L76-L98】
 - [x] Room 20: `rubies` (ruby cache)【F:legacy/KYRLOCS.C†L76-L98】
 - [x] Room 24: `silver` (silver mine/event)【F:legacy/KYRLOCS.C†L82-L99】

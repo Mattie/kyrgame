@@ -206,6 +206,9 @@ def build_default_routines(messages: MessageBundleModel) -> Dict[int, RoomRoutin
             on_exit=_willow_on_exit,
             on_command=_temple_on_command(messages),
         ),
+        18: RoomRoutine(
+            on_command=_stump_on_command(messages),
+        ),
         24: RoomRoutine(
             on_command=_silver_on_command(messages),
         ),
@@ -503,6 +506,113 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     return _handler
 
 
+def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    """Mirror the legacy ``stumpr`` routine (legacy/KYRROUS.C lines 512-538)."""
+
+    gem_sequence = list(range(12))
+    objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
+    spells_by_name = {spell.name.lower(): spell for spell in fixtures.load_spells()}
+    hotkiss = spells_by_name.get("hotkiss")
+
+    async def _handler(
+        context: RoomContext,
+        player_id: str,
+        command: str,
+        args: list[str],
+        player_level: Optional[int],
+        player: Optional[PlayerModel],
+    ) -> bool:
+        verb = command.lower()
+
+        if verb not in {"drop", "offer"}:
+            return False
+
+        if player is None or hotkiss is None or not args:
+            return False
+
+        offered = _resolve_offering(args[0], objects_by_name)
+        level = player_level if player_level is not None else (player.level or 0)
+        progress = player.stumpi or 0
+        expected = gem_sequence[progress] if progress < len(gem_sequence) else None
+
+        if offered is None or offered not in player.gpobjs:
+            player.stumpi = 0
+            await context.direct(
+                player_id, "room_message", text=messages.messages.get("BGEM05", "")
+            )
+            await context.broadcast(
+                "room_message",
+                text=messages.messages.get("BGEM06", "") % player_id,
+                player=player_id,
+            )
+            return True
+
+        _remove_inventory_item(player, offered)
+
+        if not (
+            (progress == len(gem_sequence) - 1 and level >= 6)
+            or level == 5
+        ):
+            player.stumpi = 0
+            await context.direct(
+                player_id, "room_message", text=messages.messages.get("BGEM04", "")
+            )
+            await context.broadcast(
+                "room_message",
+                text=messages.messages.get("BGEM03", "") % player_id,
+                player=player_id,
+            )
+            return True
+
+        if expected is None or offered != expected:
+            player.stumpi = 0
+            await context.direct(
+                player_id, "room_message", text=messages.messages.get("BGEM04", "")
+            )
+            await context.broadcast(
+                "room_message",
+                text=messages.messages.get("BGEM03", "") % player_id,
+                player=player_id,
+            )
+            return True
+
+        player.stumpi = progress + 1
+        if player.stumpi == len(gem_sequence):
+            if level >= 6:
+                _grant_off_spell(player, hotkiss)
+                await context.direct(
+                    player_id, "room_message", text=messages.messages.get("BGEM00", "")
+                )
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages.get("BGEM01", "") % player_id,
+                    player=player_id,
+                )
+            else:
+                player.stumpi = 0
+                await context.direct(
+                    player_id, "room_message", text=messages.messages.get("BGEM04", "")
+                )
+                await context.broadcast(
+                    "room_message",
+                    text=messages.messages.get("BGEM03", "") % player_id,
+                    player=player_id,
+                )
+            return True
+
+        await context.direct(
+            player_id, "room_message", text=messages.messages.get("BGEM02", "")
+        )
+        await context.broadcast(
+            "room_message",
+            text=messages.messages.get("BGEM03", "") % player_id,
+            player=player_id,
+        )
+        return True
+
+    return _handler
+
+
 def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     """Mirror the legacy ``silver`` routine (legacy/KYRROUS.C lines 555-589)."""
 
@@ -672,4 +782,11 @@ def _grant_def_spell(player: PlayerModel, spell_id: int, bitmask: int):
     player.defspls |= bitmask
     if spell_id not in player.spells and len(player.spells) < constants.MAXSPL:
         player.spells.append(spell_id)
+        player.nspells = len(player.spells)
+
+
+def _grant_off_spell(player: PlayerModel, spell: SpellModel):
+    player.offspls |= spell.bitdef
+    if spell.id not in player.spells and len(player.spells) < constants.MAXSPL:
+        player.spells.append(spell.id)
         player.nspells = len(player.spells)
