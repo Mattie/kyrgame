@@ -143,10 +143,14 @@ class YamlRoomEngine:
                 self._action_heal(action, player)
             elif action_type == "damage":
                 self._action_damage(action, player)
+            elif action_type == "grant_spell":
+                self._action_grant_spell(action, player, context)
             elif action_type == "random_chance":
                 self._action_random_chance(action, player, args, context, events, room_id)
             elif action_type == "random_range":
                 self._action_random_range(action, context)
+            elif action_type == "random_choice":
+                self._action_random_choice(action, player, args, context, events, room_id)
             elif action_type == "conditional":
                 self._action_conditional(action, player, args, context, events, room_id)
             elif action_type == "purchase_spell":
@@ -300,6 +304,42 @@ class YamlRoomEngine:
         amount = max(0, int(action.get("amount", 0)))
         player.hitpts = max(0, player.hitpts - amount)
 
+    def _action_grant_spell(
+        self, action: dict, player: models.PlayerModel, context: dict[str, Any]
+    ):
+        """Grant a spell bit and optional memorization slot (e.g., druid orb routine in legacy/KYRROUS.C lines 620-639)."""
+        spell_name = action.get("spell")
+        spell = self.spells_by_name.get(spell_name.lower()) if spell_name else None
+        if spell is None:
+            return
+
+        sbkref = spell.sbkref
+        override = action.get("book")
+        if isinstance(override, str):
+            normalized = override.lower()
+            if normalized in {"offense", "offensive"}:
+                sbkref = constants.OFFENS
+            elif normalized in {"defense", "defensive"}:
+                sbkref = constants.DEFENS
+            elif normalized in {"other", "others"}:
+                sbkref = constants.OTHERS
+        elif isinstance(override, int):
+            sbkref = override
+
+        if sbkref == constants.OFFENS:
+            player.offspls |= spell.bitdef
+        elif sbkref == constants.DEFENS:
+            player.defspls |= spell.bitdef
+        else:
+            player.othspls |= spell.bitdef
+
+        if spell.id not in player.spells and len(player.spells) < constants.MAXSPL:
+            player.spells.append(spell.id)
+            player.nspells = len(player.spells)
+
+        context["granted_spell_id"] = spell.id
+        context["granted_spell_name"] = spell.name
+
     def _action_random_chance(
         self,
         action: dict,
@@ -320,6 +360,41 @@ class YamlRoomEngine:
         value = self.rng.randrange(start, stop)
         if "context_key" in action:
             context[action["context_key"]] = value
+
+    def _action_random_choice(
+        self,
+        action: dict,
+        player: models.PlayerModel,
+        args: list[str],
+        context: dict[str, Any],
+        events: list[dict],
+        room_id: int,
+    ):
+        """Randomly select a weighted branch (used for spell rolls like the druid orb interaction)."""
+        choices = action.get("choices", [])
+        if not choices:
+            return
+
+        weights = [float(choice.get("weight", 1)) for choice in choices]
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            return
+
+        roll = self.rng.random() * total_weight
+        cumulative = 0.0
+        selected = choices[-1]
+        for choice, weight in zip(choices, weights):
+            cumulative += weight
+            if roll < cumulative:
+                selected = choice
+                break
+
+        if "context_key" in action and "value" in selected:
+            context[action["context_key"]] = selected["value"]
+
+        self._execute_actions(
+            selected.get("actions", []), player, args, context, events, room_id
+        )
 
     def _action_conditional(
         self,
