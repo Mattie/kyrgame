@@ -1,0 +1,50 @@
+id: 34
+name: druids
+# Legacy: legacy/KYRROUS.C lines 620-639 (druids) consume sceptre to grant random offensive spell bits.
+triggers:
+  - verbs: [touch]
+    arg_sequence: [orb, with, sceptre]
+    actions:
+      - type: branch_by_item
+        target_arg: 2
+        cases:
+          sceptre:
+            - type: remove_item
+              item: sceptre
+            - type: random_choice
+              choices:
+                - actions:
+                    - type: grant_spell
+                      spell: clutzopho
+                      book: offensive
+                - actions:
+                    - type: grant_spell
+                      spell: frostie
+                      book: offensive
+                - actions:
+                    - type: grant_spell
+                      spell: frozenu
+                      book: offensive
+                - actions:
+                    - type: grant_spell
+                      spell: gotcha
+                      book: offensive
+                - actions:
+                    - type: grant_spell
+                      spell: hotfoot
+                      book: offensive
+            - type: message
+              scope: direct
+              message_id: DRUID0
+            - type: message
+              scope: broadcast
+              message_id: DRUID1
+              format: [player_altnam]
+        missing_actions:
+          - type: message
+            scope: direct
+            message_id: DRUID2
+          - type: message
+            scope: broadcast
+            message_id: DRUID1
+            format: [player_altnam]

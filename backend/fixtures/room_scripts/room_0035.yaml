@@ -1,0 +1,14 @@
+id: 35
+name: terrace
+# Legacy: legacy/KYRROUS.C lines 472-479 (terrac) reuse the drink-water helper and otherwise fall back to default handling.
+triggers:
+  - verbs: [drink]
+    target_in: [water]
+    actions:
+      - type: message
+        scope: direct
+        message_id: DRINK0
+      - type: message
+        scope: broadcast
+        message_id: DRINK1
+        format: [player_altnam]
