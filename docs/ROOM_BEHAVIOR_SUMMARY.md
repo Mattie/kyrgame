@@ -12,8 +12,8 @@
 - **Room 19 — `fthick` (flaming thicket):** Walking into thicket triggers burn text and 10 HP damage broadcast to others.【F:legacy/KYRROUS.C†L642-L656】
 - **Room 20 — `rubies` (ruby cache):** Getting a ruby can grant a ruby object 20% of the time if inventory space allows, otherwise produce failure text and deal 8 damage to a random other player.【F:legacy/KYRROUS.C†L576-L592】
 - **Room 24 — `silver` (silver mine):** Offering objects checks against a four-gem sequence; correct order increments `gemidx`, and at completion (level 4 gate) grants a defensive spell bit; wrong item/order resets with flavor; praying/meditating broadcasts prayer text.【F:legacy/KYRROUS.C†L548-L575】
-- **Room 26 — `ashtre` (ash tree):** Cry/weep at ashes/trees drops a shard object on the ground if room has space; otherwise warns about space.【F:legacy/KYRROUS.C†L677-L696】
-- **Room 27 — `swrock` (switch rock):** Praying increments a rock counter and emits room message; dropping a sword on the rock after prayers grants a special sword object; missing sword triggers error text.【F:legacy/KYRROUS.C†L678-L711】
+- **Room 26 — `ashtre` (ash tree):** Cry/weep at ashes/trees drops a shard object on the ground if room has space; otherwise warns about space. Implemented via `backend/fixtures/room_scripts/room_0026.yaml`.【F:legacy/KYRROUS.C†L677-L696】
+- **Room 27 — `swrock` (switch rock):** Praying increments a rock counter and emits room message; dropping a sword on the rock after prayers grants a tiara object while missing swords trigger an error message. Implemented via `backend/fixtures/room_scripts/room_0027.yaml`.【F:legacy/KYRROUS.C†L678-L711】
 - **Room 34 — `druids` (druid grove):** Touching orb with sceptre consumes the sceptre and randomly grants one of five offensive spell bits; missing sceptre yields failure text.【F:legacy/KYRROUS.C†L620-L639】
 - **Room 35 — `terrac` (terrace):** Only special behavior is drinking water helper; otherwise passive.【F:legacy/KYRROUS.C†L471-L478】
 - **Room 36 — `waterf` (waterfall):** Allows drink-water helper and rose-gathering helper; otherwise passive.【F:legacy/KYRROUS.C†L480-L489】

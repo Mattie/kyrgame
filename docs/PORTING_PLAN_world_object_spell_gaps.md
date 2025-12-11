@@ -15,8 +15,8 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] Room 19: `fthick` (thicket)【F:legacy/KYRLOCS.C†L76-L98】
 - [x] Room 20: `rubies` (ruby cache)【F:legacy/KYRLOCS.C†L76-L98】
 - [x] Room 24: `silver` (silver mine/event)【F:legacy/KYRLOCS.C†L82-L99】
-- [ ] Room 26: `ashtre` (ash tree)【F:legacy/KYRLOCS.C†L82-L99】
-- [ ] Room 27: `swrock` (switch rock)【F:legacy/KYRLOCS.C†L82-L99】
+- [x] Room 26: `ashtre` (ash tree)【F:legacy/KYRLOCS.C†L82-L99】
+- [x] Room 27: `swrock` (switch rock)【F:legacy/KYRLOCS.C†L82-L99】
 - [ ] Room 34: `druids` (druid grove)【F:legacy/KYRLOCS.C†L92-L104】
 - [ ] Room 35: `terrac` (terrace)【F:legacy/KYRLOCS.C†L92-L104】
 - [ ] Room 36: `waterf` (waterfall)【F:legacy/KYRLOCS.C†L94-L104】
