@@ -1190,6 +1190,7 @@ def create_app() -> FastAPI:
             return
 
         db_session = provider.scope.app.state.session_factory()
+        player_state: models.PlayerModel | None = None
         try:
             session_repo = repositories.PlayerSessionRepository(db_session)
             session_record = session_repo.get_by_token(session_token)
@@ -1212,6 +1213,9 @@ def create_app() -> FastAPI:
             db_session.commit()
             player_id = player.plyrid
             current_room = session_record.room_id
+            player_state = _player_model_from_record(player)
+            player_state.gamloc = current_room
+            player_state.pgploc = current_room
         except Exception as e:
             # Database or other error during validation - reject connection during handshake
             logger.error(f"WebSocket connection error during validation: {type(e).__name__}")
@@ -1226,6 +1230,12 @@ def create_app() -> FastAPI:
         finally:
             db_session.close()
 
+        if player_state is None:
+            await websocket.send_denial_response(
+                Response(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content="Unable to load player state")
+            )
+            return
+
         # All validation passed - now accept the WebSocket connection
         await websocket.accept()
 
@@ -1238,11 +1248,6 @@ def create_app() -> FastAPI:
 
         limiter = RateLimiter(max_events=2, window_seconds=0.5)
 
-        player_state = provider.cache["player_template"].model_copy(deep=True)
-        player_state.plyrid = player_id
-        player_state.gamloc = current_room
-        player_state.pgploc = current_room
-        
         # Create a persistent database session for this WebSocket connection
         persistent_session = provider.scope.app.state.session_factory()
         

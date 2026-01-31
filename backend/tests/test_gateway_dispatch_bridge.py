@@ -113,6 +113,53 @@ async def test_websocket_bridge_emits_legacy_command_metadata():
 
 
 @pytest.mark.anyio
+async def test_websocket_look_uses_persisted_altnam_for_looker3():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        viewer_id = "looker3"
+        target_id = "target"
+        viewer_session = await client.post("/auth/session", json={"player_id": viewer_id, "room_id": 0})
+        viewer_token = viewer_session.json()["session"]["token"]
+        room_zero = viewer_session.json()["session"]["room_id"]
+
+        target_session = await client.post("/auth/session", json={"player_id": target_id, "room_id": room_zero})
+        target_token = target_session.json()["session"]["token"]
+
+        viewer_uri = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={viewer_token}"
+        target_uri = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={target_token}"
+
+        async with websockets.connect(viewer_uri) as viewer_ws:
+            await _recv_matching(
+                viewer_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            async with websockets.connect(target_uri) as target_ws:
+                await _recv_matching(
+                    target_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                await viewer_ws.send(json.dumps({"type": "command", "command": f"look {target_id}"}))
+
+                looker3_event = await _recv_matching(
+                    target_ws,
+                    lambda msg: msg.get("payload", {}).get("message_id") == "LOOKER3",
+                )
+                assert looker3_event["payload"]["text"] == f"*** {viewer_id} is looking at you carefully."
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_bridge_echoes_silent_metadata_on_responses():
     app = create_app()
     host = "127.0.0.1"
