@@ -8,7 +8,7 @@ import pytest
 from kyrgame import fixtures
 from kyrgame.rooms import RoomScriptEngine
 from kyrgame.scheduler import SchedulerService
-from kyrgame.webapp import DEFAULT_ADMIN_TOKEN, create_app
+from kyrgame.webapp import create_app
 
 
 class FakeGateway:
@@ -19,7 +19,8 @@ class FakeGateway:
         self.messages.append(message)
 
 
-ADMIN_HEADERS = {"Authorization": f"Bearer {DEFAULT_ADMIN_TOKEN}"}
+ADMIN_TOKEN = "test-admin-token"
+ADMIN_HEADERS = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
 
 @pytest.mark.anyio
@@ -271,7 +272,8 @@ async def test_heart_and_soul_offering_awards_willowisp_spell():
 
 
 @pytest.mark.anyio
-async def test_admin_endpoint_reloads_room_scripts_without_restart():
+async def test_admin_endpoint_reloads_room_scripts_without_restart(monkeypatch):
+    monkeypatch.setenv("KYRGAME_ADMIN_TOKEN", ADMIN_TOKEN)
     app = create_app()
     transport = httpx.ASGITransport(app=app)
 

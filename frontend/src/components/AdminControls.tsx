@@ -1,0 +1,304 @@
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+
+import { AdminUpdatePayload, useNavigator } from '../context/NavigatorContext'
+
+const AVAILABLE_FLAGS = ['FEMALE', 'PEGASU', 'WILLOW', 'BRFSTF']
+
+const parseNumber = (value: string): number | undefined => {
+  const trimmed = value.trim()
+  if (trimmed === '') return undefined
+  const parsed = Number(trimmed)
+  return Number.isNaN(parsed) ? undefined : parsed
+}
+
+export const AdminControls = () => {
+  const { session, adminToken, applyAdminUpdate } = useNavigator()
+  const [playerId, setPlayerId] = useState(session?.playerId ?? '')
+  const [alternateName, setAlternateName] = useState('')
+  const [attireName, setAttireName] = useState('')
+  const [flags, setFlags] = useState<Set<string>>(new Set())
+  const [level, setLevel] = useState('')
+  const [gold, setGold] = useState('')
+  const [spellPoints, setSpellPoints] = useState('')
+  const [hitPoints, setHitPoints] = useState('')
+  const [goldCap, setGoldCap] = useState('')
+  const [spellCap, setSpellCap] = useState('')
+  const [hitCap, setHitCap] = useState('')
+  const [location, setLocation] = useState('')
+  const [spouse, setSpouse] = useState('')
+  const [clearSpouse, setClearSpouse] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (session?.playerId) {
+      setPlayerId(session.playerId)
+    }
+  }, [session?.playerId])
+
+  const toggleFlag = (flag: string) => {
+    setFlags((prev) => {
+      const next = new Set(prev)
+      if (next.has(flag)) {
+        next.delete(flag)
+      } else {
+        next.add(flag)
+      }
+      return next
+    })
+  }
+
+  const disabled = useMemo(() => !adminToken || playerId.trim() === '', [adminToken, playerId])
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    setStatus(null)
+    setError(null)
+
+    if (disabled) {
+      setError('Admin token and player id are required')
+      return
+    }
+
+    const payload: AdminUpdatePayload = {}
+    if (alternateName.trim()) payload.altnam = alternateName.trim()
+    if (attireName.trim()) payload.attnam = attireName.trim()
+    if (flags.size > 0) payload.flags = Array.from(flags)
+
+    const parsedLevel = parseNumber(level)
+    if (parsedLevel !== undefined) payload.level = parsedLevel
+
+    const parsedGold = parseNumber(gold)
+    if (parsedGold !== undefined) payload.gold = parsedGold
+    const parsedSpellPoints = parseNumber(spellPoints)
+    if (parsedSpellPoints !== undefined) payload.spts = parsedSpellPoints
+    const parsedHitPoints = parseNumber(hitPoints)
+    if (parsedHitPoints !== undefined) payload.hitpts = parsedHitPoints
+
+    const parsedGoldCap = parseNumber(goldCap)
+    if (parsedGoldCap !== undefined) payload.cap_gold = parsedGoldCap
+    const parsedSpellCap = parseNumber(spellCap)
+    if (parsedSpellCap !== undefined) payload.cap_spts = parsedSpellCap
+    const parsedHitCap = parseNumber(hitCap)
+    if (parsedHitCap !== undefined) payload.cap_hitpts = parsedHitCap
+
+    const parsedLocation = parseNumber(location)
+    if (parsedLocation !== undefined) {
+      payload.gamloc = parsedLocation
+      payload.pgploc = parsedLocation
+    }
+
+    if (clearSpouse) {
+      payload.clear_spouse = true
+    } else if (spouse.trim()) {
+      payload.spouse = spouse.trim()
+    }
+
+    try {
+      await applyAdminUpdate(playerId.trim(), payload)
+      setStatus('Admin update saved')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save admin update')
+    }
+  }
+
+  return (
+    <section className="panel admin-controls">
+      <header className="panel-header">
+        <div>
+          <p className="eyebrow">Admin tools</p>
+          <h2>Admin controls</h2>
+          <p className="muted">Edit player identity, stats, and placement with legacy-safe caps.</p>
+        </div>
+      </header>
+      <div className="panel-body">
+        {!adminToken && (
+          <p className="status error">
+            Admin access is locked. Enable an admin session and set KYRGAME_ADMIN_TOKEN in backend/.env.
+          </p>
+        )}
+        <form onSubmit={handleSubmit} className="admin-form">
+          <div className="admin-grid">
+            <fieldset className="admin-section">
+              <legend>Target</legend>
+              <div className="field">
+                <label htmlFor="admin-player-id">Target player</label>
+                <input
+                  id="admin-player-id"
+                  name="admin-player-id"
+                  value={playerId}
+                  onChange={(event) => setPlayerId(event.target.value)}
+                />
+                <p className="field-hint">Player ID or alias to update.</p>
+              </div>
+            </fieldset>
+
+            <fieldset className="admin-section">
+              <legend>Identity</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="alternate-name">Alternate name</label>
+                  <input
+                    id="alternate-name"
+                    name="alternate-name"
+                    value={alternateName}
+                    onChange={(event) => setAlternateName(event.target.value)}
+                  />
+                  <p className="field-hint">Shown in APPEAR (legacy uppercases).</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="attire-name">Attire name</label>
+                  <input
+                    id="attire-name"
+                    name="attire-name"
+                    value={attireName}
+                    onChange={(event) => setAttireName(event.target.value)}
+                  />
+                  <p className="field-hint">Used in LOOK descriptions.</p>
+                </div>
+              </div>
+              <div className="admin-flags">
+                <p className="field-label">Appearance flags</p>
+                <div className="flag-grid">
+                  {AVAILABLE_FLAGS.map((flag) => (
+                    <label className="checkbox" key={flag}>
+                      <input
+                        type="checkbox"
+                        name={`flag-${flag}`}
+                        checked={flags.has(flag)}
+                        onChange={() => toggleFlag(flag)}
+                      />
+                      {flag}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset className="admin-section">
+              <legend>Stats & caps</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="level">Level</label>
+                  <input
+                    id="level"
+                    name="level"
+                    type="number"
+                    value={level}
+                    onChange={(event) => setLevel(event.target.value)}
+                  />
+                  <p className="field-hint">Updates derived HP/SP caps.</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="hitpts">Hit points</label>
+                  <input
+                    id="hitpts"
+                    name="hitpts"
+                    type="number"
+                    value={hitPoints}
+                    onChange={(event) => setHitPoints(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="spts">Spell points</label>
+                  <input
+                    id="spts"
+                    name="spts"
+                    type="number"
+                    value={spellPoints}
+                    onChange={(event) => setSpellPoints(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="gold">Gold</label>
+                  <input
+                    id="gold"
+                    name="gold"
+                    type="number"
+                    value={gold}
+                    onChange={(event) => setGold(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="gold-cap">Gold cap</label>
+                  <input
+                    id="gold-cap"
+                    name="gold-cap"
+                    type="number"
+                    value={goldCap}
+                    onChange={(event) => setGoldCap(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="hp-cap">HP cap</label>
+                  <input
+                    id="hp-cap"
+                    name="hp-cap"
+                    type="number"
+                    value={hitCap}
+                    onChange={(event) => setHitCap(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="sp-cap">SP cap</label>
+                  <input
+                    id="sp-cap"
+                    name="sp-cap"
+                    type="number"
+                    value={spellCap}
+                    onChange={(event) => setSpellCap(event.target.value)}
+                  />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset className="admin-section">
+              <legend>Location & spouse</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="teleport">Teleport room</label>
+                  <input
+                    id="teleport"
+                    name="teleport"
+                    type="number"
+                    value={location}
+                    onChange={(event) => setLocation(event.target.value)}
+                  />
+                  <p className="field-hint">Updates stored gamloc/pgploc; active sessions must reconnect.</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="spouse">Spouse</label>
+                  <input
+                    id="spouse"
+                    name="spouse"
+                    value={spouse}
+                    onChange={(event) => setSpouse(event.target.value)}
+                    disabled={clearSpouse}
+                  />
+                  <p className="field-hint">Leave blank to keep current spouse.</p>
+                </div>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    name="clear-spouse"
+                    checked={clearSpouse}
+                    onChange={(event) => setClearSpouse(event.target.checked)}
+                  />
+                  Clear spouse
+                </label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div className="admin-actions">
+            <button type="submit" disabled={disabled}>
+              Apply admin changes
+            </button>
+          </div>
+        </form>
+        {status && <p className="status success">{status}</p>}
+        {error && <p className="status error">{error}</p>}
+      </div>
+    </section>
+  )
+}

@@ -185,3 +185,68 @@ async def test_content_and_message_updates_refresh_caches(monkeypatch):
                 assert row.text == "Edited banner"
             finally:
                 db.close()
+
+
+@pytest.mark.anyio
+async def test_admin_player_patch_caps_and_spouse(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "player-token": {
+                    "roles": ["player_admin"],
+                    "flags": ["allow_player_rename", "allow_delete_players"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            patch_payload = {
+                "altnam": "Admin Hero",
+                "attnam": "Heroine",
+                "flags": ["FEMALE", "BRFSTF"],
+                "level": 5,
+                "hitpts": 40,
+                "spts": 20,
+                "gold": 999,
+                "gamloc": 12,
+                "pgploc": 12,
+                "spouse": "seer",
+                "cap_gold": 200,
+                "cap_hitpts": 18,
+                "cap_spts": 9,
+            }
+
+            patch_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json=patch_payload,
+            )
+
+            assert patch_resp.status_code == 200
+            payload = patch_resp.json()["player"]
+            assert payload["level"] == 5
+            assert payload["hitpts"] == 18  # capped by request cap then level scaling
+            assert payload["spts"] == 9
+            assert payload["gold"] == 200
+            assert payload["gamloc"] == 12
+            assert payload["pgploc"] == 12
+            assert payload["altnam"] == "Admin Hero"
+            assert payload["attnam"] == "Heroine"
+            assert payload["spouse"] == "seer"
+
+            clear_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"clear_spouse": True, "spts": 5, "cap_spts": 2},
+            )
+
+            assert clear_resp.status_code == 200
+            cleared = clear_resp.json()["player"]
+            assert cleared["spouse"] == ""
+            assert cleared["spts"] == 2

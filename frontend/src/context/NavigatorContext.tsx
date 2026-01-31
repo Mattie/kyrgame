@@ -58,6 +58,23 @@ export type ActivityEntry = {
   meta?: Record<string, unknown>
 }
 
+export type AdminUpdatePayload = {
+  altnam?: string
+  attnam?: string
+  flags?: string[]
+  level?: number
+  gamloc?: number
+  pgploc?: number
+  gold?: number
+  spts?: number
+  hitpts?: number
+  spouse?: string
+  clear_spouse?: boolean
+  cap_gold?: number
+  cap_hitpts?: number
+  cap_spts?: number
+}
+
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
 type NavigatorContextValue = {
@@ -70,6 +87,9 @@ type NavigatorContextValue = {
   connectionStatus: ConnectionStatus
   error: string | null
   startSession: (playerId: string, roomId?: number | null) => Promise<void>
+  adminToken: string | null
+  setAdminToken: (token: string | null) => void
+  applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (
     command: string,
@@ -156,6 +176,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [occupants, setOccupants] = useState<string[]>([])
+  const [adminToken, setAdminToken] = useState<string | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const worldRef = useRef<WorldData | null>(null)
   const occupantsRef = useRef<string[]>([])
@@ -473,6 +494,32 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     return worldData
   }, [apiBaseUrl, fetchJson])
 
+  const applyAdminUpdate = useCallback(
+    async (playerId: string, payload: AdminUpdatePayload) => {
+      if (!adminToken) {
+        throw new Error('Admin token required for updates')
+      }
+
+      const response = await fetch(`${apiBaseUrl}/admin/players/${playerId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin update failed')
+      }
+
+      const data = await response.json()
+      return data.player
+    },
+    [adminToken, apiBaseUrl]
+  )
+
   const startSession = useCallback(
     async (playerId: string, roomId?: number | null) => {
       setConnectionStatus('connecting')
@@ -580,16 +627,22 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       connectionStatus,
       error,
       startSession,
+      adminToken,
+      setAdminToken,
+      applyAdminUpdate,
       sendMove,
       sendCommand,
     }),
     [
+      adminToken,
       activity,
       apiBaseUrl,
+      applyAdminUpdate,
       connectionStatus,
       currentRoom,
       error,
       occupants,
+      setAdminToken,
       sendMove,
       sendCommand,
       session,

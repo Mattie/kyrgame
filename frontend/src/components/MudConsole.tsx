@@ -290,20 +290,21 @@ export const MudConsole = () => {
       }
 
       const payload = entry.payload ?? {}
+      const payloadRecord = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {}
       const candidateCards: StatusCardId[] = []
-      if (updates.hitpoints || updates.spellPoints || payload.event === 'hitpoints') {
+      if (updates.hitpoints || updates.spellPoints || payloadRecord.event === 'hitpoints') {
         candidateCards.push('hitpoints')
       }
-      if (updates.inventory || payload.event === 'inventory') {
+      if (updates.inventory || payloadRecord.event === 'inventory') {
         candidateCards.push('inventory')
       }
-      if (updates.spellbook || payload.event === 'spellbook') {
+      if (updates.spellbook || payloadRecord.event === 'spellbook') {
         candidateCards.push('spellbook')
       }
-      if (updates.description || payload.event === 'description') {
+      if (updates.description || payloadRecord.event === 'description') {
         candidateCards.push('description')
       }
-      if (updates.effects || payload.event === 'effects') {
+      if (updates.effects || payloadRecord.event === 'effects') {
         candidateCards.push('effects')
       }
 
@@ -313,8 +314,8 @@ export const MudConsole = () => {
           candidateCards.forEach((id) => {
             const base = next[id] ?? { ...defaultStatusCardsRef.current[id] }
             const commandFromPayload =
-              (typeof payload?.verb === 'string' && payload.verb.trim()) ||
-              (typeof payload?.command === 'string' && payload.command.trim()) ||
+              (typeof payloadRecord?.verb === 'string' && payloadRecord.verb.trim()) ||
+              (typeof payloadRecord?.command === 'string' && payloadRecord.command.trim()) ||
               base.command
 
             next[id] = {
@@ -324,7 +325,7 @@ export const MudConsole = () => {
               active: true,
               lastSummary:
                 entry.summary ??
-                (typeof payload?.text === 'string' ? payload.text : undefined) ??
+                (typeof payloadRecord?.text === 'string' ? payloadRecord.text : undefined) ??
                 base.lastSummary,
             }
           })

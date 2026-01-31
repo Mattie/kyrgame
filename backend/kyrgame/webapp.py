@@ -6,17 +6,19 @@ import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
 from . import commands, constants, fixtures, models, repositories
+from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
@@ -72,7 +74,23 @@ class AdminGrant:
     flags: set[str]
 
 
-DEFAULT_ADMIN_TOKEN = "dev-admin-token"
+class PlayerAdminUpdate(BaseModel):
+    altnam: str | None = None
+    attnam: str | None = None
+    flags: list[str] | None = None
+    level: int | None = None
+    gamloc: int | None = None
+    pgploc: int | None = None
+    gold: int | None = None
+    spts: int | None = None
+    hitpts: int | None = None
+    spouse: str | None = None
+    clear_spouse: bool = False
+    cap_gold: int | None = None
+    cap_hitpts: int | None = None
+    cap_spts: int | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def _cors_origins_from_env() -> list[str]:
@@ -127,7 +145,9 @@ def _load_admin_grants() -> dict[str, AdminGrant]:
         grants.setdefault(default_token, AdminGrant(_all_admin_roles(), _all_admin_flags()))
 
     if not grants:
-        grants[DEFAULT_ADMIN_TOKEN] = AdminGrant(_all_admin_roles(), _all_admin_flags())
+        logger.warning(
+            "No admin tokens configured. Set KYRGAME_ADMIN_TOKEN or KYRGAME_ADMIN_TOKENS to enable admin access."
+        )
 
     return grants
 
@@ -244,6 +264,57 @@ def _player_model_from_record(record: models.Player) -> models.PlayerModel:
         stumpi=record.stumpi,
         spouse=record.spouse,
     )
+
+
+def _player_level_caps(level: int) -> tuple[int, int]:
+    max_hitpoints = max(0, level * 4)
+    max_spellpoints = max(0, level * 2)
+    return max_hitpoints, max_spellpoints
+
+
+def _apply_player_admin_update(
+    player: models.PlayerModel, updates: PlayerAdminUpdate
+) -> models.PlayerModel:
+    data = player.model_dump()
+
+    if updates.altnam is not None:
+        data["altnam"] = updates.altnam[: constants.APNSIZ]
+    if updates.attnam is not None:
+        data["attnam"] = updates.attnam[: constants.APNSIZ]
+    if updates.flags is not None:
+        data["flags"] = constants.encode_player_flags(updates.flags)
+
+    if updates.gamloc is not None:
+        data["gamloc"] = updates.gamloc
+    if updates.pgploc is not None:
+        data["pgploc"] = updates.pgploc
+
+    level = updates.level if updates.level is not None else data["level"]
+    data["level"] = level
+    max_hitpoints, max_spellpoints = _player_level_caps(level)
+
+    if updates.hitpts is not None:
+        data["hitpts"] = updates.hitpts
+    hit_cap = max_hitpoints if updates.cap_hitpts is None else min(max_hitpoints, updates.cap_hitpts)
+    data["hitpts"] = max(0, min(data["hitpts"], hit_cap))
+
+    if updates.spts is not None:
+        data["spts"] = updates.spts
+    spts_cap = max_spellpoints if updates.cap_spts is None else min(max_spellpoints, updates.cap_spts)
+    data["spts"] = max(0, min(data["spts"], spts_cap))
+
+    if updates.gold is not None:
+        data["gold"] = updates.gold
+    if updates.cap_gold is not None:
+        data["gold"] = min(data["gold"], updates.cap_gold)
+    data["gold"] = max(0, data["gold"])
+
+    if updates.clear_spouse:
+        data["spouse"] = ""
+    elif updates.spouse is not None:
+        data["spouse"] = updates.spouse[: constants.ALSSIZ]
+
+    return models.PlayerModel(**data)
 
 
 def _replace_cached_model(collection, new_model, *, key_attr: str = "id"):
@@ -706,6 +777,29 @@ async def admin_update_player(
     return {"status": "updated", "player": updated.model_dump()}
 
 
+@admin_router.patch("/players/{player_id}")
+async def admin_patch_player(
+    player_id: str,
+    updates: PlayerAdminUpdate,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_admin)],
+):
+    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    current = _player_model_from_record(record)
+    updated = _apply_player_admin_update(current, updates)
+
+    for field, value in updated.model_dump().items():
+        setattr(record, field, value)
+
+    db.commit()
+    _set_player_in_cache(provider.scope.app, updated)
+    return {"status": "updated", "player": updated.model_dump()}
+
+
 @admin_router.delete("/players/{player_id}")
 async def admin_delete_player(
     player_id: str,
@@ -907,6 +1001,9 @@ def _entrance_room_message(player_id: str, room_id: int) -> dict:
 
 
 def create_app() -> FastAPI:
+    env_path = os.getenv("KYRGAME_ENV_FILE")
+    load_env_file(Path(env_path) if env_path else None)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await bootstrap_app(app)

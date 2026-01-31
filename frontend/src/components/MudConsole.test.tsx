@@ -5,7 +5,7 @@ import { MudConsole } from './MudConsole'
 
 const mockSendCommand = vi.fn()
 const mockSendMove = vi.fn()
-const navigatorState = {
+const navigatorState: any = {
   apiBaseUrl: 'http://example.test',
   session: { token: 'token', playerId: 'Hero', roomId: 0 },
   world: {
@@ -35,6 +35,9 @@ const navigatorState = {
   connectionStatus: 'connected' as const,
   error: null,
   startSession: vi.fn(),
+  adminToken: null,
+  setAdminToken: vi.fn(),
+  applyAdminUpdate: vi.fn(),
   sendMove: mockSendMove,
   sendCommand: mockSendCommand,
 }

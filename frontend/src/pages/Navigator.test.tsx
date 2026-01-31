@@ -113,7 +113,7 @@ describe('Navigator flow', () => {
 
     const user = userEvent.setup()
     await act(async () => {
-      await user.type(screen.getByLabelText(/player id/i), 'hero')
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.type(screen.getByLabelText(/room id/i), '7')
       await user.click(screen.getByRole('button', { name: /start session/i }))
     })
@@ -189,7 +189,7 @@ describe('Navigator flow', () => {
       name: /collapse session panel/i,
     })
     await user.click(sessionToggle)
-    expect(screen.queryByLabelText(/player id/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
 
     // RoomPanel has been deprecated/disabled
     // const roomToggle = screen.getByRole('button', {
@@ -205,7 +205,98 @@ describe('Navigator flow', () => {
     expect(screen.queryByTestId('activity-log-body')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /expand session panel/i }))
-    expect(screen.getByLabelText(/player id/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+  })
+
+  it('stores an admin token and calls admin update endpoints', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    const patchedPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Admin Hero',
+      attnam: 'Hero Att',
+      gpobjs: [],
+      nmpdes: 1,
+      modno: 0,
+      level: 5,
+      gamloc: 12,
+      pgploc: 12,
+      flags: 0,
+      gold: 200,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 9,
+      hitpts: 18,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: 'seer',
+    }
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/admin/players/hero')) {
+        expect(init?.headers).toMatchObject({ Authorization: 'Bearer dev-admin' })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'updated', player: patchedPlayer }),
+        } as unknown as Response)
+      }
+
+      const next = responses.shift()
+      if (!next) {
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    await screen.findByText(/admin controls/i)
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/alternate name/i), 'Admin Hero')
+      await user.type(screen.getByLabelText(/level/i), '5')
+      await user.type(screen.getByLabelText(/gold cap/i), '200')
+      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+    })
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
+    await screen.findByText(/Admin update saved/i)
   })
 
   it('dispatches move commands and updates room details on location change', async () => {
@@ -232,7 +323,7 @@ describe('Navigator flow', () => {
     render(<App />)
     const user = userEvent.setup()
     await act(async () => {
-      await user.type(screen.getByLabelText(/player id/i), 'hero')
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.click(screen.getByRole('button', { name: /start session/i }))
     })
 

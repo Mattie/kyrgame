@@ -10,8 +10,8 @@ runtime caches.
 - **Tokens**
   - `KYRGAME_ADMIN_TOKEN`: single token seeded with all roles/flags.
   - `KYRGAME_ADMIN_TOKENS`: JSON map of `{token: {"roles": [...], "flags": [...]}}`.
-  - A development fallback token `dev-admin-token` is always provisioned for
-    local use. Send it as `Authorization: Bearer dev-admin-token`.
+  - Admin endpoints are locked until one of the tokens above is configured.
+  - The API auto-loads `backend/.env` at startup; override the path with `KYRGAME_ENV_FILE`.
 - **Roles**
   - `player_admin`: CRUD on players.
   - `content_admin`: Location/object/spell maintenance and script reloads.
@@ -24,6 +24,15 @@ Example token map:
 
 ```bash
 export KYRGAME_ADMIN_TOKENS='{"sysop":{"roles":["player_admin","content_admin","message_admin"],"flags":["allow_delete_players","allow_player_rename"]}}'
+```
+
+For local development, copy the sample `.env` file and source it before running the API:
+
+```bash
+cp backend/.env.example backend/.env
+set -a
+source backend/.env
+set +a
 ```
 
 ## HTTP endpoints
