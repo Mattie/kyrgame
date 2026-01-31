@@ -11,6 +11,7 @@ runtime caches.
   - `KYRGAME_ADMIN_TOKEN`: single token seeded with all roles/flags.
   - `KYRGAME_ADMIN_TOKENS`: JSON map of `{token: {"roles": [...], "flags": [...]}}`.
   - Admin endpoints are locked until one of the tokens above is configured.
+  - The API auto-loads `backend/.env` at startup; override the path with `KYRGAME_ENV_FILE`.
 - **Roles**
   - `player_admin`: CRUD on players.
   - `content_admin`: Location/object/spell maintenance and script reloads.

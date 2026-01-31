@@ -6,6 +6,7 @@ import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
 from . import commands, constants, fixtures, models, repositories
+from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
@@ -999,6 +1001,9 @@ def _entrance_room_message(player_id: str, room_id: int) -> dict:
 
 
 def create_app() -> FastAPI:
+    env_path = os.getenv("KYRGAME_ENV_FILE")
+    load_env_file(Path(env_path) if env_path else None)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await bootstrap_app(app)

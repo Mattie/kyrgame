@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import FastAPI
 
 from . import commands, database, fixtures, loader, models, rooms
+from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .scheduler import SchedulerService
@@ -23,6 +24,9 @@ class RuntimeConfig:
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
+        env_path = os.getenv("KYRGAME_ENV_FILE")
+        load_env_file(Path(env_path) if env_path else None)
+
         seed_paths_env = os.getenv("KYRGAME_SEED_PATHS")
         default_seed = Path(__file__).resolve().parents[1] / "fixtures"
         seed_paths = (
