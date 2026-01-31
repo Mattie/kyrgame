@@ -1437,7 +1437,18 @@ def create_app() -> FastAPI:
                         envelope = {"type": "room_broadcast", "room": current_room, "payload": event}
                         if meta:
                             envelope["meta"] = meta
-                        await gateway.broadcast(current_room, envelope, sender=websocket)
+                        excluded_player = event.get("exclude_player")
+                        excluded_sockets = set()
+                        if excluded_player:
+                            for token in await provider.presence.sessions_for_player(
+                                excluded_player
+                            ):
+                                target_socket = session_connections.get(token)
+                                if target_socket:
+                                    excluded_sockets.add(target_socket)
+                        await gateway.broadcast(
+                            current_room, envelope, sender=websocket, exclude=excluded_sockets
+                        )
                     elif scope == "target":
                         target_id = event.get("player")
                         if not target_id:

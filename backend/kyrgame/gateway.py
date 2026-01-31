@@ -45,11 +45,19 @@ class RoomGateway:
                     del self.rooms[room_id]
             self.connections.pop(websocket, None)
 
-    async def broadcast(self, room_id: int, message: dict, sender: WebSocket | None = None):
+    async def broadcast(
+        self,
+        room_id: int,
+        message: dict,
+        sender: WebSocket | None = None,
+        exclude: Set[WebSocket] | None = None,
+    ):
         async with self._lock:
             recipients = list(self.rooms.get(room_id, set()))
         for connection in recipients:
             if sender is not None and connection is sender:
+                continue
+            if exclude and connection in exclude:
                 continue
             if connection.application_state != WebSocketState.CONNECTED:
                 continue
