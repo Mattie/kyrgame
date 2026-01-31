@@ -1,7 +1,7 @@
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Dict, List, Protocol
+from typing import Awaitable, Callable, Dict, List, Protocol, Set
 
 from . import constants, fixtures, models, repositories
 
@@ -49,6 +49,11 @@ class CommandHandler(Protocol):
         ...
 
 
+class PresenceAccessor(Protocol):
+    async def players_in_room(self, room_id: int) -> Set[str]:
+        ...
+
+
 @dataclass
 class CommandMetadata:
     verb: str
@@ -83,6 +88,8 @@ class GameState:
     content_mappings: dict[str, dict[str, str]] | None = None
     cooldowns: Dict[str, float] = field(default_factory=dict)
     db_session: any = None  # SQLAlchemy session for persistence
+    presence: PresenceAccessor | None = None
+    player_lookup: Callable[[str], models.PlayerModel | None] | None = None
 
 
 @dataclass
@@ -416,6 +423,185 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
     )
 
 
+def _matches_player_name(target: str, player: models.PlayerModel) -> bool:
+    target_lower = target.lower()
+    return target_lower in {
+        player.attnam.lower(),
+        player.plyrid.lower(),
+    }
+
+
+def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> bool:
+    if target is viewer:
+        return True
+    if not (target.flags & constants.PlayerFlag.INVISF):
+        return True
+    return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
+
+
+def _message_event(
+    scope: str,
+    message_id: str | None,
+    text: str | None,
+    command_id: int | None,
+) -> dict:
+    return {
+        "scope": scope,
+        "event": "room_message",
+        "type": "room_message",
+        "text": text,
+        "message_id": message_id,
+        "command_id": command_id,
+    }
+
+
+def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    header_text = _format_message(state, "SBOOK1", state.player.plyrid, state.player.altnam)
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event("player", "SBOOK1", header_text, command_id),
+            _message_event("player", "SBOOK4", _format_message(state, "SBOOK4"), command_id),
+            {
+                "scope": "player",
+                "event": "unimplemented",
+                "type": "unimplemented",
+                "detail": "Spellbook listing not yet implemented",
+                "command_id": command_id,
+                "message_id": message_id,
+            },
+        ],
+    )
+
+
+async def _handle_look(state: GameState, args: dict) -> CommandResult:
+    # Ported from legacy looker/ckinvs logic in KYRCMDS.C and KYRUTIL.C.【F:legacy/KYRCMDS.C†L739-L784】【F:legacy/KYRUTIL.C†L91-L120】
+    command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    raw = (args.get("raw") or args.get("target") or "").strip()
+    target = raw.lower()
+    objects = state.objects or {}
+    location = state.locations[state.player.gamloc]
+    events: list[dict] = []
+
+    if raw:
+        obj_id = _find_object_in_location(location, objects, target)
+        if obj_id is not None:
+            obj = objects[obj_id]
+            obj_message_id = _object_description_message_id(objects, obj)
+            obj_text = _format_message(state, obj_message_id)
+            events.append(_message_event("player", obj_message_id, obj_text, command_id))
+            looker_text = _format_message(
+                state,
+                "LOOKER1",
+                state.player.altnam,
+                obj.name,
+                location.objlds,
+            )
+            events.append(_message_event("room", "LOOKER1", looker_text, command_id))
+            return CommandResult(state=state, events=events)
+
+        inventory_index = _find_inventory_index(state.player, target, objects)
+        if inventory_index is not None:
+            obj_id = state.player.gpobjs[inventory_index]
+            obj = objects[obj_id]
+            obj_message_id = _object_description_message_id(objects, obj)
+            obj_text = _format_message(state, obj_message_id)
+            events.append(_message_event("player", obj_message_id, obj_text, command_id))
+            looker_text = _format_message(
+                state,
+                "LOOKER2",
+                state.player.altnam,
+                _hisher(state.player),
+                obj.name,
+            )
+            events.append(_message_event("room", "LOOKER2", looker_text, command_id))
+            return CommandResult(state=state, events=events)
+
+        target_player = None
+        if _matches_player_name(raw, state.player):
+            target_player = state.player
+        elif state.presence and state.player_lookup:
+            occupants = await state.presence.players_in_room(state.player.gamloc)
+            for occupant_id in occupants:
+                if occupant_id == state.player.plyrid:
+                    continue
+                if target_player:
+                    break
+                other = state.player_lookup(occupant_id)
+                if other and _matches_player_name(raw, other):
+                    if _can_see_player(state.player, other):
+                        target_player = other
+
+        if target_player:
+            if target_player.flags & constants.PlayerFlag.INVISF:
+                desc_id = "INVDES"
+                desc_text = _format_message(state, desc_id)
+            elif target_player.flags & constants.PlayerFlag.WILLOW:
+                desc_id = "WILDES"
+                desc_text = _format_message(state, desc_id)
+            elif target_player.flags & constants.PlayerFlag.PEGASU:
+                desc_id = "PEGDES"
+                desc_text = _format_message(state, desc_id)
+            elif target_player.flags & constants.PlayerFlag.PDRAGN:
+                desc_id = "PDRDES"
+                desc_text = _format_message(state, desc_id)
+            else:
+                desc_id = _player_description_message_id(target_player)
+                base_text = _format_message(state, desc_id, target_player.plyrid)
+                inventory_text = _inventory_summary_text(state, target_player, objects)
+                desc_text = f"{base_text} {inventory_text}".strip() if base_text else inventory_text
+
+            events.append(_message_event("player", desc_id, desc_text, command_id))
+
+            looker3_text = _format_message(state, "LOOKER3", state.player.altnam)
+            events.append(
+                {
+                    **_message_event("target", "LOOKER3", looker3_text, command_id),
+                    "player": target_player.plyrid,
+                }
+            )
+            looker4_text = _format_message(
+                state, "LOOKER4", state.player.altnam, target_player.altnam
+            )
+            events.append(_message_event("room", "LOOKER4", looker4_text, command_id))
+            return CommandResult(state=state, events=events)
+
+        if target == "brief":
+            looker_text = _format_message(state, "LOOKER5", location.brfdes)
+            events.append(_message_event("player", "LOOKER5", looker_text, command_id))
+            events.append(
+                _room_objects_event(location, objects, command_id, message_id)
+            )
+            occupants_event = await _room_occupants_event(state, location.id)
+            if occupants_event:
+                events.append(occupants_event)
+            return CommandResult(state=state, events=events)
+
+        if target == "spellbook":
+            return _handle_spellbook(state, args)
+
+    description_id, long_description = _location_description(state, location)
+    description_text = long_description or location.brfdes
+    events.append(
+        {
+            "scope": "player",
+            "event": "location_description",
+            "type": "location_description",
+            "location": location.id,
+            "message_id": description_id,
+            "text": description_text,
+        }
+    )
+    events.append(_room_objects_event(location, objects, command_id, message_id))
+    occupants_event = await _room_occupants_event(state, location.id)
+    if occupants_event:
+        events.append(occupants_event)
+    return CommandResult(state=state, events=events)
+
+
 def _location_message_id(location_id: int, content_mappings: dict[str, dict[str, str]] | None) -> str:
     if content_mappings and "locations" in content_mappings:
         mapping = content_mappings["locations"]
@@ -523,6 +709,113 @@ def _room_objects_event(
         "command_id": command_id,
         "message_id": message_id,
     }
+
+
+def _format_room_occupants(
+    occupants: list[str], messages: models.MessageBundleModel | None
+) -> tuple[str | None, str | None]:
+    """Format the occupant list shown when inspecting a room."""
+
+    if not occupants:
+        return None, None
+
+    catalog = messages.messages if messages else {}
+    message_id = None
+
+    if len(occupants) == 1:
+        suffix = catalog.get("KUTM11", "is here.")
+        message_id = "KUTM11" if "KUTM11" in catalog else None
+        return f"{occupants[0]} {suffix}", message_id
+
+    suffix = catalog.get("KUTM12", "are here.")
+    message_id = "KUTM12" if "KUTM12" in catalog else None
+    if len(occupants) == 2:
+        names = f"{occupants[0]} and {occupants[1]}"
+    else:
+        names = ", ".join(occupants[:-1]) + f", and {occupants[-1]}"
+    return f"{names} {suffix}", message_id
+
+
+async def _room_occupants_event(state: GameState, room_id: int) -> dict | None:
+    if not state.presence:
+        return None
+    occupants = await state.presence.players_in_room(room_id)
+    others = sorted(occupant for occupant in occupants if occupant != state.player.plyrid)
+    text, message_id = _format_room_occupants(others, state.messages)
+    if not text:
+        return None
+    return {
+        "scope": "player",
+        "event": "room_occupants",
+        "type": "room_occupants",
+        "location": room_id,
+        "occupants": others,
+        "text": text,
+        "message_id": message_id,
+    }
+
+
+def _hisher(player: models.PlayerModel) -> str:
+    if player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0:
+        return "its"
+    return "her" if player.flags & constants.PlayerFlag.FEMALE else "his"
+
+
+def _format_message(
+    state: GameState, message_id: str | None, *args: object
+) -> str | None:
+    if not message_id or not state.messages:
+        return None
+    template = state.messages.messages.get(message_id)
+    if template is None:
+        return None
+    if args:
+        try:
+            return template % args
+        except TypeError:
+            return template
+    return template
+
+
+def _object_description_message_id(
+    objects: dict[int, models.GameObjectModel], obj: models.GameObjectModel
+) -> str | None:
+    objdes_values = sorted({entry.objdes for entry in objects.values()})
+    if not objdes_values:
+        return None
+    try:
+        index = objdes_values.index(obj.objdes)
+    except ValueError:
+        return None
+    return f"KID{index:03d}"
+
+
+def _player_description_message_id(player: models.PlayerModel) -> str | None:
+    if player.nmpdes is None:
+        return None
+    return f"MDES{player.nmpdes:02d}"
+
+
+def _inventory_summary_text(
+    state: GameState, target: models.PlayerModel, objects: dict[int, models.GameObjectModel]
+) -> str:
+    item_names = []
+    for obj_id in target.gpobjs:
+        obj = objects.get(obj_id)
+        if not obj:
+            continue
+        needs_an = "NEEDAN" in obj.flags
+        article = "an" if needs_an else "a"
+        item_names.append(f"{article} {obj.name}")
+
+    catalog = state.messages.messages if state.messages else {}
+    and_text = catalog.get("KUTM08", "and")
+    spellbook_template = catalog.get("KUTM09", "%s spellbook.")
+    spellbook_text = spellbook_template % _hisher(target)
+
+    if item_names:
+        return f"{', '.join(item_names)}, {and_text} {spellbook_text}"
+    return spellbook_text
 
 
 def _find_object_in_location(
@@ -721,6 +1014,27 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
             failure_message_id="CMPCMD1",
         ),
         _handle_drop,
+    )
+    registry.register(
+        CommandMetadata(
+            verb="look",
+            command_id=vocabulary._lookup_command_id("look"),
+        ),
+        _handle_look,
+    )
+    registry.register(
+        CommandMetadata(
+            verb="examine",
+            command_id=vocabulary._lookup_command_id("examine"),
+        ),
+        _handle_look,
+    )
+    registry.register(
+        CommandMetadata(
+            verb="see",
+            command_id=vocabulary._lookup_command_id("see"),
+        ),
+        _handle_look,
     )
 
     for command in vocabulary.iter_commands():
