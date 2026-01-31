@@ -25,6 +25,21 @@ async def _recv_matching(ws, predicate, *, timeout: float = 1.0):
             return message
 
 
+async def _assert_no_matching(ws, predicate, *, timeout: float = 0.5):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return
+        try:
+            message = json.loads(await asyncio.wait_for(ws.recv(), timeout=remaining))
+        except asyncio.TimeoutError:
+            return
+        if predicate(message):
+            raise AssertionError(f"Unexpected message received: {message}")
+
+
 @pytest.mark.anyio
 async def test_websocket_bridge_emits_legacy_command_metadata():
     app = create_app()
@@ -152,6 +167,79 @@ async def test_websocket_bridge_echoes_silent_metadata_on_responses():
 
             inventory_event = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
             assert inventory_event["meta"] == {"silent": True, "status_card": "inventory"}
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
+async def test_room_broadcast_excludes_look_target():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        hero_token = hero_session.json()["session"]["token"]
+        room_zero = hero_session.json()["session"]["room_id"]
+
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": room_zero})
+        seer_token = seer_session.json()["session"]["token"]
+
+        mystic_session = await client.post("/auth/session", json={"player_id": "mystic", "room_id": room_zero})
+        mystic_token = mystic_session.json()["session"]["token"]
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={hero_token}"
+        uri_room0_seer = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={seer_token}"
+        uri_room0_mystic = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={mystic_token}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            async with websockets.connect(uri_room0_seer) as seer_ws:
+                await _recv_matching(
+                    seer_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "player_enter",
+                )
+                async with websockets.connect(uri_room0_mystic) as mystic_ws:
+                    await _recv_matching(
+                        mystic_ws,
+                        lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                    )
+
+                    await hero_ws.send(json.dumps({"type": "command", "command": "look seer"}))
+
+                    seer_target = await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "LOOKER3",
+                    )
+                    assert seer_target["payload"]["message_id"] == "LOOKER3"
+
+                    mystic_room = await _recv_matching(
+                        mystic_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "LOOKER4",
+                    )
+                    assert mystic_room["payload"]["message_id"] == "LOOKER4"
+
+                    await _assert_no_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "LOOKER4",
+                    )
 
     server.should_exit = True
     await server_task

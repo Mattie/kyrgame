@@ -444,8 +444,10 @@ def _message_event(
     message_id: str | None,
     text: str | None,
     command_id: int | None,
+    *,
+    exclude_player: str | None = None,
 ) -> dict:
-    return {
+    event = {
         "scope": scope,
         "event": "room_message",
         "type": "room_message",
@@ -453,6 +455,9 @@ def _message_event(
         "message_id": message_id,
         "command_id": command_id,
     }
+    if exclude_player:
+        event["exclude_player"] = exclude_player
+    return event
 
 
 def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
@@ -566,7 +571,16 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
             looker4_text = _format_message(
                 state, "LOOKER4", state.player.altnam, target_player.altnam
             )
-            events.append(_message_event("room", "LOOKER4", looker4_text, command_id))
+            # Legacy sndbt2() excludes the target from LOOKER4 broadcasts.【F:legacy/KYRCMDS.C†L748-L775】
+            events.append(
+                _message_event(
+                    "room",
+                    "LOOKER4",
+                    looker4_text,
+                    command_id,
+                    exclude_player=target_player.plyrid,
+                )
+            )
             return CommandResult(state=state, events=events)
 
         if target == "brief":
