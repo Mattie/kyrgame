@@ -84,6 +84,7 @@ describe('Navigator flow', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     MockWebSocket.instances.length = 0
+    localStorage.clear()
   })
 
   it('creates a session, caches world data, and streams room activity', async () => {
@@ -350,6 +351,42 @@ describe('Navigator flow', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
     await screen.findByText(/Admin update saved/i)
+  })
+
+  it('restores session form fields from browser storage', () => {
+    localStorage.setItem('kyrgame.navigator.playerId', 'hero')
+    localStorage.setItem('kyrgame.navigator.roomId', '12')
+    localStorage.setItem('kyrgame.navigator.adminSession', 'true')
+    localStorage.setItem('kyrgame.navigator.adminToken', 'stored-token')
+
+    render(<App />)
+
+    expect(screen.getByLabelText(/^player id$/i)).toHaveValue('hero')
+    expect(screen.getByLabelText(/room id/i)).toHaveValue('12')
+    expect(screen.getByRole('checkbox', { name: /admin session/i })).toBeChecked()
+    expect(screen.getByLabelText(/admin token/i)).toHaveValue('stored-token')
+  })
+
+  it('persists session form changes and clears stored admin token when disabled', async () => {
+    render(<App />)
+    const user = userEvent.setup()
+
+    await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+    expect(localStorage.getItem('kyrgame.navigator.playerId')).toBe('hero')
+
+    await user.type(screen.getByLabelText(/room id/i), '34')
+    expect(localStorage.getItem('kyrgame.navigator.roomId')).toBe('34')
+
+    const adminToggle = screen.getByRole('checkbox', { name: /admin session/i })
+    await user.click(adminToggle)
+    expect(localStorage.getItem('kyrgame.navigator.adminSession')).toBe('true')
+
+    await user.type(screen.getByLabelText(/admin token/i), 'secret-token')
+    expect(localStorage.getItem('kyrgame.navigator.adminToken')).toBe('secret-token')
+
+    await user.click(adminToggle)
+    expect(localStorage.getItem('kyrgame.navigator.adminSession')).toBe('false')
+    expect(localStorage.getItem('kyrgame.navigator.adminToken')).toBeNull()
   })
 
   it('dispatches move commands and updates room details on location change', async () => {

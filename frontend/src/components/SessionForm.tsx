@@ -1,7 +1,14 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 
 import { isDevEnvironment } from '../config/devMode'
 import { useNavigator } from '../context/NavigatorContext'
+
+const storageKeys = {
+  playerId: 'kyrgame.navigator.playerId',
+  roomId: 'kyrgame.navigator.roomId',
+  adminSession: 'kyrgame.navigator.adminSession',
+  adminToken: 'kyrgame.navigator.adminToken',
+}
 
 export const SessionForm = () => {
   const { startSession, connectionStatus, error, apiBaseUrl, setAdminToken } = useNavigator()
@@ -12,12 +19,80 @@ export const SessionForm = () => {
   const [submitting, setSubmitting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
+  useEffect(() => {
+    const storedPlayerId = localStorage.getItem(storageKeys.playerId)
+    if (storedPlayerId) {
+      setPlayerId(storedPlayerId)
+    }
+
+    const storedRoomId = localStorage.getItem(storageKeys.roomId)
+    if (storedRoomId) {
+      setRoomId(storedRoomId)
+    }
+
+    const storedAdminSession = localStorage.getItem(storageKeys.adminSession) === 'true'
+    setJoinAsAdmin(storedAdminSession)
+
+    if (storedAdminSession) {
+      const storedAdminToken = localStorage.getItem(storageKeys.adminToken)
+      if (storedAdminToken) {
+        setAdminTokenInput(storedAdminToken)
+      }
+    } else {
+      localStorage.removeItem(storageKeys.adminToken)
+    }
+  }, [])
+
+  const persistPlayerId = (nextValue: string) => {
+    if (nextValue.trim() === '') {
+      localStorage.removeItem(storageKeys.playerId)
+      return
+    }
+    localStorage.setItem(storageKeys.playerId, nextValue)
+  }
+
+  const persistRoomId = (nextValue: string) => {
+    if (nextValue.trim() === '') {
+      localStorage.removeItem(storageKeys.roomId)
+      return
+    }
+    localStorage.setItem(storageKeys.roomId, nextValue)
+  }
+
+  const persistAdminSession = (enabled: boolean) => {
+    localStorage.setItem(storageKeys.adminSession, String(enabled))
+    if (!enabled) {
+      localStorage.removeItem(storageKeys.adminToken)
+    }
+  }
+
+  const persistAdminToken = (nextValue: string) => {
+    if (!joinAsAdmin) {
+      localStorage.removeItem(storageKeys.adminToken)
+      return
+    }
+    if (nextValue.trim() === '') {
+      localStorage.removeItem(storageKeys.adminToken)
+      return
+    }
+    localStorage.setItem(storageKeys.adminToken, nextValue)
+  }
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setSubmitting(true)
     try {
       const parsedRoom = roomId.trim() === '' ? null : Number(roomId)
-      setAdminToken(joinAsAdmin ? adminTokenInput.trim() || null : null)
+      const trimmedPlayerId = playerId.trim()
+      const trimmedAdminToken = adminTokenInput.trim()
+
+      setAdminToken(joinAsAdmin ? trimmedAdminToken || null : null)
+      persistPlayerId(trimmedPlayerId)
+      persistRoomId(roomId)
+      persistAdminSession(joinAsAdmin)
+      if (joinAsAdmin) {
+        persistAdminToken(trimmedAdminToken)
+      }
       await startSession(playerId.trim(), Number.isNaN(parsedRoom) ? null : parsedRoom)
     } finally {
       setSubmitting(false)
@@ -53,7 +128,11 @@ export const SessionForm = () => {
                 id="player-id"
                 name="player-id"
                 value={playerId}
-                onChange={(event) => setPlayerId(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  setPlayerId(nextValue)
+                  persistPlayerId(nextValue)
+                }}
                 required
               />
             </div>
@@ -64,7 +143,11 @@ export const SessionForm = () => {
                 id="room-id"
                 name="room-id"
                 value={roomId}
-                onChange={(event) => setRoomId(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  setRoomId(nextValue)
+                  persistRoomId(nextValue)
+                }}
               />
               <p className="field-hint">Leave blank to use the player’s current room.</p>
             </div>
@@ -74,7 +157,15 @@ export const SessionForm = () => {
                 type="checkbox"
                 name="admin-session"
                 checked={joinAsAdmin}
-                onChange={(event) => setJoinAsAdmin(event.target.checked)}
+                onChange={(event) => {
+                  const enabled = event.target.checked
+                  setJoinAsAdmin(enabled)
+                  persistAdminSession(enabled)
+                  if (!enabled) {
+                    setAdminTokenInput('')
+                    setAdminToken(null)
+                  }
+                }}
               />
               Admin session
             </label>
@@ -85,7 +176,11 @@ export const SessionForm = () => {
                 id="admin-token"
                 name="admin-token"
                 value={adminTokenInput}
-                onChange={(event) => setAdminTokenInput(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value
+                  setAdminTokenInput(nextValue)
+                  persistAdminToken(nextValue)
+                }}
                 disabled={!joinAsAdmin}
               />
               <p className="field-hint">Configured via KYRGAME_ADMIN_TOKEN in backend/.env.</p>
