@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
@@ -70,6 +70,25 @@ class AdminFlag(str, Enum):
 class AdminGrant:
     roles: set[str]
     flags: set[str]
+
+
+class PlayerAdminUpdate(BaseModel):
+    altnam: str | None = None
+    attnam: str | None = None
+    flags: list[str] | None = None
+    level: int | None = None
+    gamloc: int | None = None
+    pgploc: int | None = None
+    gold: int | None = None
+    spts: int | None = None
+    hitpts: int | None = None
+    spouse: str | None = None
+    clear_spouse: bool = False
+    cap_gold: int | None = None
+    cap_hitpts: int | None = None
+    cap_spts: int | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 DEFAULT_ADMIN_TOKEN = "dev-admin-token"
@@ -244,6 +263,57 @@ def _player_model_from_record(record: models.Player) -> models.PlayerModel:
         stumpi=record.stumpi,
         spouse=record.spouse,
     )
+
+
+def _player_level_caps(level: int) -> tuple[int, int]:
+    max_hitpoints = max(0, level * 4)
+    max_spellpoints = max(0, level * 2)
+    return max_hitpoints, max_spellpoints
+
+
+def _apply_player_admin_update(
+    player: models.PlayerModel, updates: PlayerAdminUpdate
+) -> models.PlayerModel:
+    data = player.model_dump()
+
+    if updates.altnam is not None:
+        data["altnam"] = updates.altnam[: constants.APNSIZ]
+    if updates.attnam is not None:
+        data["attnam"] = updates.attnam[: constants.APNSIZ]
+    if updates.flags is not None:
+        data["flags"] = constants.encode_player_flags(updates.flags)
+
+    if updates.gamloc is not None:
+        data["gamloc"] = updates.gamloc
+    if updates.pgploc is not None:
+        data["pgploc"] = updates.pgploc
+
+    level = updates.level if updates.level is not None else data["level"]
+    data["level"] = level
+    max_hitpoints, max_spellpoints = _player_level_caps(level)
+
+    if updates.hitpts is not None:
+        data["hitpts"] = updates.hitpts
+    hit_cap = max_hitpoints if updates.cap_hitpts is None else min(max_hitpoints, updates.cap_hitpts)
+    data["hitpts"] = max(0, min(data["hitpts"], hit_cap))
+
+    if updates.spts is not None:
+        data["spts"] = updates.spts
+    spts_cap = max_spellpoints if updates.cap_spts is None else min(max_spellpoints, updates.cap_spts)
+    data["spts"] = max(0, min(data["spts"], spts_cap))
+
+    if updates.gold is not None:
+        data["gold"] = updates.gold
+    if updates.cap_gold is not None:
+        data["gold"] = min(data["gold"], updates.cap_gold)
+    data["gold"] = max(0, data["gold"])
+
+    if updates.clear_spouse:
+        data["spouse"] = ""
+    elif updates.spouse is not None:
+        data["spouse"] = updates.spouse[: constants.ALSSIZ]
+
+    return models.PlayerModel(**data)
 
 
 def _replace_cached_model(collection, new_model, *, key_attr: str = "id"):
@@ -703,6 +773,29 @@ async def admin_update_player(
     db.commit()
     updated = _player_model_from_record(record)
     _set_player_in_cache(provider.scope.app, updated, original_alias=player_id if player.plyrid != player_id else None)
+    return {"status": "updated", "player": updated.model_dump()}
+
+
+@admin_router.patch("/players/{player_id}")
+async def admin_patch_player(
+    player_id: str,
+    updates: PlayerAdminUpdate,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_admin)],
+):
+    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Player not found")
+
+    current = _player_model_from_record(record)
+    updated = _apply_player_admin_update(current, updates)
+
+    for field, value in updated.model_dump().items():
+        setattr(record, field, value)
+
+    db.commit()
+    _set_player_in_cache(provider.scope.app, updated)
     return {"status": "updated", "player": updated.model_dump()}
 
 

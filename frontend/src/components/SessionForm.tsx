@@ -4,9 +4,11 @@ import { isDevEnvironment } from '../config/devMode'
 import { useNavigator } from '../context/NavigatorContext'
 
 export const SessionForm = () => {
-  const { startSession, connectionStatus, error, apiBaseUrl } = useNavigator()
+  const { startSession, connectionStatus, error, apiBaseUrl, setAdminToken } = useNavigator()
   const [playerId, setPlayerId] = useState('')
   const [roomId, setRoomId] = useState('')
+  const [adminTokenInput, setAdminTokenInput] = useState('')
+  const [joinAsAdmin, setJoinAsAdmin] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
@@ -15,6 +17,7 @@ export const SessionForm = () => {
     setSubmitting(true)
     try {
       const parsedRoom = roomId.trim() === '' ? null : Number(roomId)
+      setAdminToken(joinAsAdmin ? adminTokenInput.trim() || null : null)
       await startSession(playerId.trim(), Number.isNaN(parsedRoom) ? null : parsedRoom)
     } finally {
       setSubmitting(false)
@@ -60,6 +63,26 @@ export const SessionForm = () => {
               value={roomId}
               onChange={(event) => setRoomId(event.target.value)}
               placeholder="Defaults to player room"
+            />
+
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                name="admin-session"
+                checked={joinAsAdmin}
+                onChange={(event) => setJoinAsAdmin(event.target.checked)}
+              />
+              Admin session
+            </label>
+
+            <label htmlFor="admin-token">Admin token</label>
+            <input
+              id="admin-token"
+              name="admin-token"
+              value={adminTokenInput}
+              onChange={(event) => setAdminTokenInput(event.target.value)}
+              placeholder="Bearer token for admin endpoints"
+              disabled={!joinAsAdmin}
             />
 
             <button type="submit" disabled={submitting || playerId.trim() === ''}>

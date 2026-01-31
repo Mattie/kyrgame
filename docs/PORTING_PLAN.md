@@ -116,6 +116,7 @@
 - **Room transport:** WebSocket gateway delivers welcome payloads, room broadcast events, and command responses; PresenceService tracks occupants per room and re-scopes subscriptions when players move.
 - **Command dispatch bridge:** Parsed `chat` and `move` commands execute through the dispatcher, emit broadcast payloads, and enforce basic rate limiting for spam.
 - **Repositories/migrations:** SQLAlchemy models and fixture-backed repositories exist alongside Alembic scaffolding, though persistence is still in-memory for tests.
+- **Admin endpoints:** Provide secured CRUD for player records and content, reflecting `KYRSYSP.C` behaviors. Tests cover authorization and validation, and a PATCH flow clamps level-derived HP/SP, gold caps, and spouse updates for tooling parity.
 
 ## Next Steps: View-Only Developer Navigator UI
 1. **Lock in client contracts**
