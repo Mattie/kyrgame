@@ -290,6 +290,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             break
           }
 
+          if (payloadEvent === 'room_message') {
+            const resolvedRoomMessageText =
+              !message.payload?.text && message.payload?.message_id && worldRef.current?.messages
+                ? worldRef.current.messages[message.payload.message_id]
+                : message.payload?.text
+            summary = resolvedRoomMessageText ?? summary
+            payload = { ...message.payload, text: resolvedRoomMessageText }
+          }
+
           if (payloadEvent === 'room_occupants') {
             const occupants = Array.isArray(message.payload?.occupants)
               ? (message.payload?.occupants as string[]).filter(Boolean)

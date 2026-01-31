@@ -72,3 +72,7 @@ class PresenceService:
             return {
                 self.session_players[token] for token in self.room_sessions.get(room_id, set())
             }
+
+    async def sessions_for_player(self, player_id: str) -> Set[str]:
+        async with self._lock:
+            return set(self.player_sessions.get(player_id, set()))

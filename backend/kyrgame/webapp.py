@@ -1246,6 +1246,16 @@ def create_app() -> FastAPI:
         # Create a persistent database session for this WebSocket connection
         persistent_session = provider.scope.app.state.session_factory()
         
+        def lookup_player(player_alias: str) -> models.PlayerModel | None:
+            if player_alias == player_state.plyrid:
+                return player_state
+            record = persistent_session.scalar(
+                select(models.Player).where(models.Player.plyrid == player_alias)
+            )
+            if record is None:
+                return None
+            return _player_model_from_record(record)
+
         state = commands.GameState(
             player=player_state,
             locations=provider.location_index,
@@ -1253,6 +1263,8 @@ def create_app() -> FastAPI:
             messages=provider.message_bundles.get("en-US"),
             content_mappings=provider.content_mappings,
             db_session=persistent_session,
+            presence=provider.presence,
+            player_lookup=lookup_player,
         )
 
         await provider.presence.set_location(player_id, current_room, session_token)
@@ -1421,6 +1433,20 @@ def create_app() -> FastAPI:
                         if meta:
                             envelope["meta"] = meta
                         await gateway.broadcast(current_room, envelope, sender=websocket)
+                    elif scope == "target":
+                        target_id = event.get("player")
+                        if not target_id:
+                            continue
+                        envelope = {"type": "command_response", "room": current_room, "payload": event}
+                        if meta:
+                            envelope["meta"] = meta
+                        for token in await provider.presence.sessions_for_player(target_id):
+                            target_socket = session_connections.get(token)
+                            if not target_socket:
+                                continue
+                            if target_socket.application_state != WebSocketState.CONNECTED:
+                                continue
+                            await target_socket.send_json(envelope)
                     else:
                         envelope = {"type": "command_response", "room": current_room, "payload": event}
                         if meta:

@@ -181,6 +181,59 @@ describe('Navigator flow', () => {
     ).toBeGreaterThan(0)
   })
 
+  it('renders command_response room_message text for look-style replies', async () => {
+    let responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          scope: 'player',
+          event: 'room_message',
+          type: 'room_message',
+          message_id: 'SAPRAY',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/praying to the Goddess Tashanna/i).length
+      ).toBeGreaterThan(0)
+    )
+  })
+
   it('collapses dev helper panels to reclaim space', async () => {
     render(<App />)
     const user = userEvent.setup()
