@@ -10,9 +10,9 @@ from starlette import status
 
 from kyrgame import fixtures
 from kyrgame import models
-from kyrgame.webapp import DEFAULT_ADMIN_TOKEN, create_app
+from kyrgame.webapp import create_app
 
-
+ADMIN_TOKEN = "test-admin-token"
 
 def _get_open_port() -> int:
     sock = socket.socket()
@@ -22,11 +22,12 @@ def _get_open_port() -> int:
     return port
 
 
-ADMIN_HEADERS = {"Authorization": f"Bearer {DEFAULT_ADMIN_TOKEN}"}
+ADMIN_HEADERS = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
 
 @pytest.mark.anyio
-async def test_http_endpoints_expose_fixture_shapes():
+async def test_http_endpoints_expose_fixture_shapes(monkeypatch):
+    monkeypatch.setenv("KYRGAME_ADMIN_TOKEN", ADMIN_TOKEN)
     app = create_app()
     summary = fixtures.fixture_summary()
 

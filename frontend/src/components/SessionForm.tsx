@@ -46,24 +46,28 @@ export const SessionForm = () => {
       </header>
       {!collapsed && (
         <div className="panel-body" data-testid="session-panel-body">
-          <form onSubmit={handleSubmit}>
-            <label htmlFor="player-id">Player ID</label>
-            <input
-              id="player-id"
-              name="player-id"
-              value={playerId}
-              onChange={(event) => setPlayerId(event.target.value)}
-              required
-            />
+          <form onSubmit={handleSubmit} className="form-stack">
+            <div className="field">
+              <label htmlFor="player-id">Player ID</label>
+              <input
+                id="player-id"
+                name="player-id"
+                value={playerId}
+                onChange={(event) => setPlayerId(event.target.value)}
+                required
+              />
+            </div>
 
-            <label htmlFor="room-id">Room ID (optional)</label>
-            <input
-              id="room-id"
-              name="room-id"
-              value={roomId}
-              onChange={(event) => setRoomId(event.target.value)}
-              placeholder="Defaults to player room"
-            />
+            <div className="field">
+              <label htmlFor="room-id">Room ID (optional)</label>
+              <input
+                id="room-id"
+                name="room-id"
+                value={roomId}
+                onChange={(event) => setRoomId(event.target.value)}
+              />
+              <p className="field-hint">Leave blank to use the player’s current room.</p>
+            </div>
 
             <label className="checkbox">
               <input
@@ -75,15 +79,17 @@ export const SessionForm = () => {
               Admin session
             </label>
 
-            <label htmlFor="admin-token">Admin token</label>
-            <input
-              id="admin-token"
-              name="admin-token"
-              value={adminTokenInput}
-              onChange={(event) => setAdminTokenInput(event.target.value)}
-              placeholder="Bearer token for admin endpoints"
-              disabled={!joinAsAdmin}
-            />
+            <div className="field">
+              <label htmlFor="admin-token">Admin token</label>
+              <input
+                id="admin-token"
+                name="admin-token"
+                value={adminTokenInput}
+                onChange={(event) => setAdminTokenInput(event.target.value)}
+                disabled={!joinAsAdmin}
+              />
+              <p className="field-hint">Configured via KYRGAME_ADMIN_TOKEN in backend/.env.</p>
+            </div>
 
             <button type="submit" disabled={submitting || playerId.trim() === ''}>
               {submitting ? 'Requesting…' : 'Start session'}

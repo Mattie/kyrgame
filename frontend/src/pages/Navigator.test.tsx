@@ -113,7 +113,7 @@ describe('Navigator flow', () => {
 
     const user = userEvent.setup()
     await act(async () => {
-      await user.type(screen.getByLabelText(/player id/i), 'hero')
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.type(screen.getByLabelText(/room id/i), '7')
       await user.click(screen.getByRole('button', { name: /start session/i }))
     })
@@ -189,7 +189,7 @@ describe('Navigator flow', () => {
       name: /collapse session panel/i,
     })
     await user.click(sessionToggle)
-    expect(screen.queryByLabelText(/player id/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
 
     // RoomPanel has been deprecated/disabled
     // const roomToggle = screen.getByRole('button', {
@@ -205,7 +205,7 @@ describe('Navigator flow', () => {
     expect(screen.queryByTestId('activity-log-body')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /expand session panel/i }))
-    expect(screen.getByLabelText(/player id/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
   })
 
   it('stores an admin token and calls admin update endpoints', async () => {
@@ -274,7 +274,7 @@ describe('Navigator flow', () => {
 
     const user = userEvent.setup()
     await act(async () => {
-      await user.type(screen.getAllByLabelText(/player id/i)[0], 'hero')
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.type(screen.getByLabelText(/room id/i), '7')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
       await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
@@ -292,7 +292,7 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/alternate name/i), 'Admin Hero')
       await user.type(screen.getByLabelText(/level/i), '5')
       await user.type(screen.getByLabelText(/gold cap/i), '200')
-      await user.click(screen.getByRole('button', { name: /apply admin update/i }))
+      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
     })
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
@@ -323,7 +323,7 @@ describe('Navigator flow', () => {
     render(<App />)
     const user = userEvent.setup()
     await act(async () => {
-      await user.type(screen.getByLabelText(/player id/i), 'hero')
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.click(screen.getByRole('button', { name: /start session/i }))
     })
 

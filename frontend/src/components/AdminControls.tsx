@@ -108,156 +108,193 @@ export const AdminControls = () => {
         <div>
           <p className="eyebrow">Admin tools</p>
           <h2>Admin controls</h2>
-          <p className="muted">Adjust player appearance, stats, and location.</p>
+          <p className="muted">Edit player identity, stats, and placement with legacy-safe caps.</p>
         </div>
       </header>
       <div className="panel-body">
-        {!adminToken && <p className="status error">Provide an admin token in the session form to enable edits.</p>}
-        <form onSubmit={handleSubmit}>
-          <label htmlFor="admin-player-id">Player ID</label>
-          <input
-            id="admin-player-id"
-            name="admin-player-id"
-            value={playerId}
-            onChange={(event) => setPlayerId(event.target.value)}
-            placeholder="Player to edit"
-          />
-
-          <label htmlFor="alternate-name">Alternate name</label>
-          <input
-            id="alternate-name"
-            name="alternate-name"
-            value={alternateName}
-            onChange={(event) => setAlternateName(event.target.value)}
-            placeholder="APPEAR name (caps applied by legacy)"
-          />
-
-          <label htmlFor="attire-name">Attire name</label>
-          <input
-            id="attire-name"
-            name="attire-name"
-            value={attireName}
-            onChange={(event) => setAttireName(event.target.value)}
-            placeholder="Used by look commands"
-          />
-
-          <fieldset>
-            <legend>Appearance flags</legend>
-            {AVAILABLE_FLAGS.map((flag) => (
-              <label className="checkbox" key={flag}>
+        {!adminToken && (
+          <p className="status error">
+            Admin access is locked. Enable an admin session and set KYRGAME_ADMIN_TOKEN in backend/.env.
+          </p>
+        )}
+        <form onSubmit={handleSubmit} className="admin-form">
+          <div className="admin-grid">
+            <fieldset className="admin-section">
+              <legend>Target</legend>
+              <div className="field">
+                <label htmlFor="admin-player-id">Target player</label>
                 <input
-                  type="checkbox"
-                  name={`flag-${flag}`}
-                  checked={flags.has(flag)}
-                  onChange={() => toggleFlag(flag)}
+                  id="admin-player-id"
+                  name="admin-player-id"
+                  value={playerId}
+                  onChange={(event) => setPlayerId(event.target.value)}
                 />
-                {flag}
-              </label>
-            ))}
-          </fieldset>
+                <p className="field-hint">Player ID or alias to update.</p>
+              </div>
+            </fieldset>
 
-          <label htmlFor="level">Level</label>
-          <input
-            id="level"
-            name="level"
-            type="number"
-            value={level}
-            onChange={(event) => setLevel(event.target.value)}
-            placeholder="Level sets derived HP/SP caps"
-          />
+            <fieldset className="admin-section">
+              <legend>Identity</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="alternate-name">Alternate name</label>
+                  <input
+                    id="alternate-name"
+                    name="alternate-name"
+                    value={alternateName}
+                    onChange={(event) => setAlternateName(event.target.value)}
+                  />
+                  <p className="field-hint">Shown in APPEAR (legacy uppercases).</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="attire-name">Attire name</label>
+                  <input
+                    id="attire-name"
+                    name="attire-name"
+                    value={attireName}
+                    onChange={(event) => setAttireName(event.target.value)}
+                  />
+                  <p className="field-hint">Used in LOOK descriptions.</p>
+                </div>
+              </div>
+              <div className="admin-flags">
+                <p className="field-label">Appearance flags</p>
+                <div className="flag-grid">
+                  {AVAILABLE_FLAGS.map((flag) => (
+                    <label className="checkbox" key={flag}>
+                      <input
+                        type="checkbox"
+                        name={`flag-${flag}`}
+                        checked={flags.has(flag)}
+                        onChange={() => toggleFlag(flag)}
+                      />
+                      {flag}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </fieldset>
 
-          <label htmlFor="hitpts">Hit points</label>
-          <input
-            id="hitpts"
-            name="hitpts"
-            type="number"
-            value={hitPoints}
-            onChange={(event) => setHitPoints(event.target.value)}
-            placeholder="Optional override"
-          />
+            <fieldset className="admin-section">
+              <legend>Stats & caps</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="level">Level</label>
+                  <input
+                    id="level"
+                    name="level"
+                    type="number"
+                    value={level}
+                    onChange={(event) => setLevel(event.target.value)}
+                  />
+                  <p className="field-hint">Updates derived HP/SP caps.</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="hitpts">Hit points</label>
+                  <input
+                    id="hitpts"
+                    name="hitpts"
+                    type="number"
+                    value={hitPoints}
+                    onChange={(event) => setHitPoints(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="spts">Spell points</label>
+                  <input
+                    id="spts"
+                    name="spts"
+                    type="number"
+                    value={spellPoints}
+                    onChange={(event) => setSpellPoints(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="gold">Gold</label>
+                  <input
+                    id="gold"
+                    name="gold"
+                    type="number"
+                    value={gold}
+                    onChange={(event) => setGold(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="gold-cap">Gold cap</label>
+                  <input
+                    id="gold-cap"
+                    name="gold-cap"
+                    type="number"
+                    value={goldCap}
+                    onChange={(event) => setGoldCap(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="hp-cap">HP cap</label>
+                  <input
+                    id="hp-cap"
+                    name="hp-cap"
+                    type="number"
+                    value={hitCap}
+                    onChange={(event) => setHitCap(event.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="sp-cap">SP cap</label>
+                  <input
+                    id="sp-cap"
+                    name="sp-cap"
+                    type="number"
+                    value={spellCap}
+                    onChange={(event) => setSpellCap(event.target.value)}
+                  />
+                </div>
+              </div>
+            </fieldset>
 
-          <label htmlFor="spts">Spell points</label>
-          <input
-            id="spts"
-            name="spts"
-            type="number"
-            value={spellPoints}
-            onChange={(event) => setSpellPoints(event.target.value)}
-            placeholder="Optional override"
-          />
+            <fieldset className="admin-section">
+              <legend>Location & spouse</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="teleport">Teleport room</label>
+                  <input
+                    id="teleport"
+                    name="teleport"
+                    type="number"
+                    value={location}
+                    onChange={(event) => setLocation(event.target.value)}
+                  />
+                  <p className="field-hint">Updates stored gamloc/pgploc; active sessions must reconnect.</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="spouse">Spouse</label>
+                  <input
+                    id="spouse"
+                    name="spouse"
+                    value={spouse}
+                    onChange={(event) => setSpouse(event.target.value)}
+                    disabled={clearSpouse}
+                  />
+                  <p className="field-hint">Leave blank to keep current spouse.</p>
+                </div>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    name="clear-spouse"
+                    checked={clearSpouse}
+                    onChange={(event) => setClearSpouse(event.target.checked)}
+                  />
+                  Clear spouse
+                </label>
+              </div>
+            </fieldset>
+          </div>
 
-          <label htmlFor="gold">Gold</label>
-          <input
-            id="gold"
-            name="gold"
-            type="number"
-            value={gold}
-            onChange={(event) => setGold(event.target.value)}
-            placeholder="Gold to grant or cap"
-          />
-
-          <label htmlFor="gold-cap">Gold cap</label>
-          <input
-            id="gold-cap"
-            name="gold-cap"
-            type="number"
-            value={goldCap}
-            onChange={(event) => setGoldCap(event.target.value)}
-            placeholder="Max gold after update"
-          />
-
-          <label htmlFor="hp-cap">HP cap</label>
-          <input
-            id="hp-cap"
-            name="hp-cap"
-            type="number"
-            value={hitCap}
-            onChange={(event) => setHitCap(event.target.value)}
-            placeholder="Cap HP (also limited by level)"
-          />
-
-          <label htmlFor="sp-cap">SP cap</label>
-          <input
-            id="sp-cap"
-            name="sp-cap"
-            type="number"
-            value={spellCap}
-            onChange={(event) => setSpellCap(event.target.value)}
-            placeholder="Cap SP (also limited by level)"
-          />
-
-          <label htmlFor="teleport">Teleport to location</label>
-          <input
-            id="teleport"
-            name="teleport"
-            type="number"
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
-            placeholder="Sets gamloc/pgploc"
-          />
-
-          <label htmlFor="spouse">Spouse</label>
-          <input
-            id="spouse"
-            name="spouse"
-            value={spouse}
-            onChange={(event) => setSpouse(event.target.value)}
-            placeholder="Assign spouse"
-            disabled={clearSpouse}
-          />
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              name="clear-spouse"
-              checked={clearSpouse}
-              onChange={(event) => setClearSpouse(event.target.checked)}
-            />
-            Clear spouse
-          </label>
-
-          <button type="submit" disabled={disabled}>
-            Apply admin update
-          </button>
+          <div className="admin-actions">
+            <button type="submit" disabled={disabled}>
+              Apply admin changes
+            </button>
+          </div>
         </form>
         {status && <p className="status success">{status}</p>}
         {error && <p className="status error">{error}</p>}

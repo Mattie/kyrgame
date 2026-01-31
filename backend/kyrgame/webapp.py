@@ -91,9 +91,6 @@ class PlayerAdminUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-DEFAULT_ADMIN_TOKEN = "dev-admin-token"
-
-
 def _cors_origins_from_env() -> list[str]:
     configured = os.getenv("KYRGAME_CORS_ORIGINS")
     if not configured:
@@ -146,7 +143,9 @@ def _load_admin_grants() -> dict[str, AdminGrant]:
         grants.setdefault(default_token, AdminGrant(_all_admin_roles(), _all_admin_flags()))
 
     if not grants:
-        grants[DEFAULT_ADMIN_TOKEN] = AdminGrant(_all_admin_roles(), _all_admin_flags())
+        logger.warning(
+            "No admin tokens configured. Set KYRGAME_ADMIN_TOKEN or KYRGAME_ADMIN_TOKENS to enable admin access."
+        )
 
     return grants
 
