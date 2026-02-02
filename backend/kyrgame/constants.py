@@ -94,3 +94,10 @@ def decode_player_flags(mask: int) -> List[str]:
 
 # Player flags preserved for compatibility in simple dict form
 PLAYER_FLAGS = {flag.name: flag.value for flag in PlayerFlag}
+
+
+def level_to_nmpdes(level: int) -> int:
+    """Return the nmpdes index for a given level (1-25)."""
+    # Legacy: KYRANDIA.C initgp sets MDES00/FDES00 at level 1 and KYRSYSP.C EDT002
+    # derives nmpdes from level when admin edits a player (lines 333-351, 129-146).
+    return max(0, min(level - 1, 24))
