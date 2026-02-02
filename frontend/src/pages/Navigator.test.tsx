@@ -411,6 +411,22 @@ describe('Navigator flow', () => {
     expect(localStorage.getItem('kyrgame.navigator.adminToken')).toBeNull()
   })
 
+  it('remembers admin panel and section collapse state', async () => {
+    localStorage.setItem('kyrgame.navigator.adminPanelCollapsed', 'true')
+    localStorage.setItem('kyrgame.navigator.adminSection.identity', 'true')
+
+    render(<App />)
+
+    expect(screen.queryByTestId('admin-panel-body')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /expand admin panel/i }))
+    expect(await screen.findByTestId('admin-panel-body')).toBeInTheDocument()
+
+    expect(screen.queryByTestId('admin-section-body-identity')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /expand identity section/i }))
+    expect(await screen.findByTestId('admin-section-body-identity')).toBeInTheDocument()
+    expect(localStorage.getItem('kyrgame.navigator.adminSection.identity')).toBe('false')
+  })
+
   it('dispatches move commands and updates room details on location change', async () => {
     let responses = [
       {
