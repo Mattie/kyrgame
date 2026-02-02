@@ -1,8 +1,14 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 
-import { AdminUpdatePayload, GameObject, useNavigator } from '../context/NavigatorContext'
+import { AdminPlayerRecord, AdminUpdatePayload, GameObject, useNavigator } from '../context/NavigatorContext'
 
 const AVAILABLE_FLAGS = ['FEMALE', 'PEGASU', 'WILLOW', 'BRFSTF']
+const FLAG_MASKS: Record<string, number> = {
+  FEMALE: 0x00000002,
+  BRFSTF: 0x00000008,
+  PEGASU: 0x00000020,
+  WILLOW: 0x00000040,
+}
 const MAX_INVENTORY_SLOTS = 6
 const BIRTHSTONE_SLOTS = 4
 const storageKeys = {
@@ -56,7 +62,7 @@ const resolveObjectReference = (
 }
 
 export const AdminControls = () => {
-  const { session, adminToken, applyAdminUpdate, world } = useNavigator()
+  const { session, adminToken, applyAdminUpdate, fetchAdminPlayer, world } = useNavigator()
   const [panelCollapsed, setPanelCollapsed] = useState(() => readStoredBool(storageKeys.panelCollapsed))
   const [sectionCollapsed, setSectionCollapsed] = useState<Record<AdminSectionKey, boolean>>(() => ({
     target: readStoredBool(storageKeys.sections.target),
@@ -70,6 +76,7 @@ export const AdminControls = () => {
   const [alternateName, setAlternateName] = useState('')
   const [attireName, setAttireName] = useState('')
   const [flags, setFlags] = useState<Set<string>>(new Set())
+  const [flagsInitialized, setFlagsInitialized] = useState(false)
   const [level, setLevel] = useState('')
   const [gold, setGold] = useState('')
   const [spellPoints, setSpellPoints] = useState('')
@@ -89,6 +96,9 @@ export const AdminControls = () => {
   const [location, setLocation] = useState('')
   const [spouse, setSpouse] = useState('')
   const [clearSpouse, setClearSpouse] = useState(false)
+  const [loadedPlayerId, setLoadedPlayerId] = useState<string | null>(null)
+  const [loadingPlayer, setLoadingPlayer] = useState(false)
+  const [loadedPlayer, setLoadedPlayer] = useState<AdminPlayerRecord | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -99,6 +109,7 @@ export const AdminControls = () => {
   }, [session?.playerId])
 
   const toggleFlag = (flag: string) => {
+    setFlagsInitialized(true)
     setFlags((prev) => {
       const next = new Set(prev)
       if (next.has(flag)) {
@@ -139,6 +150,82 @@ export const AdminControls = () => {
 
   const disabled = useMemo(() => !adminToken || playerId.trim() === '', [adminToken, playerId])
 
+  const resolveObjectLabel = useCallback(
+    (id: number) => objectCatalog.byId.get(id)?.name ?? String(id),
+    [objectCatalog.byId]
+  )
+
+  const hydrateFromPlayer = useCallback(
+    (player: AdminPlayerRecord) => {
+      setAlternateName(player.altnam ?? '')
+      setAttireName(player.attnam ?? '')
+      const nextFlags = new Set(
+        AVAILABLE_FLAGS.filter((flag) => (player.flags ?? 0) & (FLAG_MASKS[flag] ?? 0))
+      )
+      setFlags(nextFlags)
+      setFlagsInitialized(true)
+      setLevel(String(player.level ?? ''))
+      setGold(String(player.gold ?? ''))
+      setSpellPoints(String(player.spts ?? ''))
+      setHitPoints(String(player.hitpts ?? ''))
+      setInventoryCount(String(player.npobjs ?? ''))
+      const nextInventorySlots = Array.from({ length: MAX_INVENTORY_SLOTS }, (_, index) =>
+        player.gpobjs?.[index] !== undefined ? resolveObjectLabel(player.gpobjs[index]) : ''
+      )
+      setInventorySlots(nextInventorySlots)
+      setGemIndex(player.gemidx === null || player.gemidx === undefined ? '' : String(player.gemidx))
+      const nextBirthstones = Array.from({ length: BIRTHSTONE_SLOTS }, (_, index) =>
+        player.stones?.[index] !== undefined ? resolveObjectLabel(player.stones[index]) : ''
+      )
+      setBirthstones(nextBirthstones)
+      setStumpIndex(player.stumpi === null || player.stumpi === undefined ? '' : String(player.stumpi))
+      setLocation(String(player.gamloc ?? ''))
+      setSpouse(player.spouse ?? '')
+      setClearSpouse(false)
+    },
+    [resolveObjectLabel]
+  )
+
+  const loadAdminPlayer = useCallback(
+    async (overrideId?: string) => {
+      const targetId = (overrideId ?? playerId).trim()
+      if (!adminToken || targetId === '') {
+        setError('Admin token and player id are required to refresh player data')
+        return
+      }
+      setLoadingPlayer(true)
+      setStatus(null)
+      setError(null)
+      try {
+        const player = await fetchAdminPlayer(targetId)
+        hydrateFromPlayer(player)
+        setLoadedPlayer(player)
+        setLoadedPlayerId(targetId)
+        setStatus('Admin data refreshed')
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to refresh admin data')
+      } finally {
+        setLoadingPlayer(false)
+      }
+    },
+    [adminToken, fetchAdminPlayer, hydrateFromPlayer, playerId]
+  )
+
+  useEffect(() => {
+    const trimmed = playerId.trim()
+    if (!trimmed || !adminToken) {
+      return
+    }
+    if (loadedPlayerId !== trimmed) {
+      loadAdminPlayer(trimmed)
+    }
+  }, [adminToken, loadAdminPlayer, loadedPlayerId, playerId])
+
+  useEffect(() => {
+    if (!loadedPlayer) return
+    hydrateFromPlayer(loadedPlayer)
+  }, [hydrateFromPlayer, loadedPlayer, objectCatalog.byId])
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setStatus(null)
@@ -152,7 +239,7 @@ export const AdminControls = () => {
     const payload: AdminUpdatePayload = {}
     if (alternateName.trim()) payload.altnam = alternateName.trim()
     if (attireName.trim()) payload.attnam = attireName.trim()
-    if (flags.size > 0) payload.flags = Array.from(flags)
+    if (flagsInitialized) payload.flags = Array.from(flags)
 
     const parsedLevel = parseNumber(level)
     if (parsedLevel !== undefined) payload.level = parsedLevel
@@ -633,6 +720,9 @@ export const AdminControls = () => {
             </div>
 
             <div className="admin-actions">
+              <button type="button" onClick={() => loadAdminPlayer()} disabled={disabled || loadingPlayer}>
+                {loadingPlayer ? 'Refreshing...' : 'Refresh admin data'}
+              </button>
               <button type="submit" disabled={disabled}>
                 Apply admin changes
               </button>

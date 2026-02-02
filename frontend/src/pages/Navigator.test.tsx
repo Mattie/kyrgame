@@ -282,6 +282,36 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [0, 1],
+      nmpdes: 1,
+      modno: 0,
+      level: 4,
+      gamloc: 7,
+      pgploc: 7,
+      flags: 0,
+      gold: 150,
+      npobjs: 2,
+      obvals: [0, 0],
+      nspells: 0,
+      spts: 10,
+      hitpts: 20,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 1,
+      stones: [0, 1, 2, 3],
+      macros: 0,
+      stumpi: 2,
+      spouse: 'seer',
+    }
+
     const patchedPlayer = {
       uidnam: 'HeroicUser',
       plyrid: 'hero',
@@ -314,10 +344,17 @@ describe('Navigator flow', () => {
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ player: adminPlayer }),
+        } as unknown as Response)
+      }
       if (url.includes('/admin/players/hero')) {
         expect(init?.headers).toMatchObject({ Authorization: 'Bearer dev-admin' })
         const payload = JSON.parse(init?.body as string)
         expect(payload).toMatchObject({
+          flags: [],
           gpobjs: [0, 1, null, null, null, null],
           npobjs: 2,
           gemidx: 2,
@@ -356,23 +393,234 @@ describe('Navigator flow', () => {
     await screen.findByText(/admin controls/i)
 
     await act(async () => {
+      await user.clear(screen.getByLabelText(/alternate name/i))
       await user.type(screen.getByLabelText(/alternate name/i), 'Admin Hero')
+      await user.clear(screen.getByLabelText(/level/i))
       await user.type(screen.getByLabelText(/level/i), '5')
+      await user.clear(screen.getByLabelText(/gold cap/i))
       await user.type(screen.getByLabelText(/gold cap/i), '200')
+      await user.clear(screen.getByLabelText(/inventory count/i))
       await user.type(screen.getByLabelText(/inventory count/i), '2')
+      await user.clear(screen.getByLabelText(/inventory slot 1/i))
       await user.type(screen.getByLabelText(/inventory slot 1/i), 'ruby')
+      await user.clear(screen.getByLabelText(/inventory slot 2/i))
       await user.type(screen.getByLabelText(/inventory slot 2/i), '1')
+      await user.clear(screen.getByLabelText(/birthstone 1/i))
       await user.type(screen.getByLabelText(/birthstone 1/i), '0')
+      await user.clear(screen.getByLabelText(/birthstone 2/i))
       await user.type(screen.getByLabelText(/birthstone 2/i), 'emerald')
+      await user.clear(screen.getByLabelText(/birthstone 3/i))
       await user.type(screen.getByLabelText(/birthstone 3/i), '2')
+      await user.clear(screen.getByLabelText(/birthstone 4/i))
       await user.type(screen.getByLabelText(/birthstone 4/i), 'garnet')
+      await user.clear(screen.getByLabelText(/gem index/i))
       await user.type(screen.getByLabelText(/gem index/i), '2')
+      await user.clear(screen.getByLabelText(/stump index/i))
       await user.type(screen.getByLabelText(/stump index/i), '5')
       await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
     })
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
     await screen.findByText(/Admin update saved/i)
+  })
+
+  it('prepopulates admin fields from the current player and supports refresh', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [0, 1],
+      nmpdes: 1,
+      modno: 0,
+      level: 8,
+      gamloc: 12,
+      pgploc: 12,
+      flags: 2,
+      gold: 250,
+      npobjs: 2,
+      obvals: [0, 0],
+      nspells: 0,
+      spts: 15,
+      hitpts: 30,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 2,
+      stones: [0, 1, 2, 3],
+      macros: 0,
+      stumpi: 4,
+      spouse: 'seer',
+    }
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ player: adminPlayer }),
+        } as unknown as Response)
+      }
+
+      const next = responses.shift()
+      if (!next) {
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    await screen.findByText(/admin controls/i)
+    expect(await screen.findByLabelText(/alternate name/i)).toHaveValue('Hero')
+    expect(screen.getByLabelText(/attire name/i)).toHaveValue('Heroic Attire')
+    expect(screen.getByLabelText(/level/i)).toHaveValue(8)
+    expect(screen.getByLabelText(/hit points/i)).toHaveValue(30)
+    expect(screen.getByLabelText(/spell points/i)).toHaveValue(15)
+    expect(screen.getByLabelText(/^gold$/i)).toHaveValue(250)
+    expect(screen.getByLabelText(/inventory count/i)).toHaveValue(2)
+    expect(screen.getByLabelText(/inventory slot 1/i)).toHaveValue('ruby')
+    expect(screen.getByLabelText(/inventory slot 2/i)).toHaveValue('emerald')
+    expect(screen.getByLabelText(/birthstone 1/i)).toHaveValue('ruby')
+    expect(screen.getByLabelText(/birthstone 2/i)).toHaveValue('emerald')
+    expect(screen.getByLabelText(/birthstone 3/i)).toHaveValue('sapphire')
+    expect(screen.getByLabelText(/birthstone 4/i)).toHaveValue('garnet')
+    expect(screen.getByLabelText(/gem index/i)).toHaveValue(2)
+    expect(screen.getByLabelText(/stump index/i)).toHaveValue(4)
+    expect(screen.getByLabelText(/teleport room/i)).toHaveValue(12)
+    expect(screen.getByLabelText(/^spouse$/i)).toHaveValue('seer')
+    expect(screen.getByRole('checkbox', { name: /female/i })).toBeChecked()
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /refresh admin data/i }))
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything())
+  })
+
+  it('submits unchecked flags to clear them on save', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [],
+      nmpdes: 1,
+      modno: 0,
+      level: 4,
+      gamloc: 7,
+      pgploc: 7,
+      flags: 2,
+      gold: 150,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 10,
+      hitpts: 20,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: 'seer',
+    }
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ player: adminPlayer }),
+        } as unknown as Response)
+      }
+      if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
+        const payload = JSON.parse(init?.body as string)
+        expect(payload.flags).toEqual([])
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'updated', player: adminPlayer }),
+        } as unknown as Response)
+      }
+
+      const next = responses.shift()
+      if (!next) {
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    await screen.findByText(/admin controls/i)
+    const femaleFlag = await screen.findByRole('checkbox', { name: /female/i })
+    expect(femaleFlag).toBeChecked()
+
+    await act(async () => {
+      await user.click(femaleFlag)
+      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+    })
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
   })
 
   it('restores session form fields from browser storage', () => {

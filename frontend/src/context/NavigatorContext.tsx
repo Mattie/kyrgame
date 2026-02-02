@@ -80,6 +80,36 @@ export type AdminUpdatePayload = {
   cap_spts?: number
 }
 
+export type AdminPlayerRecord = {
+  uidnam: string
+  plyrid: string
+  altnam: string
+  attnam: string
+  gpobjs: number[]
+  nmpdes?: number | null
+  modno?: number | null
+  level: number
+  gamloc: number
+  pgploc: number
+  flags: number
+  gold: number
+  npobjs: number
+  obvals: number[]
+  nspells: number
+  spts: number
+  hitpts: number
+  charms: number[]
+  offspls: number
+  defspls: number
+  othspls: number
+  spells: number[]
+  gemidx?: number | null
+  stones: number[]
+  macros?: number | null
+  stumpi?: number | null
+  spouse: string
+}
+
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
 type NavigatorContextValue = {
@@ -94,6 +124,7 @@ type NavigatorContextValue = {
   startSession: (playerId: string, roomId?: number | null) => Promise<void>
   adminToken: string | null
   setAdminToken: (token: string | null) => void
+  fetchAdminPlayer: (playerId: string) => Promise<AdminPlayerRecord>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (
@@ -534,6 +565,29 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     [adminToken, apiBaseUrl]
   )
 
+  const fetchAdminPlayer = useCallback(
+    async (playerId: string) => {
+      if (!adminToken) {
+        throw new Error('Admin token required to fetch player data')
+      }
+
+      const response = await fetch(`${apiBaseUrl}/admin/players/${playerId}`, {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin player fetch failed')
+      }
+
+      const data = await response.json()
+      return data.player as AdminPlayerRecord
+    },
+    [adminToken, apiBaseUrl]
+  )
+
   const startSession = useCallback(
     async (playerId: string, roomId?: number | null) => {
       setConnectionStatus('connecting')
@@ -643,6 +697,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       startSession,
       adminToken,
       setAdminToken,
+      fetchAdminPlayer,
       applyAdminUpdate,
       sendMove,
       sendCommand,
@@ -655,6 +710,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       connectionStatus,
       currentRoom,
       error,
+      fetchAdminPlayer,
       occupants,
       setAdminToken,
       sendMove,
