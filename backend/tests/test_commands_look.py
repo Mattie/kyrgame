@@ -106,6 +106,26 @@ async def test_look_player_emits_description_inventory_and_room_broadcasts():
 
 
 @pytest.mark.anyio
+async def test_look_female_player_emits_female_description():
+    other = _build_player(
+        plyrid="lady",
+        attnam="Lady",
+        altnam="Lady Alt",
+        nmpdes=1,
+        flags=int(constants.PlayerFlag.FEMALE),
+    )
+    player = _build_player(flags=0)
+    state = _build_state(player, [other])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "Lady"}, state)
+
+    message_ids = {event.get("message_id") for event in result.events}
+    assert "FDES01" in message_ids
+
+
+@pytest.mark.anyio
 async def test_look_self_allows_invisible_description():
     player = _build_player(flags=int(constants.PlayerFlag.INVISF))
     state = _build_state(player, [])
