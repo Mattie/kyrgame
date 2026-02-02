@@ -338,6 +338,9 @@ def _apply_player_admin_update(
 
     level = updates.level if updates.level is not None else data["level"]
     data["level"] = level
+    if updates.level is not None:
+        # Legacy: kyraedit EDT002 sets nmpdes from level when editing players (KYRSYSP.C 129-146).
+        data["nmpdes"] = constants.level_to_nmpdes(level)
     max_hitpoints, max_spellpoints = _player_level_caps(level)
 
     if updates.hitpts is not None:

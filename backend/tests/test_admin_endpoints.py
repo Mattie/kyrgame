@@ -231,6 +231,7 @@ async def test_admin_player_patch_caps_and_spouse(monkeypatch):
             assert patch_resp.status_code == 200
             payload = patch_resp.json()["player"]
             assert payload["level"] == 5
+            assert payload["nmpdes"] == 4
             assert payload["hitpts"] == 18  # capped by request cap then level scaling
             assert payload["spts"] == 9
             assert payload["gold"] == 200

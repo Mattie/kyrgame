@@ -19,6 +19,7 @@
 - [x] Port look/examine/see (looker) command handling with tests to mirror legacy room/object/player inspection.
 - [x] Align looker player descriptions with FEMALE flag (FDES vs MDES) for parity with `KYRANDIA.C`/`KYRSYSP.C`.
 - [x] Ensure WebSocket sessions hydrate player identity fields (altnam/attnam) from persisted records for looker messaging.
+- [x] Match LOOK player targeting and level-driven appearance updates to legacy `findgp`/`glvutl`/`kyraedit` behavior.
 - [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring/heart-and-soul room routines plus object/spell effect engines with cooldowns, transformations, and costs. Track remaining gaps with the checkboxes in `docs/PORTING_PLAN_world_object_spell_gaps.md`—mark entries complete there as they’re implemented and only check off this line item once that appendix is fully completed.)*
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.

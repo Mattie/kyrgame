@@ -106,6 +106,28 @@ async def test_look_player_emits_description_inventory_and_room_broadcasts():
 
 
 @pytest.mark.anyio
+async def test_look_uses_attnam_for_player_matching():
+    other = _build_player(
+        plyrid="buddy",
+        attnam="Seer",
+        altnam="Seer Alt",
+        nmpdes=1,
+        flags=0,
+    )
+    player = _build_player(flags=0)
+    state = _build_state(player, [other])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "buddy"}, state)
+
+    description_event = next(
+        event for event in result.events if event.get("type") == "location_description"
+    )
+    assert description_event["message_id"] == "KRD000"
+
+
+@pytest.mark.anyio
 async def test_look_female_player_emits_female_description():
     other = _build_player(
         plyrid="lady",

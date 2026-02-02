@@ -425,10 +425,8 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
 
 def _matches_player_name(target: str, player: models.PlayerModel) -> bool:
     target_lower = target.lower()
-    return target_lower in {
-        player.attnam.lower(),
-        player.plyrid.lower(),
-    }
+    # Legacy: findgp matches against attnam only (KYRUTIL.C 472-484).
+    return target_lower == player.attnam.lower()
 
 
 def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> bool:
@@ -806,11 +804,13 @@ def _object_description_message_id(
 
 def _player_description_message_id(player: models.PlayerModel) -> str | None:
     if player.nmpdes is None:
-        return None
+        nmpdes = constants.level_to_nmpdes(player.level)
+    else:
+        nmpdes = player.nmpdes
     # Legacy: initgp/EDT002 select FDES/MDES based on FEMALE (KYRANDIA.C 345-351,
     # KYRSYSP.C 138-144).
     prefix = "FDES" if player.flags & constants.PlayerFlag.FEMALE else "MDES"
-    return f"{prefix}{player.nmpdes:02d}"
+    return f"{prefix}{nmpdes:02d}"
 
 
 def _inventory_summary_text(
