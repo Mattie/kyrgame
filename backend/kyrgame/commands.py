@@ -807,7 +807,10 @@ def _object_description_message_id(
 def _player_description_message_id(player: models.PlayerModel) -> str | None:
     if player.nmpdes is None:
         return None
-    return f"MDES{player.nmpdes:02d}"
+    # Legacy: initgp/EDT002 select FDES/MDES based on FEMALE (KYRANDIA.C 345-351,
+    # KYRSYSP.C 138-144).
+    prefix = "FDES" if player.flags & constants.PlayerFlag.FEMALE else "MDES"
+    return f"{prefix}{player.nmpdes:02d}"
 
 
 def _inventory_summary_text(
