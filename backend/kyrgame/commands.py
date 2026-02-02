@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, List, Protocol, Set
 
-from . import constants, fixtures, models, repositories
+from . import constants, fixtures, models, repositories, room_spoilers
 
 
 class CommandError(Exception):
@@ -318,6 +318,55 @@ def _handle_inventory(state: GameState, args: dict) -> CommandResult:  # noqa: A
         state=state,
         events=[_inventory_event(state, command_id, message_id)],
     )
+
+
+def _handle_spoiler(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    room_id = state.player.gamloc
+    spoiler = room_spoilers.load_room_spoilers().get(room_id)
+    if not spoiler:
+        return CommandResult(state=state, events=[])
+
+    summary = _resolve_spoiler_phrases(spoiler.get("summary"), state.messages)
+    interaction = _resolve_spoiler_phrases(spoiler.get("interaction"), state.messages)
+    legacy_ref = spoiler.get("legacy_ref")
+    text_parts = [part for part in (summary, interaction) if part]
+    text = "\n".join(text_parts) if text_parts else None
+
+    return CommandResult(
+        state=state,
+        events=[
+            {
+                "scope": "player",
+                "event": "spoiler",
+                "type": "spoiler",
+                "location": room_id,
+                "summary": summary,
+                "interaction": interaction,
+                "legacy_ref": legacy_ref,
+                "text": text,
+                "command_id": command_id,
+                "message_id": message_id,
+            }
+        ],
+    )
+
+
+def _resolve_spoiler_phrases(
+    text: str | None, messages: models.MessageBundleModel | None
+) -> str | None:
+    if not text or not messages:
+        return text
+    replacements = {
+        "WILCMD": messages.messages.get("WILCMD"),
+        "EGLADE": messages.messages.get("EGLADE"),
+    }
+    resolved = text
+    for key, value in replacements.items():
+        if value:
+            resolved = resolved.replace(key, value)
+    return resolved
 
 
 def _handle_get(state: GameState, args: dict) -> CommandResult:
@@ -1002,6 +1051,13 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
     )
     registry.register(CommandMetadata(verb="chat", cooldown_seconds=1.5), _handle_chat)
     registry.register(CommandMetadata(verb="inventory"), _handle_inventory)
+    registry.register(
+        CommandMetadata(
+            verb="spoiler",
+            command_id=vocabulary._lookup_command_id("spoiler"),
+        ),
+        _handle_spoiler,
+    )
     registry.register(
         CommandMetadata(
             verb="get",

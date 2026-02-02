@@ -15,6 +15,25 @@ class RoomHandleResult:
     events: list[dict]
 
 
+def extract_room_spoilers(definitions: dict) -> dict[int, dict[str, str | None]]:
+    spoilers: dict[int, dict[str, str | None]] = {}
+    for room in definitions.get("rooms", []):
+        room_id = room.get("id")
+        if room_id is None:
+            continue
+        summary = room.get("spoiler_summary")
+        interaction = room.get("spoiler_interaction")
+        legacy_ref = room.get("legacy_ref")
+        if not (summary or interaction or legacy_ref):
+            continue
+        spoilers[int(room_id)] = {
+            "summary": summary,
+            "interaction": interaction,
+            "legacy_ref": legacy_ref,
+        }
+    return spoilers
+
+
 class YamlRoomEngine:
     """Interpret YAML-defined room behaviors against a player state."""
 

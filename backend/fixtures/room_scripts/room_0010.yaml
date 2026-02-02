@@ -1,9 +1,8 @@
 id: 10
 name: vhealr
-# Room summary: Misty healer's abode where a serene healer rewards floral offerings.
-# Mechanics: offering a rose removes it, heals 10 HP up to 4× level cap, while other offers are rejected and missing roses get gentle refusals.
-# Tone: peaceful gratitude and gentle admonishment toward materialism when the offer is wrong.
-# Legacy: legacy/KYRROUS.C lines 410-436
+spoiler_summary: "Misty healer's abode where a serene healer rewards floral offerings."
+spoiler_interaction: "Offer a rose to consume it and heal 10 HP up to the 4× level cap; other offerings are rejected and missing roses get gentle refusals."
+legacy_ref: "legacy/KYRROUS.C:410-436"
 triggers:
   - verbs: [offer]
     target_in: [rose]
@@ -33,4 +32,3 @@ triggers:
       - type: message
         scope: direct
         message_id: NOGOOD
-

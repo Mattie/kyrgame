@@ -1,9 +1,8 @@
 id: 14
 name: gpcone
-# Room summary: Pine glade where players reach for pinecones amid fallen needles.
-# Mechanics: get/grab/pick/take pinecone has a 40% success roll, then grants a pinecone if inventory space remains; misses or full packs yield failure text.
-# Tone: lighthearted fumbling with pine trees, celebrating a successful grab or noting a miss.
-# Legacy: legacy/KYRROUS.C lines 492-509
+spoiler_summary: "Pine glade where players reach for pinecones amid fallen needles."
+spoiler_interaction: "Get/grab/pick/take pinecone for a 40% chance to secure one; success also requires open inventory space, otherwise the attempt fails."
+legacy_ref: "legacy/KYRROUS.C:492-509"
 triggers:
   - verbs: [get, grab, pick, take]
     target_in: [pinecone]
@@ -40,4 +39,3 @@ triggers:
             scope: broadcast
             message_id: PINEC3
             format: [player_altnam]
-

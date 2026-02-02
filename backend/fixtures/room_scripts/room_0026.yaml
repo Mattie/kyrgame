@@ -1,9 +1,8 @@
 id: 26
 name: ashtre
-# Room summary: Cluster of ash trees where tears coax a crystal shard from the ashes.
-# Mechanics: cry/weep at the ashes/trees shows shard appearance messages and, if the room
-# has space, spawns a shard object on the ground; otherwise warns that the shard vanishes.
-# Legacy: legacy/KYRROUS.C lines 677-696
+spoiler_summary: "Cluster of ash trees where tears coax a crystal shard from the ashes."
+spoiler_interaction: "Cry/weep at the ashes or trees to summon a shard on the ground if the room has space; otherwise the shard vanishes."
+legacy_ref: "legacy/KYRROUS.C:707-727"
 triggers:
   - verbs: [cry, weep]
     target_in: [ashes, trees]

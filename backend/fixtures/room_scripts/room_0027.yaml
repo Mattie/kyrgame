@@ -1,10 +1,8 @@
 id: 27
 name: swrock
-# Room summary: Strange rock shrouded in mist that responds to prayers and a sword offering.
-# Mechanics: praying at the rock increments a shared counter and broadcasts swirling mists;
-# dropping a sword on the rock after any prayer consumes the sword, awards a tiara on the ground,
-# or rejects if the player lacks the sword. Requires the explicit "sword rock" phrasing.
-# Legacy: legacy/KYRROUS.C lines 678-711
+spoiler_summary: "Strange rock shrouded in mist that responds to prayers and a sword offering."
+spoiler_interaction: "Pray at the rock to stir the mists, then drop a sword onto the rock (\"sword rock\") to trade it for a tiara; failing to have the sword is rejected."
+legacy_ref: "legacy/KYRROUS.C:679-705"
 state:
   rockpr: 0
 triggers:

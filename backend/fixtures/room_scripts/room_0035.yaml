@@ -1,6 +1,8 @@
 id: 35
 name: terrace
-# Legacy: legacy/KYRROUS.C lines 472-479 (terrac) reuse the drink-water helper and otherwise fall back to default handling.
+spoiler_summary: "Quiet terrace where the only notable action is to sip the water."
+spoiler_interaction: "Drink water to receive a simple flavor message; other actions fall through to default handling."
+legacy_ref: "legacy/KYRROUS.C:471-478"
 triggers:
   - verbs: [drink]
     target_in: [water]
