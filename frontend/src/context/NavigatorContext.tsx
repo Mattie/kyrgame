@@ -3,6 +3,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -215,7 +216,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [adminToken, setAdminToken] = useState<string | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const worldRef = useRef<WorldData | null>(null)
+  const sessionRef = useRef<SessionRecord | null>(null)
   const occupantsRef = useRef<string[]>([])
+
+  useEffect(() => {
+    sessionRef.current = session
+  }, [session])
 
   const resetSocket = useCallback(() => {
     if (socketRef.current) {
@@ -260,6 +266,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         case 'room_broadcast': {
           const payload = message.payload ?? {}
+
+          const excludedPlayer = payload.exclude_player ?? payload.excludePlayer
+          const currentPlayerId = sessionRef.current?.playerId ?? session?.playerId ?? null
+          if (
+            excludedPlayer &&
+            normalizePlayerName(excludedPlayer) === normalizePlayerName(currentPlayerId)
+          ) {
+            break
+          }
 
           const resolvedRoomMessageText =
             payload.event === 'room_message' && !payload.text

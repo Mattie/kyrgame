@@ -128,6 +128,13 @@ class YamlRoomEngine:
             if any(args[idx].lower() != expected for idx, expected in enumerate(sequence)):
                 return False
 
+        arg_at = trigger.get("arg_at")
+        if arg_at:
+            index = int(arg_at.get("index", 0))
+            value = str(arg_at.get("value", "")).lower()
+            if len(args) <= index or args[index].lower() != value:
+                return False
+
         required_state = trigger.get("room_state_at_least", {})
         if required_state:
             state = self._get_room_state(room_id)
@@ -288,6 +295,7 @@ class YamlRoomEngine:
         message_id = action.get("message_id")
         text = action.get("text")
         format_args = action.get("format", [])
+        scope = action.get("scope", "direct")
         if text is None and message_id:
             text = self.messages.messages.get(message_id, "")
 
@@ -303,11 +311,12 @@ class YamlRoomEngine:
 
         events.append(
             {
-                "scope": action.get("scope", "direct"),
+                "scope": "broadcast" if scope == "broadcast_others" else scope,
                 "event": "room_message",
                 "message_id": message_id,
                 "text": text,
                 "player": player.plyrid,
+                "exclude_player": player.plyrid if scope == "broadcast_others" else None,
             }
         )
 

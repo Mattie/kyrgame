@@ -1,0 +1,50 @@
+# Legacy: legacy/KYRROUS.C:864-885 (refpoo)
+id: 182
+name: refpoo
+spoiler_summary: "Reflection pool that transforms a tossed dagger into a gleaming sword."
+spoiler_interaction: "Drop/throw/toss an item into the pool; daggers transform into swords, while other offerings are rejected."
+legacy_ref: "legacy/KYRROUS.C:864-885"
+triggers:
+  - verbs: [drop, throw, toss]
+    arg_at: {index: 1, value: pool}
+    actions:
+      - type: branch_by_item
+        target_arg: 0
+        cases:
+          dagger:
+            - type: remove_item
+            - type: grant_object
+              object: sword
+            - type: message
+              scope: direct
+              message_id: REFM00
+            - type: message
+              scope: broadcast
+              message_id: REFM01
+              format: [player_altnam]
+        default_actions:
+          - type: message
+            scope: direct
+            message_id: REFM02
+          - type: message
+            scope: broadcast
+            message_id: REFM01
+            format: [player_altnam]
+        missing_actions:
+          - type: message
+            scope: direct
+            message_id: REFM02
+          - type: message
+            scope: broadcast
+            message_id: REFM01
+            format: [player_altnam]
+  - verbs: [see, look, examine]
+    target_in: [pool]
+    actions:
+      - type: message
+        scope: direct
+        message_id: REFM03
+      - type: message
+        scope: broadcast
+        message_id: REFM04
+        format: [player_altnam]

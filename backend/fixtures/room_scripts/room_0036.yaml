@@ -1,0 +1,41 @@
+# Legacy: legacy/KYRROUS.C:481-489 (waterf)
+id: 36
+name: waterf
+spoiler_summary: "Waterfall clearing where travelers can sip fresh water or pluck roses."
+spoiler_interaction: "Drink water for a short flavor message, or pick roses if you have inventory space; otherwise the waterfall ignores other actions."
+legacy_ref: "legacy/KYRROUS.C:481-489"
+triggers:
+  - verbs: [drink]
+    target_in: [water]
+    actions:
+      - type: message
+        scope: direct
+        message_id: DRINK0
+      - type: message
+        scope: broadcast
+        message_id: DRINK1
+        format: [player_altnam]
+  - verbs: [get, grab, pick, take]
+    target_in: [rose]
+    actions:
+      - type: conditional
+        conditions:
+          - inventory_lt: 6
+        then:
+          - type: grant_object
+            object: rose
+          - type: message
+            scope: direct
+            message_id: GROSE1
+          - type: message
+            scope: broadcast
+            message_id: GROSE2
+            format: [player_altnam]
+        else:
+          - type: message
+            scope: direct
+            message_id: GROSE3
+          - type: message
+            scope: broadcast
+            message_id: GROSE4
+            format: [player_altnam]

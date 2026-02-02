@@ -1508,6 +1508,51 @@ def create_app() -> FastAPI:
                     else:
                         parsed = provider.command_vocabulary.parse_text(command_text)
                     result = await provider.command_dispatcher.dispatch_parsed(parsed, state)
+                except commands.UnknownCommandError as exc:  # type: ignore[attr-defined]
+                    tokens = command_text.strip().split()
+                    handled = False
+                    if tokens and provider.room_scripts:
+                        verb = tokens[0].lower()
+                        arg_list = tokens[1:]
+                        handled = await provider.room_scripts.handle_command(
+                            player_id,
+                            current_room,
+                            command=verb,
+                            args=arg_list,
+                            player=state.player,
+                        )
+                    if handled:
+                        ack_payload = {
+                            "type": "command_response",
+                            "room": current_room,
+                            "payload": {
+                                "command_id": getattr(parsed, "command_id", None)
+                                if "parsed" in locals()
+                                else None,
+                                "message_id": getattr(parsed, "message_id", None)
+                                if "parsed" in locals()
+                                else None,
+                                "verb": tokens[0].lower() if tokens else "",
+                            },
+                        }
+                        if meta:
+                            ack_payload["meta"] = meta
+                        await websocket.send_json(ack_payload)
+                        continue
+                    await websocket.send_json(
+                        {
+                            "type": "command_error",
+                            "room": current_room,
+                            "payload": {
+                                "command_id": getattr(parsed, "command_id", None)
+                                if "parsed" in locals()
+                                else None,
+                                "message_id": getattr(exc, "message_id", None),
+                                "detail": str(exc),
+                            },
+                        }
+                    )
+                    continue
                 except commands.CommandError as exc:  # type: ignore[attr-defined]
                     await websocket.send_json(
                         {

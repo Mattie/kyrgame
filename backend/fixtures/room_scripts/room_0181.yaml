@@ -1,0 +1,41 @@
+# Legacy: legacy/KYRROUS.C:841-860 (tashas)
+id: 181
+name: tashas
+spoiler_summary: "Tashanna's shrine where imagination and the statue's inscription reveal secrets."
+spoiler_interaction: "Imagine a dagger to conjure one if you have space; examine the statue to read its cryptic inscription."
+legacy_ref: "legacy/KYRROUS.C:841-860"
+triggers:
+  - verbs: [imagine]
+    target_in: [dagger]
+    actions:
+      - type: conditional
+        conditions:
+          - inventory_lt: 6
+        then:
+          - type: grant_object
+            object: dagger
+          - type: message
+            scope: direct
+            message_id: DAGM00
+          - type: message
+            scope: broadcast_others
+            message_id: DAGM01
+            format: [player_altnam]
+        else:
+          - type: message
+            scope: direct
+            message_id: DAGM02
+          - type: message
+            scope: broadcast_others
+            message_id: DAGM01
+            format: [player_altnam]
+  - verbs: [see, look, examine]
+    target_in: [statue]
+    actions:
+      - type: message
+        scope: direct
+        message_id: DAGM03
+      - type: message
+        scope: broadcast_others
+        message_id: DAGM04
+        format: [player_altnam]
