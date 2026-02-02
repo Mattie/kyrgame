@@ -295,6 +295,47 @@ def test_gpcone_random_pinecone_requires_inventory_space(base_player):
     assert engine_fail.messages.messages["PINEC2"] in fail_texts
 
 
+def test_arg_at_trigger_matches_second_argument(base_player):
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    definitions = {
+        "rooms": [
+            {
+                "id": 999,
+                "triggers": [
+                    {
+                        "verbs": ["drop"],
+                        "arg_at": {"index": 1, "value": "pool"},
+                        "actions": [
+                            {"type": "message", "scope": "direct", "text": "matched"}
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+    )
+
+    miss = engine.handle(
+        player=base_player, room_id=999, command="drop", args=["dagger"]
+    )
+    assert miss.handled is False
+
+    hit = engine.handle(
+        player=base_player, room_id=999, command="drop", args=["dagger", "pool"]
+    )
+    assert hit.handled is True
+    assert any(event["text"] == "matched" for event in hit.events)
+
+
 def test_fearno_levels_player_when_phrase_matched(base_player):
     messages = fixtures.load_messages()
     objects = fixtures.load_objects()

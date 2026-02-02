@@ -128,6 +128,13 @@ class YamlRoomEngine:
             if any(args[idx].lower() != expected for idx, expected in enumerate(sequence)):
                 return False
 
+        arg_at = trigger.get("arg_at")
+        if arg_at:
+            index = int(arg_at.get("index", 0))
+            value = str(arg_at.get("value", "")).lower()
+            if len(args) <= index or args[index].lower() != value:
+                return False
+
         required_state = trigger.get("room_state_at_least", {})
         if required_state:
             state = self._get_room_state(room_id)
