@@ -335,6 +335,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             payload = { ...message.payload, text: resolvedRoomMessageText }
           }
 
+          if (payloadEvent === 'spoiler') {
+            const interaction =
+              message.payload?.interaction ?? message.payload?.text ?? message.payload?.summary
+            if (interaction) {
+              summary = `... A mysterious voice whispers words of secret wisdom, "${interaction}"`
+              payload = { ...message.payload, text: summary }
+            }
+          }
+
           if (payloadEvent === 'room_occupants') {
             const occupants = Array.isArray(message.payload?.occupants)
               ? (message.payload?.occupants as string[]).filter(Boolean)
