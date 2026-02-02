@@ -53,6 +53,7 @@
 6. **Admin/editor tooling**
    - Add secured HTTP endpoints (and CLI scripts if needed) for player management, content edits, and message bundle updates reflecting `KYRSYSP.C` behaviors.
    - Cover authorization policies and validation with tests and update documentation for operator workflows.
+   - [x] Extend admin player editor to adjust inventory slots, gem/stump progression, and birthstones with catalog validation to mirror kyraedit flows.
 7. **Ops, packaging, and CI**
    - Deliver Docker Compose with API, Postgres, and seed jobs; create Makefile targets for `make up`, `make test`, `make seed`, and `make package-content`.
    - Configure CI (lint, type check, unit/integration tests) and artifact generation for offline bundles.

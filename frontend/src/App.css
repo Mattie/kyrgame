@@ -251,6 +251,25 @@ p {
   padding: 0 0.5rem;
   font-weight: 700;
   color: #f3c77a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-section .section-toggle {
+  background: rgba(17, 31, 45, 0.65);
+  color: #f3c77a;
+  border: 1px solid rgba(243, 199, 122, 0.4);
+  border-radius: 10px;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.admin-section.collapsed {
+  opacity: 0.8;
 }
 
 .admin-controls input {
@@ -271,6 +290,13 @@ p {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-slot-grid {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .admin-flags {

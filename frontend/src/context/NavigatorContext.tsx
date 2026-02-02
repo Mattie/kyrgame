@@ -68,6 +68,11 @@ export type AdminUpdatePayload = {
   gold?: number
   spts?: number
   hitpts?: number
+  gpobjs?: Array<number | null>
+  npobjs?: number
+  gemidx?: number
+  stones?: number[]
+  stumpi?: number
   spouse?: string
   clear_spouse?: boolean
   cap_gold?: number
