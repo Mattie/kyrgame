@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 
-import { AdminUpdatePayload, useNavigator } from '../context/NavigatorContext'
+import { AdminUpdatePayload, GameObject, useNavigator } from '../context/NavigatorContext'
 
 const AVAILABLE_FLAGS = ['FEMALE', 'PEGASU', 'WILLOW', 'BRFSTF']
+const MAX_INVENTORY_SLOTS = 6
+const BIRTHSTONE_SLOTS = 4
 
 const parseNumber = (value: string): number | undefined => {
   const trimmed = value.trim()
@@ -11,8 +13,26 @@ const parseNumber = (value: string): number | undefined => {
   return Number.isNaN(parsed) ? undefined : parsed
 }
 
+const resolveObjectReference = (
+  value: string,
+  objectsById: Map<number, GameObject>,
+  objectsByName: Map<string, GameObject>
+): number | null | undefined => {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const numeric = Number(trimmed)
+  if (!Number.isNaN(numeric) && objectsById.has(numeric)) {
+    return numeric
+  }
+  const byName = objectsByName.get(trimmed.toLowerCase())
+  if (byName) {
+    return byName.id
+  }
+  return undefined
+}
+
 export const AdminControls = () => {
-  const { session, adminToken, applyAdminUpdate } = useNavigator()
+  const { session, adminToken, applyAdminUpdate, world } = useNavigator()
   const [playerId, setPlayerId] = useState(session?.playerId ?? '')
   const [alternateName, setAlternateName] = useState('')
   const [attireName, setAttireName] = useState('')
@@ -24,6 +44,15 @@ export const AdminControls = () => {
   const [goldCap, setGoldCap] = useState('')
   const [spellCap, setSpellCap] = useState('')
   const [hitCap, setHitCap] = useState('')
+  const [inventoryCount, setInventoryCount] = useState('')
+  const [inventorySlots, setInventorySlots] = useState<string[]>(
+    Array.from({ length: MAX_INVENTORY_SLOTS }, () => '')
+  )
+  const [gemIndex, setGemIndex] = useState('')
+  const [birthstones, setBirthstones] = useState<string[]>(
+    Array.from({ length: BIRTHSTONE_SLOTS }, () => '')
+  )
+  const [stumpIndex, setStumpIndex] = useState('')
   const [location, setLocation] = useState('')
   const [spouse, setSpouse] = useState('')
   const [clearSpouse, setClearSpouse] = useState(false)
@@ -47,6 +76,17 @@ export const AdminControls = () => {
       return next
     })
   }
+
+  const objectCatalog = useMemo(() => {
+    const objects = world?.objects ?? []
+    const byId = new Map<number, GameObject>()
+    const byName = new Map<string, GameObject>()
+    objects.forEach((obj) => {
+      byId.set(obj.id, obj)
+      byName.set(obj.name.toLowerCase(), obj)
+    })
+    return { objects, byId, byName }
+  }, [world?.objects])
 
   const disabled = useMemo(() => !adminToken || playerId.trim() === '', [adminToken, playerId])
 
@@ -81,6 +121,66 @@ export const AdminControls = () => {
     if (parsedSpellCap !== undefined) payload.cap_spts = parsedSpellCap
     const parsedHitCap = parseNumber(hitCap)
     if (parsedHitCap !== undefined) payload.cap_hitpts = parsedHitCap
+
+    const parsedInventoryCount = parseNumber(inventoryCount)
+    if (parsedInventoryCount !== undefined) {
+      if (parsedInventoryCount < 0 || parsedInventoryCount > MAX_INVENTORY_SLOTS) {
+        setError(`Inventory count must be between 0 and ${MAX_INVENTORY_SLOTS}`)
+        return
+      }
+    }
+
+    const hasInventorySlots = inventorySlots.some((slot) => slot.trim() !== '')
+    if (hasInventorySlots) {
+      const resolvedSlots = inventorySlots.map((slot) =>
+        resolveObjectReference(slot, objectCatalog.byId, objectCatalog.byName)
+      )
+      if (resolvedSlots.some((slot) => slot === undefined)) {
+        setError('Inventory slots must match a catalog object name or id.')
+        return
+      }
+      const normalizedSlots = resolvedSlots as Array<number | null>
+      let seenEmpty = false
+      for (const slot of normalizedSlots) {
+        if (slot === null) {
+          seenEmpty = true
+        } else if (seenEmpty) {
+          setError('Inventory slots must be contiguous from slot 1 onward.')
+          return
+        }
+      }
+      const filledSlots = normalizedSlots.filter((slot): slot is number => slot !== null)
+      if (parsedInventoryCount !== undefined && parsedInventoryCount !== filledSlots.length) {
+        setError('Inventory count must match the number of filled slots.')
+        return
+      }
+      payload.gpobjs = normalizedSlots
+      payload.npobjs = parsedInventoryCount ?? filledSlots.length
+    } else if (parsedInventoryCount !== undefined) {
+      payload.npobjs = parsedInventoryCount
+    }
+
+    const hasBirthstones = birthstones.some((stone) => stone.trim() !== '')
+    if (hasBirthstones) {
+      const resolvedStones = birthstones.map((stone) =>
+        resolveObjectReference(stone, objectCatalog.byId, objectCatalog.byName)
+      )
+      if (resolvedStones.some((stone) => stone === undefined)) {
+        setError('Birthstones must match a catalog object name or id.')
+        return
+      }
+      if (resolvedStones.some((stone) => stone === null)) {
+        setError(`Provide ${BIRTHSTONE_SLOTS} birthstones or leave all blank.`)
+        return
+      }
+      payload.stones = resolvedStones as number[]
+    }
+
+    const parsedGemIndex = parseNumber(gemIndex)
+    if (parsedGemIndex !== undefined) payload.gemidx = parsedGemIndex
+
+    const parsedStumpIndex = parseNumber(stumpIndex)
+    if (parsedStumpIndex !== undefined) payload.stumpi = parsedStumpIndex
 
     const parsedLocation = parseNumber(location)
     if (parsedLocation !== undefined) {
@@ -253,6 +353,97 @@ export const AdminControls = () => {
             </fieldset>
 
             <fieldset className="admin-section">
+              <legend>Inventory</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="inventory-count">Inventory count</label>
+                  <input
+                    id="inventory-count"
+                    name="inventory-count"
+                    type="number"
+                    min={0}
+                    max={MAX_INVENTORY_SLOTS}
+                    value={inventoryCount}
+                    onChange={(event) => setInventoryCount(event.target.value)}
+                  />
+                  <p className="field-hint">Max {MAX_INVENTORY_SLOTS} items (matches MXPOBS).</p>
+                </div>
+              </div>
+              <div className="admin-slot-grid">
+                {inventorySlots.map((slot, index) => (
+                  <div className="field" key={`inventory-slot-${index}`}>
+                    <label htmlFor={`inventory-slot-${index}`}>Inventory slot {index + 1}</label>
+                    <input
+                      id={`inventory-slot-${index}`}
+                      name={`inventory-slot-${index}`}
+                      list="inventory-object-options"
+                      value={slot}
+                      onChange={(event) =>
+                        setInventorySlots((prev) => {
+                          const next = [...prev]
+                          next[index] = event.target.value
+                          return next
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="admin-section">
+              <legend>Gems & stump</legend>
+              <div className="admin-fields">
+                <div className="field">
+                  <label htmlFor="gem-index">Gem index</label>
+                  <input
+                    id="gem-index"
+                    name="gem-index"
+                    type="number"
+                    min={0}
+                    max={BIRTHSTONE_SLOTS}
+                    value={gemIndex}
+                    onChange={(event) => setGemIndex(event.target.value)}
+                  />
+                  <p className="field-hint">Birthstone progress (0-{BIRTHSTONE_SLOTS}).</p>
+                </div>
+                <div className="field">
+                  <label htmlFor="stump-index">Stump index</label>
+                  <input
+                    id="stump-index"
+                    name="stump-index"
+                    type="number"
+                    min={0}
+                    max={12}
+                    value={stumpIndex}
+                    onChange={(event) => setStumpIndex(event.target.value)}
+                  />
+                  <p className="field-hint">Chamber of the Mind progress (0-12).</p>
+                </div>
+              </div>
+              <div className="admin-slot-grid">
+                {birthstones.map((stone, index) => (
+                  <div className="field" key={`birthstone-${index}`}>
+                    <label htmlFor={`birthstone-${index}`}>Birthstone {index + 1}</label>
+                    <input
+                      id={`birthstone-${index}`}
+                      name={`birthstone-${index}`}
+                      list="inventory-object-options"
+                      value={stone}
+                      onChange={(event) =>
+                        setBirthstones((prev) => {
+                          const next = [...prev]
+                          next[index] = event.target.value
+                          return next
+                        })
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="admin-section">
               <legend>Location & spouse</legend>
               <div className="admin-fields">
                 <div className="field">
@@ -296,6 +487,16 @@ export const AdminControls = () => {
             </button>
           </div>
         </form>
+        <datalist id="inventory-object-options">
+          {objectCatalog.objects.flatMap((obj) => [
+            <option key={`${obj.id}-name`} value={obj.name}>
+              {obj.id}
+            </option>,
+            <option key={`${obj.id}-id`} value={`${obj.id}`}>
+              {obj.name}
+            </option>,
+          ])}
+        </datalist>
         {status && <p className="status success">{status}</p>}
         {error && <p className="status error">{error}</p>}
       </div>

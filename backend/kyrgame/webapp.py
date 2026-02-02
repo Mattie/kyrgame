@@ -84,6 +84,11 @@ class PlayerAdminUpdate(BaseModel):
     gold: int | None = None
     spts: int | None = None
     hitpts: int | None = None
+    gpobjs: list[int | str | None] | None = None
+    npobjs: int | None = None
+    gemidx: int | None = None
+    stones: list[int | str] | None = None
+    stumpi: int | None = None
     spouse: str | None = None
     clear_spouse: bool = False
     cap_gold: int | None = None
@@ -272,10 +277,52 @@ def _player_level_caps(level: int) -> tuple[int, int]:
     return max_hitpoints, max_spellpoints
 
 
+def _object_catalog_indexes(objects: list[models.GameObjectModel]):
+    objects_by_id = {obj.id: obj for obj in objects}
+    objects_by_name = {obj.name.lower(): obj for obj in objects}
+    return objects_by_id, objects_by_name
+
+
+def _resolve_object_reference(
+    raw: int | str,
+    objects_by_id: dict[int, models.GameObjectModel],
+    objects_by_name: dict[str, models.GameObjectModel],
+    *,
+    field_name: str,
+) -> int:
+    if isinstance(raw, int):
+        object_id = raw
+    else:
+        trimmed = raw.strip()
+        if not trimmed:
+            raise HTTPException(status_code=422, detail=f"{field_name} cannot be blank")
+        if trimmed.isdigit():
+            object_id = int(trimmed)
+        else:
+            match = objects_by_name.get(trimmed.lower())
+            if not match:
+                raise HTTPException(status_code=422, detail=f"{field_name} must reference a catalog object")
+            return match.id
+
+    if object_id not in objects_by_id:
+        raise HTTPException(status_code=422, detail=f"{field_name} must reference a catalog object")
+    return object_id
+
+
+def _normalize_obvals(obvals: list[int], target_length: int) -> list[int]:
+    if len(obvals) >= target_length:
+        return obvals[:target_length]
+    return [*obvals, *([0] * (target_length - len(obvals)))]
+
+
 def _apply_player_admin_update(
-    player: models.PlayerModel, updates: PlayerAdminUpdate
+    player: models.PlayerModel,
+    updates: PlayerAdminUpdate,
+    *,
+    objects: list[models.GameObjectModel],
 ) -> models.PlayerModel:
     data = player.model_dump()
+    objects_by_id, objects_by_name = _object_catalog_indexes(objects)
 
     if updates.altnam is not None:
         data["altnam"] = updates.altnam[: constants.APNSIZ]
@@ -308,6 +355,77 @@ def _apply_player_admin_update(
     if updates.cap_gold is not None:
         data["gold"] = min(data["gold"], updates.cap_gold)
     data["gold"] = max(0, data["gold"])
+
+    if updates.gpobjs is not None:
+        if len(updates.gpobjs) > constants.MXPOBS:
+            raise HTTPException(status_code=422, detail="gpobjs exceeds MXPOBS")
+        resolved: list[int] = []
+        seen_empty = False
+        for slot in updates.gpobjs:
+            if slot is None or (isinstance(slot, str) and not slot.strip()):
+                seen_empty = True
+                continue
+            if seen_empty:
+                raise HTTPException(
+                    status_code=422, detail="gpobjs slots must be contiguous from slot 1"
+                )
+            resolved.append(
+                _resolve_object_reference(
+                    slot,
+                    objects_by_id,
+                    objects_by_name,
+                    field_name="gpobjs",
+                )
+            )
+        if updates.npobjs is not None and updates.npobjs != len(resolved):
+            raise HTTPException(status_code=422, detail="npobjs must match gpobjs length")
+        data["gpobjs"] = resolved
+        data["npobjs"] = len(resolved)
+        data["obvals"] = _normalize_obvals(data["obvals"], len(resolved))
+    elif updates.npobjs is not None:
+        if updates.npobjs < 0 or updates.npobjs > constants.MXPOBS:
+            raise HTTPException(status_code=422, detail="npobjs must be within MXPOBS")
+        gpobjs = list(data["gpobjs"])
+        obvals = list(data["obvals"])
+        if updates.npobjs > len(gpobjs):
+            # Legacy kyraedit increments gpobjs with gmobjs[2]. (KYRSYSP.C EDT008 @ ~221-241)
+            default_id = 2
+            if default_id not in objects_by_id:
+                raise HTTPException(status_code=422, detail="Default inventory object missing")
+            for _ in range(len(gpobjs), updates.npobjs):
+                gpobjs.append(default_id)
+                obvals.append(0)
+        elif updates.npobjs < len(gpobjs):
+            gpobjs = gpobjs[: updates.npobjs]
+            obvals = obvals[: updates.npobjs]
+        data["gpobjs"] = gpobjs
+        data["obvals"] = obvals
+        data["npobjs"] = updates.npobjs
+
+    if updates.stones is not None:
+        if len(updates.stones) != constants.BIRTHSTONE_SLOTS:
+            raise HTTPException(status_code=422, detail="stones must contain four entries")
+        data["stones"] = [
+            _resolve_object_reference(
+                stone,
+                objects_by_id,
+                objects_by_name,
+                field_name="stones",
+            )
+            for stone in updates.stones
+        ]
+
+    if updates.gemidx is not None:
+        # Legacy kyraedit gemidx allows 0-4 inclusive. (KYRSYSP.C EDT022 @ ~296-305)
+        if updates.gemidx < 0 or updates.gemidx > constants.BIRTHSTONE_SLOTS:
+            raise HTTPException(status_code=422, detail="gemidx must be between 0 and 4")
+        data["gemidx"] = updates.gemidx
+
+    if updates.stumpi is not None:
+        # Legacy kyraedit stumpi allows 0-12 inclusive. (KYRSYSP.C EDT023 @ ~307-317)
+        if updates.stumpi < 0 or updates.stumpi > 12:
+            raise HTTPException(status_code=422, detail="stumpi must be between 0 and 12")
+        data["stumpi"] = updates.stumpi
 
     if updates.clear_spouse:
         data["spouse"] = ""
@@ -790,7 +908,11 @@ async def admin_patch_player(
         raise HTTPException(status_code=404, detail="Player not found")
 
     current = _player_model_from_record(record)
-    updated = _apply_player_admin_update(current, updates)
+    updated = _apply_player_admin_update(
+        current,
+        updates,
+        objects=provider.cache["objects"],
+    )
 
     for field, value in updated.model_dump().items():
         setattr(record, field, value)

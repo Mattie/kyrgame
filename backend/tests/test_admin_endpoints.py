@@ -4,7 +4,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from kyrgame import fixtures, models
+from kyrgame import constants, fixtures, models
 from kyrgame.webapp import create_app
 
 
@@ -250,3 +250,86 @@ async def test_admin_player_patch_caps_and_spouse(monkeypatch):
             cleared = clear_resp.json()["player"]
             assert cleared["spouse"] == ""
             assert cleared["spts"] == 2
+
+
+@pytest.mark.anyio
+async def test_admin_player_patch_inventory_and_gems(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "player-token": {
+                    "roles": ["player_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    objects = fixtures.load_objects()
+    object_names = [obj.name for obj in objects]
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            grow_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"npobjs": 3},
+            )
+            assert grow_resp.status_code == 200
+            grown = grow_resp.json()["player"]
+            assert grown["npobjs"] == 3
+            assert grown["gpobjs"][-1] == 2
+            assert len(grown["obvals"]) == 3
+            assert grown["obvals"][-1] == 0
+
+            slot_payload = {
+                "gpobjs": [
+                    object_names[0],
+                    objects[1].id,
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+                "stones": [
+                    objects[0].id,
+                    objects[1].name,
+                    objects[2].id,
+                    objects[3].name,
+                ],
+                "gemidx": 2,
+                "stumpi": 5,
+            }
+            slot_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json=slot_payload,
+            )
+            assert slot_resp.status_code == 200
+            slotted = slot_resp.json()["player"]
+            assert slotted["gpobjs"] == [objects[0].id, objects[1].id]
+            assert slotted["npobjs"] == 2
+            assert slotted["stones"] == [
+                objects[0].id,
+                objects[1].id,
+                objects[2].id,
+                objects[3].id,
+            ]
+            assert slotted["gemidx"] == 2
+            assert slotted["stumpi"] == 5
+
+            invalid_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"gpobjs": [object_names[0], None, "not-a-real-object"]},
+            )
+            assert invalid_resp.status_code == 422
+
+            too_many = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"npobjs": constants.MXPOBS + 1},
+            )
+            assert too_many.status_code == 422

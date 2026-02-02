@@ -67,7 +67,12 @@ describe('Navigator flow', () => {
     },
   ]
 
-  const objects = [{ id: 0, name: 'ruby' }]
+  const objects = [
+    { id: 0, name: 'ruby' },
+    { id: 1, name: 'emerald' },
+    { id: 2, name: 'sapphire' },
+    { id: 3, name: 'garnet' },
+  ]
 
   const commands = [
     { id: 1, command: 'move' },
@@ -311,6 +316,14 @@ describe('Navigator flow', () => {
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/admin/players/hero')) {
         expect(init?.headers).toMatchObject({ Authorization: 'Bearer dev-admin' })
+        const payload = JSON.parse(init?.body as string)
+        expect(payload).toMatchObject({
+          gpobjs: [0, 1, null, null, null, null],
+          npobjs: 2,
+          gemidx: 2,
+          stones: [0, 1, 2, 3],
+          stumpi: 5,
+        })
         return Promise.resolve({
           ok: true,
           json: async () => ({ status: 'updated', player: patchedPlayer }),
@@ -346,6 +359,15 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/alternate name/i), 'Admin Hero')
       await user.type(screen.getByLabelText(/level/i), '5')
       await user.type(screen.getByLabelText(/gold cap/i), '200')
+      await user.type(screen.getByLabelText(/inventory count/i), '2')
+      await user.type(screen.getByLabelText(/inventory slot 1/i), 'ruby')
+      await user.type(screen.getByLabelText(/inventory slot 2/i), '1')
+      await user.type(screen.getByLabelText(/birthstone 1/i), '0')
+      await user.type(screen.getByLabelText(/birthstone 2/i), 'emerald')
+      await user.type(screen.getByLabelText(/birthstone 3/i), '2')
+      await user.type(screen.getByLabelText(/birthstone 4/i), 'garnet')
+      await user.type(screen.getByLabelText(/gem index/i), '2')
+      await user.type(screen.getByLabelText(/stump index/i), '5')
       await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
     })
 
