@@ -12,7 +12,7 @@ triggers:
         scope: direct
         message_id: DRINK0
       - type: message
-        scope: broadcast
+        scope: broadcast_others
         message_id: DRINK1
         format: [player_altnam]
   - verbs: [get, grab, pick, take]
@@ -28,7 +28,7 @@ triggers:
             scope: direct
             message_id: GROSE1
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: GROSE2
             format: [player_altnam]
         else:
@@ -36,6 +36,6 @@ triggers:
             scope: direct
             message_id: GROSE3
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: GROSE4
             format: [player_altnam]

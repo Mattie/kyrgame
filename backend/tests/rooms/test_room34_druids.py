@@ -33,6 +33,18 @@ def _broadcast_texts(engine: RoomScriptEngine) -> list[str]:
     ]
 
 
+def _broadcast_payloads(engine: RoomScriptEngine) -> list[dict]:
+    return [
+        message.get("payload", {})
+        for message in engine.gateway.messages
+        if message.get("payload", {}).get("scope") == "broadcast"
+    ]
+
+
+def _payload_for_text(payloads: list[dict], text: str) -> dict:
+    return next(payload for payload in payloads if payload.get("text") == text)
+
+
 @pytest.fixture
 async def scheduler():
     service = SchedulerService()
@@ -93,7 +105,10 @@ async def test_touching_orb_consumes_sceptre_and_grants_spell(engine, player):
     broadcast_texts = _broadcast_texts(engine)
     messages = fixtures.load_messages().messages
     assert messages["DRUID0"] in direct_texts
-    assert (messages["DRUID1"] % player.altnam) in broadcast_texts
+    broadcast_text = messages["DRUID1"] % player.altnam
+    assert broadcast_text in broadcast_texts
+    payload = _payload_for_text(_broadcast_payloads(engine), broadcast_text)
+    assert payload.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio
@@ -113,7 +128,10 @@ async def test_touching_orb_without_sceptre_rejects(engine, player):
     direct_texts = _direct_texts(engine, player.plyrid)
     broadcast_texts = _broadcast_texts(engine)
     assert messages["DRUID2"] in direct_texts
-    assert (messages["DRUID1"] % player.altnam) in broadcast_texts
+    broadcast_text = messages["DRUID1"] % player.altnam
+    assert broadcast_text in broadcast_texts
+    payload = _payload_for_text(_broadcast_payloads(engine), broadcast_text)
+    assert payload.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio

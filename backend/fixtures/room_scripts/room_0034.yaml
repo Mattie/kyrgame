@@ -39,7 +39,7 @@ triggers:
               scope: direct
               message_id: DRUID0
             - type: message
-              scope: broadcast
+              scope: broadcast_others
               message_id: DRUID1
               format: [player_altnam]
         missing_actions:
@@ -47,6 +47,6 @@ triggers:
             scope: direct
             message_id: DRUID2
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: DRUID1
             format: [player_altnam]

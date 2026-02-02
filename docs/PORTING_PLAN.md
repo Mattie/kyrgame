@@ -25,6 +25,7 @@
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
 - [x] Ensure LOOKER4 room broadcasts exclude the target player, mirroring legacy `sndbt2` behavior.
+- [x] Updated msgutl2 room scripts (rooms 34/35/36/182) to broadcast to other occupants only, matching legacy exclusion behavior.
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
 - [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures.
 - [ ] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling.
