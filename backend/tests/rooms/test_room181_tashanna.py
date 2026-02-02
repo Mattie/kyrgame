@@ -77,6 +77,7 @@ async def test_tashanna_imagine_dagger_grants_when_space(engine, player):
     messages = fixtures.load_messages().messages
     assert messages["DAGM00"] in _direct_texts(engine, player.plyrid)
     assert (messages["DAGM01"] % player.altnam) in _broadcast_texts(engine)
+    assert (messages["DAGM01"] % player.altnam) not in _direct_texts(engine, player.plyrid)
 
 
 @pytest.mark.anyio

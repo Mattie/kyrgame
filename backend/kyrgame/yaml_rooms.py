@@ -295,6 +295,7 @@ class YamlRoomEngine:
         message_id = action.get("message_id")
         text = action.get("text")
         format_args = action.get("format", [])
+        scope = action.get("scope", "direct")
         if text is None and message_id:
             text = self.messages.messages.get(message_id, "")
 
@@ -310,11 +311,12 @@ class YamlRoomEngine:
 
         events.append(
             {
-                "scope": action.get("scope", "direct"),
+                "scope": "broadcast" if scope == "broadcast_others" else scope,
                 "event": "room_message",
                 "message_id": message_id,
                 "text": text,
                 "player": player.plyrid,
+                "exclude_player": player.plyrid if scope == "broadcast_others" else None,
             }
         )
 
