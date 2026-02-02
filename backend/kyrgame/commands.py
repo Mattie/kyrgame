@@ -328,8 +328,8 @@ def _handle_spoiler(state: GameState, args: dict) -> CommandResult:
     if not spoiler:
         return CommandResult(state=state, events=[])
 
-    summary = spoiler.get("summary")
-    interaction = spoiler.get("interaction")
+    summary = _resolve_spoiler_phrases(spoiler.get("summary"), state.messages)
+    interaction = _resolve_spoiler_phrases(spoiler.get("interaction"), state.messages)
     legacy_ref = spoiler.get("legacy_ref")
     text_parts = [part for part in (summary, interaction) if part]
     text = "\n".join(text_parts) if text_parts else None
@@ -351,6 +351,22 @@ def _handle_spoiler(state: GameState, args: dict) -> CommandResult:
             }
         ],
     )
+
+
+def _resolve_spoiler_phrases(
+    text: str | None, messages: models.MessageBundleModel | None
+) -> str | None:
+    if not text or not messages:
+        return text
+    replacements = {
+        "WILCMD": messages.messages.get("WILCMD"),
+        "EGLADE": messages.messages.get("EGLADE"),
+    }
+    resolved = text
+    for key, value in replacements.items():
+        if value:
+            resolved = resolved.replace(key, value)
+    return resolved
 
 
 def _handle_get(state: GameState, args: dict) -> CommandResult:

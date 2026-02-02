@@ -60,3 +60,17 @@ async def test_spoiler_uses_yaml_room_metadata(base_state):
     event = result.events[0]
     assert event["summary"].startswith("Gem cutter's hut")
     assert "kyragem" in event["interaction"]
+
+
+@pytest.mark.anyio
+async def test_spoiler_resolves_special_phrases(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player.gamloc = 0
+
+    result = await dispatcher.dispatch("spoiler", {}, base_state)
+
+    event = result.events[0]
+    assert "WILCMD" not in event["interaction"]
+    assert "kneel" in event["interaction"]
