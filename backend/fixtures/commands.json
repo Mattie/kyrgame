@@ -484,5 +484,11 @@
     "command": "yell",
     "cmdrou": "yeller",
     "payonl": false
+  },
+  {
+    "id": 81,
+    "command": "spoiler",
+    "cmdrou": "spoiler",
+    "payonl": false
   }
 ]

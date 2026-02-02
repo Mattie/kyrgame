@@ -1,9 +1,8 @@
 id: 8
 name: getgol
-# Room summary: Gem cutter's hut where a jeweler quietly evaluates offered stones and pays out discreetly.
-# Mechanics: trade verbs convert known gems into fixed gold payouts, swap a kyragem for a soulstone, and reject anything else.
-# Tone: hush-hush dealings with private conversations signaled by the broadcast “move off by themselves” messages.
-# Legacy: legacy/KYRROUS.C lines 198-239
+spoiler_summary: "Gem cutter's hut where a jeweler quietly evaluates offered stones and pays out discreetly."
+spoiler_interaction: "Use give/sell/trade <gem> to exchange listed gems for fixed gold, or trade a kyragem for a soulstone; other items are refused with a private rebuke."
+legacy_ref: "legacy/KYRROUS.C:198-239"
 triggers:
   - verbs: [give, sell, trade]
     actions:
@@ -207,4 +206,3 @@ triggers:
             scope: broadcast
             message_id: TRDM03
             format: [player_altnam]
-

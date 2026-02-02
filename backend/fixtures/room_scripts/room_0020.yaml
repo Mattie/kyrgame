@@ -1,6 +1,8 @@
 id: 20
 name: ruby cache
-# Legacy: legacy/KYRROUS.C lines 600-617 (rubies) picks a ruby with 20% success and snake backlash otherwise.
+spoiler_summary: "Ruby cache watched by hidden vipers and wary magic."
+spoiler_interaction: "Get/grab/pick/take ruby for a 20% success chance; failure triggers a snake strike that deals damage."
+legacy_ref: "legacy/KYRROUS.C:599-618"
 triggers:
   - verbs: [get, grab, pick, take]
     target_in: [ruby]

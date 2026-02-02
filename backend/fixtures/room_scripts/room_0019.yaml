@@ -1,6 +1,8 @@
 id: 19
 name: thicket
-# Legacy: legacy/KYRROUS.C lines 641-661 (fthick) burns players who walk into the flaming thicket.
+spoiler_summary: "Flaming thicket that scorches anyone foolish enough to walk inside."
+spoiler_interaction: "Walk thicket to take immediate fire damage and broadcast your burning misstep."
+legacy_ref: "legacy/KYRROUS.C:645-659"
 triggers:
   - verbs: [walk]
     target_in: [thicket]

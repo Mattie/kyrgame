@@ -1,9 +1,8 @@
 id: 9
 name: buyspl
-# Room summary: Spell shop whose keeper haggles cheerfully inside the spell shop hutch.
-# Mechanics: buy/order/pay/purchase verbs look up one of 16 stocked spells, charge gold if affordable, and set the spell flag; otherwise deliver broke or missing-stock banter.
-# Tone: playful merchant jokes about back orders and bargaining before casting a glow over the buyer's spellbook.
-# Legacy: legacy/KYRROUS.C lines 242-286
+spoiler_summary: "Spell shop whose keeper haggles cheerfully inside the spell shop hutch."
+spoiler_interaction: "Buy/order/pay/purchase <spell> to purchase one of the 16 stocked spells; the shop charges gold if you can afford it and refuses otherwise."
+legacy_ref: "legacy/KYRROUS.C:242-286"
 triggers:
   - verbs: [buy, order, pay, purchase]
     actions:
@@ -50,4 +49,3 @@ triggers:
             scope: broadcast
             message_id: BUYM01
             format: [player_altnam, player_pronoun_obj]
-

@@ -1,9 +1,8 @@
 id: 12
 name: gquest
-# Room summary: Bubbling brook quest spot where adventurers sift through water and flowers.
-# Mechanics: dig/search/hunt/look at the brook can reveal 2–101 gold on low rolls if the player is under 101 gold; otherwise nothing, plus water drinking and rose-picking helpers with inventory limits.
-# Tone: tranquil brookside scavenging with occasional small finds and fragrant lavender roses nearby.
-# Legacy: legacy/KYRROUS.C lines 439-469
+spoiler_summary: "Bubbling brook quest spot where adventurers sift through water and flowers."
+spoiler_interaction: "Dig/hunt/search/look at the brook to try for 2–101 gold if you're under 101 gold; drink water for a flavor message, and pick roses if you have inventory space."
+legacy_ref: "legacy/KYRROUS.C:439-469"
 triggers:
   - verbs: [dig, hunt, look, search]
     target_in: [gold, brook, water, stream]
@@ -64,4 +63,3 @@ triggers:
             scope: broadcast
             message_id: GROSE4
             format: [player_altnam]
-

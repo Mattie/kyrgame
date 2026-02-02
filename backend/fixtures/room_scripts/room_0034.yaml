@@ -1,6 +1,8 @@
 id: 34
 name: druids
-# Legacy: legacy/KYRROUS.C lines 620-639 (druids) consume sceptre to grant random offensive spell bits.
+spoiler_summary: "Druid circle where an orb channels magic through a sceptre sacrifice."
+spoiler_interaction: "Touch the orb with a sceptre to consume it and receive a random offensive spell; missing sceptres draw a rebuke."
+legacy_ref: "legacy/KYRROUS.C:620-643"
 triggers:
   - verbs: [touch]
     arg_sequence: [orb, with, sceptre]
