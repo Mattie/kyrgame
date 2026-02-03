@@ -365,6 +365,43 @@ def test_vocabulary_maps_aliases_to_canonical_commands():
 
 
 @pytest.mark.anyio
+async def test_pickup_synonyms_route_to_get_handler(base_state):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    starting_location = base_state.locations[base_state.player.gamloc]
+    target_id = next(
+        obj_id
+        for obj_id in starting_location.objects
+        if "PICKUP" in base_state.objects[obj_id].flags
+    )
+    target_name = base_state.objects[target_id].name
+
+    parsed = vocabulary.parse_text(f"take {target_name}")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert parsed.verb == "take"
+    assert parsed.args["target"] == target_name
+    assert parsed.command_id == 68  # legacy command id for "take"
+    assert target_id in base_state.player.gpobjs
+
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [], "obvals": [], "npobjs": 0}
+    )
+    base_state.locations[base_state.player.gamloc].objects.append(target_id)
+
+    parsed_snatch = vocabulary.parse_text(f"snatch {target_name}")
+    await dispatcher.dispatch_parsed(parsed_snatch, base_state)
+
+    assert parsed_snatch.verb == "snatch"
+    assert parsed_snatch.command_id == 62  # legacy command id for "snatch"
+    assert target_id in base_state.player.gpobjs
+
+
+@pytest.mark.anyio
 async def test_payonl_commands_require_live_flag(base_state):
     vocabulary = commands.CommandVocabulary(
         fixtures.load_commands(), fixtures.load_messages()
