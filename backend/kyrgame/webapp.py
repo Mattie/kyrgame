@@ -1541,6 +1541,47 @@ def create_app() -> FastAPI:
                         if meta:
                             ack_payload["meta"] = meta
                         await websocket.send_json(ack_payload)
+                        
+                        # Process pending events from room script engine
+                        pending_events = provider.room_scripts.get_and_clear_pending_events()
+                        for event in pending_events:
+                            scope = event.get("scope", "player")
+                            if scope == "room":
+                                envelope = {"type": "room_broadcast", "room": current_room, "payload": event}
+                                if meta:
+                                    envelope["meta"] = meta
+                                excluded_player = event.get("exclude_player")
+                                excluded_sockets = set()
+                                if excluded_player:
+                                    for token in await provider.presence.sessions_for_player(
+                                        excluded_player
+                                    ):
+                                        target_socket = session_connections.get(token)
+                                        if target_socket:
+                                            excluded_sockets.add(target_socket)
+                                await gateway.broadcast(
+                                    current_room, envelope, sender=websocket, exclude=excluded_sockets
+                                )
+                            elif scope == "target":
+                                target_id = event.get("player")
+                                if not target_id:
+                                    continue
+                                envelope = {"type": "command_response", "room": current_room, "payload": event}
+                                if meta:
+                                    envelope["meta"] = meta
+                                for token in await provider.presence.sessions_for_player(target_id):
+                                    target_socket = session_connections.get(token)
+                                    if not target_socket:
+                                        continue
+                                    if target_socket.application_state != WebSocketState.CONNECTED:
+                                        continue
+                                    await target_socket.send_json(envelope)
+                            else:
+                                envelope = {"type": "command_response", "room": current_room, "payload": event}
+                                if meta:
+                                    envelope["meta"] = meta
+                                await websocket.send_json(envelope)
+                        
                         continue
 
                 if parse_error:
