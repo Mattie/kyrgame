@@ -1,0 +1,24 @@
+# Legacy: legacy/KYRROUS.C:1033-1051 (sanman)
+id: 189
+name: sanman
+spoiler_summary: "Sandy cavern where digging might yield a lone gold coin."
+spoiler_interaction: "Dig/hunt/look/search the sand for a small chance to uncover a gold coin."
+legacy_ref: "legacy/KYRROUS.C:1033-1051"
+triggers:
+  - verbs: [dig, hunt, look, search]
+    target_in: [sand]
+    actions:
+      - type: random_chance
+        probability: 0.1
+        on_success:
+          - type: add_gold
+            amount: 1
+          - type: message
+            message_id: SANM00
+            broadcast_message_id: SANM01
+            broadcast_format: [player_altnam]
+        on_failure:
+          - type: message
+            message_id: SANM02
+            broadcast_message_id: SANM01
+            broadcast_format: [player_altnam]

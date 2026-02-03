@@ -25,10 +25,10 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] Room 183: `panthe` (pantheon chamber)【F:legacy/KYRLOCS.C†L238-L250】
 - [x] Room 184: `portal` (portal hub)【F:legacy/KYRLOCS.C†L238-L250】
 - [x] Room 185: `waller` (wall event)【F:legacy/KYRLOCS.C†L238-L250】
-- [ ] Room 186: `slotma` (slot machine cave)【F:legacy/KYRLOCS.C†L241-L250】
-- [ ] Room 188: `mistyr` (misty ridge)【F:legacy/KYRLOCS.C†L247-L259】
-- [ ] Room 189: `sanman` (sandman encounter)【F:legacy/KYRLOCS.C†L247-L259】
-- [ ] Room 199: `tulips` (tulip grove)【F:legacy/KYRLOCS.C†L258-L265】
+- [x] Room 186: `slotma` (slot machine cave)【F:legacy/KYRLOCS.C†L241-L250】
+- [x] Room 188: `mistyr` (misty ridge)【F:legacy/KYRLOCS.C†L247-L259】
+- [x] Room 189: `sanman` (sandman encounter)【F:legacy/KYRLOCS.C†L247-L259】
+- [x] Room 199: `tulips` (tulip grove)【F:legacy/KYRLOCS.C†L258-L265】
 - [ ] Room 201: `crystt` (crystal tunnel)【F:legacy/KYRLOCS.C†L259-L265】
 - [ ] Room 204: `rainbo` (rainbow bridge)【F:legacy/KYRLOCS.C†L262-L270】
 - [ ] Room 213: `sunshi` (sunshine chamber)【F:legacy/KYRLOCS.C†L272-L276】
