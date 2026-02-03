@@ -1164,6 +1164,7 @@ def create_app() -> FastAPI:
 
     gateway: RoomGateway | None = None
     app.state.session_connections = {}
+    app.state.active_players = {}
 
     @app.websocket("/ws/admin/kyraedit")
     async def kyraedit_socket(
@@ -1380,9 +1381,12 @@ def create_app() -> FastAPI:
         # Create a persistent database session for this WebSocket connection
         persistent_session = provider.scope.app.state.session_factory()
         
+        active_players = provider.scope.app.state.active_players
+
         def lookup_player(player_alias: str) -> models.PlayerModel | None:
-            if player_alias == player_state.plyrid:
-                return player_state
+            active_player = active_players.get(player_alias)
+            if active_player:
+                return active_player
             record = persistent_session.scalar(
                 select(models.Player).where(models.Player.plyrid == player_alias)
             )
@@ -1401,6 +1405,7 @@ def create_app() -> FastAPI:
             player_lookup=lookup_player,
         )
 
+        active_players[player_id] = player_state
         await provider.presence.set_location(player_id, current_room, session_token)
         await gateway.register(current_room, websocket)
 
@@ -1816,6 +1821,7 @@ def create_app() -> FastAPI:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)
         finally:
+            active_players.pop(player_id, None)
             if session_connections.get(session_token) is websocket:
                 session_connections.pop(session_token, None)
             # Close the persistent database session

@@ -364,6 +364,22 @@ def test_vocabulary_maps_aliases_to_canonical_commands():
     assert parsed_chat.command_id == 53  # legacy command id for "say"
 
 
+def test_vocabulary_parses_player_targeted_get_patterns():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed_from = vocabulary.parse_text("take ruby from Buddy")
+    assert parsed_from.verb == "take"
+    assert parsed_from.args["target"] == "ruby"
+    assert parsed_from.args["target_player"] == "Buddy"
+
+    parsed_possessive = vocabulary.parse_text("steal Buddy's ruby")
+    assert parsed_possessive.verb == "steal"
+    assert parsed_possessive.args["target"] == "ruby"
+    assert parsed_possessive.args["target_player"] == "Buddy"
+
+
 @pytest.mark.anyio
 async def test_pickup_synonyms_route_to_get_handler(base_state):
     vocabulary = commands.CommandVocabulary(
