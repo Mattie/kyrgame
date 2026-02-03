@@ -184,6 +184,17 @@ _DIRECTION_FIELDS = {
     "west": "gi_west",
 }
 
+_PICKUP_VERBS = {
+    "get",
+    "grab",
+    "pickpocket",
+    "pilfer",
+    "snatch",
+    "steal",
+    "take",
+}
+# Pickup verbs mirror legacy getter aliases in KYRCMDS.C (gi_cmdarr).【F:legacy/KYRCMDS.C†L117-L174】
+
 
 def _command_message_id(command_id: int | None) -> str | None:
     if command_id is None:
@@ -1073,7 +1084,7 @@ class CommandVocabulary:
                 pay_only=pay_only,
             )
 
-        if verb in {"get", "grab", "drop"}:
+        if verb in _PICKUP_VERBS | {"drop"}:
             command_id = command_id or self._lookup_command_id(verb)
             message_id = message_id or self._message_for_command(command_id)
             return ParsedCommand(
@@ -1120,26 +1131,17 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         ),
         _handle_spoiler,
     )
-    registry.register(
-        CommandMetadata(
-            verb="get",
-            command_id=vocabulary._lookup_command_id("get"),
-            required_level=1,
-            required_flags=int(constants.PlayerFlag.LOADED),
-            failure_message_id="CMPCMD1",
-        ),
-        _handle_get,
-    )
-    registry.register(
-        CommandMetadata(
-            verb="grab",
-            command_id=vocabulary._lookup_command_id("grab"),
-            required_level=1,
-            required_flags=int(constants.PlayerFlag.LOADED),
-            failure_message_id="CMPCMD1",
-        ),
-        _handle_get,
-    )
+    for verb in sorted(_PICKUP_VERBS):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            _handle_get,
+        )
     registry.register(
         CommandMetadata(
             verb="drop",
@@ -1180,7 +1182,7 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
             continue
         if verb in {"inv", "inventory"}:
             continue
-        if verb in {"get", "grab", "drop"}:
+        if verb in _PICKUP_VERBS | {"drop"}:
             continue
 
         registry.register(

@@ -30,6 +30,7 @@
 - [x] Captured spell bitflags from `legacy/KYRSPLS.H` in `backend/kyrgame/constants.py` for reuse in room routines.
 - [x] Prioritized room routine handling ahead of command registry dispatch to mirror `kyra()` flow in `KYRCMDS.C`.
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
+- [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
 - [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures.
 - [ ] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling.
