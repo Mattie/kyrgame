@@ -1,0 +1,48 @@
+# Legacy: legacy/KYRROUS.C:939-960 (waller)
+id: 185
+name: waller
+spoiler_summary: "Sealed wall with a crevice that opens after the opensesame chant."
+spoiler_interaction: "Chant opensesame to awaken the wall; drop the key into the crevice to teleport in a golden flash."
+legacy_ref: "legacy/KYRROUS.C:939-960"
+state:
+  sesame: 0
+triggers:
+  - verbs: [drop, throw, toss]
+    arg_at: {index: 1, value: crevice}
+    actions:
+      - type: conditional
+        conditions:
+          - room_state_gte: {key: sesame, value: 1}
+          - has_item: key
+        then:
+          - type: remove_item
+            item: key
+          - type: message
+            scope: direct
+            message_id: WALM00
+          - type: transfer_player
+            target_room: 186
+            leave_text: "*** %s has just vanished in a golden flash of light!"
+            leave_format: [player_altnam]
+            arrive_text: "*** %s has just appeared in a golden flash of light!"
+            arrive_format: [player_altnam]
+        else:
+          - type: message
+            message_id: WALM01
+            broadcast_message_id: WALM02
+            broadcast_format: [player_altnam]
+  - verbs: [chant]
+    actions:
+      - type: increment_room_state
+        key: sesame
+      - type: message
+        message_id: WALM03
+        broadcast_message_id: WALM04
+  - verbs: [say]
+    arg_sequence: [opensesame]
+    actions:
+      - type: increment_room_state
+        key: sesame
+      - type: message
+        message_id: WALM03
+        broadcast_message_id: WALM04

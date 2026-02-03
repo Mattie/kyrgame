@@ -1,0 +1,38 @@
+# Legacy: legacy/KYRROUS.C:889-918 (panthe)
+id: 183
+name: panthe
+spoiler_summary: "Pantheon chamber that rewards a spoken verse with a golden key."
+spoiler_interaction: "Speak the full legends/time/true/never/die verse to materialize a key if you have inventory space; examine the symbols or pillars for a hint."
+legacy_ref: "legacy/KYRROUS.C:889-918"
+triggers:
+  - verbs: [say]
+    arg_count: 12
+    arg_matches:
+      - {index: 0, value: legends}
+      - {index: 3, value: time}
+      - {index: 7, value: true}
+      - {index: 10, value: never}
+      - {index: 11, value: die}
+    actions:
+      - type: conditional
+        conditions:
+          - inventory_lt: 6
+        then:
+          - type: grant_object
+            object: key
+          - type: message
+            message_id: PANM00
+            broadcast_message_id: PANM01
+            broadcast_format: [player_altnam]
+        else:
+          - type: message
+            message_id: PANM02
+            broadcast_message_id: PANM01
+            broadcast_format: [player_altnam]
+  - verbs: [see, look, examine]
+    target_in: [symbols, pillars]
+    actions:
+      - type: message
+        message_id: PANM03
+        broadcast_message_id: PANM04
+        broadcast_format: [player_altnam]
