@@ -329,7 +329,11 @@ def _apply_player_admin_update(
     if updates.attnam is not None:
         data["attnam"] = updates.attnam[: constants.APNSIZ]
     if updates.flags is not None:
-        data["flags"] = constants.encode_player_flags(updates.flags)
+        current_mask = data["flags"]
+        # Legacy kyraedit only modifies select flags when editing players (KYRSYSP.C 477-482).
+        editable_mask = int(constants.ADMIN_EDITABLE_PLAYER_FLAGS)
+        new_mask = (current_mask & ~editable_mask) | constants.encode_player_flags(updates.flags)
+        data["flags"] = new_mask
 
     if updates.gamloc is not None:
         data["gamloc"] = updates.gamloc
