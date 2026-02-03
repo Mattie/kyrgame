@@ -1,4 +1,5 @@
 import asyncio
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, List, Protocol, Set
@@ -87,6 +88,7 @@ class GameState:
     messages: models.MessageBundleModel | None = None
     content_mappings: dict[str, dict[str, str]] | None = None
     cooldowns: Dict[str, float] = field(default_factory=dict)
+    rng: random.Random = field(default_factory=random.Random)
     db_session: any = None  # SQLAlchemy session for persistence
     presence: PresenceAccessor | None = None
     player_lookup: Callable[[str], models.PlayerModel | None] | None = None
@@ -390,10 +392,17 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
     verb = (args.get("verb") or "get").strip().lower()
-    target = (args.get("target") or "").strip().lower()
+    raw_target = (args.get("target") or "").strip()
+    target = raw_target.lower()
+    target_player_name = (args.get("target_player") or "").strip()
 
     if not target:
         raise CommandError("Specify an item to pick up", message_id=message_id)
+
+    if target_player_name:
+        return await _handle_get_from_player(
+            state, target_player_name, raw_target, verb, command_id
+        )
 
     location = state.locations[state.player.gamloc]
     objects = state.objects or {}
@@ -493,6 +502,132 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
     )
 
 
+async def _handle_get_from_player(
+    state: GameState,
+    target_player_name: str,
+    target_item: str,
+    verb: str,
+    command_id: int | None,
+) -> CommandResult:
+    """Handle player-targeted pickup attempts (legacy getgp)."""
+
+    # Ported from getgp in legacy/KYRCMDS.C (player theft rules + messages).【F:legacy/KYRCMDS.C†L654-L699】
+    target_player = await _find_player_in_room(state, target_player_name)
+    if not target_player:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "GETGP1",
+                    _format_message(state, "GETGP1"),
+                    command_id,
+                )
+            ],
+        )
+
+    if target_player.plyrid == state.player.plyrid:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "GETGP2",
+                    _format_message(state, "GETGP2"),
+                    command_id,
+                )
+            ],
+        )
+
+    objects = state.objects or {}
+    inventory_index = _find_inventory_index(
+        target_player, target_item.lower(), objects
+    )
+    if inventory_index is None:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "GETGP3",
+                    _format_message(state, "GETGP3", target_player.altnam, target_item),
+                    command_id,
+                )
+            ],
+        )
+
+    if len(state.player.gpobjs) >= constants.MXPOBS:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "GETGP4",
+                    _format_message(state, "GETGP4"),
+                    command_id,
+                )
+            ],
+        )
+
+    obj_id = target_player.gpobjs[inventory_index]
+    obj = objects.get(obj_id)
+    obj_name = obj.name if obj else target_item
+    theft_roll = state.rng.randrange(256)
+    if (theft_roll & 0x0E) != 0:
+        actor_text = _format_message(state, "GETGP5")
+        target_text = _format_message(state, "GETGP6", state.player.altnam, verb, obj_name)
+        room_text = _format_message(
+            state, "GETGP7", state.player.altnam, verb, target_player.altnam, obj_name
+        )
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event("player", "GETGP5", actor_text, command_id),
+                {
+                    **_message_event("target", "GETGP6", target_text, command_id),
+                    "player": target_player.plyrid,
+                },
+                _message_event(
+                    "room",
+                    "GETGP7",
+                    room_text,
+                    command_id,
+                    exclude_player=target_player.plyrid,
+                ),
+            ],
+        )
+
+    value = target_player.obvals.pop(inventory_index)
+    target_player.gpobjs.pop(inventory_index)
+    target_player.npobjs = len(target_player.gpobjs)
+    state.player.gpobjs.append(obj_id)
+    state.player.obvals.append(value)
+    state.player.npobjs = len(state.player.gpobjs)
+
+    actor_text = _format_message(state, "GETGP8")
+    target_text = _format_message(state, "GETGP9", state.player.altnam, obj_name)
+    room_text = _format_message(
+        state, "GETGP10", state.player.altnam, target_player.altnam, obj_name
+    )
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event("player", "GETGP8", actor_text, command_id),
+            {
+                **_message_event("target", "GETGP9", target_text, command_id),
+                "player": target_player.plyrid,
+            },
+            _message_event(
+                "room",
+                "GETGP10",
+                room_text,
+                command_id,
+                exclude_player=target_player.plyrid,
+            ),
+        ],
+    )
+
+
 def _handle_drop(state: GameState, args: dict) -> CommandResult:
     # Ported from dropit in legacy/KYRCMDS.C when moving items back to the room.【F:legacy/KYRCMDS.C†L862-L892】
     command_id = args.get("command_id")
@@ -557,6 +692,19 @@ def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> b
     if not (target.flags & constants.PlayerFlag.INVISF):
         return True
     return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
+
+
+async def _find_player_in_room(
+    state: GameState, target_name: str
+) -> models.PlayerModel | None:
+    if not state.presence or not state.player_lookup:
+        return None
+    occupants = await state.presence.players_in_room(state.player.gamloc)
+    for occupant_id in occupants:
+        candidate = state.player_lookup(occupant_id)
+        if candidate and _matches_player_name(target_name, candidate):
+            return candidate
+    return None
 
 
 def _message_event(
@@ -1038,6 +1186,29 @@ class CommandVocabulary:
             return key
         return key
 
+    @staticmethod
+    def _parse_pickup_target(remainder: str) -> tuple[str | None, str]:
+        trimmed = remainder.strip()
+        if not trimmed:
+            return None, ""
+
+        lowered = trimmed.lower()
+        if " from " in lowered:
+            idx = lowered.rfind(" from ")
+            item = trimmed[:idx].strip()
+            player = trimmed[idx + len(" from ") :].strip()
+            if item and player:
+                return player, item
+
+        if "'s " in lowered:
+            idx = lowered.find("'s ")
+            player = trimmed[:idx].strip()
+            item = trimmed[idx + len("'s ") :].strip()
+            if player and item:
+                return player, item
+
+        return None, trimmed
+
     def parse_text(self, text: str) -> ParsedCommand:
         raw = (text or "").strip()
         if not raw:
@@ -1087,9 +1258,16 @@ class CommandVocabulary:
         if verb in _PICKUP_VERBS | {"drop"}:
             command_id = command_id or self._lookup_command_id(verb)
             message_id = message_id or self._message_for_command(command_id)
+            target_player = None
+            target = remainder
+            if verb in _PICKUP_VERBS:
+                target_player, target = self._parse_pickup_target(remainder)
             return ParsedCommand(
                 verb=verb,
-                args={"target": remainder},
+                args={
+                    "target": target,
+                    **({"target_player": target_player} if target_player else {}),
+                },
                 command_id=command_id,
                 message_id=message_id,
                 pay_only=pay_only,

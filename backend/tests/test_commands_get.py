@@ -38,6 +38,14 @@ def _build_player(**updates):
     return player.model_copy(update=data)
 
 
+class FixedRng:
+    def __init__(self, value: int):
+        self.value = value
+
+    def randrange(self, _upper: int) -> int:
+        return self.value
+
+
 def _place_object_in_room(state: commands.GameState, object_id: int):
     location = state.locations[state.player.gamloc]
     updated = location.model_copy(update={"objects": [object_id], "nlobjs": 1})
@@ -47,7 +55,12 @@ def _place_object_in_room(state: commands.GameState, object_id: int):
 
 @pytest.mark.anyio
 async def test_get_pickup_emits_room_broadcast_getloc7():
-    player = _build_player(flags=int(constants.PlayerFlag.LOADED))
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
     state = _build_state(player, [])
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
@@ -66,7 +79,12 @@ async def test_get_pickup_emits_room_broadcast_getloc7():
 
 @pytest.mark.anyio
 async def test_get_non_pickup_emits_room_broadcast_getloc5():
-    player = _build_player(flags=int(constants.PlayerFlag.LOADED))
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
     state = _build_state(player, [])
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
@@ -87,7 +105,12 @@ async def test_get_player_target_emits_room_broadcast_excluding_target():
         attnam="Buddy",
         altnam="Buddy Alt",
     )
-    player = _build_player(flags=int(constants.PlayerFlag.LOADED))
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
     state = _build_state(player, [other])
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
@@ -98,3 +121,73 @@ async def test_get_player_target_emits_room_broadcast_excluding_target():
     assert {"GETLOC1", "GETLOC2", "GETLOC3"}.issubset(message_ids)
     room_event = next(event for event in result.events if event.get("message_id") == "GETLOC3")
     assert room_event.get("exclude_player") == other.plyrid
+
+
+@pytest.mark.anyio
+async def test_get_from_player_failure_notifies_target_and_room():
+    target_obj = next(iter(fixtures.load_objects()))
+    target = _build_player(
+        plyrid="buddy",
+        attnam="Buddy",
+        altnam="Buddy Alt",
+        gpobjs=[target_obj.id],
+        obvals=[5],
+        npobjs=1,
+    )
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [target])
+    state.rng = FixedRng(2)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch(
+        "get",
+        {"target": target_obj.name, "target_player": "Buddy"},
+        state,
+    )
+
+    assert target_obj.id in target.gpobjs
+    assert target_obj.id not in state.player.gpobjs
+    message_ids = {event.get("message_id") for event in result.events}
+    assert {"GETGP5", "GETGP6", "GETGP7"}.issubset(message_ids)
+    room_event = next(event for event in result.events if event.get("message_id") == "GETGP7")
+    assert room_event.get("exclude_player") == target.plyrid
+
+
+@pytest.mark.anyio
+async def test_get_from_player_success_transfers_item():
+    target_obj = next(iter(fixtures.load_objects()))
+    target = _build_player(
+        plyrid="buddy",
+        attnam="Buddy",
+        altnam="Buddy Alt",
+        gpobjs=[target_obj.id],
+        obvals=[7],
+        npobjs=1,
+    )
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [target])
+    state.rng = FixedRng(0)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch(
+        "get",
+        {"target": target_obj.name, "target_player": "Buddy"},
+        state,
+    )
+
+    assert target_obj.id in state.player.gpobjs
+    assert target_obj.id not in target.gpobjs
+    message_ids = {event.get("message_id") for event in result.events}
+    assert {"GETGP8", "GETGP9", "GETGP10"}.issubset(message_ids)
