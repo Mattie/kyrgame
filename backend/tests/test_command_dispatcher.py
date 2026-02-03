@@ -179,6 +179,33 @@ async def test_inventory_message_id_travels_with_command(base_state):
     assert inventory_events[0]["message_id"] == "CMD029"
 
 
+def test_command_vocabulary_normalizes_articles_and_prepositions_for_non_chat():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed = vocabulary.parse_text("get the sword")
+
+    assert parsed.verb == "get"
+    assert parsed.args["target"] == "sword"
+
+    parsed = vocabulary.parse_text("put sword in rock")
+
+    assert parsed.verb == "put"
+    assert parsed.args["raw"] == "sword rock"
+
+
+def test_command_vocabulary_preserves_chat_text():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed = vocabulary.parse_text("whisper to alice hello")
+
+    assert parsed.verb == "chat"
+    assert parsed.args["text"] == "to alice hello"
+
+
 @pytest.mark.parametrize(
     "input_text,direction,expected_command_id",
     [

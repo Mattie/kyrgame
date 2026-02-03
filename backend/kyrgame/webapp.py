@@ -1502,6 +1502,9 @@ def create_app() -> FastAPI:
                 args = payload.get("args", {}) or {}
                 tokens = command_text.strip().split()
                 verb = tokens[0].lower() if tokens else ""
+                if verb and verb not in commands.CommandVocabulary.chat_aliases:
+                    tokens = commands.normalize_tokens(tokens)
+                    verb = tokens[0].lower() if tokens else ""
                 arg_list = tokens[1:]
                 parsed = None
                 parse_error = None

@@ -199,6 +199,28 @@ _PICKUP_VERBS = {
 }
 # Pickup verbs mirror legacy getter aliases in KYRCMDS.C (gi_cmdarr).【F:legacy/KYRCMDS.C†L117-L174】
 
+_NORMALIZE_ARTICLES = {"the", "a", "an"}
+_NORMALIZE_PREPOSITIONS = {"at", "to", "into", "through", "in"}
+
+
+def normalize_tokens(tokens: List[str]) -> List[str]:
+    """Remove legacy stop-words while preserving the last argument token."""
+    # Mirrors gi_bagthe/bagprep token stripping in legacy/GAMUTILS.C (lines 55-95).
+    if len(tokens) <= 2:
+        return tokens[:]
+
+    normalized = [tokens[0]]
+    last_index = len(tokens) - 1
+    for index, token in enumerate(tokens[1:], start=1):
+        if index >= last_index:
+            normalized.append(token)
+            continue
+        lowered = token.lower()
+        if lowered in _NORMALIZE_ARTICLES or lowered in _NORMALIZE_PREPOSITIONS:
+            continue
+        normalized.append(token)
+    return normalized
+
 
 def _command_message_id(command_id: int | None) -> str | None:
     if command_id is None:
@@ -1236,6 +1258,9 @@ class CommandVocabulary:
         tokens = raw.split()
         verb = tokens[0].lower()
         remainder = " ".join(tokens[1:]).strip()
+        if verb not in self.chat_aliases:
+            tokens = normalize_tokens(tokens)
+            remainder = " ".join(tokens[1:]).strip()
 
         command_entry = self.commands.get(verb)
         command_id = command_entry.id if command_entry else None
