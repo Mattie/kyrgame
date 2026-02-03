@@ -130,6 +130,14 @@ class PlayerFlag(IntFlag):
     BLESSD = 0x00000200
 
 
+ADMIN_EDITABLE_PLAYER_FLAGS = (
+    PlayerFlag.FEMALE
+    | PlayerFlag.BRFSTF
+    | PlayerFlag.PEGASU
+    | PlayerFlag.WILLOW
+)
+
+
 class CharmSlot(IntEnum):
     INVISIBILITY = CINVIS
     FIRE_PROTECTION = FIRPRO

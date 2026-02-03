@@ -254,6 +254,44 @@ async def test_admin_player_patch_caps_and_spouse(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_admin_player_patch_preserves_non_editable_flags(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "player-token": {
+                    "roles": ["player_admin"],
+                    "flags": ["allow_player_rename", "allow_delete_players"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            current_resp = await client.get("/admin/players/hero", headers=_auth("player-token"))
+            assert current_resp.status_code == 200
+            current_flags = current_resp.json()["player"]["flags"]
+            editable_mask = int(constants.ADMIN_EDITABLE_PLAYER_FLAGS)
+
+            patch_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"flags": ["BRFSTF"]},
+            )
+
+            assert patch_resp.status_code == 200
+            updated_flags = patch_resp.json()["player"]["flags"]
+            expected_flags = (current_flags & ~editable_mask) | constants.encode_player_flags(
+                ["BRFSTF"]
+            )
+            assert updated_flags == expected_flags
+
+
+@pytest.mark.anyio
 async def test_admin_player_patch_inventory_and_gems(monkeypatch):
     monkeypatch.setenv(
         ADMIN_MAP_ENV,

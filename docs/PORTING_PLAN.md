@@ -24,6 +24,7 @@
 - [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring/heart-and-soul/waterfall/Tashanna/reflection-pool/pantheon/portal/waller room routines plus object/spell effect engines with cooldowns, transformations, and costs. Track remaining gaps with the checkboxes in `docs/PORTING_PLAN_world_object_spell_gaps.md`—mark entries complete there as they’re implemented and only check off this line item once that appendix is fully completed.)*
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
+- [x] Preserve non-editable player flags when applying admin editor updates to mirror `KYRSYSP.C` flag handling.
 - [x] Ensure LOOKER4 room broadcasts exclude the target player, mirroring legacy `sndbt2` behavior.
 - [x] Updated msgutl2 room scripts (rooms 34/35/36/182) to broadcast to other occupants only, matching legacy exclusion behavior.
 - [x] Infer YAML message scope from `message_id`/`broadcast_message_id` to reduce duplication in room scripts.
