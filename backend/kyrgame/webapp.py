@@ -1491,6 +1491,11 @@ def create_app() -> FastAPI:
 
                 command_text = payload.get("command", "")
                 args = payload.get("args", {}) or {}
+                tokens = command_text.strip().split()
+                verb = tokens[0].lower() if tokens else ""
+                arg_list = tokens[1:]
+                parsed = None
+                parse_error = None
                 try:
                     if args and command_text == "move" and args.get("direction"):
                         parsed = commands.ParsedCommand(
@@ -1507,52 +1512,55 @@ def create_app() -> FastAPI:
                         )
                     else:
                         parsed = provider.command_vocabulary.parse_text(command_text)
-                    result = await provider.command_dispatcher.dispatch_parsed(parsed, state)
                 except commands.UnknownCommandError as exc:  # type: ignore[attr-defined]
-                    tokens = command_text.strip().split()
-                    handled = False
-                    if tokens and provider.room_scripts:
-                        verb = tokens[0].lower()
-                        arg_list = tokens[1:]
-                        handled = await provider.room_scripts.handle_command(
-                            player_id,
-                            current_room,
-                            command=verb,
-                            args=arg_list,
-                            player=state.player,
-                        )
+                    parse_error = exc
+
+                if tokens and provider.room_scripts:
+                    # Legacy kyra() runs the room routine before the command table.【F:legacy/KYRCMDS.C†L1251-L1257】
+                    handled = await provider.room_scripts.handle_command(
+                        player_id,
+                        current_room,
+                        command=verb,
+                        args=arg_list,
+                        player=state.player,
+                    )
                     if handled:
                         ack_payload = {
                             "type": "command_response",
                             "room": current_room,
                             "payload": {
                                 "command_id": getattr(parsed, "command_id", None)
-                                if "parsed" in locals()
+                                if parsed
                                 else None,
                                 "message_id": getattr(parsed, "message_id", None)
-                                if "parsed" in locals()
+                                if parsed
                                 else None,
-                                "verb": tokens[0].lower() if tokens else "",
+                                "verb": verb,
                             },
                         }
                         if meta:
                             ack_payload["meta"] = meta
                         await websocket.send_json(ack_payload)
                         continue
+
+                if parse_error:
                     await websocket.send_json(
                         {
                             "type": "command_error",
                             "room": current_room,
                             "payload": {
                                 "command_id": getattr(parsed, "command_id", None)
-                                if "parsed" in locals()
+                                if parsed
                                 else None,
-                                "message_id": getattr(exc, "message_id", None),
-                                "detail": str(exc),
+                                "message_id": getattr(parse_error, "message_id", None),
+                                "detail": str(parse_error),
                             },
                         }
                     )
                     continue
+
+                try:
+                    result = await provider.command_dispatcher.dispatch_parsed(parsed, state)
                 except commands.CommandError as exc:  # type: ignore[attr-defined]
                     await websocket.send_json(
                         {
@@ -1560,7 +1568,7 @@ def create_app() -> FastAPI:
                             "room": current_room,
                             "payload": {
                                 "command_id": getattr(parsed, "command_id", None)
-                                if "parsed" in locals()
+                                if parsed
                                 else None,
                                 "message_id": getattr(exc, "message_id", None),
                                 "detail": str(exc),

@@ -274,6 +274,118 @@ async def test_websocket_room_command_handles_unknown_verbs():
 
 
 @pytest.mark.anyio
+async def test_websocket_room_command_overrides_stubbed_drink():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 36})
+        hero_token = hero_session.json()["session"]["token"]
+        room_id = hero_session.json()["session"]["room_id"]
+
+        uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={hero_token}"
+
+        async with websockets.connect(uri) as hero_ws:
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_description",
+            )
+
+            await hero_ws.send(json.dumps({"type": "command", "command": "drink water"}))
+
+            saw_ack = False
+            saw_drink = False
+            while not (saw_ack and saw_drink):
+                message = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+                if (
+                    message.get("type") == "command_response"
+                    and message.get("payload", {}).get("verb") == "drink"
+                ):
+                    saw_ack = True
+                if (
+                    message.get("type") == "room_broadcast"
+                    and message.get("payload", {}).get("message_id") == "DRINK0"
+                ):
+                    saw_drink = True
+
+            await _assert_no_matching(
+                hero_ws,
+                lambda msg: msg.get("type") == "command_response"
+                and msg.get("payload", {}).get("event") == "unimplemented",
+            )
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_room_command_overrides_stubbed_toss():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 182})
+        hero_token = hero_session.json()["session"]["token"]
+        room_id = hero_session.json()["session"]["room_id"]
+
+        uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={hero_token}"
+
+        async with websockets.connect(uri) as hero_ws:
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_description",
+            )
+
+            await hero_ws.send(json.dumps({"type": "command", "command": "toss dagger pool"}))
+
+            saw_ack = False
+            saw_reflection = False
+            while not (saw_ack and saw_reflection):
+                message = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
+                if (
+                    message.get("type") == "command_response"
+                    and message.get("payload", {}).get("verb") == "toss"
+                ):
+                    saw_ack = True
+                if (
+                    message.get("type") == "room_broadcast"
+                    and message.get("payload", {}).get("message_id") == "REFM02"
+                ):
+                    saw_reflection = True
+
+            await _assert_no_matching(
+                hero_ws,
+                lambda msg: msg.get("type") == "command_response"
+                and msg.get("payload", {}).get("event") == "unimplemented",
+            )
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
 async def test_room_broadcast_excludes_look_target():
     app = create_app()
     host = "127.0.0.1"
