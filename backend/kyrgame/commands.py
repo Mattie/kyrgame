@@ -127,7 +127,12 @@ class CommandDispatcher:
             )
         return await self.dispatch(
             parsed.verb,
-            {**parsed.args, "command_id": parsed.command_id, "message_id": parsed.message_id},
+            {
+                **parsed.args,
+                "command_id": parsed.command_id,
+                "message_id": parsed.message_id,
+                "verb": parsed.verb,
+            },
             state,
         )
 
@@ -369,10 +374,11 @@ def _resolve_spoiler_phrases(
     return resolved
 
 
-def _handle_get(state: GameState, args: dict) -> CommandResult:
-    # Ported from getter in legacy/KYRCMDS.C for picking up room objects.【F:legacy/KYRCMDS.C†L633-L651】
+async def _handle_get(state: GameState, args: dict) -> CommandResult:
+    # Ported from getloc in legacy/KYRCMDS.C for pickup/broadcast parity.【F:legacy/KYRCMDS.C†L702-L729】
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
+    verb = (args.get("verb") or "get").strip().lower()
     target = (args.get("target") or "").strip().lower()
 
     if not target:
@@ -380,6 +386,40 @@ def _handle_get(state: GameState, args: dict) -> CommandResult:
 
     location = state.locations[state.player.gamloc]
     objects = state.objects or {}
+    if state.presence and state.player_lookup:
+        occupants = await state.presence.players_in_room(location.id)
+        target_player = None
+        for occupant_id in occupants:
+            if occupant_id == state.player.plyrid:
+                continue
+            candidate = state.player_lookup(occupant_id)
+            if candidate and _matches_player_name(target, candidate):
+                target_player = candidate
+                break
+        if target_player:
+            actor_text = _format_message(state, "GETLOC1", target_player.altnam)
+            target_text = _format_message(state, "GETLOC2", state.player.altnam, verb)
+            room_text = _format_message(
+                state, "GETLOC3", state.player.altnam, verb, target_player.altnam
+            )
+            return CommandResult(
+                state=state,
+                events=[
+                    _message_event("player", "GETLOC1", actor_text, command_id),
+                    {
+                        **_message_event("target", "GETLOC2", target_text, command_id),
+                        "player": target_player.plyrid,
+                    },
+                    _message_event(
+                        "room",
+                        "GETLOC3",
+                        room_text,
+                        command_id,
+                        exclude_player=target_player.plyrid,
+                    ),
+                ],
+            )
+
     object_id = _find_object_in_location(location, objects, target)
     if object_id is None:
         raise CommandError(f"No {target} here", message_id=message_id)
@@ -389,7 +429,21 @@ def _handle_get(state: GameState, args: dict) -> CommandResult:
 
     obj = objects.get(object_id)
     if obj is None or "PICKUP" not in obj.flags:
-        raise CommandError("You cannot pick that up", message_id=message_id)
+        room_text = _format_message(
+            state, "GETLOC5", state.player.altnam, verb, obj.name if obj else target
+        )
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    message_id,
+                    _format_message(state, message_id) or "You cannot pick that up",
+                    command_id,
+                ),
+                _message_event("room", "GETLOC5", room_text, command_id),
+            ],
+        )
 
     remaining_objects = [oid for oid in location.objects if oid != object_id]
     location = location.model_copy(
@@ -407,6 +461,14 @@ def _handle_get(state: GameState, args: dict) -> CommandResult:
         events=[
             _inventory_event(state, command_id, message_id),
             _room_objects_event(location, objects, command_id, message_id),
+            _message_event(
+                "room",
+                "GETLOC7",
+                _format_message(
+                    state, "GETLOC7", state.player.altnam, obj.name, location.objlds
+                ),
+                command_id,
+            ),
             {
                 "scope": "player",
                 "event": "pickup_result",
