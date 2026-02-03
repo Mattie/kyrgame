@@ -1544,6 +1544,12 @@ def create_app() -> FastAPI:
                         
                         # Process pending events from room script engine
                         pending_events = provider.room_scripts.get_and_clear_pending_events()
+                        transfer_event = None
+                        for event in list(pending_events):
+                            if event.get("event") == "room_transfer":
+                                transfer_event = event
+                                pending_events.remove(event)
+
                         for event in pending_events:
                             scope = event.get("scope", "player")
                             if scope == "room":
@@ -1581,6 +1587,121 @@ def create_app() -> FastAPI:
                                 if meta:
                                     envelope["meta"] = meta
                                 await websocket.send_json(envelope)
+
+                        if transfer_event:
+                            target_room = int(transfer_event.get("target_room", current_room))
+                            leave_text = transfer_event.get("leave_text")
+                            arrive_text = transfer_event.get("arrive_text")
+                            if leave_text:
+                                await gateway.broadcast(
+                                    current_room,
+                                    {
+                                        "type": "room_broadcast",
+                                        "room": current_room,
+                                        "payload": {
+                                            "scope": "room",
+                                            "event": "room_message",
+                                            "type": "room_message",
+                                            "player": player_id,
+                                            "from": current_room,
+                                            "to": None,
+                                            "direction": None,
+                                            "text": leave_text,
+                                            "message_id": None,
+                                        },
+                                    },
+                                    sender=websocket,
+                                )
+
+                            if target_room != current_room:
+                                await gateway.register(target_room, websocket, announce=False)
+                                await provider.presence.set_location(
+                                    player_id, target_room, session_token
+                                )
+                                with provider.scope.app.state.session_factory() as db:
+                                    repo = repositories.PlayerSessionRepository(db)
+                                    repo.set_room(session_token, target_room)
+                                    repo.mark_seen(session_token)
+                                    db.commit()
+                                current_room = target_room
+
+                                location = state.locations.get(current_room)
+                                if location is not None:
+                                    description_id, long_description = commands._location_description(
+                                        state, location
+                                    )
+                                    await websocket.send_json(
+                                        {
+                                            "type": "command_response",
+                                            "room": current_room,
+                                            "payload": {
+                                                "scope": "player",
+                                                "event": "location_update",
+                                                "type": "location_update",
+                                                "location": location.id,
+                                                "description": location.brfdes,
+                                                "description_id": description_id,
+                                                "long_description": long_description,
+                                                "message_id": description_id,
+                                            },
+                                        }
+                                    )
+                                    await websocket.send_json(
+                                        {
+                                            "type": "command_response",
+                                            "room": current_room,
+                                            "payload": {
+                                                "scope": "player",
+                                                "event": "location_description",
+                                                "type": "location_description",
+                                                "location": location.id,
+                                                "message_id": description_id,
+                                                "text": long_description or location.brfdes,
+                                            },
+                                        }
+                                    )
+                                    await websocket.send_json(
+                                        {
+                                            "type": "command_response",
+                                            "room": current_room,
+                                            "payload": commands._room_objects_event(
+                                                location, state.objects or {}, None, description_id
+                                            ),
+                                        }
+                                    )
+
+                                occupant_event = await _room_occupants_event(
+                                    provider.presence, player_id, current_room, state.messages
+                                )
+                                if occupant_event:
+                                    await websocket.send_json(
+                                        {
+                                            "type": "command_response",
+                                            "room": current_room,
+                                            "payload": occupant_event,
+                                        }
+                                    )
+
+                            if arrive_text:
+                                await gateway.broadcast(
+                                    current_room,
+                                    {
+                                        "type": "room_broadcast",
+                                        "room": current_room,
+                                        "payload": {
+                                            "scope": "room",
+                                            "event": "room_message",
+                                            "type": "room_message",
+                                            "player": player_id,
+                                            "from": None,
+                                            "to": current_room,
+                                            "direction": None,
+                                            "text": arrive_text,
+                                            "message_id": None,
+                                        },
+                                    },
+                                    sender=websocket,
+                                )
                         
                         continue
 

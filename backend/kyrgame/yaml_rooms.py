@@ -135,6 +135,18 @@ class YamlRoomEngine:
             if len(args) <= index or args[index].lower() != value:
                 return False
 
+        arg_count = trigger.get("arg_count")
+        if arg_count is not None and len(args) != int(arg_count):
+            return False
+
+        arg_matches = trigger.get("arg_matches", [])
+        if arg_matches:
+            for match in arg_matches:
+                index = int(match.get("index", 0))
+                value = str(match.get("value", "")).lower()
+                if len(args) <= index or args[index].lower() != value:
+                    return False
+
         required_state = trigger.get("room_state_at_least", {})
         if required_state:
             state = self._get_room_state(room_id)
@@ -187,6 +199,8 @@ class YamlRoomEngine:
                 self._action_add_room_object(action, player, context, events, room_id)
             elif action_type == "increment_room_state":
                 self._action_increment_room_state(action, context, room_id)
+            elif action_type == "transfer_player":
+                self._action_transfer_player(action, player, context, events)
 
     def _action_branch_by_item(
         self,
@@ -309,10 +323,14 @@ class YamlRoomEngine:
             return resolved
 
         message_id = action.get("message_id")
+        if isinstance(message_id, str) and "{" in message_id:
+            message_id = message_id.format(**context)
         text = action.get("text")
         format_args = action.get("format", [])
         scope = action.get("scope")
         broadcast_message_id = action.get("broadcast_message_id")
+        if isinstance(broadcast_message_id, str) and "{" in broadcast_message_id:
+            broadcast_message_id = broadcast_message_id.format(**context)
         broadcast_text = action.get("broadcast_text")
         broadcast_format = action.get("broadcast_format", [])
 
@@ -645,6 +663,48 @@ class YamlRoomEngine:
         if "context_key" in action:
             context[action["context_key"]] = state[key]
 
+    def _action_transfer_player(
+        self,
+        action: dict,
+        player: models.PlayerModel,
+        context: dict[str, Any],
+        events: list[dict],
+    ):
+        """Teleport a player with legacy remvgp/entrgp messaging (KYRROUS.C:939-958)."""
+        target_room = action.get("target_room")
+        if target_room is None:
+            return
+
+        leave_text = action.get("leave_text")
+        leave_format = action.get("leave_format", [])
+        arrive_text = action.get("arrive_text")
+        arrive_format = action.get("arrive_format", [])
+
+        def _format_text(template: str | None, format_list: list[str]) -> str | None:
+            if not template:
+                return None
+            values = [context.get(arg, arg) for arg in format_list]
+            if not values:
+                return template
+            try:
+                return template % tuple(values)
+            except TypeError:
+                return template % tuple(str(val) for val in values)
+
+        player.pgploc = player.gamloc
+        player.gamloc = int(target_room)
+
+        events.append(
+            {
+                "scope": "system",
+                "event": "room_transfer",
+                "player": player.plyrid,
+                "target_room": int(target_room),
+                "leave_text": _format_text(leave_text, leave_format),
+                "arrive_text": _format_text(arrive_text, arrive_format),
+            }
+        )
+
     @staticmethod
     def _find_inventory_index(player: models.PlayerModel, object_id: int) -> int | None:
         try:
@@ -669,6 +729,7 @@ class YamlRoomEngine:
             "player_altnam": player.altnam,
             "player_pronoun_obj": "her" if female else "him",
             "player_pronoun_poss": "her" if female else "his",
+            "player_pronoun_subj": "she" if female else "he",
             "args": args,
         }
 

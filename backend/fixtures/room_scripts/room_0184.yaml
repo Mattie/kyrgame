@@ -1,0 +1,27 @@
+# Legacy: legacy/KYRROUS.C:920-937 (portal)
+id: 184
+name: portal
+spoiler_summary: "Shimmering portal that floods entrants with random visions."
+spoiler_interaction: "Enter the portal to experience a randomly chosen vision; others see you enter the portal in a flash."
+legacy_ref: "legacy/KYRROUS.C:920-937"
+triggers:
+  - verbs: [enter]
+    target_in: [portal]
+    actions:
+      - type: random_range
+        start: 1
+        stop: 10
+        context_key: portal_roll
+      - type: message
+        scope: direct
+        message_id: PORTAL
+      - type: message
+        scope: direct
+        message_id: "PORTAL{portal_roll}"
+      - type: message
+        scope: direct
+        message_id: ENDPOR
+      - type: message
+        scope: broadcast_others
+        message_id: OEPORT
+        format: [player_altnam, player_pronoun_subj]

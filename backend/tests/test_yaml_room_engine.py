@@ -430,3 +430,154 @@ def test_fearno_levels_player_when_phrase_matched(base_player):
     )
     high_texts = [evt["text"] for evt in already.events if evt["scope"] == "direct"]
     assert engine.messages.messages["LVLM00"] in high_texts
+
+
+def _panthe_phrase_args():
+    return [
+        "legends",
+        "of",
+        "the",
+        "time",
+        "and",
+        "space",
+        "are",
+        "true",
+        "forever",
+        "and",
+        "never",
+        "die",
+    ]
+
+
+def test_panthe_grants_key_when_phrase_matches(room_engine, base_player):
+    player = base_player.model_copy(update={"gpobjs": [], "obvals": [], "npobjs": 0})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=183,
+        command="say",
+        args=_panthe_phrase_args(),
+    )
+
+    assert result.handled is True
+    key_id = room_engine.objects_by_name["key"].id
+    assert key_id in player.gpobjs
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages["PANM00"] in direct_texts
+    assert room_engine.messages.messages["PANM01"] % player.altnam in broadcast_texts
+
+
+def test_panthe_rejects_phrase_when_inventory_full(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "gpobjs": [0] * constants.MXPOBS,
+            "obvals": [0] * constants.MXPOBS,
+            "npobjs": constants.MXPOBS,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=183,
+        command="say",
+        args=_panthe_phrase_args(),
+    )
+
+    assert result.handled is True
+    assert player.npobjs == constants.MXPOBS
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    assert room_engine.messages.messages["PANM02"] in direct_texts
+
+
+def test_portal_enters_and_broadcasts_random_vision(base_player):
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    definitions = fixtures.load_room_scripts()
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+        rng=StubRandom([4]),
+    )
+    player = base_player.model_copy(update={"altnam": "Echo", "flags": 0})
+
+    result = engine.handle(
+        player=player,
+        room_id=184,
+        command="enter",
+        args=["portal"],
+    )
+
+    assert result.handled is True
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    assert messages.messages["PORTAL"] in direct_texts
+    assert messages.messages["PORTAL4"] in direct_texts
+    assert messages.messages["ENDPOR"] in direct_texts
+
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert messages.messages["OEPORT"] % (player.altnam, "he") in broadcast_texts
+
+
+def test_waller_chant_sets_sesame_flag(room_engine, base_player):
+    result = room_engine.handle(
+        player=base_player,
+        room_id=185,
+        command="chant",
+        args=[],
+    )
+
+    assert result.handled is True
+    state = room_engine.get_room_state(185)
+    assert state.get("sesame") >= 1
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages["WALM03"] in direct_texts
+    assert room_engine.messages.messages["WALM04"] in broadcast_texts
+
+
+def test_waller_transfer_requires_sesame_and_key(room_engine, base_player):
+    key_id = room_engine.objects_by_name["key"].id
+    player = base_player.model_copy(update={"gpobjs": [key_id], "obvals": [0], "npobjs": 1})
+    room_engine.get_room_state(185)["sesame"] = 1
+
+    success = room_engine.handle(
+        player=player,
+        room_id=185,
+        command="drop",
+        args=["key", "crevice"],
+    )
+
+    assert success.handled is True
+    assert key_id not in player.gpobjs
+    transfer_events = [evt for evt in success.events if evt.get("event") == "room_transfer"]
+    assert transfer_events
+    assert transfer_events[0]["target_room"] == 186
+
+    direct_texts = [evt["text"] for evt in success.events if evt["scope"] == "direct"]
+    assert room_engine.messages.messages["WALM00"] in direct_texts
+
+    room_engine.get_room_state(185)["sesame"] = 0
+    player = base_player.model_copy(update={"gpobjs": [key_id], "obvals": [0], "npobjs": 1})
+
+    failure = room_engine.handle(
+        player=player,
+        room_id=185,
+        command="drop",
+        args=["key", "crevice"],
+    )
+
+    direct_texts = [evt["text"] for evt in failure.events if evt["scope"] == "direct"]
+    assert room_engine.messages.messages["WALM01"] in direct_texts
