@@ -16,35 +16,23 @@ triggers:
             - type: grant_object
               object: sword
             - type: message
-              scope: direct
               message_id: REFM00
-            - type: message
-              scope: broadcast_others
-              message_id: REFM01
-              format: [player_altnam]
+              broadcast_message_id: REFM01
+              broadcast_format: [player_altnam]
         default_actions:
           - type: message
-            scope: direct
             message_id: REFM02
-          - type: message
-            scope: broadcast_others
-            message_id: REFM01
-            format: [player_altnam]
+            broadcast_message_id: REFM01
+            broadcast_format: [player_altnam]
         missing_actions:
           - type: message
-            scope: direct
             message_id: REFM02
-          - type: message
-            scope: broadcast_others
-            message_id: REFM01
-            format: [player_altnam]
+            broadcast_message_id: REFM01
+            broadcast_format: [player_altnam]
   - verbs: [see, look, examine]
     target_in: [pool]
     actions:
       - type: message
-        scope: direct
         message_id: REFM03
-      - type: message
-        scope: broadcast_others
-        message_id: REFM04
-        format: [player_altnam]
+        broadcast_message_id: REFM04
+        broadcast_format: [player_altnam]

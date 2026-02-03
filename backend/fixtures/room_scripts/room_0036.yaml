@@ -9,12 +9,9 @@ triggers:
     target_in: [water]
     actions:
       - type: message
-        scope: direct
         message_id: DRINK0
-      - type: message
-        scope: broadcast_others
-        message_id: DRINK1
-        format: [player_altnam]
+        broadcast_message_id: DRINK1
+        broadcast_format: [player_altnam]
   - verbs: [get, grab, pick, take]
     target_in: [rose]
     actions:
@@ -25,17 +22,11 @@ triggers:
           - type: grant_object
             object: rose
           - type: message
-            scope: direct
             message_id: GROSE1
-          - type: message
-            scope: broadcast_others
-            message_id: GROSE2
-            format: [player_altnam]
+            broadcast_message_id: GROSE2
+            broadcast_format: [player_altnam]
         else:
           - type: message
-            scope: direct
             message_id: GROSE3
-          - type: message
-            scope: broadcast_others
-            message_id: GROSE4
-            format: [player_altnam]
+            broadcast_message_id: GROSE4
+            broadcast_format: [player_altnam]

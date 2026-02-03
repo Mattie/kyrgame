@@ -36,17 +36,11 @@ triggers:
                       spell: hotfoot
                       book: offensive
             - type: message
-              scope: direct
               message_id: DRUID0
-            - type: message
-              scope: broadcast_others
-              message_id: DRUID1
-              format: [player_altnam]
+              broadcast_message_id: DRUID1
+              broadcast_format: [player_altnam]
         missing_actions:
           - type: message
-            scope: direct
             message_id: DRUID2
-          - type: message
-            scope: broadcast_others
-            message_id: DRUID1
-            format: [player_altnam]
+            broadcast_message_id: DRUID1
+            broadcast_format: [player_altnam]

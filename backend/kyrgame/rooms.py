@@ -95,6 +95,7 @@ class RoomScriptEngine:
             player.plyrid: player for player in (players or [])
         }
         self.reloads = 0
+        self.pending_events: list[dict] = []  # Events to be processed by webapp
         self.yaml_engine = (
             yaml_rooms.YamlRoomEngine(
                 definitions=room_scripts,
@@ -150,6 +151,12 @@ class RoomScriptEngine:
         self.routines = build_default_routines(self.messages)
         self.reloads += 1
 
+    def get_and_clear_pending_events(self) -> list[dict]:
+        """Retrieve and clear pending events for webapp processing."""
+        events = self.pending_events
+        self.pending_events = []
+        return events
+
     def room_broadcast_envelope(self, room_id: int, payload: dict) -> dict:
         return {"type": "room_broadcast", "room": room_id, "payload": payload}
 
@@ -173,16 +180,17 @@ class RoomScriptEngine:
                     args=args or [],
                 )
                 # Process events from YAML engine
-                ctx = RoomContext(self, room_id)
+                # Store events for webapp to process with proper filtering
                 for event in result.events:
-                    event_type = event.get("event", "room_message")
+                    # Map YAML scopes to webapp-compatible scopes
                     scope = event.get("scope", "broadcast")
-                    # Create a copy without event/scope keys to avoid duplication
-                    event_data = {k: v for k, v in event.items() if k not in ("event", "scope")}
                     if scope == "direct":
-                        await ctx.direct(player_id, event_type, **event_data)
-                    else:
-                        await ctx.broadcast(event_type, **event_data)
+                        # Direct messages should use "target" scope for webapp filtering
+                        event = {**event, "scope": "target"}
+                    elif scope == "broadcast":
+                        # Broadcast messages should use "room" scope
+                        event = {**event, "scope": "room"}
+                    self.pending_events.append(event)
                 if result.handled:
                     return True
         
@@ -618,7 +626,7 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     """Mirror the legacy ``silver`` routine (legacy/KYRROUS.C lines 555-589)."""
 
     hotseat_spell_id = 32  # SBD033 / hotseat (ice protection I)
-    hotseat_bit = 0x00000100
+    hotseat_bit = constants.SBD033_ICEPROT1
     objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
 
     async def _handler(
