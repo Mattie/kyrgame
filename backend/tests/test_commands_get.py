@@ -1,6 +1,9 @@
 import pytest
 
-from kyrgame import commands, constants, fixtures
+from sqlalchemy import select
+
+from kyrgame import commands, constants, fixtures, models
+from kyrgame.database import create_session, get_engine, init_db_schema
 
 
 class FakePresence:
@@ -44,6 +47,45 @@ class FixedRng:
 
     def randrange(self, _upper: int) -> int:
         return self.value
+
+
+def _persist_player(session, player: models.PlayerModel) -> models.Player:
+    record = models.Player(**player.model_dump())
+    session.add(record)
+    session.commit()
+    return record
+
+
+def _player_model_from_record(record: models.Player) -> models.PlayerModel:
+    return models.PlayerModel(
+        uidnam=record.uidnam,
+        plyrid=record.plyrid,
+        altnam=record.altnam,
+        attnam=record.attnam,
+        gpobjs=record.gpobjs,
+        nmpdes=record.nmpdes,
+        modno=record.modno,
+        level=record.level,
+        gamloc=record.gamloc,
+        pgploc=record.pgploc,
+        flags=record.flags,
+        gold=record.gold,
+        npobjs=record.npobjs,
+        obvals=record.obvals,
+        nspells=record.nspells,
+        spts=record.spts,
+        hitpts=record.hitpts,
+        charms=record.charms,
+        offspls=record.offspls,
+        defspls=record.defspls,
+        othspls=record.othspls,
+        spells=record.spells,
+        gemidx=record.gemidx,
+        stones=record.stones,
+        macros=record.macros,
+        stumpi=record.stumpi,
+        spouse=record.spouse,
+    )
 
 
 def _place_object_in_room(state: commands.GameState, object_id: int):
@@ -191,3 +233,60 @@ async def test_get_from_player_success_transfers_item():
     assert target_obj.id not in target.gpobjs
     message_ids = {event.get("message_id") for event in result.events}
     assert {"GETGP8", "GETGP9", "GETGP10"}.issubset(message_ids)
+
+
+@pytest.mark.anyio
+async def test_get_from_player_updates_persistent_inventory(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    session = create_session(engine)
+
+    target_obj = next(iter(fixtures.load_objects()))
+    target = _build_player(
+        plyrid="buddy",
+        attnam="Buddy",
+        altnam="Buddy Alt",
+        gpobjs=[target_obj.id],
+        obvals=[4],
+        npobjs=1,
+    )
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    _persist_player(session, player)
+    _persist_player(session, target)
+
+    def lookup_player(player_alias: str) -> models.PlayerModel | None:
+        record = session.scalar(select(models.Player).where(models.Player.plyrid == player_alias))
+        if not record:
+            return None
+        return _player_model_from_record(record)
+
+    state = commands.GameState(
+        player=player,
+        locations={location.id: location for location in fixtures.load_locations()},
+        objects={obj.id: obj for obj in fixtures.load_objects()},
+        messages=fixtures.load_messages(),
+        content_mappings=fixtures.load_content_mappings(),
+        presence=FakePresence({player.gamloc: {player.plyrid, target.plyrid}}),
+        player_lookup=lookup_player,
+        db_session=session,
+    )
+    state.rng = FixedRng(0)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    await dispatcher.dispatch(
+        "get",
+        {"target": target_obj.name, "target_player": "Buddy"},
+        state,
+    )
+
+    updated_target = session.scalar(
+        select(models.Player).where(models.Player.plyrid == target.plyrid)
+    )
+    assert updated_target is not None
+    assert target_obj.id not in updated_target.gpobjs

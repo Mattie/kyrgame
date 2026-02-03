@@ -4,6 +4,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, List, Protocol, Set
 
+from sqlalchemy import select
+
 from . import constants, fixtures, models, repositories, room_spoilers
 
 
@@ -603,6 +605,8 @@ async def _handle_get_from_player(
     state.player.gpobjs.append(obj_id)
     state.player.obvals.append(value)
     state.player.npobjs = len(state.player.gpobjs)
+    _persist_player_inventory(state, target_player)
+    _persist_player_inventory(state, state.player)
 
     actor_text = _format_message(state, "GETGP8")
     target_text = _format_message(state, "GETGP9", state.player.altnam, obj_name)
@@ -967,6 +971,21 @@ def _persist_location_objects(state: GameState, location_id: int, object_ids: li
         location_repo = repositories.LocationRepository(state.db_session)
         location_repo.update_objects(location_id, object_ids)
         state.db_session.commit()
+
+
+def _persist_player_inventory(state: GameState, player: models.PlayerModel):
+    """Persist player inventory changes so multiplayer sessions stay consistent."""
+    if not state.db_session:
+        return
+    record = state.db_session.scalar(
+        select(models.Player).where(models.Player.plyrid == player.plyrid)
+    )
+    if not record:
+        return
+    record.gpobjs = list(player.gpobjs)
+    record.obvals = list(player.obvals)
+    record.npobjs = player.npobjs
+    state.db_session.commit()
 
 
 def _room_objects_event(
