@@ -1,0 +1,84 @@
+# Legacy: legacy/KYRROUS.C:992-1031 (mistyr)
+id: 188
+name: mistyr
+spoiler_summary: "Misty ruins with a glowing orb that teleports, grants charms, or elevates worthy daggers."
+spoiler_interaction: "Touch/get the orb to teleport, concentrate on it to receive a charm, or drop a dagger into the orb to level up at the proper gate."
+legacy_ref: "legacy/KYRROUS.C:992-1031"
+triggers:
+  - verbs: [touch, get]
+    target_in: [orb]
+    actions:
+      - type: message
+        scope: direct
+        message_id: MISM00
+      - type: transfer_player
+        target_room: 34
+        leave_text: "vanished in a bright blue flash"
+        arrive_text: "appeared in a bright blue flash"
+  - verbs: [think, concentrate, meditate]
+    arg_matches:
+      - index: 0
+        value: orb
+    actions:
+      - type: conditional
+        conditions:
+          - inventory_lt: 6
+        then:
+          - type: grant_object
+            object: charm
+          - type: message
+            message_id: MISM01
+            broadcast_message_id: MISM02
+            broadcast_format: [player_altnam]
+        else:
+          - type: message
+            message_id: MISM03
+            broadcast_message_id: MISM02
+            broadcast_format: [player_altnam]
+  - verbs: [think, concentrate, meditate]
+    arg_matches:
+      - index: 1
+        value: orb
+    actions:
+      - type: conditional
+        conditions:
+          - inventory_lt: 6
+        then:
+          - type: grant_object
+            object: charm
+          - type: message
+            message_id: MISM01
+            broadcast_message_id: MISM02
+            broadcast_format: [player_altnam]
+        else:
+          - type: message
+            message_id: MISM03
+            broadcast_message_id: MISM02
+            broadcast_format: [player_altnam]
+  - verbs: [drop, insert, put, stick, thrust]
+    arg_at: {index: 1, value: orb}
+    arg_matches:
+      - index: 0
+        value: dagger
+    requires_item: dagger
+    actions:
+      - type: level_gate
+        target_level: 8
+        level_up: true
+        on_success:
+          - type: remove_item
+            item: dagger
+          - type: message
+            message_id: MISM04
+            broadcast_message_id: MISM05
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]

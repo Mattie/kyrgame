@@ -1,0 +1,73 @@
+# Legacy: legacy/KYRROUS.C:965-989 (slotma)
+id: 186
+name: slotma
+spoiler_summary: "Slot machine cavern that eats garnets for a small chance at prizes."
+spoiler_interaction: "Drop/insert/put/stick/thrust a garnet into the slot to gamble for a random gem or elixir."
+legacy_ref: "legacy/KYRROUS.C:965-989"
+triggers:
+  - verbs: [drop, insert, put, stick, thrust]
+    arg_at: {index: 1, value: slot}
+    arg_matches:
+      - index: 0
+        value: garnet
+    requires_item: garnet
+    actions:
+      - type: remove_item
+        item: garnet
+      - type: random_chance
+        probability: 0.1818181818
+        on_success:
+          - type: message
+            message_id: SLOT00
+            broadcast_message_id: SLOT01
+            broadcast_format: [player_altnam]
+          - type: random_choice
+            choices:
+              - actions:
+                  - type: grant_object
+                    object: ruby
+              - actions:
+                  - type: grant_object
+                    object: emerald
+              - actions:
+                  - type: grant_object
+                    object: garnet
+              - actions:
+                  - type: grant_object
+                    object: pearl
+              - actions:
+                  - type: grant_object
+                    object: aquamarine
+              - actions:
+                  - type: grant_object
+                    object: moonstone
+              - actions:
+                  - type: grant_object
+                    object: sapphire
+              - actions:
+                  - type: grant_object
+                    object: diamond
+              - actions:
+                  - type: grant_object
+                    object: amethyst
+              - actions:
+                  - type: grant_object
+                    object: onyx
+              - actions:
+                  - type: grant_object
+                    object: opal
+              - actions:
+                  - type: grant_object
+                    object: bloodstone
+              - actions:
+                  - type: grant_object
+                    object: elixir
+          - type: message
+            scope: direct
+            message_id: SLOT02
+            format: [granted_object_article]
+        on_failure:
+          - type: message
+            message_id: SLOT03
+            broadcast_message_id: SLOT04
+            broadcast_format: [player_altnam]

@@ -432,6 +432,54 @@ def test_fearno_levels_player_when_phrase_matched(base_player):
     assert engine.messages.messages["LVLM00"] in high_texts
 
 
+def test_requires_item_trigger_skips_when_missing(base_player):
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+
+    garnet_id = next(obj.id for obj in objects if obj.name == "garnet")
+
+    definitions = {
+        "rooms": [
+            {
+                "id": 999,
+                "name": "requires_item_demo",
+                "triggers": [
+                    {
+                        "verbs": ["drop"],
+                        "arg_matches": [{"index": 0, "value": "garnet"}],
+                        "requires_item": "garnet",
+                        "actions": [
+                            {"type": "message", "scope": "direct", "text": "matched"}
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+    )
+
+    miss = engine.handle(
+        player=base_player, room_id=999, command="drop", args=["garnet"]
+    )
+    assert miss.handled is False
+
+    base_player.gpobjs.append(garnet_id)
+    base_player.obvals.append(0)
+    base_player.npobjs = len(base_player.gpobjs)
+    hit = engine.handle(player=base_player, room_id=999, command="drop", args=["garnet"])
+    assert hit.handled is True
+    assert any(event["text"] == "matched" for event in hit.events)
+
+
 def _panthe_phrase_args():
     return [
         "legends",

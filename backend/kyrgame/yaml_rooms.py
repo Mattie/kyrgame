@@ -94,7 +94,7 @@ class YamlRoomEngine:
         events: list[dict] = []
 
         for trigger in room.get("triggers", []):
-            if not self._matches_trigger(trigger, command, args, room_id):
+            if not self._matches_trigger(trigger, player, command, args, room_id):
                 continue
             self._execute_actions(
                 trigger.get("actions", []), player, args, context, events, room_id
@@ -104,7 +104,12 @@ class YamlRoomEngine:
         return RoomHandleResult(handled=False, events=events)
 
     def _matches_trigger(
-        self, trigger: dict, command: str, args: list[str], room_id: int
+        self,
+        trigger: dict,
+        player: models.PlayerModel,
+        command: str,
+        args: list[str],
+        room_id: int,
     ) -> bool:
         verb = command.lower()
         verbs = {v.lower() for v in trigger.get("verbs", [])}
@@ -146,6 +151,13 @@ class YamlRoomEngine:
                 value = str(match.get("value", "")).lower()
                 if len(args) <= index or args[index].lower() != value:
                     return False
+
+        required_item = trigger.get("requires_item")
+        if required_item:
+            # Legacy room routines often check fgmpobj() before handling drops (e.g., KYRROUS.C:972-1027).
+            obj = self.objects_by_name.get(str(required_item).lower())
+            if obj is None or self._find_inventory_index(player, obj.id) is None:
+                return False
 
         required_state = trigger.get("room_state_at_least", {})
         if required_state:
@@ -298,6 +310,8 @@ class YamlRoomEngine:
         player.npobjs = len(player.gpobjs)
         context["granted_object_id"] = obj.id
         context["granted_object_name"] = obj.name
+        # Legacy slot machine rewards use dobutl() to include articles (KYRROUS.C:976-981).
+        context["granted_object_article"] = self._article_for_object(obj)
 
     def _action_message(
         self,

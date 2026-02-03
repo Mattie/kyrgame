@@ -1,0 +1,25 @@
+# Legacy: legacy/KYRROUS.C:1053-1069 (tulips)
+id: 199
+name: tulips
+spoiler_summary: "Silver tulip grove that lets travelers pluck enchanted flowers."
+spoiler_interaction: "Get/grab/pick/take a tulip to add one to your inventory, if you have room."
+legacy_ref: "legacy/KYRROUS.C:1053-1069"
+triggers:
+  - verbs: [get, grab, pick, take]
+    target_in: [tulip]
+    actions:
+      - type: conditional
+        conditions:
+          - inventory_lt: 6
+        then:
+          - type: grant_object
+            object: tulip
+          - type: message
+            message_id: TULM00
+            broadcast_message_id: TULM01
+            broadcast_format: [player_altnam]
+        else:
+          - type: message
+            message_id: TULM02
+            broadcast_message_id: TULM01
+            broadcast_format: [player_altnam]
