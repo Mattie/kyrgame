@@ -292,33 +292,105 @@ class YamlRoomEngine:
         context: dict[str, Any],
         events: list[dict],
     ):
+        def _render_message(
+            message_key: str | None,
+            fallback_text: str | None,
+            format_list: list[str] | None,
+        ) -> str | None:
+            resolved = fallback_text
+            if resolved is None and message_key:
+                resolved = self.messages.messages.get(message_key, "")
+            if format_list and resolved:
+                values = [context.get(arg, arg) for arg in format_list]
+                try:
+                    resolved = resolved % tuple(values)
+                except TypeError:
+                    resolved = resolved % tuple(str(val) for val in values)
+            return resolved
+
         message_id = action.get("message_id")
         text = action.get("text")
         format_args = action.get("format", [])
-        scope = action.get("scope", "direct")
-        if text is None and message_id:
-            text = self.messages.messages.get(message_id, "")
+        scope = action.get("scope")
+        broadcast_message_id = action.get("broadcast_message_id")
+        broadcast_text = action.get("broadcast_text")
+        broadcast_format = action.get("broadcast_format", [])
 
-        if format_args and text:
-            values = [context.get(arg, arg) for arg in format_args]
-            try:
-                text = text % tuple(values)
-            except TypeError:
-                text = text % tuple(str(val) for val in values)
+        if scope in {"direct", "broadcast", "broadcast_others", "direct_and_others"}:
+            if scope == "direct_and_others":
+                direct_text = _render_message(message_id, text, format_args)
+                other_text = _render_message(
+                    broadcast_message_id, broadcast_text, broadcast_format
+                )
+                if direct_text is not None:
+                    events.append(
+                        {
+                            "scope": "direct",
+                            "event": "room_message",
+                            "message_id": message_id,
+                            "text": direct_text,
+                            "player": player.plyrid,
+                        }
+                    )
+                if other_text is not None:
+                    events.append(
+                        {
+                            "scope": "broadcast",
+                            "event": "room_message",
+                            "message_id": broadcast_message_id,
+                            "text": other_text,
+                            "player": player.plyrid,
+                            "exclude_player": player.plyrid,
+                        }
+                    )
+                return
 
-        if text is None:
+            direct_text = _render_message(message_id, text, format_args)
+            if direct_text is None:
+                return
+            events.append(
+                {
+                    "scope": "broadcast" if scope == "broadcast_others" else scope,
+                    "event": "room_message",
+                    "message_id": message_id,
+                    "text": direct_text,
+                    "player": player.plyrid,
+                    "exclude_player": player.plyrid if scope == "broadcast_others" else None,
+                }
+            )
             return
 
-        events.append(
-            {
-                "scope": "broadcast" if scope == "broadcast_others" else scope,
-                "event": "room_message",
-                "message_id": message_id,
-                "text": text,
-                "player": player.plyrid,
-                "exclude_player": player.plyrid if scope == "broadcast_others" else None,
-            }
+        has_direct = message_id is not None or text is not None
+        has_broadcast = broadcast_message_id is not None or broadcast_text is not None
+        direct_text = _render_message(message_id, text, format_args) if has_direct else None
+        other_text = (
+            _render_message(broadcast_message_id, broadcast_text, broadcast_format)
+            if has_broadcast
+            else None
         )
+
+        if direct_text is not None:
+            events.append(
+                {
+                    "scope": "direct",
+                    "event": "room_message",
+                    "message_id": message_id,
+                    "text": direct_text,
+                    "player": player.plyrid,
+                }
+            )
+
+        if other_text is not None:
+            events.append(
+                {
+                    "scope": "broadcast",
+                    "event": "room_message",
+                    "message_id": broadcast_message_id,
+                    "text": other_text,
+                    "player": player.plyrid,
+                    "exclude_player": player.plyrid,
+                }
+            )
 
     def _action_heal(self, action: dict, player: models.PlayerModel):
         amount = int(action.get("amount", 0))

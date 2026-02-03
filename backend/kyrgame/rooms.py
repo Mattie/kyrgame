@@ -618,7 +618,7 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     """Mirror the legacy ``silver`` routine (legacy/KYRROUS.C lines 555-589)."""
 
     hotseat_spell_id = 32  # SBD033 / hotseat (ice protection I)
-    hotseat_bit = 0x00000100
+    hotseat_bit = constants.SBD033_ICEPROT1
     objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
 
     async def _handler(

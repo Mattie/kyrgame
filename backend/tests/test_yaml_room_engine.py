@@ -64,6 +64,56 @@ def test_room_scripts_fixture_is_split_into_files():
     )
 
 
+def test_yaml_room_engine_inferrs_message_scope_from_ids():
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    player = fixtures.build_player()
+    player.altnam = "Echo"
+
+    definitions = {
+        "rooms": [
+            {
+                "id": 999,
+                "name": "msgutl2_demo",
+                "triggers": [
+                    {
+                        "verbs": ["wave"],
+                        "actions": [
+                            {
+                                "type": "message",
+                                "message_id": "DRINK0",
+                                "broadcast_message_id": "DRINK1",
+                                "broadcast_format": ["player_altnam"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+    )
+
+    result = engine.handle(player=player, room_id=999, command="wave", args=[])
+
+    direct_events = [evt for evt in result.events if evt["scope"] == "direct"]
+    broadcast_events = [evt for evt in result.events if evt["scope"] == "broadcast"]
+
+    assert engine.messages.messages["DRINK0"] in [evt["text"] for evt in direct_events]
+    assert engine.messages.messages["DRINK1"] % player.altnam in [
+        evt["text"] for evt in broadcast_events
+    ]
+    assert broadcast_events[0].get("exclude_player") == player.plyrid
+
+
 def test_getgol_converts_gems_and_rejects_unknown(room_engine, base_player):
     base_player.gold = 10
 

@@ -15,27 +15,18 @@ triggers:
           - type: grant_object
             object: dagger
           - type: message
-            scope: direct
             message_id: DAGM00
-          - type: message
-            scope: broadcast_others
-            message_id: DAGM01
-            format: [player_altnam]
+            broadcast_message_id: DAGM01
+            broadcast_format: [player_altnam]
         else:
           - type: message
-            scope: direct
             message_id: DAGM02
-          - type: message
-            scope: broadcast_others
-            message_id: DAGM01
-            format: [player_altnam]
+            broadcast_message_id: DAGM01
+            broadcast_format: [player_altnam]
   - verbs: [see, look, examine]
     target_in: [statue]
     actions:
       - type: message
-        scope: direct
         message_id: DAGM03
-      - type: message
-        scope: broadcast_others
-        message_id: DAGM04
-        format: [player_altnam]
+        broadcast_message_id: DAGM04
+        broadcast_format: [player_altnam]

@@ -8,9 +8,6 @@ triggers:
     target_in: [water]
     actions:
       - type: message
-        scope: direct
         message_id: DRINK0
-      - type: message
-        scope: broadcast_others
-        message_id: DRINK1
-        format: [player_altnam]
+        broadcast_message_id: DRINK1
+        broadcast_format: [player_altnam]
