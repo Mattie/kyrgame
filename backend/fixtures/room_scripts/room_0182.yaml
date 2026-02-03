@@ -19,7 +19,7 @@ triggers:
               scope: direct
               message_id: REFM00
             - type: message
-              scope: broadcast
+              scope: broadcast_others
               message_id: REFM01
               format: [player_altnam]
         default_actions:
@@ -27,7 +27,7 @@ triggers:
             scope: direct
             message_id: REFM02
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: REFM01
             format: [player_altnam]
         missing_actions:
@@ -35,7 +35,7 @@ triggers:
             scope: direct
             message_id: REFM02
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: REFM01
             format: [player_altnam]
   - verbs: [see, look, examine]
@@ -45,6 +45,6 @@ triggers:
         scope: direct
         message_id: REFM03
       - type: message
-        scope: broadcast
+        scope: broadcast_others
         message_id: REFM04
         format: [player_altnam]

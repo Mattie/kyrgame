@@ -32,6 +32,18 @@ def _broadcast_texts(engine: RoomScriptEngine) -> list[str]:
     ]
 
 
+def _broadcast_payloads(engine: RoomScriptEngine) -> list[dict]:
+    return [
+        message.get("payload", {})
+        for message in engine.gateway.messages
+        if message.get("payload", {}).get("scope") == "broadcast"
+    ]
+
+
+def _payload_for_text(payloads: list[dict], text: str) -> dict:
+    return next(payload for payload in payloads if payload.get("text") == text)
+
+
 @pytest.fixture
 async def scheduler():
     service = SchedulerService()
@@ -73,7 +85,10 @@ async def test_waterfall_drink_water(engine, player):
 
     messages = fixtures.load_messages().messages
     assert messages["DRINK0"] in _direct_texts(engine, player.plyrid)
-    assert (messages["DRINK1"] % player.altnam) in _broadcast_texts(engine)
+    broadcast_text = messages["DRINK1"] % player.altnam
+    assert broadcast_text in _broadcast_texts(engine)
+    payload = _payload_for_text(_broadcast_payloads(engine), broadcast_text)
+    assert payload.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio
@@ -88,7 +103,10 @@ async def test_waterfall_get_rose_grants_when_space(engine, player):
 
     messages = fixtures.load_messages().messages
     assert messages["GROSE1"] in _direct_texts(engine, player.plyrid)
-    assert (messages["GROSE2"] % player.altnam) in _broadcast_texts(engine)
+    broadcast_text = messages["GROSE2"] % player.altnam
+    assert broadcast_text in _broadcast_texts(engine)
+    payload = _payload_for_text(_broadcast_payloads(engine), broadcast_text)
+    assert payload.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio
@@ -112,4 +130,7 @@ async def test_waterfall_get_rose_rejects_when_full(engine, player):
 
     messages = fixtures.load_messages().messages
     assert messages["GROSE3"] in _direct_texts(engine, player.plyrid)
-    assert (messages["GROSE4"] % player.altnam) in _broadcast_texts(engine)
+    broadcast_text = messages["GROSE4"] % player.altnam
+    assert broadcast_text in _broadcast_texts(engine)
+    payload = _payload_for_text(_broadcast_payloads(engine), broadcast_text)
+    assert payload.get("exclude_player") == player.plyrid

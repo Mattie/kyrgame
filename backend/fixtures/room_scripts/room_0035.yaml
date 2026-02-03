@@ -11,6 +11,6 @@ triggers:
         scope: direct
         message_id: DRINK0
       - type: message
-        scope: broadcast
+        scope: broadcast_others
         message_id: DRINK1
         format: [player_altnam]
