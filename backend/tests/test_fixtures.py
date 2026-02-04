@@ -102,6 +102,14 @@ def test_messages_fixture_shape():
     assert len(parsed.messages) > 100
 
 
+def test_messages_preserve_crlf_line_breaks():
+    catalog = load_json("messages/en-US.legacy.json")
+    parsed = models.MessageBundleModel(**catalog)
+
+    assert "\r\n" in parsed.messages["BODM01"]
+    assert parsed.messages["BODM01"].split("\r\n")[0].startswith("...You leap")
+
+
 def test_loader_populates_database(tmp_path):
     engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
     init_db_schema(engine)
