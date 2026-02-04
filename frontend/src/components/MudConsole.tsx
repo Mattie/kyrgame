@@ -8,6 +8,7 @@ import {
 } from 'react'
 
 import { ActivityEntry, useNavigator } from '../context/NavigatorContext'
+import { AnsiText } from './AnsiText'
 import { GemstoneText } from './GemstoneText'
 
 const articleizedName = (object?: { name: string; flags?: string[] }) => {
@@ -553,12 +554,12 @@ export const MudConsole = () => {
                           &gt;
                         </span>
                       )}
-                      <GemstoneText text={entry.summary} />
+                      <AnsiText text={entry.summary} />
                       {payloadText && <span className="payload-inline">{payloadText}</span>}
                     </p>
                     {legacyLines?.map((line, index) => (
                       <p key={`${entry.id}-extra-${index}`} className={`crt-line ${entry.type} detail`}>
-                        <GemstoneText text={line} />
+                        <AnsiText text={line} />
                       </p>
                     ))}
                   </div>

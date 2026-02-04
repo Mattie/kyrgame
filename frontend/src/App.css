@@ -608,6 +608,78 @@ p {
   color: #a4d8ff;
 }
 
+.ansi-token {
+  white-space: pre-wrap;
+}
+
+.ansi-bold {
+  font-weight: 700;
+}
+
+.ansi-fg-black {
+  color: #1c222d;
+}
+
+.ansi-fg-red {
+  color: #f28b82;
+}
+
+.ansi-fg-green {
+  color: #8de1c6;
+}
+
+.ansi-fg-yellow {
+  color: #f3c77a;
+}
+
+.ansi-fg-blue {
+  color: #9fbfff;
+}
+
+.ansi-fg-magenta {
+  color: #f3acbf;
+}
+
+.ansi-fg-cyan {
+  color: #a4d8ff;
+}
+
+.ansi-fg-white {
+  color: #f5f5f5;
+}
+
+.ansi-fg-bright-black {
+  color: #7d8796;
+}
+
+.ansi-fg-bright-red {
+  color: #ff9f96;
+}
+
+.ansi-fg-bright-green {
+  color: #b3f3dc;
+}
+
+.ansi-fg-bright-yellow {
+  color: #ffe0a2;
+}
+
+.ansi-fg-bright-blue {
+  color: #b7d2ff;
+}
+
+.ansi-fg-bright-magenta {
+  color: #ffc2dc;
+}
+
+.ansi-fg-bright-cyan {
+  color: #c0eaff;
+}
+
+.ansi-fg-bright-white {
+  color: #ffffff;
+}
+
 .prompt-symbol {
   color: #f3c77a;
 }
