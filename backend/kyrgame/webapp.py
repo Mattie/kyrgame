@@ -1537,6 +1537,7 @@ def create_app() -> FastAPI:
                         player=state.player,
                     )
                     if handled:
+                        commands._persist_player_state(state, state.player)
                         ack_payload = {
                             "type": "command_response",
                             "room": current_room,

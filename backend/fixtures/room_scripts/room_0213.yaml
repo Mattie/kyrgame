@@ -1,0 +1,56 @@
+# Legacy: legacy/KYRROUS.C:1111-1141 (sunshi)
+id: 213
+name: sunshi
+spoiler_summary: "Sunshine chamber where spellcasting and offerings transform tulips and kyragems."
+spoiler_interaction: "Cast zapher on a tulip to create a wand, cast zennyra for a vision, or offer a kyragem to attempt level 12."
+legacy_ref: "legacy/KYRROUS.C:1111-1141"
+triggers:
+  - verbs: [cast]
+    arg_matches:
+      - index: 0
+        value: zapher
+      - index: 1
+        value: tulip
+    requires_item: tulip
+    actions:
+      - type: remove_item
+        item: tulip
+      - type: grant_object
+        object: wand
+      - type: message
+        message_id: SUNM00
+        broadcast_message_id: SUNM01
+        broadcast_format: [player_altnam]
+  - verbs: [cast]
+    arg_matches:
+      - index: 0
+        value: zennyra
+    actions:
+      - type: message
+        message_id: SUNM02
+        broadcast_message_id: SUNM01
+        broadcast_format: [player_altnam]
+  - verbs: [offer]
+    arg_matches:
+      - index: 0
+        value: kyragem
+    requires_item: kyragem
+    actions:
+      - type: level_gate
+        target_level: 12
+        level_up: true
+        on_success:
+          - type: message
+            message_id: SUNM03
+            broadcast_message_id: SUNM04
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]

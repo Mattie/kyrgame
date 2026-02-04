@@ -1010,6 +1010,40 @@ def _persist_player_inventory(state: GameState, player: models.PlayerModel):
     state.db_session.commit()
 
 
+def _persist_player_state(state: GameState, player: models.PlayerModel):
+    """Persist player state changes triggered by room scripts or commands."""
+    if not state.db_session:
+        return
+    record = state.db_session.scalar(
+        select(models.Player).where(models.Player.plyrid == player.plyrid)
+    )
+    if not record:
+        return
+    record.level = player.level
+    record.nmpdes = player.nmpdes
+    record.hitpts = player.hitpts
+    record.spts = player.spts
+    record.flags = player.flags
+    record.gold = player.gold
+    record.gpobjs = list(player.gpobjs)
+    record.obvals = list(player.obvals)
+    record.npobjs = player.npobjs
+    record.nspells = player.nspells
+    record.offspls = player.offspls
+    record.defspls = player.defspls
+    record.othspls = player.othspls
+    record.spells = list(player.spells)
+    record.charms = list(player.charms)
+    record.gamloc = player.gamloc
+    record.pgploc = player.pgploc
+    record.gemidx = player.gemidx
+    record.stones = list(player.stones)
+    record.macros = player.macros
+    record.stumpi = player.stumpi
+    record.spouse = player.spouse
+    state.db_session.commit()
+
+
 def _room_objects_event(
     location: models.LocationModel,
     objects: dict[int, models.GameObjectModel],
