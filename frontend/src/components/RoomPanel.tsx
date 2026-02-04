@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 
 import { isDevEnvironment } from '../config/devMode'
 import { LocationRecord, useNavigator } from '../context/NavigatorContext'
+import { AnsiText } from './AnsiText'
 import { GemstoneBadge } from './GemstoneBadge'
 
 type DirectionKey = 'north' | 'south' | 'east' | 'west'
@@ -118,7 +119,7 @@ export const RoomPanel = () => {
             <div>
               <h3>Look description</h3>
               <p className="muted" data-testid="room-look-description">
-                {lookDescription ?? 'No description available'}
+                <AnsiText text={lookDescription ?? 'No description available'} />
               </p>
             </div>
 

@@ -76,6 +76,35 @@ describe('MudConsole', () => {
     expect(screen.queryByText(/room_occupants.*KUTM11/)).toBeNull()
   })
 
+  it('renders ANSI color spans without escape codes', () => {
+    navigatorState.activity = [
+      {
+        id: 'ansi-entry',
+        type: 'command_response',
+        summary: '\u001b[1;32mWelcome\u001b[0m adventurer',
+        payload: null,
+      },
+    ]
+
+    const { container } = render(<MudConsole />)
+
+    const line = screen.getByText((_, element) => {
+      return element?.classList.contains('crt-line') && element.textContent === 'Welcome adventurer'
+    }) as HTMLElement
+    expect(line).toBeInTheDocument()
+    expect(line.textContent).not.toContain('\u001b[')
+
+    const greenSpan = line.querySelector('.ansi-fg-green')
+    expect(greenSpan).toBeInTheDocument()
+    expect(greenSpan).toHaveTextContent('Welcome')
+
+    const tokens = Array.from(line.querySelectorAll('.ansi-token'))
+    const resetToken = tokens.find((token) => token.textContent?.includes('adventurer'))
+    expect(resetToken).toBeDefined()
+    expect(resetToken).not.toHaveClass('ansi-fg-green')
+    expect(container.textContent).not.toContain('\u001b[0m')
+  })
+
   it('activates an inventory status card with auto-refresh toggled on by default', () => {
     vi.useFakeTimers()
     navigatorState.activity = [
