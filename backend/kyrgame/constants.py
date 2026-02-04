@@ -17,6 +17,20 @@ NGOBJS = 54  # number of objects defined
 NGLOCS = 305 # number of locations defined
 MXLOBS = 6   # maximum objects present at a location
 
+# Legacy range guards (KYRANDIA.C initgp @ 340-355, KYRSYSP.C EDT010-EDT023 @ 250-315)
+CHARM_TIMER_MIN = 0
+CHARM_TIMER_MAX = 240
+GEM_INDEX_MIN = 0
+GEM_INDEX_MAX = BIRTHSTONE_SLOTS
+STUMPI_MIN = 0
+STUMPI_MAX = 12
+MACROS_MIN = 0
+MACROS_MAX = 19
+BIRTHSTONE_MIN = 0
+BIRTHSTONE_MAX = 12
+SPELL_ID_MIN = 0
+SPELL_ID_MAX = NGSPLS - 1
+
 # Spellbook types
 OFFENS = 1
 DEFENS = 2
@@ -171,6 +185,18 @@ def decode_player_flags(mask: int) -> List[str]:
 
 # Player flags preserved for compatibility in simple dict form
 PLAYER_FLAGS = {flag.name: flag.value for flag in PlayerFlag}
+PLAYER_FLAG_MASK = int(
+    PlayerFlag.LOADED
+    | PlayerFlag.FEMALE
+    | PlayerFlag.INVISF
+    | PlayerFlag.BRFSTF
+    | PlayerFlag.MARRYD
+    | PlayerFlag.PEGASU
+    | PlayerFlag.WILLOW
+    | PlayerFlag.GOTKYG
+    | PlayerFlag.PDRAGN
+    | PlayerFlag.BLESSD
+)
 
 
 def level_to_nmpdes(level: int) -> int:

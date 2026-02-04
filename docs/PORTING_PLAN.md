@@ -14,6 +14,7 @@
 - [x] Added loader utilities to seed a database session from fixtures and a script to package offline content (`backend/kyrgame/scripts/package_content.py`).
 - [x] Stood up a FastAPI skeleton with fixture-backed HTTP endpoints, a room WebSocket gateway, simple presence tracking, rate limiting, and a stub room script engine (e.g., the willow routine).
 - [x] Expand player modeling to cover the full legacy state (timers, spell slots, inventories, gems) with validation and serialization parity to `gmplyr`.
+- [x] Validated gmplyr player field ranges (charm timers, gem/stump indices, macro cap, spell IDs) across models + fixtures.
 - [x] Persist player sessions and runtime state in a real database (PostgreSQL) with migrations, replacing the current in-memory SQLite bootstrap.
 - [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
 - [x] Port look/examine/see (looker) command handling with tests to mirror legacy room/object/player inspection.
