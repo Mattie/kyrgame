@@ -33,10 +33,10 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] Room 204: `rainbo` (rainbow bridge)【F:legacy/KYRLOCS.C†L262-L270】
 - [x] Room 213: `sunshi` (sunshine chamber)【F:legacy/KYRLOCS.C†L272-L276】
 - [x] Room 218: `demong` (demon gate)【F:legacy/KYRLOCS.C†L276-L283】
-- [ ] Room 252: `singer` (singing contest)【F:legacy/KYRLOCS.C†L312-L320】
-- [ ] Room 253: `forgtr` (forgetful NPC)【F:legacy/KYRLOCS.C†L312-L320】
-- [ ] Room 255: `oflove` (goddess of love altar)【F:legacy/KYRLOCS.C†L312-L320】
-- [ ] Room 257: `believ` (faith challenge)【F:legacy/KYRLOCS.C†L312-L320】
+- [x] Room 252: `singer` (singing contest)【F:legacy/KYRLOCS.C†L312】
+- [x] Room 253: `forgtr` (forgetful NPC)【F:legacy/KYRLOCS.C†L313】
+- [x] Room 255: `oflove` (goddess of love altar)【F:legacy/KYRLOCS.C†L315】
+- [x] Room 257: `believ` (faith challenge)【F:legacy/KYRLOCS.C†L317】
 - [ ] Room 264: `philos` (philosopher)【F:legacy/KYRLOCS.C†L324-L334】
 - [ ] Room 280: `truthy` (truth maze)【F:legacy/KYRLOCS.C†L337-L343】
 - [ ] Room 282: `bodyma` (body mastery)【F:legacy/KYRLOCS.C†L340-L348】

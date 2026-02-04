@@ -114,6 +114,57 @@ def test_yaml_room_engine_inferrs_message_scope_from_ids():
     assert broadcast_events[0].get("exclude_player") == player.plyrid
 
 
+def test_arg_strip_allows_optional_words():
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    player = fixtures.build_player()
+
+    definitions = {
+        "rooms": [
+            {
+                "id": 998,
+                "name": "strip_demo",
+                "triggers": [
+                    {
+                        "verbs": ["offer"],
+                        "arg_strip": ["my"],
+                        "arg_matches": [
+                            {"index": 0, "value": "love"},
+                        ],
+                        "actions": [
+                            {
+                                "type": "message",
+                                "message_id": "OFFER0",
+                                "broadcast_message_id": "OFFER1",
+                                "broadcast_format": ["player_altnam"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+    )
+
+    result = engine.handle(
+        player=player,
+        room_id=998,
+        command="offer",
+        args=["my", "love"],
+    )
+
+    assert result.handled is True
+
+
 def test_getgol_converts_gems_and_rejects_unknown(room_engine, base_player):
     base_player.gold = 10
 
@@ -629,3 +680,90 @@ def test_waller_transfer_requires_sesame_and_key(room_engine, base_player):
 
     direct_texts = [evt["text"] for evt in failure.events if evt["scope"] == "direct"]
     assert room_engine.messages.messages["WALM01"] in direct_texts
+
+
+@pytest.mark.parametrize(
+    ("room_id", "command", "args", "target_level", "success_message"),
+    [
+        (252, "sing", [], 19, "LEVL19"),
+        (253, "forget", [], 20, "LEVL20"),
+        (255, "offer", ["love"], 22, "LEVL22"),
+        (255, "offer", ["my", "love"], 22, "LEVL22"),
+        (257, "believe", ["magic"], 21, "LEVL21"),
+    ],
+)
+def test_bard_trials_level_up_with_key(
+    room_engine, base_player, room_id, command, args, target_level, success_message
+):
+    key_id = room_engine.objects_by_name["key"].id
+    player = base_player.model_copy(
+        update={"level": target_level - 1, "gpobjs": [key_id], "obvals": [0], "npobjs": 1}
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=room_id,
+        command=command,
+        args=args,
+    )
+
+    assert result.handled is True
+    assert player.level == target_level
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages[success_message] in direct_texts
+    assert room_engine.messages.messages["LVL9M1"] % player.altnam in broadcast_texts
+
+
+def test_bard_trial_requires_key_at_target_level(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 18, "gpobjs": [], "obvals": [], "npobjs": 0})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=252,
+        command="sing",
+        args=[],
+    )
+
+    assert result.handled is True
+    assert player.level == 18
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages["NPAY00"] in direct_texts
+    assert room_engine.messages.messages["NPAY01"] % player.altnam in broadcast_texts
+
+
+def test_bard_trial_ignores_key_when_level_is_too_low(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 10, "gpobjs": [], "obvals": [], "npobjs": 0})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=252,
+        command="sing",
+        args=[],
+    )
+
+    assert result.handled is True
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages["LVLM02"] in direct_texts
+    assert room_engine.messages.messages["LVLM03"] % player.altnam in broadcast_texts
+
+
+def test_believe_in_magic_is_not_required(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 20})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=257,
+        command="believe",
+        args=["in", "magic"],
+    )
+
+    assert result.handled is False

@@ -1,0 +1,38 @@
+# Legacy: legacy/KYRLOCS.C:317 (believ); legacy/KYRROUS.C:1361-1372 (believ)
+id: 257
+name: believ
+spoiler_summary: "Chamber of the Bard where belief in magic tests readiness for level 21."
+spoiler_interaction: "Say 'believe magic' to attempt the level 21 ascension if you hold the golden key."
+legacy_ref: "legacy/KYRROUS.C:1361-1372"
+triggers:
+  # NOTE: Legacy expects "believe in magic", but modern parsing can strip prepositions.
+  # We intentionally accept "believe magic" to keep the trial reachable in the current flow.
+  - verbs: [believe]
+    arg_matches:
+      - index: 0
+        value: magic
+    actions:
+      - type: level_gate
+        target_level: 21
+        level_up: true
+        requires_item: key
+        on_missing_item:
+          - type: message
+            message_id: NPAY00
+            broadcast_message_id: NPAY01
+            broadcast_format: [player_altnam]
+        on_success:
+          - type: message
+            message_id: LEVL21
+            broadcast_message_id: LVL9M1
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]

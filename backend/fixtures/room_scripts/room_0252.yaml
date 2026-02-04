@@ -1,0 +1,33 @@
+# Legacy: legacy/KYRLOCS.C:312 (singer); legacy/KYRROUS.C:1320-1331 (singer)
+id: 252
+name: singer
+spoiler_summary: "Chamber of the Bard where song and melody test readiness for level 19."
+spoiler_interaction: "Sing, hum, or whistle to attempt the level 19 ascension if you hold the golden key."
+legacy_ref: "legacy/KYRROUS.C:1320-1331"
+triggers:
+  - verbs: [sing, hum, whistle]
+    actions:
+      - type: level_gate
+        target_level: 19
+        level_up: true
+        requires_item: key
+        on_missing_item:
+          - type: message
+            message_id: NPAY00
+            broadcast_message_id: NPAY01
+            broadcast_format: [player_altnam]
+        on_success:
+          - type: message
+            message_id: LEVL19
+            broadcast_message_id: LVL9M1
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]
