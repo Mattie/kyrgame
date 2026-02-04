@@ -703,3 +703,16 @@ def test_bard_trial_ignores_key_when_level_is_too_low(room_engine, base_player):
     ]
     assert room_engine.messages.messages["LVLM02"] in direct_texts
     assert room_engine.messages.messages["LVLM03"] % player.altnam in broadcast_texts
+
+
+def test_believe_in_magic_is_not_required(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 20})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=257,
+        command="believe",
+        args=["in", "magic"],
+    )
+
+    assert result.handled is False
