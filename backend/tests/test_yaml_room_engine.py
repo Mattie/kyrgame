@@ -638,6 +638,7 @@ def test_waller_transfer_requires_sesame_and_key(room_engine, base_player):
         (253, "forget", [], 20, "LEVL20"),
         (255, "offer", ["love"], 22, "LEVL22"),
         (257, "believe", ["in", "magic"], 21, "LEVL21"),
+        (257, "believe", ["magic"], 21, "LEVL21"),
     ],
 )
 def test_bard_trials_level_up_with_key(
