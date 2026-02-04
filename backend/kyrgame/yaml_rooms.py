@@ -601,8 +601,16 @@ class YamlRoomEngine:
         target = int(action.get("target_level", 0))
         level_up = action.get("level_up", False)
 
-        # Mirrors the chklvl/glvutl progression checks (legacy/KYRROUS.C lines 660-676).
+        # Mirrors the chklvl/glvutl progression checks (legacy/KYRROUS.C:1436-1462).
         if player.level == target - 1:
+            required_item = action.get("requires_item")
+            if required_item:
+                obj = self.objects_by_name.get(str(required_item).lower())
+                if obj is None or self._find_inventory_index(player, obj.id) is None:
+                    self._execute_actions(
+                        action.get("on_missing_item", []), player, [], context, events, room_id
+                    )
+                    return
             if level_up:
                 self._level_up(player)
             self._execute_actions(

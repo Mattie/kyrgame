@@ -629,3 +629,76 @@ def test_waller_transfer_requires_sesame_and_key(room_engine, base_player):
 
     direct_texts = [evt["text"] for evt in failure.events if evt["scope"] == "direct"]
     assert room_engine.messages.messages["WALM01"] in direct_texts
+
+
+@pytest.mark.parametrize(
+    ("room_id", "command", "args", "target_level", "success_message"),
+    [
+        (252, "sing", [], 19, "LEVL19"),
+        (253, "forget", [], 20, "LEVL20"),
+        (255, "offer", ["love"], 22, "LEVL22"),
+        (257, "believe", ["in", "magic"], 21, "LEVL21"),
+    ],
+)
+def test_bard_trials_level_up_with_key(
+    room_engine, base_player, room_id, command, args, target_level, success_message
+):
+    key_id = room_engine.objects_by_name["key"].id
+    player = base_player.model_copy(
+        update={"level": target_level - 1, "gpobjs": [key_id], "obvals": [0], "npobjs": 1}
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=room_id,
+        command=command,
+        args=args,
+    )
+
+    assert result.handled is True
+    assert player.level == target_level
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages[success_message] in direct_texts
+    assert room_engine.messages.messages["LVL9M1"] % player.altnam in broadcast_texts
+
+
+def test_bard_trial_requires_key_at_target_level(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 18, "gpobjs": [], "obvals": [], "npobjs": 0})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=252,
+        command="sing",
+        args=[],
+    )
+
+    assert result.handled is True
+    assert player.level == 18
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages["NPAY00"] in direct_texts
+    assert room_engine.messages.messages["NPAY01"] % player.altnam in broadcast_texts
+
+
+def test_bard_trial_ignores_key_when_level_is_too_low(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 10, "gpobjs": [], "obvals": [], "npobjs": 0})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=252,
+        command="sing",
+        args=[],
+    )
+
+    assert result.handled is True
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [
+        evt["text"] for evt in result.events if evt["scope"] == "broadcast"
+    ]
+    assert room_engine.messages.messages["LVLM02"] in direct_texts
+    assert room_engine.messages.messages["LVLM03"] % player.altnam in broadcast_texts

@@ -1,0 +1,65 @@
+# Legacy: legacy/KYRLOCS.C:315 (oflove); legacy/KYRROUS.C:1347-1358 (oflove)
+id: 255
+name: oflove
+spoiler_summary: "Goddess of Love altar where an offering of love tests readiness for level 22."
+spoiler_interaction: "Offer love (offer love / offer my love) to attempt the level 22 ascension if you hold the golden key."
+legacy_ref: "legacy/KYRROUS.C:1347-1358"
+triggers:
+  - verbs: [offer]
+    arg_matches:
+      - index: 0
+        value: love
+    actions:
+      - type: level_gate
+        target_level: 22
+        level_up: true
+        requires_item: key
+        on_missing_item:
+          - type: message
+            message_id: NPAY00
+            broadcast_message_id: NPAY01
+            broadcast_format: [player_altnam]
+        on_success:
+          - type: message
+            message_id: LEVL22
+            broadcast_message_id: LVL9M1
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]
+  - verbs: [offer]
+    arg_matches:
+      - index: 1
+        value: love
+    actions:
+      - type: level_gate
+        target_level: 22
+        level_up: true
+        requires_item: key
+        on_missing_item:
+          - type: message
+            message_id: NPAY00
+            broadcast_message_id: NPAY01
+            broadcast_format: [player_altnam]
+        on_success:
+          - type: message
+            message_id: LEVL22
+            broadcast_message_id: LVL9M1
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]
