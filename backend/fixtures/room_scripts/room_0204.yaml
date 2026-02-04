@@ -1,0 +1,32 @@
+# Legacy: legacy/KYRROUS.C:1090-1107 (rainbo)
+id: 204
+name: rainbo
+spoiler_summary: "Rainbow bridge where breaking a wand can yield a kyragem once."
+spoiler_interaction: "Break a wand to trigger a reward the first time; afterward it only shatters."
+legacy_ref: "legacy/KYRROUS.C:1090-1107"
+triggers:
+  - verbs: [break]
+    arg_matches:
+      - index: 0
+        value: wand
+    requires_item: wand
+    actions:
+      - type: remove_item
+        item: wand
+      - type: conditional
+        conditions:
+          - player_flag_set: GOTKYG
+        then:
+          - type: message
+            message_id: RABOM0
+            broadcast_message_id: RABOM1
+            broadcast_format: [player_altnam]
+        else:
+          - type: message
+            message_id: RABOM2
+            broadcast_message_id: RABOM3
+            broadcast_format: [player_altnam]
+          - type: grant_object
+            object: kyragem
+          - type: set_player_flag
+            flag: GOTKYG

@@ -1,0 +1,23 @@
+# Legacy: legacy/KYRROUS.C:1144-1161 (demong)
+id: 218
+name: demong
+spoiler_summary: "Demon gate niche that consumes a soulstone offering to teleport travelers."
+spoiler_interaction: "Drop/insert/put a soulstone into the niche to trigger the demon gate."
+legacy_ref: "legacy/KYRROUS.C:1144-1161"
+triggers:
+  - verbs: [drop, insert, put, stick, thrust]
+    arg_matches:
+      - index: 0
+        value: soulstone
+    arg_at:
+      index: 1
+      value: niche
+    requires_item: soulstone
+    actions:
+      - type: message
+        scope: direct
+        message_id: SOUKEY
+      - type: transfer_player
+        target_room: 219
+        leave_text: "vanished through the demon gate"
+        arrive_text: "appeared in a column of blue flame"

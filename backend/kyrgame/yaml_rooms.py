@@ -213,6 +213,8 @@ class YamlRoomEngine:
                 self._action_increment_room_state(action, context, room_id)
             elif action_type == "transfer_player":
                 self._action_transfer_player(action, player, context, events)
+            elif action_type == "set_player_flag":
+                self._action_set_player_flag(action, player)
 
     def _action_branch_by_item(
         self,
@@ -640,6 +642,11 @@ class YamlRoomEngine:
             obj_name = condition["has_item"]
             obj = self.objects_by_name.get(obj_name.lower()) if obj_name else None
             return obj is not None and obj.id in player.gpobjs
+        if "player_flag_set" in condition:
+            flag_value = self._resolve_player_flag(condition["player_flag_set"])
+            if flag_value is None:
+                return False
+            return bool(player.flags & flag_value)
         return False
 
     def _action_add_room_object(
@@ -718,6 +725,31 @@ class YamlRoomEngine:
                 "arrive_text": _format_text(arrive_text, arrive_format),
             }
         )
+
+    def _action_set_player_flag(self, action: dict, player: models.PlayerModel):
+        """Toggle player flags for legacy routines such as rainbo (legacy/KYRROUS.C:1090-1103)."""
+        flag_value = self._resolve_player_flag(action.get("flag"))
+        if flag_value is None:
+            return
+        enabled = action.get("enabled", True)
+        if enabled:
+            player.flags |= flag_value
+        else:
+            player.flags &= ~flag_value
+
+    @staticmethod
+    def _resolve_player_flag(flag: Any) -> int | None:
+        if isinstance(flag, int):
+            return flag
+        if isinstance(flag, str):
+            key = flag.strip().upper()
+            if key in constants.PlayerFlag.__members__:
+                return int(constants.PlayerFlag[key])
+            try:
+                return int(flag, 0)
+            except ValueError:
+                return None
+        return None
 
     @staticmethod
     def _find_inventory_index(player: models.PlayerModel, object_id: int) -> int | None:

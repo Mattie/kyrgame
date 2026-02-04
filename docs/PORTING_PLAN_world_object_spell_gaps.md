@@ -29,10 +29,10 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] Room 188: `mistyr` (misty ridge)【F:legacy/KYRLOCS.C†L247-L259】
 - [x] Room 189: `sanman` (sandman encounter)【F:legacy/KYRLOCS.C†L247-L259】
 - [x] Room 199: `tulips` (tulip grove)【F:legacy/KYRLOCS.C†L258-L265】
-- [ ] Room 201: `crystt` (crystal tunnel)【F:legacy/KYRLOCS.C†L259-L265】
-- [ ] Room 204: `rainbo` (rainbow bridge)【F:legacy/KYRLOCS.C†L262-L270】
-- [ ] Room 213: `sunshi` (sunshine chamber)【F:legacy/KYRLOCS.C†L272-L276】
-- [ ] Room 218: `demong` (demon gate)【F:legacy/KYRLOCS.C†L276-L283】
+- [x] Room 201: `crystt` (crystal tunnel)【F:legacy/KYRLOCS.C†L259-L265】
+- [x] Room 204: `rainbo` (rainbow bridge)【F:legacy/KYRLOCS.C†L262-L270】
+- [x] Room 213: `sunshi` (sunshine chamber)【F:legacy/KYRLOCS.C†L272-L276】
+- [x] Room 218: `demong` (demon gate)【F:legacy/KYRLOCS.C†L276-L283】
 - [ ] Room 252: `singer` (singing contest)【F:legacy/KYRLOCS.C†L312-L320】
 - [ ] Room 253: `forgtr` (forgetful NPC)【F:legacy/KYRLOCS.C†L312-L320】
 - [ ] Room 255: `oflove` (goddess of love altar)【F:legacy/KYRLOCS.C†L312-L320】

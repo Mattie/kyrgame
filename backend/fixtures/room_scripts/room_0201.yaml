@@ -1,0 +1,34 @@
+# Legacy: legacy/KYRROUS.C:1072-1086 (crystt)
+id: 201
+name: crystt
+spoiler_summary: "Crystal tunnel where aiming a wand at the tree can unlock a level 11 ascension."
+spoiler_interaction: "Aim a wand at the crystal tree to attempt the level-up ritual."
+legacy_ref: "legacy/KYRROUS.C:1072-1086"
+triggers:
+  - verbs: [aim]
+    arg_matches:
+      - index: 0
+        value: wand
+    arg_at:
+      index: 1
+      value: tree
+    requires_item: wand
+    actions:
+      - type: level_gate
+        target_level: 11
+        level_up: true
+        on_success:
+          - type: message
+            message_id: CTREM0
+            broadcast_message_id: CTREM1
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]
