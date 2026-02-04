@@ -238,7 +238,6 @@ def test_buyspl_respects_prices_and_sets_spell_bits(room_engine, base_player):
     assert base_player.gold == 150
     assert base_player.offspls & room_engine.spells_by_name["zapher"].bitdef
     assert room_engine.spells_by_name["zapher"].id in base_player.spells
-
     direct_texts = [evt["text"] for evt in purchase.events if evt["scope"] == "direct"]
     assert room_engine.messages.messages["BUYM02"] in direct_texts
 
@@ -256,6 +255,153 @@ def test_buyspl_respects_prices_and_sets_spell_bits(room_engine, base_player):
     assert not base_player.defspls
     reject_texts = [evt["text"] for evt in poor.events if evt["scope"] == "direct"]
     assert room_engine.messages.messages["BUYM00"] in reject_texts
+
+
+def test_philos_wonder_levels_with_key(room_engine, base_player):
+    key_id = room_engine.objects_by_name["key"].id
+    player = base_player.model_copy(
+        update={
+            "level": 22,
+            "gpobjs": [key_id],
+            "obvals": [0],
+            "npobjs": 1,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=264,
+        command="wonder",
+        args=[],
+    )
+
+    assert result.handled is True
+    assert player.level == 23
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+
+    assert room_engine.messages.messages["LEVL23"] in direct_texts
+    assert room_engine.messages.messages["LVL9M1"] % player.altnam in broadcast_texts
+
+
+def test_truthy_seeking_truth_can_hurt_or_level():
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+
+    damage_engine = yaml_rooms.YamlRoomEngine(
+        definitions=fixtures.load_room_scripts(),
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+        rng=StubRandom([0.25]),
+    )
+    level_engine = yaml_rooms.YamlRoomEngine(
+        definitions=fixtures.load_room_scripts(),
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+        rng=StubRandom([0.75]),
+    )
+
+    key_id = damage_engine.objects_by_name["key"].id
+    base = fixtures.build_player()
+    player = base.model_copy(
+        update={
+            "level": 17,
+            "hitpts": 20,
+            "gpobjs": [key_id],
+            "obvals": [0],
+            "npobjs": 1,
+        }
+    )
+
+    result_damage = damage_engine.handle(
+        player=player,
+        room_id=280,
+        command="seek",
+        args=["truth"],
+    )
+
+    assert result_damage.handled is True
+    assert player.hitpts == 0
+    assert player.level == 17
+    assert messages.messages["TRUM01"] in [
+        evt["text"] for evt in result_damage.events if evt["scope"] == "direct"
+    ]
+
+    player = player.model_copy(update={"hitpts": 20})
+    result_level = level_engine.handle(
+        player=player,
+        room_id=280,
+        command="seek",
+        args=["truth"],
+    )
+
+    assert result_level.handled is True
+    assert player.level == 18
+    assert messages.messages["TRUM02"] in [
+        evt["text"] for evt in result_level.events if evt["scope"] == "direct"
+    ]
+
+
+def test_bodyma_requires_object_charm_and_handles_full_inventory(room_engine):
+    bracelet_id = room_engine.objects_by_name["broach"].id
+    key_id = room_engine.objects_by_name["key"].id
+    player = fixtures.build_player().model_copy(
+        update={
+            "level": 12,
+            "charms": [0, 0, 0, 0, 1, 0],
+            "gpobjs": [key_id, 0, 1, 2, 3, 4],
+            "obvals": [0, 0, 0, 0, 0, 0],
+            "npobjs": 6,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=282,
+        command="jump",
+        args=["chasm"],
+    )
+
+    assert result.handled is True
+    assert player.level == 13
+    assert bracelet_id in player.gpobjs
+    assert player.npobjs == 6
+    assert room_engine.messages.messages["BODM03"] in [
+        evt["text"] for evt in result.events if evt["scope"] == "direct"
+    ]
+
+
+def test_mindma_grants_pendant(room_engine, base_player):
+    key_id = room_engine.objects_by_name["key"].id
+    player = base_player.model_copy(
+        update={
+            "level": 13,
+            "gpobjs": [key_id],
+            "obvals": [0],
+            "npobjs": 1,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=285,
+        command="answer",
+        args=["time"],
+    )
+
+    assert result.handled is True
+    assert player.level == 14
+    assert room_engine.objects_by_name["pendant"].id in player.gpobjs
+    assert room_engine.messages.messages["MINM01"] in [
+        evt["text"] for evt in result.events if evt["scope"] == "direct"
+    ]
 
 
 def test_vhealr_offers_rose_healing(room_engine, base_player):

@@ -464,6 +464,7 @@ describe('Navigator flow', () => {
           gemidx: 2,
           stones: [0, 1, 2, 3],
           stumpi: 5,
+          charms: [0, 0, 0, 0, 7, 0],
         })
         return Promise.resolve({
           ok: true,
@@ -497,8 +498,8 @@ describe('Navigator flow', () => {
     await screen.findByText(/admin controls/i)
 
     await act(async () => {
-      await user.clear(screen.getByLabelText(/alternate name/i))
-      await user.type(screen.getByLabelText(/alternate name/i), 'Admin Hero')
+      await user.clear(screen.getByLabelText(/^alternate name$/i))
+      await user.type(screen.getByLabelText(/^alternate name$/i), 'Admin Hero')
       await user.clear(screen.getByLabelText(/level/i))
       await user.type(screen.getByLabelText(/level/i), '5')
       await user.clear(screen.getByLabelText(/gold cap/i))
@@ -521,6 +522,8 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/gem index/i), '2')
       await user.clear(screen.getByLabelText(/stump index/i))
       await user.type(screen.getByLabelText(/stump index/i), '5')
+      await user.clear(screen.getByLabelText(/object protection charm/i))
+      await user.type(screen.getByLabelText(/object protection charm/i), '7')
       await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
     })
 
@@ -605,7 +608,7 @@ describe('Navigator flow', () => {
     })
 
     await screen.findByText(/admin controls/i)
-    expect(await screen.findByLabelText(/alternate name/i)).toHaveValue('Hero')
+    expect(await screen.findByLabelText(/^alternate name$/i)).toHaveValue('Hero')
     expect(screen.getByLabelText(/attire name/i)).toHaveValue('Heroic Attire')
     expect(screen.getByLabelText(/level/i)).toHaveValue(8)
     expect(screen.getByLabelText(/hit points/i)).toHaveValue(30)

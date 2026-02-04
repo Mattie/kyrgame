@@ -9,6 +9,14 @@ const FLAG_MASKS: Record<string, number> = {
   PEGASU: 0x00000020,
   WILLOW: 0x00000040,
 }
+const CHARM_SLOTS = [
+  { key: 'CINVIS', label: 'Invisibility charm' },
+  { key: 'FIRPRO', label: 'Fire protection charm' },
+  { key: 'ICEPRO', label: 'Ice protection charm' },
+  { key: 'LIGPRO', label: 'Lightning protection charm' },
+  { key: 'OBJPRO', label: 'Object protection charm' },
+  { key: 'ALTNAM', label: 'Alternate name charm' },
+]
 const MAX_INVENTORY_SLOTS = 6
 const BIRTHSTONE_SLOTS = 4
 const storageKeys = {
@@ -17,6 +25,7 @@ const storageKeys = {
     target: 'kyrgame.navigator.adminSection.target',
     identity: 'kyrgame.navigator.adminSection.identity',
     stats: 'kyrgame.navigator.adminSection.stats',
+    charms: 'kyrgame.navigator.adminSection.charms',
     inventory: 'kyrgame.navigator.adminSection.inventory',
     gems: 'kyrgame.navigator.adminSection.gems',
     location: 'kyrgame.navigator.adminSection.location',
@@ -29,6 +38,7 @@ const sectionLabels: Record<AdminSectionKey, string> = {
   target: 'Target',
   identity: 'Identity',
   stats: 'Stats & caps',
+  charms: 'Charms',
   inventory: 'Inventory',
   gems: 'Gems & stump',
   location: 'Location & spouse',
@@ -68,6 +78,7 @@ export const AdminControls = () => {
     target: readStoredBool(storageKeys.sections.target),
     identity: readStoredBool(storageKeys.sections.identity),
     stats: readStoredBool(storageKeys.sections.stats),
+    charms: readStoredBool(storageKeys.sections.charms),
     inventory: readStoredBool(storageKeys.sections.inventory),
     gems: readStoredBool(storageKeys.sections.gems),
     location: readStoredBool(storageKeys.sections.location),
@@ -84,6 +95,10 @@ export const AdminControls = () => {
   const [goldCap, setGoldCap] = useState('')
   const [spellCap, setSpellCap] = useState('')
   const [hitCap, setHitCap] = useState('')
+  const [charmSlots, setCharmSlots] = useState<string[]>(
+    Array.from({ length: CHARM_SLOTS.length }, () => '')
+  )
+  const [charmsInitialized, setCharmsInitialized] = useState(false)
   const [inventoryCount, setInventoryCount] = useState('')
   const [inventorySlots, setInventorySlots] = useState<string[]>(
     Array.from({ length: MAX_INVENTORY_SLOTS }, () => '')
@@ -168,6 +183,11 @@ export const AdminControls = () => {
       setGold(String(player.gold ?? ''))
       setSpellPoints(String(player.spts ?? ''))
       setHitPoints(String(player.hitpts ?? ''))
+      const nextCharms = Array.from({ length: CHARM_SLOTS.length }, (_, index) =>
+        player.charms?.[index] !== undefined ? String(player.charms[index]) : '0'
+      )
+      setCharmSlots(nextCharms)
+      setCharmsInitialized(false)
       setInventoryCount(String(player.npobjs ?? ''))
       const nextInventorySlots = Array.from({ length: MAX_INVENTORY_SLOTS }, (_, index) =>
         player.gpobjs?.[index] !== undefined ? resolveObjectLabel(player.gpobjs[index]) : ''
@@ -257,6 +277,24 @@ export const AdminControls = () => {
     if (parsedSpellCap !== undefined) payload.cap_spts = parsedSpellCap
     const parsedHitCap = parseNumber(hitCap)
     if (parsedHitCap !== undefined) payload.cap_hitpts = parsedHitCap
+
+    if (charmsInitialized) {
+      const resolvedCharms = charmSlots.map((value) => {
+        const trimmed = value.trim()
+        if (!trimmed) return 0
+        const parsed = parseNumber(trimmed)
+        return parsed
+      })
+      if (resolvedCharms.some((value) => value === undefined)) {
+        setError('Charm values must be numeric.')
+        return
+      }
+      if (resolvedCharms.some((value) => (value ?? 0) < 0)) {
+        setError('Charm values must be zero or greater.')
+        return
+      }
+      payload.charms = resolvedCharms as number[]
+    }
 
     const parsedInventoryCount = parseNumber(inventoryCount)
     if (parsedInventoryCount !== undefined) {
@@ -539,6 +577,50 @@ export const AdminControls = () => {
                         />
                       </div>
                     </div>
+                  </div>
+                )}
+              </fieldset>
+
+              <fieldset className={`admin-section ${sectionCollapsed.charms ? 'collapsed' : ''}`}>
+                <legend>
+                  <span>{sectionLabels.charms}</span>
+                  <button
+                    type="button"
+                    className="section-toggle"
+                    aria-label={`${sectionCollapsed.charms ? 'Expand' : 'Collapse'} charms section`}
+                    aria-expanded={!sectionCollapsed.charms}
+                    onClick={() => toggleSection('charms')}
+                  >
+                    {sectionCollapsed.charms ? 'Expand' : 'Collapse'}
+                  </button>
+                </legend>
+                {!sectionCollapsed.charms && (
+                  <div className="admin-section-body" data-testid="admin-section-body-charms">
+                    <div className="admin-slot-grid">
+                      {CHARM_SLOTS.map((charm, index) => (
+                        <div className="field" key={charm.key}>
+                          <label htmlFor={`charm-slot-${charm.key}`}>{charm.label}</label>
+                          <input
+                            id={`charm-slot-${charm.key}`}
+                            name={`charm-slot-${charm.key}`}
+                            type="number"
+                            min={0}
+                            value={charmSlots[index] ?? ''}
+                            onChange={(event) => {
+                              setCharmsInitialized(true)
+                              setCharmSlots((prev) => {
+                                const next = [...prev]
+                                next[index] = event.target.value
+                                return next
+                              })
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="field-hint">
+                      Charm timers mirror legacy charm slots (OBJPRO needed for room 282).
+                    </p>
                   </div>
                 )}
               </fieldset>

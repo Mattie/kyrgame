@@ -37,10 +37,10 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] Room 253: `forgtr` (forgetful NPC)【F:legacy/KYRLOCS.C†L313】
 - [x] Room 255: `oflove` (goddess of love altar)【F:legacy/KYRLOCS.C†L315】
 - [x] Room 257: `believ` (faith challenge)【F:legacy/KYRLOCS.C†L317】
-- [ ] Room 264: `philos` (philosopher)【F:legacy/KYRLOCS.C†L324-L334】
-- [ ] Room 280: `truthy` (truth maze)【F:legacy/KYRLOCS.C†L337-L343】
-- [ ] Room 282: `bodyma` (body mastery)【F:legacy/KYRLOCS.C†L340-L348】
-- [ ] Room 285: `mindma` (mind mastery)【F:legacy/KYRLOCS.C†L342-L349】
+- [x] Room 264: `philos` (philosopher)【F:legacy/KYRLOCS.C†L324-L334】
+- [x] Room 280: `truthy` (truth maze)【F:legacy/KYRLOCS.C†L337-L343】
+- [x] Room 282: `bodyma` (body mastery)【F:legacy/KYRLOCS.C†L340-L348】
+- [x] Room 285: `mindma` (mind mastery)【F:legacy/KYRLOCS.C†L342-L349】
 - [ ] Room 288: `heartm` (heart mastery)【F:legacy/KYRLOCS.C†L348-L353】
 - [ ] Room 291: `soulma` (soul mastery)【F:legacy/KYRLOCS.C†L349-L356】
 - [ ] Room 293: `fanbel` (faith and belief)【F:legacy/KYRLOCS.C†L352-L356】

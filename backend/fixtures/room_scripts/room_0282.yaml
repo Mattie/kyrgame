@@ -1,0 +1,64 @@
+# Legacy: legacy/KYRROUS.C:1163-1191 (bodyma)
+id: 282
+name: bodyma
+spoiler_summary: "Body mastery trial where object protection lets you leap the chasm."
+spoiler_interaction: "Jump or leap the chasm with object protection active to attempt the level 13 ascension; without it you are hurt."
+legacy_ref: "legacy/KYRROUS.C:1163-1191"
+triggers:
+  - verbs: [jump, leap]
+    arg_strip: [across, the]
+    target_in: [chasm]
+    actions:
+      - type: conditional
+        conditions:
+          - has_charm: OBJPRO
+        then:
+          # Charm-protected branch: chklvl(13) gate before reward. (legacy/KYRROUS.C:1170-1179)
+          - type: level_gate
+            target_level: 13
+            level_up: false
+            requires_item: key
+            on_missing_item:
+              - type: message
+                message_id: NPAY00
+                broadcast_message_id: NPAY01
+                broadcast_format: [player_altnam]
+            on_success:
+              # msgutl2(BODM01, BODM02) before reward + level-up. (legacy/KYRROUS.C:1172-1179)
+              - type: message
+                message_id: BODM01
+                broadcast_message_id: BODM02
+                broadcast_format: [player_altnam]
+              - type: conditional
+                conditions:
+                  - inventory_lt: 6
+                else:
+                  # Legacy tgmpobj(0) drops oldest item when pack is full. (legacy/KYRROUS.C:1173-1176)
+                  - type: remove_inventory_index
+                    index: 0
+                  - type: message
+                    message_id: BODM03
+              # Grant broach (gmobjs[23]) and then glvutl(). (legacy/KYRROUS.C:1177-1179)
+              - type: grant_object
+                object: broach
+              - type: level_up
+            on_too_high:
+              # Over-leveled: msgutl2(LVLM00, LVLM01). (legacy/KYRROUS.C:1436-1452)
+              - type: message
+                message_id: LVLM00
+                broadcast_message_id: LVLM01
+                broadcast_format: [player_altnam]
+            on_too_low:
+              # Under-leveled: msgutl2(LVLM02, LVLM03). (legacy/KYRROUS.C:1436-1452)
+              - type: message
+                message_id: LVLM02
+                broadcast_message_id: LVLM03
+                broadcast_format: [player_altnam]
+        else:
+          # Unprotected branch: msgutl2(BODM04, BODM05) + hitoth(100). (legacy/KYRROUS.C:1182-1185)
+          - type: message
+            message_id: BODM04
+            broadcast_message_id: BODM05
+            broadcast_format: [player_altnam]
+          - type: damage
+            amount: 100

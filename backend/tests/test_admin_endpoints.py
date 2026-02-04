@@ -372,3 +372,38 @@ async def test_admin_player_patch_inventory_and_gems(monkeypatch):
                 json={"npobjs": constants.MXPOBS + 1},
             )
             assert too_many.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_admin_player_patch_charms(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "player-token": {
+                    "roles": ["player_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            update_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"charms": [0, 0, 0, 0, 7, 0]},
+            )
+            assert update_resp.status_code == 200
+            updated = update_resp.json()["player"]
+            assert updated["charms"] == [0, 0, 0, 0, 7, 0]
+
+            invalid_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"charms": [1, 2]},
+            )
+            assert invalid_resp.status_code == 422

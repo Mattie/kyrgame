@@ -79,6 +79,7 @@ export type AdminUpdatePayload = {
   cap_gold?: number
   cap_hitpts?: number
   cap_spts?: number
+  charms?: number[]
 }
 
 export type AdminPlayerRecord = {

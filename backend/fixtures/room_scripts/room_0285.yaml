@@ -1,0 +1,53 @@
+# Legacy: legacy/KYRROUS.C:1193-1210 (mindma)
+id: 285
+name: mindma
+spoiler_summary: "Mind mastery riddle where answering \"time\" tests readiness for level 14."
+spoiler_interaction: "Answer time to attempt the level 14 ascension if you hold the golden key."
+legacy_ref: "legacy/KYRROUS.C:1193-1210"
+triggers:
+  - verbs: [answer]
+    arg_matches:
+      - index: 0
+        value: time
+    actions:
+      - type: level_gate
+        target_level: 14
+        level_up: false
+        requires_item: key
+        # Legacy chklvl gate (key + level 13) before reward. (legacy/KYRROUS.C:1196-1205)
+        on_missing_item:
+          - type: message
+            message_id: NPAY00
+            broadcast_message_id: NPAY01
+            broadcast_format: [player_altnam]
+        on_success:
+          # msgutl2(MINM01, MINM02) before pendant reward + level-up. (legacy/KYRROUS.C:1198-1205)
+          - type: message
+            message_id: MINM01
+            broadcast_message_id: MINM02
+            broadcast_format: [player_altnam]
+          - type: conditional
+            conditions:
+              - inventory_lt: 6
+            else:
+              # Legacy tgmpobj(0) drops oldest item when pack is full. (legacy/KYRROUS.C:1199-1202)
+              - type: remove_inventory_index
+                index: 0
+              - type: message
+                message_id: MINM03
+          # Grant pendant (gmobjs[17]) and then glvutl(). (legacy/KYRROUS.C:1203-1205)
+          - type: grant_object
+            object: pendant
+          - type: level_up
+        on_too_high:
+          # Over-leveled: msgutl2(LVLM00, LVLM01). (legacy/KYRROUS.C:1436-1452)
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          # Under-leveled: msgutl2(LVLM02, LVLM03). (legacy/KYRROUS.C:1436-1452)
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]
