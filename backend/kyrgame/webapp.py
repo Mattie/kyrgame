@@ -84,6 +84,7 @@ class PlayerAdminUpdate(BaseModel):
     gold: int | None = None
     spts: int | None = None
     hitpts: int | None = None
+    charms: list[int] | None = None
     gpobjs: list[int | str | None] | None = None
     npobjs: int | None = None
     gemidx: int | None = None
@@ -362,6 +363,13 @@ def _apply_player_admin_update(
     if updates.cap_gold is not None:
         data["gold"] = min(data["gold"], updates.cap_gold)
     data["gold"] = max(0, data["gold"])
+
+    if updates.charms is not None:
+        if len(updates.charms) != constants.NCHARM:
+            raise HTTPException(status_code=422, detail="charms must contain six entries")
+        if any(charm < 0 for charm in updates.charms):
+            raise HTTPException(status_code=422, detail="charms must be zero or greater")
+        data["charms"] = [int(charm) for charm in updates.charms]
 
     if updates.gpobjs is not None:
         if len(updates.gpobjs) > constants.MXPOBS:
