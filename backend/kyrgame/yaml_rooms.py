@@ -116,6 +116,11 @@ class YamlRoomEngine:
         if verbs and verb not in verbs:
             return False
 
+        strip_tokens = {token.lower() for token in trigger.get("arg_strip", [])}
+        filtered_args = (
+            [arg for arg in args if arg.lower() not in strip_tokens] if strip_tokens else args
+        )
+
         phrase_key = trigger.get("match_phrase_key")
         if phrase_key:
             target_phrase = self.messages.messages.get(phrase_key, "").lower()
@@ -124,24 +129,26 @@ class YamlRoomEngine:
 
         target_terms = {term.lower() for term in trigger.get("target_in", [])}
         if target_terms:
-            return args and args[0].lower() in target_terms
+            return filtered_args and filtered_args[0].lower() in target_terms
 
         sequence = [arg.lower() for arg in trigger.get("arg_sequence", [])]
         if sequence:
-            if len(args) < len(sequence):
+            if len(filtered_args) < len(sequence):
                 return False
-            if any(args[idx].lower() != expected for idx, expected in enumerate(sequence)):
+            if any(
+                filtered_args[idx].lower() != expected for idx, expected in enumerate(sequence)
+            ):
                 return False
 
         arg_at = trigger.get("arg_at")
         if arg_at:
             index = int(arg_at.get("index", 0))
             value = str(arg_at.get("value", "")).lower()
-            if len(args) <= index or args[index].lower() != value:
+            if len(filtered_args) <= index or filtered_args[index].lower() != value:
                 return False
 
         arg_count = trigger.get("arg_count")
-        if arg_count is not None and len(args) != int(arg_count):
+        if arg_count is not None and len(filtered_args) != int(arg_count):
             return False
 
         arg_matches = trigger.get("arg_matches", [])
@@ -149,7 +156,7 @@ class YamlRoomEngine:
             for match in arg_matches:
                 index = int(match.get("index", 0))
                 value = str(match.get("value", "")).lower()
-                if len(args) <= index or args[index].lower() != value:
+                if len(filtered_args) <= index or filtered_args[index].lower() != value:
                     return False
 
         required_item = trigger.get("requires_item")

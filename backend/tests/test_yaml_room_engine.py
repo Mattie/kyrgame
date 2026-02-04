@@ -114,6 +114,57 @@ def test_yaml_room_engine_inferrs_message_scope_from_ids():
     assert broadcast_events[0].get("exclude_player") == player.plyrid
 
 
+def test_arg_strip_allows_optional_words():
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    player = fixtures.build_player()
+
+    definitions = {
+        "rooms": [
+            {
+                "id": 998,
+                "name": "strip_demo",
+                "triggers": [
+                    {
+                        "verbs": ["offer"],
+                        "arg_strip": ["my"],
+                        "arg_matches": [
+                            {"index": 0, "value": "love"},
+                        ],
+                        "actions": [
+                            {
+                                "type": "message",
+                                "message_id": "OFFER0",
+                                "broadcast_message_id": "OFFER1",
+                                "broadcast_format": ["player_altnam"],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+    )
+
+    result = engine.handle(
+        player=player,
+        room_id=998,
+        command="offer",
+        args=["my", "love"],
+    )
+
+    assert result.handled is True
+
+
 def test_getgol_converts_gems_and_rejects_unknown(room_engine, base_player):
     base_player.gold = 10
 
@@ -637,7 +688,7 @@ def test_waller_transfer_requires_sesame_and_key(room_engine, base_player):
         (252, "sing", [], 19, "LEVL19"),
         (253, "forget", [], 20, "LEVL20"),
         (255, "offer", ["love"], 22, "LEVL22"),
-        (257, "believe", ["in", "magic"], 21, "LEVL21"),
+        (255, "offer", ["my", "love"], 22, "LEVL22"),
         (257, "believe", ["magic"], 21, "LEVL21"),
     ],
 )
