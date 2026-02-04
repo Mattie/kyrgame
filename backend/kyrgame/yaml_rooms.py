@@ -222,6 +222,10 @@ class YamlRoomEngine:
                 self._action_transfer_player(action, player, context, events)
             elif action_type == "set_player_flag":
                 self._action_set_player_flag(action, player)
+            elif action_type == "remove_inventory_index":
+                self._action_remove_inventory_index(action, player)
+            elif action_type == "level_up":
+                self._action_level_up(player)
 
     def _action_branch_by_item(
         self,
@@ -662,6 +666,13 @@ class YamlRoomEngine:
             if flag_value is None:
                 return False
             return bool(player.flags & flag_value)
+        if "has_charm" in condition:
+            slot = self._resolve_charm_slot(condition["has_charm"])
+            if slot is None:
+                return False
+            if slot < 0 or slot >= len(player.charms):
+                return False
+            return player.charms[slot] > 0
         return False
 
     def _action_add_room_object(
@@ -752,6 +763,18 @@ class YamlRoomEngine:
         else:
             player.flags &= ~flag_value
 
+    def _action_remove_inventory_index(self, action: dict, player: models.PlayerModel):
+        index = action.get("index")
+        if index is None:
+            return
+        idx = int(index)
+        if idx < 0 or idx >= len(player.gpobjs):
+            return
+        self._remove_inventory_index(player, idx)
+
+    def _action_level_up(self, player: models.PlayerModel):
+        self._level_up(player)
+
     @staticmethod
     def _resolve_player_flag(flag: Any) -> int | None:
         if isinstance(flag, int):
@@ -762,6 +785,23 @@ class YamlRoomEngine:
                 return int(constants.PlayerFlag[key])
             try:
                 return int(flag, 0)
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _resolve_charm_slot(slot: Any) -> int | None:
+        if isinstance(slot, int):
+            return slot
+        if isinstance(slot, str):
+            key = slot.strip().upper()
+            if hasattr(constants, key):
+                return int(getattr(constants, key))
+            for name, member in constants.CharmSlot.__members__.items():
+                if name.upper() == key:
+                    return int(member)
+            try:
+                return int(slot, 0)
             except ValueError:
                 return None
         return None
