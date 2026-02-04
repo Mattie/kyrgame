@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -77,28 +78,28 @@ class PlayerModel(BaseModel):
     plyrid: str = Field(max_length=constants.ALSSIZ)
     altnam: str = Field(max_length=constants.APNSIZ)
     attnam: str = Field(max_length=constants.APNSIZ)
-    gpobjs: List[int] = Field(default_factory=list, max_length=constants.MXPOBS)
-    nmpdes: Optional[int] = None
-    modno: Optional[int] = None
+    gpobjs: List[int] = Field(max_length=constants.MXPOBS)
+    nmpdes: int
+    modno: int
     level: int
     gamloc: int
     pgploc: int
     flags: int
     gold: int
     npobjs: int
-    obvals: List[int] = Field(default_factory=list, max_length=constants.MXPOBS)
+    obvals: List[int] = Field(max_length=constants.MXPOBS)
     nspells: int
     spts: int
     hitpts: int
-    charms: List[int] = Field(default_factory=list, max_length=constants.NCHARM)
+    charms: List[int] = Field(max_length=constants.NCHARM)
     offspls: int
     defspls: int
     othspls: int
-    spells: List[int] = Field(default_factory=list, max_length=constants.MAXSPL)
-    gemidx: Optional[int] = None
-    stones: List[int] = Field(default_factory=list, max_length=constants.BIRTHSTONE_SLOTS)
-    macros: Optional[int] = None
-    stumpi: Optional[int] = None
+    spells: List[int] = Field(max_length=constants.MAXSPL)
+    gemidx: int
+    stones: List[int] = Field(max_length=constants.BIRTHSTONE_SLOTS)
+    macros: int
+    stumpi: int
     spouse: str = Field(max_length=constants.ALSSIZ)
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -114,6 +115,42 @@ class PlayerModel(BaseModel):
         if len(self.stones) != constants.BIRTHSTONE_SLOTS:
             raise ValueError(
                 f"stones must contain exactly {constants.BIRTHSTONE_SLOTS} birthstones"
+            )
+        unknown_flags = self.flags & ~constants.PLAYER_FLAG_MASK
+        if unknown_flags:
+            raise ValueError("flags contains unknown bits")
+        if not constants.GEM_INDEX_MIN <= self.gemidx <= constants.GEM_INDEX_MAX:
+            raise ValueError(
+                f"gemidx must be between {constants.GEM_INDEX_MIN} and {constants.GEM_INDEX_MAX}"
+            )
+        if not constants.MACROS_MIN <= self.macros <= constants.MACROS_MAX:
+            raise ValueError(
+                f"macros must be between {constants.MACROS_MIN} and {constants.MACROS_MAX}"
+            )
+        if not constants.STUMPI_MIN <= self.stumpi <= constants.STUMPI_MAX:
+            raise ValueError(
+                f"stumpi must be between {constants.STUMPI_MIN} and {constants.STUMPI_MAX}"
+            )
+        if any(
+            charm < constants.CHARM_TIMER_MIN or charm > constants.CHARM_TIMER_MAX
+            for charm in self.charms
+        ):
+            raise ValueError(
+                f"charms must be between {constants.CHARM_TIMER_MIN} and {constants.CHARM_TIMER_MAX}"
+            )
+        if any(
+            stone < constants.BIRTHSTONE_MIN or stone > constants.BIRTHSTONE_MAX
+            for stone in self.stones
+        ):
+            raise ValueError(
+                f"stones must be between {constants.BIRTHSTONE_MIN} and {constants.BIRTHSTONE_MAX}"
+            )
+        if any(
+            spell_id < constants.SPELL_ID_MIN or spell_id > constants.SPELL_ID_MAX
+            for spell_id in self.spells
+        ):
+            raise ValueError(
+                f"spells must be between {constants.SPELL_ID_MIN} and {constants.SPELL_ID_MAX}"
             )
         return self
 
@@ -181,6 +218,20 @@ class Location(Base):
 
 class Player(Base):
     __tablename__ = "players"
+    __table_args__ = (
+        CheckConstraint(
+            f"gemidx >= {constants.GEM_INDEX_MIN} AND gemidx <= {constants.GEM_INDEX_MAX}",
+            name="ck_players_gemidx_range",
+        ),
+        CheckConstraint(
+            f"stumpi >= {constants.STUMPI_MIN} AND stumpi <= {constants.STUMPI_MAX}",
+            name="ck_players_stumpi_range",
+        ),
+        CheckConstraint(
+            f"macros >= {constants.MACROS_MIN} AND macros <= {constants.MACROS_MAX}",
+            name="ck_players_macros_range",
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
     uidnam = Column(String(constants.UIDSIZ), nullable=False)
@@ -188,8 +239,8 @@ class Player(Base):
     altnam = Column(String(constants.APNSIZ), nullable=False)
     attnam = Column(String(constants.APNSIZ), nullable=False)
     gpobjs = Column(JSON, nullable=False)
-    nmpdes = Column(Integer, nullable=True)
-    modno = Column(Integer, nullable=True)
+    nmpdes = Column(Integer, nullable=False)
+    modno = Column(Integer, nullable=False)
     level = Column(Integer, nullable=False)
     gamloc = Column(Integer, nullable=False)
     pgploc = Column(Integer, nullable=False)
@@ -205,10 +256,10 @@ class Player(Base):
     othspls = Column(BigInteger, nullable=False)
     charms = Column(JSON, nullable=False)
     spells = Column(JSON, nullable=False)
-    gemidx = Column(Integer, nullable=True)
+    gemidx = Column(Integer, nullable=False)
     stones = Column(JSON, nullable=False)
-    macros = Column(Integer, nullable=True)
-    stumpi = Column(Integer, nullable=True)
+    macros = Column(Integer, nullable=False)
+    stumpi = Column(Integer, nullable=False)
     spouse = Column(String(constants.ALSSIZ), nullable=False)
 
 

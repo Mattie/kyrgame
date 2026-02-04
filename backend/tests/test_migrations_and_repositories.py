@@ -65,6 +65,25 @@ def test_alembic_upgrade_creates_all_tables(migrated_engine):
     }.issubset(table_names)
 
 
+def test_player_and_content_column_lengths_match_existing_contracts(migrated_engine):
+    inspector = inspect(migrated_engine)
+
+    spell_name = inspector.get_columns("spells")[1]
+    assert spell_name["name"] == "name"
+    assert spell_name["type"].length == 32
+
+    location_columns = {column["name"]: column for column in inspector.get_columns("locations")}
+    assert location_columns["brfdes"]["type"].length == 80
+    assert location_columns["objlds"]["type"].length == 160
+
+    player_columns = {column["name"]: column for column in inspector.get_columns("players")}
+    assert player_columns["uidnam"]["type"].length == 14
+    assert player_columns["plyrid"]["type"].length == 14
+    assert player_columns["altnam"]["type"].length == 30
+    assert player_columns["attnam"]["type"].length == 30
+    assert player_columns["spouse"]["type"].length == 14
+
+
 def test_inventory_repository_upserts_by_slot(seeded_session):
     player_id = seeded_session.scalar(select(models.Player.id))
     repo = repositories.InventoryRepository(seeded_session)
