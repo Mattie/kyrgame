@@ -36,6 +36,7 @@
 - [x] Ported full spellbook rendering for `look spellbook`/`read spellbook` to legacy `seesbk` semantics (ordered bitfield scan, 3-column `SBOOK2` rows, `SBOOK3` empty state, and `SBOOK4` footer with title/player substitution).
 
 - [x] Ported `learn`/`memorize` command handling to legacy `memori`/`memutl` parity (`KSPM09` ownership failures, `GAISPL`/`LOSSPL` MAXSPL messaging, `MEMSPL` room broadcast excluding caster, and persisted memorized slots).
+- [x] Ported `spells` command handling to legacy `shwsutl` parity (exact memorized-list grammar, spell point + level/title status text in a single response event, and structured memorized spell metadata payloads for UI cards).
 - [x] Prioritized room routine handling ahead of command registry dispatch to mirror `kyra()` flow in `KYRCMDS.C`.
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.

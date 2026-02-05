@@ -176,3 +176,71 @@ async def test_memorize_persists_player_state():
     assert record is not None
     assert record.spells == [0]
     assert record.nspells == 1
+
+
+@pytest.mark.anyio
+async def test_spells_command_renders_legacy_memorized_grammar_and_status_payload():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=7,
+        spts=19,
+        spells=[0, 2, 5],
+        nspells=3,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("spells", {}, state)
+
+    assert len(result.events) == 1
+    event = result.events[0]
+    assert event["type"] == "room_message"
+    assert (
+        event["text"]
+        == '"abbracada", "blowitawa", and "burnup" memorized, and 19 spell points of energy.  '
+        'You are at level 7, titled "Enchanter".'
+    )
+    assert event["memorized_spell_ids"] == [0, 2, 5]
+    assert event["memorized_spell_names"] == ["abbracada", "blowitawa", "burnup"]
+    assert event["spts"] == 19
+    assert event["level"] == 7
+    assert event["title"] == "Enchanter"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("spells", "expected_text"),
+    [
+        (
+            [],
+            'no spells memorized, and 4 spell points of energy.  You are at level 1, titled "Apprentice".',
+        ),
+        (
+            [0],
+            '"abbracada" memorized, and 4 spell points of energy.  You are at level 1, titled "Apprentice".',
+        ),
+        (
+            [0, 1],
+            '"abbracada" and "allbettoo" memorized, and 4 spell points of energy.  '
+            'You are at level 1, titled "Apprentice".',
+        ),
+    ],
+)
+async def test_spells_command_matches_legacy_grammar_for_zero_one_two(
+    spells, expected_text
+):
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=1,
+        spts=4,
+        spells=spells,
+        nspells=len(spells),
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("spells", {}, state)
+
+    assert result.events[0]["text"] == expected_text
