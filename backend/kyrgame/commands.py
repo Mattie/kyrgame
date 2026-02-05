@@ -7,7 +7,7 @@ from typing import Awaitable, Callable, Dict, List, Protocol, Set
 from sqlalchemy import select
 
 from . import constants, fixtures, models, repositories, room_spoilers
-from .spellbook import list_memorized_spells, list_spellbook_spells
+from .spellbook import list_spellbook_spells
 
 
 class CommandError(Exception):
@@ -759,28 +759,72 @@ def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
     command_id = args.get("command_id")
     spells_catalog = fixtures.load_spells()
     owned_spells = list_spellbook_spells(state.player, spells_catalog)
-    memorized_spells = list_memorized_spells(state.player, spells_catalog)
+    # Legacy seesbk chooses SBOOK* vs ASBOOK* by terminal type (legacy/KYRSPEL.C:1427).
+    spellbook_prefix = "ASBOOK" if args.get("terminal_mode") == "at" else "SBOOK"
+    title = "Lady" if state.player.flags & constants.PlayerFlag.FEMALE else "Lord"
+    header_id = f"{spellbook_prefix}1"
+    row_id = f"{spellbook_prefix}2"
+    empty_id = f"{spellbook_prefix}3"
+    footer_id = f"{spellbook_prefix}4"
 
-    header_text = _format_message(state, "SBOOK1", state.player.plyrid, state.player.altnam)
-    spellbook_text = (
-        '...Spellbook: ' + ', '.join(f'"{spell.name}"' for spell in owned_spells)
-        if owned_spells
-        else _format_message(state, "SBOOK3")
-    )
-    memorized_text = (
-        '...Memorized: ' + ', '.join(f'"{spell.name}"' for spell in memorized_spells)
-        if memorized_spells
-        else '...Memorized: none.'
-    )
     return CommandResult(
         state=state,
-        events=[
-            _message_event("player", "SBOOK1", header_text, command_id),
-            _message_event("player", None, spellbook_text, command_id),
-            _message_event("player", None, memorized_text, command_id),
-            _message_event("player", "SBOOK4", _format_message(state, "SBOOK4"), command_id),
-        ],
+        events=_spellbook_events(
+            state,
+            command_id,
+            owned_spells,
+            header_id=header_id,
+            row_id=row_id,
+            empty_id=empty_id,
+            footer_id=footer_id,
+            title=title,
+        ),
     )
+
+
+def _spellbook_events(
+    state: GameState,
+    command_id: int | None,
+    owned_spells: list[models.SpellModel],
+    *,
+    header_id: str,
+    row_id: str,
+    empty_id: str,
+    footer_id: str,
+    title: str,
+) -> list[dict]:
+    events = [
+        _message_event(
+            "player",
+            header_id,
+            _format_message(state, header_id, title, state.player.plyrid),
+            command_id,
+        )
+    ]
+
+    if owned_spells:
+        spell_names = [spell.name for spell in owned_spells]
+        # Legacy seesbk prints spell names in 3-column rows via SBOOK2/ASBOOK2 (legacy/KYRSPEL.C:1430-1437).
+        for index in range(0, len(spell_names), 3):
+            chunk = spell_names[index : index + 3]
+            chunk.extend([""] * (3 - len(chunk)))
+            events.append(
+                _message_event(
+                    "player",
+                    row_id,
+                    _format_message(state, row_id, chunk[0], chunk[1], chunk[2]),
+                    command_id,
+                )
+            )
+    else:
+        events.append(
+            _message_event("player", empty_id, _format_message(state, empty_id), command_id)
+        )
+
+    events.append(
+        _message_event("player", footer_id, _format_message(state, footer_id), command_id)
+    )
+    return events
 
 
 async def _handle_look(state: GameState, args: dict) -> CommandResult:
@@ -1437,6 +1481,16 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         ),
         _handle_look,
     )
+    registry.register(
+        CommandMetadata(
+            verb="read",
+            command_id=vocabulary._lookup_command_id("read"),
+            required_level=1,
+            required_flags=int(constants.PlayerFlag.LOADED),
+            failure_message_id="CMPCMD1",
+        ),
+        _handle_read,
+    )
 
     for command in vocabulary.iter_commands():
         verb = command.command.lower()
@@ -1463,3 +1517,11 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         )
 
     return registry
+
+
+def _handle_read(state: GameState, args: dict) -> CommandResult:
+    raw = (args.get("raw") or "").strip().lower()
+    if raw == "spellbook":
+        # Legacy reader() delegates `read spellbook` to looker()/seesbk() (legacy/KYRCMDS.C:1035-1056).
+        return _handle_spellbook(state, args)
+    return _handle_stub(state, args)
