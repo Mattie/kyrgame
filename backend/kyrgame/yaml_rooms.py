@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 import random
 from typing import Any, Iterable, Optional
 
@@ -121,17 +122,22 @@ class YamlRoomEngine:
             [arg for arg in args if arg.lower() not in strip_tokens] if strip_tokens else args
         )
 
+        def _normalize_phrase(text: str) -> str:
+            lowered = text.lower()
+            stripped = re.sub(r"[^a-z0-9\\s]", "", lowered)
+            return " ".join(stripped.split())
+
         phrase_key = trigger.get("match_phrase_key")
         if phrase_key:
-            target_phrase = self.messages.messages.get(phrase_key, "").lower()
-            attempt = " ".join([command, *filtered_args]).lower()
-            return attempt == target_phrase
+            target_phrase = self.messages.messages.get(phrase_key, "")
+            attempt = " ".join([command, *filtered_args])
+            return _normalize_phrase(attempt) == _normalize_phrase(target_phrase)
 
         arg_phrase_key = trigger.get("arg_phrase_key")
         if arg_phrase_key:
-            target_phrase = self.messages.messages.get(arg_phrase_key, "").lower()
-            attempt = " ".join(filtered_args).lower()
-            return attempt == target_phrase
+            target_phrase = self.messages.messages.get(arg_phrase_key, "")
+            attempt = " ".join(filtered_args)
+            return _normalize_phrase(attempt) == _normalize_phrase(target_phrase)
 
         target_terms = {term.lower() for term in trigger.get("target_in", [])}
         if target_terms:

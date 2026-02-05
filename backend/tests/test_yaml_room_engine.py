@@ -1098,3 +1098,33 @@ def test_wingam_riddle_levels_up(room_engine, base_player):
     global_texts = [evt["text"] for evt in result.events if evt["scope"] == "global"]
     assert room_engine.messages.messages["YOUWIN"] in direct_texts
     assert room_engine.messages.messages["SHEWON"] % player.altnam in global_texts
+
+
+def test_wingam_allows_case_and_punctuation(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 24, "gpobjs": [], "obvals": [], "npobjs": 0})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=302,
+        command="answer",
+        args=[
+            "Cast",
+            "the",
+            "spells",
+            "and",
+            "cross",
+            "the",
+            "seas,",
+            "heart,",
+            "soul,",
+            "mind,",
+            "and",
+            "body",
+            "are",
+            "the",
+            "keys.",
+        ],
+    )
+
+    assert result.handled is True
+    assert player.level == 25
