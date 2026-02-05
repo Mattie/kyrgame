@@ -132,3 +132,17 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
 
 Each spell entry above also ties to timers/charms processed in `splrtk` (regen and expiration logic) that need to be mirrored when wiring the Python spell timer repository.【F:legacy/KYRSPEL.C†L215-L259】
+
+## Animation routines still to port (`KYRANIM.C`)
+Legacy animation ticks coordinate Zar, dryads, elves, brownies, and gem spawns. Mirror these behaviors in a scheduler-driven service and check them off once parity behavior (including broadcasts and damage) is covered:
+
+- [ ] `inianm` + `animat` main tick loop and cadence (rtkick 30/15).【F:legacy/KYRANIM.C†L88-L152】
+- [ ] `chkzar` Zar roaming/timeout behavior.【F:legacy/KYRANIM.C†L154-L173】
+- [ ] `zaritm` dragonstaff use (summon/attack flow).【F:legacy/KYRANIM.C†L176-L198】
+- [ ] `zarfood`/`dthbyz` Zar attack sequencing + protection checks.【F:legacy/KYRANIM.C†L201-L322】
+- [ ] `pzinlc`/`rmvzar` Zar placement/removal (including props).【F:legacy/KYRANIM.C†L211-L267】
+- [ ] `dryads` wandering dryad logic (room capacity handling).【F:legacy/KYRANIM.C†L325-L348】
+- [ ] `elves` hint/gold alternating encounter behavior.【F:legacy/KYRANIM.C†L351-L389】
+- [ ] `browns` brownie theft/taunt behavior (gold/inventory clearing).【F:legacy/KYRANIM.C†L392-L426】
+- [ ] `gemakr` periodic gem spawns in forest rooms.【F:legacy/KYRANIM.C†L428-L449】
+- [ ] `zarapp` Zar sighting broadcast warnings.【F:legacy/KYRANIM.C†L452-L459】
