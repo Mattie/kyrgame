@@ -44,19 +44,21 @@ async def engine(player, scheduler):
 
 
 def _direct_texts(engine: RoomScriptEngine, player_id: str) -> list[str]:
+    # Check pending events from the engine (scope "target" for player-directed messages)
     return [
-        message.get("payload", {}).get("text")
-        for message in engine.gateway.messages
-        if message.get("payload", {}).get("scope") == "direct"
-        and message.get("payload", {}).get("player") == player_id
+        event.get("text")
+        for event in engine.pending_events
+        if event.get("scope") == "target"
+        and event.get("player") == player_id
     ]
 
 
 def _broadcast_texts(engine: RoomScriptEngine) -> list[str]:
+    # Check pending events from the engine (scope "room" for broadcasts)
     return [
-        message.get("payload", {}).get("text")
-        for message in engine.gateway.messages
-        if message.get("payload", {}).get("scope") == "broadcast"
+        event.get("text")
+        for event in engine.pending_events
+        if event.get("scope") == "room"
     ]
 
 
