@@ -12,6 +12,8 @@ from .models import (
     SpellModel,
 )
 from . import yaml_rooms
+from .messaging import build_direct_and_others_events
+from .player_progression import level_up_player
 from .spellbook import add_spell_to_book
 
 
@@ -62,6 +64,31 @@ class RoomContext:
                 {"event": event, "scope": "direct", "player": player_id, **payload},
             ),
         )
+
+    async def direct_and_others(
+        self,
+        player_id: str,
+        event: str,
+        *,
+        direct_text: str | None,
+        others_text: str | None,
+        direct_message_id: str | None = None,
+        others_message_id: str | None = None,
+        **payload,
+    ):
+        for message in build_direct_and_others_events(
+            player_id=player_id,
+            event=event,
+            direct_text=direct_text,
+            others_text=others_text,
+            direct_message_id=direct_message_id,
+            others_message_id=others_message_id,
+            extra_payload=payload,
+        ):
+            await self.engine.gateway.broadcast(
+                self.room_id,
+                self.engine.room_broadcast_envelope(self.room_id, message),
+            )
 
     def schedule(self, name: str, delay: float, callback: Callable[[], Awaitable[None] | None], interval: float | None = None):
         handle = self.engine.scheduler.schedule(delay, callback, interval=interval)
@@ -547,76 +574,75 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
 
         if offered is None or offered not in player.gpobjs:
             player.stumpi = 0
-            await context.direct(
-                player_id, "room_message", text=messages.messages.get("BGEM05", "")
-            )
-            await context.broadcast(
+            await context.direct_and_others(
+                player_id,
                 "room_message",
-                text=messages.messages.get("BGEM06", "") % player_id,
-                player=player_id,
+                direct_text=messages.messages.get("BGEM05", ""),
+                others_text=messages.messages.get("BGEM06", "") % player_id,
+                direct_message_id="BGEM05",
+                others_message_id="BGEM06",
             )
             return True
 
         _remove_inventory_item(player, offered)
 
-        if not (
-            (progress == len(gem_sequence) - 1 and level >= 6)
-            or level == 5
-        ):
+        if level != 5:
             player.stumpi = 0
-            await context.direct(
-                player_id, "room_message", text=messages.messages.get("BGEM04", "")
-            )
-            await context.broadcast(
+            await context.direct_and_others(
+                player_id,
                 "room_message",
-                text=messages.messages.get("BGEM03", "") % player_id,
-                player=player_id,
+                direct_text=messages.messages.get("BGEM04", ""),
+                others_text=messages.messages.get("BGEM03", "") % player_id,
+                direct_message_id="BGEM04",
+                others_message_id="BGEM03",
             )
             return True
 
         if expected is None or offered != expected:
             player.stumpi = 0
-            await context.direct(
-                player_id, "room_message", text=messages.messages.get("BGEM04", "")
-            )
-            await context.broadcast(
+            await context.direct_and_others(
+                player_id,
                 "room_message",
-                text=messages.messages.get("BGEM03", "") % player_id,
-                player=player_id,
+                direct_text=messages.messages.get("BGEM04", ""),
+                others_text=messages.messages.get("BGEM03", "") % player_id,
+                direct_message_id="BGEM04",
+                others_message_id="BGEM03",
             )
             return True
 
         player.stumpi = progress + 1
         if player.stumpi == len(gem_sequence):
-            if level >= 6:
+            if level == 5:
+                # Legacy stumpr rewards the final gem with chklvl(6)+glvutl (legacy/KYRROUS.C:534-537).
+                level_up_player(player)
                 _grant_off_spell(player, hotkiss)
-                await context.direct(
-                    player_id, "room_message", text=messages.messages.get("BGEM00", "")
-                )
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages.get("BGEM01", "") % player_id,
-                    player=player_id,
+                    direct_text=messages.messages.get("BGEM00", ""),
+                    others_text=messages.messages.get("BGEM01", "") % player_id,
+                    direct_message_id="BGEM00",
+                    others_message_id="BGEM01",
                 )
             else:
                 player.stumpi = 0
-                await context.direct(
-                    player_id, "room_message", text=messages.messages.get("BGEM04", "")
-                )
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages.get("BGEM03", "") % player_id,
-                    player=player_id,
+                    direct_text=messages.messages.get("BGEM04", ""),
+                    others_text=messages.messages.get("BGEM03", "") % player_id,
+                    direct_message_id="BGEM04",
+                    others_message_id="BGEM03",
                 )
             return True
 
-        await context.direct(
-            player_id, "room_message", text=messages.messages.get("BGEM02", "")
-        )
-        await context.broadcast(
+        await context.direct_and_others(
+            player_id,
             "room_message",
-            text=messages.messages.get("BGEM03", "") % player_id,
-            player=player_id,
+            direct_text=messages.messages.get("BGEM02", ""),
+            others_text=messages.messages.get("BGEM03", "") % player_id,
+            direct_message_id="BGEM02",
+            others_message_id="BGEM03",
         )
         return True
 
@@ -646,13 +672,13 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
 
             offered = _resolve_offering(args[0], objects_by_name)
             if offered is None or offered not in player.gpobjs:
-                await context.direct(
-                    player_id, "room_message", text=messages.messages.get("TRDM05", "")
-                )
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages.get("SILVM5", "") % player_id,
-                    player=player_id,
+                    direct_text=messages.messages.get("TRDM05", ""),
+                    others_text=messages.messages.get("SILVM5", "") % player_id,
+                    direct_message_id="TRDM05",
+                    others_message_id="SILVM5",
                 )
                 return True
 
@@ -664,37 +690,39 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 player.gemidx = progress + 1
                 if player.gemidx == len(player.stones):
                     if (player_level or 0) >= 4:
+                        # Legacy silver uses chklvl(4) + glvutl before granting the spell (legacy/KYRROUS.C:568-573).
+                        level_up_player(player)
                         _grant_def_spell(player, hotseat_spell_id, hotseat_bit)
-                        await context.direct(
-                            player_id, "room_message", text=messages.messages.get("SILVM0", "")
-                        )
-                        await context.broadcast(
+                        await context.direct_and_others(
+                            player_id,
                             "room_message",
-                            text=messages.messages.get("SILVM1", "") % player_id,
-                            player=player_id,
+                            direct_text=messages.messages.get("SILVM0", ""),
+                            others_text=messages.messages.get("SILVM1", "") % player_id,
+                            direct_message_id="SILVM0",
+                            others_message_id="SILVM1",
                         )
                     else:
                         player.gemidx = 0
                     return True
 
-                await context.direct(
-                    player_id, "room_message", text=messages.messages.get("SILVM2", "")
-                )
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages.get("SILVM3", "") % player_id,
-                    player=player_id,
+                    direct_text=messages.messages.get("SILVM2", ""),
+                    others_text=messages.messages.get("SILVM3", "") % player_id,
+                    direct_message_id="SILVM2",
+                    others_message_id="SILVM3",
                 )
                 return True
 
             player.gemidx = 0
-            await context.direct(
-                player_id, "room_message", text=messages.messages.get("SILVM4", "")
-            )
-            await context.broadcast(
+            await context.direct_and_others(
+                player_id,
                 "room_message",
-                text=messages.messages.get("SILVM3", "") % player_id,
-                player=player_id,
+                direct_text=messages.messages.get("SILVM4", ""),
+                others_text=messages.messages.get("SILVM3", "") % player_id,
+                direct_message_id="SILVM4",
+                others_message_id="SILVM3",
             )
             return True
 
@@ -702,14 +730,15 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             # Legacy behavior: deliver SAPRAY to the player and a sndutl-style
             # emote to the rest of the room (legacy/KYRROUS.C lines 555-589).
             prayer_text = messages.messages.get("SAPRAY", "")
-            await context.direct(
-                player_id, "room_message", text=prayer_text, message_id="SAPRAY"
-            )
-
             attnam = player.attnam if player else None
             broadcast_text = f"*** {attnam or player_id} is praying to the Goddess Tashanna."
-            await context.broadcast(
-                "room_message", text=broadcast_text, player=player_id, message_id="SAPRAY"
+            await context.direct_and_others(
+                player_id,
+                "room_message",
+                direct_text=prayer_text,
+                others_text=broadcast_text,
+                direct_message_id="SAPRAY",
+                others_message_id="SAPRAY",
             )
             return True
 
