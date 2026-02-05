@@ -1,0 +1,49 @@
+# Legacy: legacy/KYRLOCS.C:353-360 (devote); legacy/KYRROUS.C:1254-1316 (devote/fouris)
+id: 295
+name: devote
+spoiler_summary: "Devotion trial where presenting four tokens enables the level 17 ascension."
+spoiler_interaction: "Devote yourself with broach, pendant, locket, and ring to attempt the level 17 ascension."
+legacy_ref: "legacy/KYRROUS.C:1254-1316"
+triggers:
+  - verbs: [devote]
+    actions:
+      - type: level_gate
+        target_level: 17
+        level_up: false
+        on_success:
+          - type: conditional
+            conditions:
+              - has_item: broach
+              - has_item: pendant
+              - has_item: locket
+              - has_item: ring
+            then:
+              # Legacy fouris() consumes the four tokens before leveling. (legacy/KYRROUS.C:1294-1315)
+              - type: remove_item
+                item: broach
+              - type: remove_item
+                item: pendant
+              - type: remove_item
+                item: locket
+              - type: remove_item
+                item: ring
+              - type: message
+                message_id: DEVM01
+                broadcast_message_id: DEVM02
+                broadcast_format: [player_altnam]
+              - type: level_up
+            else:
+              - type: message
+                message_id: DEVM03
+                broadcast_message_id: DEVM04
+                broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]

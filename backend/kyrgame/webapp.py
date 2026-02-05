@@ -1589,6 +1589,14 @@ def create_app() -> FastAPI:
                                 await gateway.broadcast(
                                     current_room, envelope, sender=websocket, exclude=excluded_sockets
                                 )
+                            elif scope == "global":
+                                envelope = {"type": "system_broadcast", "payload": event}
+                                if meta:
+                                    envelope["meta"] = meta
+                                for target_socket in list(session_connections.values()):
+                                    if target_socket.application_state != WebSocketState.CONNECTED:
+                                        continue
+                                    await target_socket.send_json(envelope)
                             elif scope == "target":
                                 target_id = event.get("player")
                                 if not target_id:
