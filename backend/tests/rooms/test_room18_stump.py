@@ -82,7 +82,6 @@ async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
     assert player.stumpi == 11
     assert player.npobjs == len(player.gpobjs) == 1
 
-    player.level = 6
     await engine.handle_command(
         "hero",
         18,
@@ -93,6 +92,7 @@ async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
     )
 
     assert player.stumpi == 12
+    assert player.level == 6
     assert player.offspls
     assert player.spells == []
     assert player.nspells == 0
@@ -110,6 +110,41 @@ async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
         if msg.get("scope") == "broadcast" and msg.get("room") == 18 and "text" in msg
     ]
     assert messages.messages["BGEM01"] % "hero" in broadcast_texts
+
+
+@pytest.mark.anyio
+async def test_stump_broadcast_message_goes_only_to_others(engine_and_gateway):
+    engine, gateway = engine_and_gateway
+    messages = fixtures.load_messages()
+    player = _fresh_player()
+    player.level = 5
+
+    await engine.enter_room("hero", 18)
+    await engine.enter_room("ally", 18)
+
+    await engine.handle_command(
+        "hero",
+        18,
+        command="drop",
+        args=["0"],
+        player_level=player.level,
+        player=player,
+    )
+
+    direct_for_hero = [
+        msg.get("text")
+        for msg in gateway.messages
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
+    ]
+    assert messages.messages["BGEM03"] % "hero" not in direct_for_hero
+
+    broadcast_for_others = [
+        msg
+        for msg in gateway.messages
+        if msg.get("scope") == "broadcast" and msg.get("text") == (messages.messages["BGEM03"] % "hero")
+    ]
+    assert broadcast_for_others
+    assert all(msg.get("exclude_player") == "hero" for msg in broadcast_for_others)
 
 
 @pytest.mark.anyio

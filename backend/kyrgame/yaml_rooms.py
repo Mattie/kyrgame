@@ -7,6 +7,8 @@ from typing import Any, Iterable, Optional
 import yaml
 
 from . import constants, models
+from .messaging import build_direct_and_others_events
+from .player_progression import level_up_player
 from .spellbook import add_spell_to_book
 
 
@@ -368,27 +370,16 @@ class YamlRoomEngine:
                 other_text = _render_message(
                     broadcast_message_id, broadcast_text, broadcast_format
                 )
-                if direct_text is not None:
-                    events.append(
-                        {
-                            "scope": "direct",
-                            "event": "room_message",
-                            "message_id": message_id,
-                            "text": direct_text,
-                            "player": player.plyrid,
-                        }
+                events.extend(
+                    build_direct_and_others_events(
+                        player_id=player.plyrid,
+                        event="room_message",
+                        direct_text=direct_text,
+                        others_text=other_text,
+                        direct_message_id=message_id,
+                        others_message_id=broadcast_message_id,
                     )
-                if other_text is not None:
-                    events.append(
-                        {
-                            "scope": "broadcast",
-                            "event": "room_message",
-                            "message_id": broadcast_message_id,
-                            "text": other_text,
-                            "player": player.plyrid,
-                            "exclude_player": player.plyrid,
-                        }
-                    )
+                )
                 return
 
             direct_text = _render_message(message_id, text, format_args)
@@ -415,28 +406,16 @@ class YamlRoomEngine:
             else None
         )
 
-        if direct_text is not None:
-            events.append(
-                {
-                    "scope": "direct",
-                    "event": "room_message",
-                    "message_id": message_id,
-                    "text": direct_text,
-                    "player": player.plyrid,
-                }
+        events.extend(
+            build_direct_and_others_events(
+                player_id=player.plyrid,
+                event="room_message",
+                direct_text=direct_text,
+                others_text=other_text,
+                direct_message_id=message_id,
+                others_message_id=broadcast_message_id,
             )
-
-        if other_text is not None:
-            events.append(
-                {
-                    "scope": "broadcast",
-                    "event": "room_message",
-                    "message_id": broadcast_message_id,
-                    "text": other_text,
-                    "player": player.plyrid,
-                    "exclude_player": player.plyrid,
-                }
-            )
+        )
 
     def _action_heal(self, action: dict, player: models.PlayerModel):
         amount = int(action.get("amount", 0))
@@ -609,7 +588,7 @@ class YamlRoomEngine:
                     )
                     return
             if level_up:
-                self._level_up(player)
+                level_up_player(player)
             self._execute_actions(
                 action.get("on_success", []), player, [], context, events, room_id
             )
@@ -759,7 +738,7 @@ class YamlRoomEngine:
         self._remove_inventory_index(player, idx)
 
     def _action_level_up(self, player: models.PlayerModel):
-        self._level_up(player)
+        level_up_player(player)
 
     @staticmethod
     def _resolve_player_flag(flag: Any) -> int | None:
@@ -835,17 +814,6 @@ class YamlRoomEngine:
 
     def get_room_objects(self, room_id: int) -> list[int]:
         return self._get_room_objects(room_id)
-
-    @staticmethod
-    def _level_up(player: models.PlayerModel):
-        player.level += 1
-        # Legacy: glvutl increments level, nmpdes, hitpts, spts (KYRROUS.C 1455-1461).
-        if player.nmpdes is None:
-            player.nmpdes = constants.level_to_nmpdes(player.level)
-        else:
-            player.nmpdes += 1
-        player.hitpts += 4
-        player.spts += 2
 
 
 def load_yaml_room_definitions(path) -> dict:
