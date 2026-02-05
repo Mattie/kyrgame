@@ -182,6 +182,37 @@ class CommandDispatcher:
             )
 
 
+# Legacy titles array used by shwsutl output (legacy/KYRANDIA.C:106-133).
+_LEGACY_TITLES_BY_LEVEL = [
+    "",
+    "Apprentice",
+    "Magic-user",
+    "Evoker",
+    "Conjurer",
+    "Magician",
+    "Mystic",
+    "Enchanter",
+    "Warlock",
+    "Sorcerer",
+    "Green Wizard",
+    "Blue Wizard",
+    "Red Wizard",
+    "Grey Wizard",
+    "White Wizard",
+    "Mage",
+    "Mage of Ice",
+    "Mage of Wind",
+    "Mage of Fire",
+    "Mage of Light",
+    "Arch-Mage",
+    "Arch-Mage of Wands",
+    "Arch Mage of Staves",
+    "Arch-Mage of Swords",
+    "Arch-Mage of Jewels",
+    "Arch-Mage of Legends",
+]
+
+
 _DIRECTION_FIELDS = {
     "north": "gi_north",
     "south": "gi_south",
@@ -765,6 +796,56 @@ def _find_spell_by_name(raw_name: str, spells_catalog: list[models.SpellModel]) 
         if spell.name.lower() == target:
             return spell
     return None
+
+
+def _legacy_title_for_level(level: int) -> str:
+    index = max(0, min(level, len(_LEGACY_TITLES_BY_LEVEL) - 1))
+    return _LEGACY_TITLES_BY_LEVEL[index]
+
+
+def _legacy_memorized_spells_text(memorized_names: list[str]) -> str:
+    # Ported from shwsutl in legacy/KYRSPEL.C (lines 1372-1387):
+    # 0=no spells, 1="x", 2="x" and "y", n=comma list with final and.
+    count = len(memorized_names)
+    if count == 0:
+        return "no spells"
+    if count == 1:
+        return f'"{memorized_names[0]}"'
+    if count == 2:
+        return f'"{memorized_names[0]}" and "{memorized_names[1]}"'
+    leading = ", ".join(f'"{name}"' for name in memorized_names[:-1])
+    return f"{leading}, and \"{memorized_names[-1]}\""
+
+
+def _handle_spells(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    spells_catalog = fixtures.load_spells()
+    spells_by_id = {spell.id: spell for spell in spells_catalog}
+    memorized_spell_ids = list(state.player.spells[: state.player.nspells])
+    memorized_spell_names = [
+        spells_by_id[spell_id].name if spell_id in spells_by_id else str(spell_id)
+        for spell_id in memorized_spell_ids
+    ]
+    memorized_text = _legacy_memorized_spells_text(memorized_spell_names)
+    title = _legacy_title_for_level(state.player.level)
+    text = (
+        f"{memorized_text} memorized, and {state.player.spts} spell points of energy.  "
+        f"You are at level {state.player.level}, titled \"{title}\"."
+    )
+
+    return CommandResult(
+        state=state,
+        events=[
+            {
+                **_message_event("player", None, text, command_id),
+                "memorized_spell_ids": memorized_spell_ids,
+                "memorized_spell_names": memorized_spell_names,
+                "spts": state.player.spts,
+                "level": state.player.level,
+                "title": title,
+            }
+        ],
+    )
 
 
 def _handle_memorize(state: GameState, args: dict) -> CommandResult:
@@ -1569,6 +1650,13 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
             ),
             _handle_memorize,
         )
+    registry.register(
+        CommandMetadata(
+            verb="spells",
+            command_id=vocabulary._lookup_command_id("spells"),
+        ),
+        _handle_spells,
+    )
 
     for command in vocabulary.iter_commands():
         verb = command.command.lower()
