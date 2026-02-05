@@ -237,7 +237,8 @@ def test_buyspl_respects_prices_and_sets_spell_bits(room_engine, base_player):
 
     assert base_player.gold == 150
     assert base_player.offspls & room_engine.spells_by_name["zapher"].bitdef
-    assert room_engine.spells_by_name["zapher"].id in base_player.spells
+    assert base_player.spells == []
+    assert base_player.nspells == 0
     direct_texts = [evt["text"] for evt in purchase.events if evt["scope"] == "direct"]
     assert room_engine.messages.messages["BUYM02"] in direct_texts
 

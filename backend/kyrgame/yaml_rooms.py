@@ -7,6 +7,7 @@ from typing import Any, Iterable, Optional
 import yaml
 
 from . import constants, models
+from .spellbook import add_spell_to_book
 
 
 @dataclass
@@ -471,16 +472,9 @@ class YamlRoomEngine:
         elif isinstance(override, int):
             sbkref = override
 
-        if sbkref == constants.OFFENS:
-            player.offspls |= spell.bitdef
-        elif sbkref == constants.DEFENS:
-            player.defspls |= spell.bitdef
-        else:
-            player.othspls |= spell.bitdef
-
-        if spell.id not in player.spells and len(player.spells) < constants.MAXSPL:
-            player.spells.append(spell.id)
-            player.nspells = len(player.spells)
+        # Legacy: grants set spellbook ownership bits; memorization is separate (legacy/KYRROUS.C:265-273).
+        spell = spell.model_copy(update={"sbkref": sbkref})
+        add_spell_to_book(player, spell)
 
         context["granted_spell_id"] = spell.id
         context["granted_spell_name"] = spell.name
@@ -586,16 +580,8 @@ class YamlRoomEngine:
             return
 
         player.gold -= price
-        if spell.sbkref == constants.OFFENS:
-            player.offspls |= spell.bitdef
-        elif spell.sbkref == constants.DEFENS:
-            player.defspls |= spell.bitdef
-        else:
-            player.othspls |= spell.bitdef
-
-        if spell.id not in player.spells and len(player.spells) < constants.MAXSPL:
-            player.spells.append(spell.id)
-            player.nspells = len(player.spells)
+        # Legacy buyspl awards spellbook ownership bits only (legacy/KYRROUS.C:265-273).
+        add_spell_to_book(player, spell)
 
         context["spell_price"] = price
         context["spell_name"] = spell.name

@@ -64,9 +64,6 @@ def _fresh_player():
 async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
-    spells = fixtures.load_spells()
-    hotseat = next(spell for spell in spells if spell.name == "hotseat")
-
     player = _fresh_player()
     player.level = 4
 
@@ -81,9 +78,9 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
         )
 
     assert player.gemidx == len(player.stones)
-    assert player.defspls & hotseat.bitdef
-    assert hotseat.id in player.spells
-    assert player.nspells == len(player.spells)
+    assert player.defspls
+    assert player.spells == []
+    assert player.nspells == 0
     assert player.npobjs == len(player.gpobjs) == 0
 
     direct_texts = [

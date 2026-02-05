@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Dict, List, Protocol, Set
 from sqlalchemy import select
 
 from . import constants, fixtures, models, repositories, room_spoilers
+from .spellbook import list_memorized_spells, list_spellbook_spells
 
 
 class CommandError(Exception):
@@ -756,21 +757,28 @@ def _message_event(
 
 def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
     command_id = args.get("command_id")
-    message_id = args.get("message_id") or _command_message_id(command_id)
+    spells_catalog = fixtures.load_spells()
+    owned_spells = list_spellbook_spells(state.player, spells_catalog)
+    memorized_spells = list_memorized_spells(state.player, spells_catalog)
+
     header_text = _format_message(state, "SBOOK1", state.player.plyrid, state.player.altnam)
+    spellbook_text = (
+        '...Spellbook: ' + ', '.join(f'"{spell.name}"' for spell in owned_spells)
+        if owned_spells
+        else _format_message(state, "SBOOK3")
+    )
+    memorized_text = (
+        '...Memorized: ' + ', '.join(f'"{spell.name}"' for spell in memorized_spells)
+        if memorized_spells
+        else '...Memorized: none.'
+    )
     return CommandResult(
         state=state,
         events=[
             _message_event("player", "SBOOK1", header_text, command_id),
+            _message_event("player", None, spellbook_text, command_id),
+            _message_event("player", None, memorized_text, command_id),
             _message_event("player", "SBOOK4", _format_message(state, "SBOOK4"), command_id),
-            {
-                "scope": "player",
-                "event": "unimplemented",
-                "type": "unimplemented",
-                "detail": "Spellbook listing not yet implemented",
-                "command_id": command_id,
-                "message_id": message_id,
-            },
         ],
     )
 

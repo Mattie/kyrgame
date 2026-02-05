@@ -31,6 +31,7 @@
 - [x] Infer YAML message scope from `message_id`/`broadcast_message_id` to reduce duplication in room scripts.
 - [x] Persist YAML room script player mutations (levels, flags, inventory, gold, location) to the database for session continuity.
 - [x] Captured spell bitflags from `legacy/KYRSPLS.H` in `backend/kyrgame/constants.py` for reuse in room routines.
+- [x] Centralized spellbook ownership/memorization invariants in `backend/kyrgame/spellbook.py` and routed room-script spell grants/purchases through the shared service (ownership bits in `offspls/defspls/othspls`, memorized IDs in `spells`).
 - [x] Prioritized room routine handling ahead of command registry dispatch to mirror `kyra()` flow in `KYRCMDS.C`.
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.

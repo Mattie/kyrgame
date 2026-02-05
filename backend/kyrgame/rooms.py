@@ -12,6 +12,7 @@ from .models import (
     SpellModel,
 )
 from . import yaml_rooms
+from .spellbook import add_spell_to_book
 
 
 RoomCallback = Callable[["RoomContext", str], Awaitable[None]]
@@ -788,14 +789,13 @@ def _remove_inventory_item(player: PlayerModel, object_id: int):
 
 
 def _grant_def_spell(player: PlayerModel, spell_id: int, bitmask: int):
-    player.defspls |= bitmask
-    if spell_id not in player.spells and len(player.spells) < constants.MAXSPL:
-        player.spells.append(spell_id)
-        player.nspells = len(player.spells)
+    # Legacy rewards set spellbook bit ownership only (legacy/KYRROUS.C:189,570).
+    add_spell_to_book(
+        player,
+        SpellModel(id=spell_id, name=f"spell-{spell_id}", sbkref=constants.DEFENS, bitdef=bitmask, level=0),
+    )
 
 
 def _grant_off_spell(player: PlayerModel, spell: SpellModel):
-    player.offspls |= spell.bitdef
-    if spell.id not in player.spells and len(player.spells) < constants.MAXSPL:
-        player.spells.append(spell.id)
-        player.nspells = len(player.spells)
+    # Legacy rewards set spellbook bit ownership only (legacy/KYRROUS.C:634).
+    add_spell_to_book(player, spell)
