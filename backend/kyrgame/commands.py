@@ -7,7 +7,7 @@ from typing import Awaitable, Callable, Dict, List, Protocol, Set
 from sqlalchemy import select
 
 from . import constants, fixtures, models, repositories, room_spoilers
-from .spellbook import list_spellbook_spells
+from .spellbook import has_spell_in_book, list_spellbook_spells, memorize_spell
 
 
 class CommandError(Exception):
@@ -755,6 +755,72 @@ def _message_event(
     return event
 
 
+
+
+def _find_spell_by_name(raw_name: str, spells_catalog: list[models.SpellModel]) -> models.SpellModel | None:
+    target = raw_name.strip().lower()
+    if not target:
+        return None
+    for spell in spells_catalog:
+        if spell.name.lower() == target:
+            return spell
+    return None
+
+
+def _handle_memorize(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    raw_target = (args.get("raw") or args.get("target") or "").strip()
+    spells_catalog = fixtures.load_spells()
+    # Ported from memori in legacy/KYRSPEL.C (lines 1448-1486): resolve spell name,
+    # verify spellbook ownership bits, or emit KSPM09 on failure.
+    spell = _find_spell_by_name(raw_target, spells_catalog)
+    if spell is None or not has_spell_in_book(state.player, spell):
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "KSPM09",
+                    _format_message(state, "KSPM09"),
+                    command_id,
+                )
+            ],
+        )
+
+    at_capacity = state.player.nspells >= constants.MAXSPL and bool(state.player.spells)
+    evicted_spell_name: str | None = None
+    if at_capacity:
+        evicted_spell_id = state.player.spells[constants.MAXSPL - 1]
+        by_id = {entry.id: entry for entry in spells_catalog}
+        evicted = by_id.get(evicted_spell_id)
+        evicted_spell_name = evicted.name if evicted else str(evicted_spell_id)
+
+    # Ported from memutl in legacy/KYRSPEL.C (lines 1491-1504): MAXSPL overflow
+    # drops the last memorized slot before appending the newly memorized spell.
+    memorize_spell(state.player, spell)
+    _persist_player_state(state, state.player)
+
+    actor_message_id = "LOSSPL" if at_capacity else "GAISPL"
+    actor_text = (
+        _format_message(state, actor_message_id, spell.name, evicted_spell_name)
+        if at_capacity
+        else _format_message(state, actor_message_id, spell.name)
+    )
+
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event("player", actor_message_id, actor_text, command_id),
+            _message_event(
+                "room",
+                "MEMSPL",
+                _format_message(state, "MEMSPL", state.player.altnam, _hisher(state.player)),
+                command_id,
+                exclude_player=state.player.plyrid,
+            ),
+        ],
+    )
+
 def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
     command_id = args.get("command_id")
     spells_catalog = fixtures.load_spells()
@@ -1491,6 +1557,18 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         ),
         _handle_read,
     )
+
+    for verb in ("learn", "memorize"):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            _handle_memorize,
+        )
 
     for command in vocabulary.iter_commands():
         verb = command.command.lower()

@@ -1,6 +1,9 @@
 import pytest
+from sqlalchemy import select
 
 from kyrgame import commands, constants, fixtures
+from kyrgame.database import create_session, get_engine, init_db_schema
+from kyrgame import models
 
 
 class FakePresence:
@@ -94,3 +97,82 @@ async def test_read_spellbook_routes_to_spellbook_rendering_path():
     message_ids = [event.get("message_id") for event in result.events]
     assert message_ids == ["SBOOK1", "SBOOK2", "SBOOK4"]
     assert "Lady" in result.events[0]["text"]
+
+
+@pytest.mark.anyio
+async def test_memorize_requires_owned_spell_and_emits_kspm09():
+    player = _build_player(flags=int(constants.PlayerFlag.LOADED), offspls=0, defspls=0, othspls=0)
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("memorize", {"raw": "zapher"}, state)
+
+    assert result.events == [
+        {
+            "scope": "player",
+            "event": "room_message",
+            "type": "room_message",
+            "text": fixtures.load_messages().messages["KSPM09"],
+            "message_id": "KSPM09",
+            "command_id": None,
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_memorize_at_maxspl_evicts_last_slot_and_broadcasts_memspl():
+    spells = fixtures.load_spells()
+    overflow_spell = spells[10]
+    forgotten_spell = spells[9]
+    player = _build_player(flags=int(constants.PlayerFlag.LOADED), offspls=0, defspls=0, othspls=0)
+    _set_owned_spells(player, list(range(0, 11)))
+    player = player.model_copy(
+        update={
+            "spells": list(range(constants.MAXSPL)),
+            "nspells": constants.MAXSPL,
+        }
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("learn", {"raw": overflow_spell.name}, state)
+
+    assert state.player.spells == [0, 1, 2, 3, 4, 5, 6, 7, 8, overflow_spell.id]
+    assert state.player.nspells == constants.MAXSPL
+    assert result.events[0]["message_id"] == "LOSSPL"
+    assert forgotten_spell.name in result.events[0]["text"]
+    assert result.events[1]["message_id"] == "MEMSPL"
+    assert result.events[1]["exclude_player"] == state.player.plyrid
+
+
+@pytest.mark.anyio
+async def test_memorize_persists_player_state():
+    engine = get_engine("sqlite+pysqlite:///:memory:")
+    init_db_schema(engine)
+    session = create_session(engine)
+
+    base_player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        offspls=0,
+        defspls=0,
+        othspls=0,
+        spells=[],
+        nspells=0,
+    )
+    _set_owned_spells(base_player, [0])
+    session.add(models.Player(**base_player.model_dump()))
+    session.commit()
+
+    state = _build_state(base_player)
+    state.db_session = session
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    await dispatcher.dispatch("memorize", {"raw": "abbracada"}, state)
+
+    record = session.scalar(select(models.Player).where(models.Player.plyrid == base_player.plyrid))
+    assert record is not None
+    assert record.spells == [0]
+    assert record.nspells == 1
