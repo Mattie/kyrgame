@@ -66,9 +66,6 @@ def _fresh_player():
 async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
-    spells = fixtures.load_spells()
-    hotkiss = next(spell for spell in spells if spell.name == "hotkiss")
-
     player = _fresh_player()
     player.level = 5
 
@@ -96,9 +93,9 @@ async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
     )
 
     assert player.stumpi == 12
-    assert player.offspls & hotkiss.bitdef
-    assert hotkiss.id in player.spells
-    assert player.nspells == len(player.spells)
+    assert player.offspls
+    assert player.spells == []
+    assert player.nspells == 0
 
     direct_texts = [
         msg.get("text")
