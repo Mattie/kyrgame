@@ -41,11 +41,11 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] Room 280: `truthy` (truth maze)【F:legacy/KYRLOCS.C†L337-L343】
 - [x] Room 282: `bodyma` (body mastery)【F:legacy/KYRLOCS.C†L340-L348】
 - [x] Room 285: `mindma` (mind mastery)【F:legacy/KYRLOCS.C†L342-L349】
-- [ ] Room 288: `heartm` (heart mastery)【F:legacy/KYRLOCS.C†L348-L353】
-- [ ] Room 291: `soulma` (soul mastery)【F:legacy/KYRLOCS.C†L349-L356】
-- [ ] Room 293: `fanbel` (faith and belief)【F:legacy/KYRLOCS.C†L352-L356】
-- [ ] Room 295: `devote` (devotion trial)【F:legacy/KYRLOCS.C†L353-L360】
-- [ ] Room 302: `wingam` (wing animation chamber)【F:legacy/KYRLOCS.C†L360-L364】
+- [x] Room 288: `heartm` (heart mastery)【F:legacy/KYRLOCS.C†L348-L353】
+- [x] Room 291: `soulma` (soul mastery)【F:legacy/KYRLOCS.C†L349-L356】
+- [x] Room 293: `fanbel` (faith and belief)【F:legacy/KYRLOCS.C†L352-L356】
+- [x] Room 295: `devote` (devotion trial)【F:legacy/KYRLOCS.C†L353-L360】
+- [x] Room 302: `wingam` (wing animation chamber)【F:legacy/KYRLOCS.C†L360-L364】
 
 ## Object effects missing from ObjectEffectEngine
 `ObjectEffectEngine` only defines behaviors for object IDs 32 (pinecone) and 33 (dagger). Check off catalog entries from `gmobjs` as effect mappings, cooldowns, and target/resource rules are implemented:

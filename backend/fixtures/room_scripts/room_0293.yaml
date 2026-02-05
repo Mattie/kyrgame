@@ -1,0 +1,32 @@
+# Legacy: legacy/KYRLOCS.C:352-356 (fanbel); legacy/KYRROUS.C:1388-1403 (fanbel)
+id: 293
+name: fanbel
+spoiler_summary: "Faith-and-belief trial where reciting the belief phrase proves readiness for level 24."
+spoiler_interaction: "Say the belief phrase (believe in fantasy) to attempt the level 24 ascension."
+legacy_ref: "legacy/KYRROUS.C:1388-1403"
+triggers:
+  # NOTE: Legacy compares the BELINF phrase directly; the parser may strip prepositions.
+  - verbs: [believe]
+    arg_strip: [in]
+    arg_matches:
+      - index: 0
+        value: fantasy
+    actions:
+      - type: level_gate
+        target_level: 24
+        level_up: true
+        on_success:
+          - type: message
+            message_id: LEVL24
+            broadcast_message_id: LVL9M1
+            broadcast_format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]
