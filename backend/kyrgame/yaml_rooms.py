@@ -125,7 +125,11 @@ class YamlRoomEngine:
         def _normalize_phrase(text: str) -> str:
             lowered = text.lower()
             stripped = re.sub(r"[^a-z0-9\\s]", "", lowered)
-            return " ".join(stripped.split())
+            tokens = stripped.split()
+            stop_words = {"the", "a", "an", "at", "to", "into", "through", "in"}
+            filtered = [token for token in tokens if token not in stop_words]
+            # Legacy bagprep strips articles/prepositions; normalize both sides to match player input. (legacy/GAMUTILS.C:55-95)
+            return " ".join(filtered)
 
         phrase_key = trigger.get("match_phrase_key")
         if phrase_key:
