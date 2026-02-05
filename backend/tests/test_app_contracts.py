@@ -194,6 +194,67 @@ async def test_websocket_gateway_broadcasts_and_echoes_commands():
 
 
 @pytest.mark.anyio
+async def test_room_302_accepts_answer_phrase_with_punctuation():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        session = await client.post("/auth/session", json={"player_id": "solver", "room_id": 302})
+        token = session.json()["session"]["token"]
+        room_id = session.json()["session"]["room_id"]
+
+        uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={token}"
+
+        async with websockets.connect(uri) as ws:
+            welcome = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
+            assert welcome["type"] == "room_welcome"
+
+            for _ in range(4):
+                try:
+                    msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
+                except asyncio.TimeoutError:
+                    break
+                assert msg["type"] == "command_response"
+
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "command",
+                        "command": "answer cast the spells and cross the seas, heart, soul, mind, and body are the keys.",
+                    }
+                )
+            )
+
+            received = []
+            for _ in range(5):
+                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
+                received.append(msg)
+                if msg.get("type") == "command_error":
+                    break
+                if msg.get("type") == "command_response" and msg.get("payload", {}).get(
+                    "verb"
+                ) == "answer":
+                    break
+
+            assert not any(msg.get("type") == "command_error" for msg in received)
+            assert any(
+                msg.get("type") == "command_response"
+                and msg.get("payload", {}).get("verb") == "answer"
+                for msg in received
+            )
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_sends_location_description_on_connect():
     app = create_app()
     host = "127.0.0.1"

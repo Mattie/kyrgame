@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 import random
 from typing import Any, Iterable, Optional
 
@@ -121,11 +122,22 @@ class YamlRoomEngine:
             [arg for arg in args if arg.lower() not in strip_tokens] if strip_tokens else args
         )
 
+        def _normalize_phrase(text: str) -> str:
+            lowered = text.lower()
+            stripped = re.sub(r"[^a-z0-9\\s]", "", lowered)
+            return " ".join(stripped.split())
+
         phrase_key = trigger.get("match_phrase_key")
         if phrase_key:
-            target_phrase = self.messages.messages.get(phrase_key, "").lower()
-            attempt = " ".join([command, *args]).lower()
-            return attempt == target_phrase
+            target_phrase = self.messages.messages.get(phrase_key, "")
+            attempt = " ".join([command, *filtered_args])
+            return _normalize_phrase(attempt) == _normalize_phrase(target_phrase)
+
+        arg_phrase_key = trigger.get("arg_phrase_key")
+        if arg_phrase_key:
+            target_phrase = self.messages.messages.get(arg_phrase_key, "")
+            attempt = " ".join(filtered_args)
+            return _normalize_phrase(attempt) == _normalize_phrase(target_phrase)
 
         target_terms = {term.lower() for term in trigger.get("target_in", [])}
         if target_terms:
@@ -158,6 +170,16 @@ class YamlRoomEngine:
                 value = str(match.get("value", "")).lower()
                 if len(filtered_args) <= index or filtered_args[index].lower() != value:
                     return False
+
+        arg_equals_spouse = trigger.get("arg_equals_player_spouse")
+        if arg_equals_spouse:
+            # Legacy heartm compares the offered spouse name directly (legacy/KYRROUS.C:1216-1229).
+            index = int(arg_equals_spouse.get("index", 0))
+            spouse = (player.spouse or "").lower()
+            if not spouse or len(filtered_args) <= index:
+                return False
+            if filtered_args[index].lower() != spouse:
+                return False
 
         required_item = trigger.get("requires_item")
         if required_item:
@@ -361,7 +383,7 @@ class YamlRoomEngine:
         broadcast_text = action.get("broadcast_text")
         broadcast_format = action.get("broadcast_format", [])
 
-        if scope in {"direct", "broadcast", "broadcast_others", "direct_and_others"}:
+        if scope in {"direct", "broadcast", "broadcast_others", "direct_and_others", "global"}:
             if scope == "direct_and_others":
                 direct_text = _render_message(message_id, text, format_args)
                 other_text = _render_message(

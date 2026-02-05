@@ -913,3 +913,218 @@ def test_believe_in_magic_is_not_required(room_engine, base_player):
     )
 
     assert result.handled is False
+
+
+def test_heartm_requires_matching_spouse(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "spouse": "Juliet",
+            "level": 14,
+            "gpobjs": [],
+            "obvals": [],
+            "npobjs": 0,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=288,
+        command="offer",
+        args=["heart", "Romeo"],
+    )
+
+    assert result.handled is False
+
+
+def test_heartm_grants_locket_and_levels_up(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "spouse": "Juliet",
+            "level": 14,
+            "gpobjs": [0, 1, 2, 3, 4, 5],
+            "obvals": [0] * 6,
+            "npobjs": 6,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=288,
+        command="offer",
+        args=["heart", "Juliet"],
+    )
+
+    assert result.handled is True
+    assert player.level == 15
+    assert 15 in player.gpobjs
+    assert 0 not in player.gpobjs
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+    assert room_engine.messages.messages["HEAR01"] in direct_texts
+    assert room_engine.messages.messages["HEAR03"] in direct_texts
+    assert room_engine.messages.messages["HEAR02"] % player.altnam in broadcast_texts
+
+
+def test_soulma_grants_ring_and_levels_up(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "level": 15,
+            "gpobjs": [],
+            "obvals": [],
+            "npobjs": 0,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=291,
+        command="ignore",
+        args=["time"],
+    )
+
+    assert result.handled is True
+    assert player.level == 16
+    assert 39 in player.gpobjs
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+    assert room_engine.messages.messages["SOUL01"] in direct_texts
+    assert room_engine.messages.messages["SOUL02"] % player.altnam in broadcast_texts
+
+
+def test_fanbel_belief_levels_up(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "level": 23,
+            "gpobjs": [],
+            "obvals": [],
+            "npobjs": 0,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=293,
+        command="believe",
+        args=["in", "fantasy"],
+    )
+
+    assert result.handled is True
+    assert player.level == 24
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+    assert room_engine.messages.messages["LEVL24"] in direct_texts
+    assert room_engine.messages.messages["LVL9M1"] % player.altnam in broadcast_texts
+
+
+def test_devote_requires_four_tokens(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "level": 16,
+            "gpobjs": [],
+            "obvals": [],
+            "npobjs": 0,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=295,
+        command="devote",
+        args=[],
+    )
+
+    assert result.handled is True
+    assert player.level == 16
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+    assert room_engine.messages.messages["DEVM03"] in direct_texts
+    assert room_engine.messages.messages["DEVM04"] % player.altnam in broadcast_texts
+
+
+def test_devote_consumes_tokens_and_levels_up(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "level": 16,
+            "gpobjs": [23, 17, 15, 39],
+            "obvals": [0] * 4,
+            "npobjs": 4,
+        }
+    )
+
+    result = room_engine.handle(
+        player=player,
+        room_id=295,
+        command="devote",
+        args=[],
+    )
+
+    assert result.handled is True
+    assert player.level == 17
+    assert not {23, 17, 15, 39}.intersection(player.gpobjs)
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+    assert room_engine.messages.messages["DEVM01"] in direct_texts
+    assert room_engine.messages.messages["DEVM02"] % player.altnam in broadcast_texts
+
+
+def test_wingam_riddle_levels_up(room_engine, base_player):
+    player = base_player.model_copy(
+        update={
+            "level": 24,
+            "gpobjs": [],
+            "obvals": [],
+            "npobjs": 0,
+        }
+    )
+
+    riddle = room_engine.messages.messages["RIDDLE"]
+    result = room_engine.handle(
+        player=player,
+        room_id=302,
+        command="answer",
+        args=riddle.split(" "),
+    )
+
+    assert result.handled is True
+    assert player.level == 25
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+    global_texts = [evt["text"] for evt in result.events if evt["scope"] == "global"]
+    assert room_engine.messages.messages["YOUWIN"] in direct_texts
+    assert room_engine.messages.messages["SHEWON"] % player.altnam in global_texts
+
+
+def test_wingam_allows_case_and_punctuation(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 24, "gpobjs": [], "obvals": [], "npobjs": 0})
+
+    result = room_engine.handle(
+        player=player,
+        room_id=302,
+        command="answer",
+        args=[
+            "Cast",
+            "the",
+            "spells",
+            "and",
+            "cross",
+            "the",
+            "seas,",
+            "heart,",
+            "soul,",
+            "mind,",
+            "and",
+            "body",
+            "are",
+            "the",
+            "keys.",
+        ],
+    )
+
+    assert result.handled is True
+    assert player.level == 25

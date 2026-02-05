@@ -1,0 +1,33 @@
+# Legacy: legacy/KYRLOCS.C:360-364 (wingam); legacy/KYRROUS.C:1406-1421 (wingam)
+id: 302
+name: wingam
+spoiler_summary: "Wing animation chamber where answering the riddle completes the level 25 trial."
+spoiler_interaction: "Answer the riddle phrase to attempt the level 25 ascension."
+legacy_ref: "legacy/KYRROUS.C:1406-1421"
+triggers:
+  - verbs: [answer]
+    # Legacy compares the answer phrase (RIDDLE) to the full response after "answer". (legacy/KYRROUS.C:1410-1416)
+    arg_phrase_key: RIDDLE
+    actions:
+      - type: level_gate
+        target_level: 25
+        level_up: true
+        on_success:
+          # Legacy shocst() announces globally; model with a global message for SHEWON. (legacy/KYRROUS.C:1414-1416)
+          - type: message
+            scope: direct
+            message_id: YOUWIN
+          - type: message
+            scope: global
+            message_id: SHEWON
+            format: [player_altnam]
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]
