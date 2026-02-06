@@ -56,7 +56,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 30: dragonstaff (rub-to-summon Zar behavior via `zaritm`)【F:legacy/KYROBJS.C†L154-L157】【F:legacy/KYRANIM.C†L206-L237】
 - [ ] ID 31: potion (drinkable)【F:legacy/KYROBJS.C†L157-L160】
 - [ ] ID 34: sword (attack item)【F:legacy/KYROBJS.C†L165-L169】
-- [ ] IDs 35–38: readables (scroll, codex, tome, parchment)【F:legacy/KYROBJS.C†L169-L178】
+- [x] IDs 35–38: readables (scroll, codex, tome, parchment)【F:legacy/KYROBJS.C†L169-L178】
 - [ ] IDs 39–44: jewelry/flowers (ring, rose, lilac, orchid, shard, tulip)【F:legacy/KYROBJS.C†L181-L197】
 - [ ] IDs 45–53: scenery/NPC props (dryad, willow tree, temple altar, spell-shop sign, forest statue, hidden shrine, slot machine, Zar dragon, chamber-of-life altar)【F:legacy/KYROBJS.C†L199-L225】
 

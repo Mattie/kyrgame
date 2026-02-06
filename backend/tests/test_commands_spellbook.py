@@ -11,6 +11,16 @@ class FakePresence:
         return set()
 
 
+class FixedRng:
+    def __init__(self, values):
+        self._values = list(values)
+
+    def randint(self, low, high):
+        value = self._values.pop(0)
+        assert low <= value <= high
+        return value
+
+
 def _build_state(player):
     locations = {location.id: location for location in fixtures.load_locations()}
     objects = {obj.id: obj for obj in fixtures.load_objects()}
@@ -97,6 +107,106 @@ async def test_read_spellbook_routes_to_spellbook_rendering_path():
     message_ids = [event.get("message_id") for event in result.events]
     assert message_ids == ["SBOOK1", "SBOOK2", "SBOOK4"]
     assert "Lady" in result.events[0]["text"]
+
+
+@pytest.mark.anyio
+async def test_read_scroll_consumes_item_and_grants_spellbook_spell():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[35],
+        obvals=[0],
+        npobjs=1,
+        offspls=0,
+        defspls=0,
+        othspls=0,
+    )
+    state = _build_state(player)
+    state.rng = FixedRng([0])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("read", {"raw": "scroll"}, state)
+
+    assert state.player.gpobjs == []
+    assert state.player.npobjs == 0
+    assert (state.player.offspls | state.player.defspls | state.player.othspls) != 0
+    assert [event["message_id"] for event in result.events] == [None, "URSCRL"]
+    assert result.events[0]["exclude_player"] == state.player.plyrid
+
+
+@pytest.mark.anyio
+async def test_read_scroll_failure_clears_inventory_except_spellbook_conceptually():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[35, 30, 31],
+        obvals=[0, 0, 0],
+        npobjs=3,
+        offspls=0,
+        defspls=0,
+        othspls=0,
+    )
+    state = _build_state(player)
+    state.rng = FixedRng([80, 1])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("read", {"raw": "scroll"}, state)
+
+    assert state.player.gpobjs == []
+    assert state.player.npobjs == 0
+    assert result.events[-1]["message_id"] == "SCRLM1"
+
+
+@pytest.mark.anyio
+async def test_read_non_readable_inventory_item_emits_reader1():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[30],
+        obvals=[0],
+        npobjs=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("read", {"raw": "dragonstaff"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["READER1"]
+
+
+@pytest.mark.anyio
+async def test_read_scroll_failure_teleports_and_persists_player_state():
+    engine = get_engine("sqlite+pysqlite:///:memory:")
+    init_db_schema(engine)
+    session = create_session(engine)
+
+    base_player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gamloc=4,
+        pgploc=4,
+        gpobjs=[36],
+        obvals=[0],
+        npobjs=1,
+    )
+    session.add(models.Player(**base_player.model_dump()))
+    session.commit()
+
+    state = _build_state(base_player)
+    state.db_session = session
+    state.rng = FixedRng([90, 4, 99])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("read", {"raw": "codex"}, state)
+
+    assert state.player.gamloc == 99
+    assert state.player.pgploc == 4
+    assert [event["message_id"] for event in result.events][-2:] == ["SCRLM4", "SCRLM42"]
+
+    record = session.scalar(select(models.Player).where(models.Player.plyrid == base_player.plyrid))
+    assert record is not None
+    assert record.gamloc == 99
+    assert record.pgploc == 4
 
 
 @pytest.mark.anyio

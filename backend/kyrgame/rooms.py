@@ -15,6 +15,7 @@ from . import yaml_rooms
 from .messaging import build_direct_and_others_events
 from .player_progression import level_up_player
 from .spellbook import add_spell_to_book
+from .inventory import remove_inventory_item
 
 
 RoomCallback = Callable[["RoomContext", str], Awaitable[None]]
@@ -584,7 +585,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             )
             return True
 
-        _remove_inventory_item(player, offered)
+        remove_inventory_item(player, offered)
 
         if level != 5:
             player.stumpi = 0
@@ -682,7 +683,7 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 )
                 return True
 
-            _remove_inventory_item(player, offered)
+            remove_inventory_item(player, offered)
             progress = player.gemidx or 0
             expected = player.stones[progress] if progress < len(player.stones) else None
 
@@ -806,15 +807,6 @@ def _resolve_offering(candidate: str, mapping: dict[str, int]) -> int | None:
         return int(candidate)
     except ValueError:
         return mapping.get(candidate.lower())
-
-
-def _remove_inventory_item(player: PlayerModel, object_id: int):
-    if object_id in player.gpobjs:
-        index = player.gpobjs.index(object_id)
-        player.gpobjs.pop(index)
-        if index < len(player.obvals):
-            player.obvals.pop(index)
-        player.npobjs = len(player.gpobjs)
 
 
 def _grant_def_spell(player: PlayerModel, spell_id: int, bitmask: int):
