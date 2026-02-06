@@ -285,6 +285,52 @@ describe('MudConsole', () => {
 
 
 
+
+  it('updates self-look description when a later refresh response arrives', () => {
+    vi.useFakeTimers()
+    navigatorState.activity = []
+
+    const { rerender } = render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look at Hero' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    navigatorState.activity = [
+      {
+        id: 'self-look-initial',
+        type: 'command_response',
+        summary: 'Hero stands before you.',
+        payload: { event: 'room_message', message_id: 'MDES01', text: 'Hero stands before you.' },
+      },
+    ]
+    rerender(<MudConsole />)
+
+    navigatorState.activity = [
+      {
+        id: 'self-look-initial',
+        type: 'command_response',
+        summary: 'Hero stands before you.',
+        payload: { event: 'room_message', message_id: 'MDES01', text: 'Hero stands before you.' },
+      },
+      {
+        id: 'self-look-refresh',
+        type: 'command_response',
+        summary: 'Hero is now wearing a crimson cloak.',
+        payload: {
+          event: 'room_message',
+          message_id: 'MDES01',
+          text: 'Hero is now wearing a crimson cloak.',
+        },
+      },
+    ]
+    rerender(<MudConsole />)
+
+    const selfLookCard = screen.getByText('Self look').closest('.hud-card') as HTMLElement
+    expect(within(selfLookCard).getByText(/crimson cloak/)).toBeInTheDocument()
+    vi.useRealTimers()
+  })
+
   it('does not let plain look overwrite self-look refresh command', () => {
     vi.useFakeTimers()
     navigatorState.activity = []
