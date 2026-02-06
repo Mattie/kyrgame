@@ -211,6 +211,64 @@ describe('MudConsole', () => {
     vi.useRealTimers()
   })
 
+
+
+  it('pins self-look card for look-at commands even when name differs from session id', () => {
+    vi.useFakeTimers()
+    navigatorState.activity = []
+
+    const { rerender } = render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look at Mattie4' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    navigatorState.activity = [
+      {
+        id: 'self-look-entry-alt-name',
+        type: 'command_response',
+        summary: 'Mattie4 stands before you, carrying a ruby.',
+        payload: { message_id: 'MDES' },
+      },
+    ]
+    rerender(<MudConsole />)
+
+    expect(screen.getByText('Self look')).toBeInTheDocument()
+
+    vi.advanceTimersByTime(5000)
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Mattie4', {
+      silent: true,
+      skipLog: true,
+      meta: { status_card: 'selfLook' },
+    })
+    vi.useRealTimers()
+  })
+
+  it('does not activate or refresh a hitpoints card from spells payloads', () => {
+    vi.useFakeTimers()
+    navigatorState.activity = [
+      {
+        id: 'spells-entry-no-hitpoints',
+        type: 'command_response',
+        summary: '"Fireball" memorized, and 21 spell points of energy.',
+        payload: {
+          memorized_spell_names: ['Fireball'],
+          spts: 21,
+          level: 8,
+          title: 'Sorcerer',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+    expect(screen.queryByText('Hitpoints')).not.toBeInTheDocument()
+
+    vi.advanceTimersByTime(5000)
+    const sentCommands = mockSendCommand.mock.calls.map((args) => args[0])
+    expect(sentCommands).not.toContain('hitpoints')
+    vi.useRealTimers()
+  })
+
   it('renders a spells status card with memorized spells and spell points', () => {
     navigatorState.activity = [
       {

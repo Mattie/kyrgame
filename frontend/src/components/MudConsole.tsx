@@ -119,7 +119,6 @@ type HudState = {
 }
 
 type StatusCardId =
-  | 'hitpoints'
   | 'inventory'
   | 'spellbook'
   | 'description'
@@ -137,7 +136,6 @@ type StatusCardState = {
 }
 
 const STATUS_CARD_CONFIG: Record<StatusCardId, { title: string; command: string }> = {
-  hitpoints: { title: 'Hitpoints', command: 'hitpoints' },
   inventory: { title: 'inventory', command: 'inv' },
   spellbook: { title: 'Spellbook', command: 'spellbook' },
   spells: { title: 'Spells', command: 'spells' },
@@ -147,7 +145,6 @@ const STATUS_CARD_CONFIG: Record<StatusCardId, { title: string; command: string 
 }
 
 const STATUS_CARD_ORDER: StatusCardId[] = [
-  'hitpoints',
   'inventory',
   'spellbook',
   'spells',
@@ -322,9 +319,6 @@ export const MudConsole = () => {
       const payload = entry.payload ?? {}
       const payloadRecord = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {}
       const candidateCards: StatusCardId[] = []
-      if (updates.hitpoints || updates.spellPoints || payloadRecord.event === 'hitpoints') {
-        candidateCards.push('hitpoints')
-      }
       if (updates.inventory || payloadRecord.event === 'inventory') {
         candidateCards.push('inventory')
       }
@@ -387,22 +381,6 @@ export const MudConsole = () => {
 
   const renderCardContent = (card: StatusCardState) => {
     switch (card.id) {
-      case 'hitpoints':
-        return (
-          <>
-            {hud.hitpoints && (
-              <p className="hud-line">Hitpoints: {hud.hitpoints.current}/{hud.hitpoints.max}</p>
-            )}
-            {hud.spellPoints && (
-              <p className="hud-line">
-                Spell points: {hud.spellPoints.current}/{hud.spellPoints.max}
-              </p>
-            )}
-            {!hud.hitpoints && !hud.spellPoints && (
-              <p className="muted">Use HITPOINTS to pin your vitals.</p>
-            )}
-          </>
-        )
       case 'inventory':
         return card.lastSummary ? (
           <p className="hud-line">
@@ -510,8 +488,7 @@ export const MudConsole = () => {
     if (!command) return
 
     const normalized = command.toLowerCase()
-    const selfName = session?.playerId?.trim().toLowerCase()
-    if (selfName && (normalized === `look ${selfName}` || normalized === `look at ${selfName}`)) {
+    if (/^look(?:\s+at)?\s+.+/.test(normalized)) {
       pendingSelfLookCommandRef.current = command
     }
 
