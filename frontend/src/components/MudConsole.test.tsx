@@ -283,6 +283,57 @@ describe('MudConsole', () => {
     vi.useRealTimers()
   })
 
+
+  it('keeps full look-at command for self-look refresh after follow-up responses', () => {
+    vi.useFakeTimers()
+    navigatorState.activity = []
+
+    const { rerender } = render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look at Mattie4' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    navigatorState.activity = [
+      {
+        id: 'self-look-entry-initial',
+        type: 'command_response',
+        summary: '...Mattie4 is a charming lady.',
+        payload: {
+          scope: 'player',
+          event: 'room_message',
+          type: 'room_message',
+          text: '...Mattie4 is a charming lady.',
+          message_id: 'FDES01',
+          command_id: 40,
+        },
+      },
+      {
+        id: 'self-look-entry-follow-up',
+        type: 'command_response',
+        summary: '...Mattie4 is a charming lady.',
+        payload: {
+          scope: 'player',
+          event: 'room_message',
+          type: 'room_message',
+          text: '...Mattie4 is a charming lady.',
+          message_id: 'FDES01',
+          command_id: 41,
+          verb: 'look',
+        },
+      },
+    ]
+    rerender(<MudConsole />)
+
+    vi.advanceTimersByTime(5000)
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Mattie4', {
+      silent: true,
+      skipLog: true,
+      meta: { status_card: 'selfLook' },
+    })
+    vi.useRealTimers()
+  })
+
   it('does not activate or refresh a hitpoints card from spells payloads', () => {
     vi.useFakeTimers()
     navigatorState.activity = [

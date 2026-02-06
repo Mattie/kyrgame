@@ -361,10 +361,11 @@ export const MudConsole = () => {
           candidateCards.forEach((id) => {
             const base = next[id] ?? { ...defaultStatusCardsRef.current[id] }
             const commandFromPayload =
-              (id === 'selfLook' && pendingSelfLookCommandRef.current) ||
-              (typeof payloadRecord?.verb === 'string' && payloadRecord.verb.trim()) ||
-              (typeof payloadRecord?.command === 'string' && payloadRecord.command.trim()) ||
-              base.command
+              id === 'selfLook'
+                ? pendingSelfLookCommandRef.current || base.command
+                : (typeof payloadRecord?.verb === 'string' && payloadRecord.verb.trim()) ||
+                  (typeof payloadRecord?.command === 'string' && payloadRecord.command.trim()) ||
+                  base.command
 
             next[id] = {
               ...base,
