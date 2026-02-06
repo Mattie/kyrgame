@@ -304,7 +304,7 @@ export const MudConsole = () => {
     } else {
       node.scrollTop = node.scrollHeight
     }
-  }, [activity, statusCards])
+  }, [activity])
 
   useEffect(() => {
     if (!navMode) return
@@ -356,9 +356,10 @@ export const MudConsole = () => {
           : typeof payloadRecord.messageId === 'string'
             ? payloadRecord.messageId
             : null
+      const hasSelfLookMeta = entry.meta?.status_card === 'selfLook'
       const shouldUpdateSelfLook =
         isPlayerDescriptionMessageId(messageId) &&
-        (pendingSelfLookCommandRef.current || statusCards.selfLook?.active)
+        (pendingSelfLookCommandRef.current || hasSelfLookMeta)
       if (shouldUpdateSelfLook) {
         candidateCards.push('selfLook')
       }
