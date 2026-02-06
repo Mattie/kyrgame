@@ -8,6 +8,7 @@ import yaml
 
 from . import constants, models
 from .messaging import build_direct_and_others_events
+from .inventory import pop_inventory_index
 from .player_progression import level_up_player
 from .spellbook import add_spell_to_book
 
@@ -291,7 +292,7 @@ class YamlRoomEngine:
 
         idx = self._find_inventory_index(player, obj_id)
         if idx is not None:
-            self._remove_inventory_index(player, idx)
+            pop_inventory_index(player, idx)
 
     def _action_add_gold(self, action: dict, player: models.PlayerModel, context: dict[str, Any]):
         amount = action.get("amount", 0)
@@ -735,7 +736,7 @@ class YamlRoomEngine:
         idx = int(index)
         if idx < 0 or idx >= len(player.gpobjs):
             return
-        self._remove_inventory_index(player, idx)
+        pop_inventory_index(player, idx)
 
     def _action_level_up(self, player: models.PlayerModel):
         level_up_player(player)
@@ -778,11 +779,6 @@ class YamlRoomEngine:
         except ValueError:
             return None
 
-    @staticmethod
-    def _remove_inventory_index(player: models.PlayerModel, index: int):
-        player.gpobjs.pop(index)
-        player.obvals.pop(index)
-        player.npobjs = len(player.gpobjs)
 
     def _article_for_object(self, obj: models.GameObjectModel) -> str:
         article = "an" if "NEEDAN" in obj.flags or obj.name[0].lower() in "aeiou" else "a"

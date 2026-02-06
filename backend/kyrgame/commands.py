@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Dict, List, Protocol, Set
 from sqlalchemy import select
 
 from . import constants, fixtures, models, repositories, room_spoilers
+from .inventory import pop_inventory_index
 from .spellbook import has_spell_in_book, list_spellbook_spells, memorize_spell
 
 
@@ -653,9 +654,7 @@ async def _handle_get_from_player(
             ],
         )
 
-    value = target_player.obvals.pop(inventory_index)
-    target_player.gpobjs.pop(inventory_index)
-    target_player.npobjs = len(target_player.gpobjs)
+    _, value = pop_inventory_index(target_player, inventory_index)
     state.player.gpobjs.append(obj_id)
     state.player.obvals.append(value)
     state.player.npobjs = len(state.player.gpobjs)
@@ -704,10 +703,7 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
     if inventory_index is None:
         raise CommandError("You are not carrying that", message_id=message_id)
 
-    object_id = state.player.gpobjs.pop(inventory_index)
-    if len(state.player.obvals) > inventory_index:
-        state.player.obvals.pop(inventory_index)
-    state.player.npobjs = len(state.player.gpobjs)
+    object_id, _ = pop_inventory_index(state.player, inventory_index)
 
     updated_objects = list(location.objects) + [object_id]
     location = location.model_copy(
@@ -1686,8 +1682,114 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
 
 
 def _handle_read(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
     raw = (args.get("raw") or "").strip().lower()
     if raw == "spellbook":
         # Legacy reader() delegates `read spellbook` to looker()/seesbk() (legacy/KYRCMDS.C:1035-1056).
         return _handle_spellbook(state, args)
-    return _handle_stub(state, args)
+
+    objects = state.objects or {}
+    inventory_index = _find_inventory_index(state.player, raw, objects)
+    if inventory_index is None:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "READER2",
+                    _format_message(state, "READER2"),
+                    command_id,
+                )
+            ],
+        )
+
+    object_id = state.player.gpobjs[inventory_index]
+    obj = objects.get(object_id)
+    if obj is None or "REDABL" not in obj.flags:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "READER1",
+                    _format_message(state, "READER1", obj.name if obj else raw),
+                    command_id,
+                )
+            ],
+        )
+
+    # Ported from reader()/scroll() in legacy/KYRCMDS.C:1033-1145.
+    pop_inventory_index(state.player, inventory_index)
+    read_item = obj.name
+    room_text = _format_message(
+        state,
+        "SCROLL1",
+        state.player.altnam,
+        _hisher(state.player),
+        read_item,
+    )
+    events = [
+        _message_event("room", None, room_text, command_id, exclude_player=state.player.plyrid),
+    ]
+
+    spell_roll = state.rng.randint(0, 111)
+    if spell_roll < 67:
+        spell = fixtures.load_spells()[spell_roll]
+        events.append(
+            _message_event(
+                "player",
+                "URSCRL",
+                _format_message(state, "URSCRL", read_item, spell.name),
+                command_id,
+            )
+        )
+        if spell.sbkref == constants.OFFENS:
+            state.player.offspls |= spell.bitdef
+        elif spell.sbkref == constants.DEFENS:
+            state.player.defspls |= spell.bitdef
+        else:
+            state.player.othspls |= spell.bitdef
+    else:
+        failure = state.rng.randint(0, 8)
+        if failure == 0:
+            state.player.spells = []
+            state.player.nspells = 0
+            events.append(_message_event("player", "SCRLM0", _format_message(state, "SCRLM0", read_item), command_id))
+        elif failure == 1:
+            state.player.gpobjs.clear()
+            state.player.obvals.clear()
+            state.player.npobjs = 0
+            events.append(_message_event("player", "SCRLM1", _format_message(state, "SCRLM1", read_item), command_id))
+        elif failure == 2:
+            state.player.gold = 0
+            events.append(_message_event("player", "SCRLM2", _format_message(state, "SCRLM2", read_item), command_id))
+        elif failure == 3:
+            state.player.spts = 0
+            events.append(_message_event("player", "SCRLM3", _format_message(state, "SCRLM3", read_item), command_id))
+        elif failure == 4:
+            target_room = state.rng.randint(0, 169)
+            state.player.pgploc = state.player.gamloc
+            state.player.gamloc = target_room
+            events.append(_message_event("player", "SCRLM4", _format_message(state, "SCRLM4", read_item), command_id))
+            events.append(_message_event("player", "SCRLM42", _format_message(state, "SCRLM42"), command_id))
+        elif failure == 5:
+            if len(state.player.gpobjs) < constants.MXPOBS:
+                state.player.gpobjs.append(30)
+                state.player.obvals.append(0)
+                state.player.npobjs = len(state.player.gpobjs)
+            events.append(_message_event("player", "SCRLM5", _format_message(state, "SCRLM5", read_item), command_id))
+        elif failure == 6:
+            surprise_item = state.rng.randint(36, 38)
+            label = "codex" if surprise_item == 36 else "tome"
+            if len(state.player.gpobjs) < constants.MXPOBS:
+                state.player.gpobjs.append(surprise_item)
+                state.player.obvals.append(0)
+                state.player.npobjs = len(state.player.gpobjs)
+            events.append(_message_event("player", "SCRLM6", _format_message(state, "SCRLM6", read_item, label), command_id))
+        else:
+            damage = state.rng.randint(2, 11)
+            state.player.hitpts = max(0, state.player.hitpts - damage)
+            events.append(_message_event("player", "SCRLM7", _format_message(state, "SCRLM7", read_item, damage), command_id))
+
+    _persist_player_state(state, state.player)
+    return CommandResult(state=state, events=events)
