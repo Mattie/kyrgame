@@ -91,15 +91,6 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
 }
 
 
-const isPlayerDescriptionMessageId = (messageId: string | null): boolean => {
-  if (!messageId) return false
-  return (
-    /^MDES\d*$/i.test(messageId) ||
-    /^FDES\d*$/i.test(messageId) ||
-    ['INVDES', 'WILDES', 'PEGDES', 'PDRDES'].includes(messageId.toUpperCase())
-  )
-}
-
 const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   if (payload === undefined || payload === null) return null
   if (typeof payload === 'object' && 'event' in payload) {
@@ -133,7 +124,6 @@ type StatusCardId =
   | 'spellbook'
   | 'description'
   | 'effects'
-  | 'selfLook'
   | 'spells'
 
 type StatusCardState = {
@@ -150,7 +140,6 @@ const STATUS_CARD_CONFIG: Record<StatusCardId, { title: string; command: string 
   spellbook: { title: 'Spellbook', command: 'spellbook' },
   spells: { title: 'Spells', command: 'spells' },
   description: { title: 'Description', command: 'describe' },
-  selfLook: { title: 'Self look', command: 'look at self' },
   effects: { title: 'Effects', command: 'effects' },
 }
 
@@ -160,7 +149,6 @@ const STATUS_CARD_ORDER: StatusCardId[] = [
   'spells',
   'effects',
   'description',
-  'selfLook',
 ]
 
 const createDefaultStatusCards = (): Record<StatusCardId, StatusCardState> =>
@@ -271,7 +259,6 @@ export const MudConsole = () => {
   const processedActivityRef = useRef(0)
   const defaultStatusCardsRef = useRef(createDefaultStatusCards())
   const lastConnectionStatusRef = useRef(connectionStatus)
-  const pendingSelfLookCommandRef = useRef<string | null>(null)
 
   const hudVisible = useMemo(
     () => Object.values(statusCards).some((card) => card.active),
@@ -285,11 +272,6 @@ export const MudConsole = () => {
         .filter((card): card is StatusCardState => Boolean(card && card.active)),
     [statusCards]
   )
-
-  const selfLookCommand = useMemo(() => {
-    const displayName = session?.playerId?.trim()
-    return displayName ? `look at ${displayName}` : 'look at self'
-  }, [session?.playerId])
 
   const location = useMemo(() => {
     if (!world || currentRoom === null) return null
@@ -356,13 +338,6 @@ export const MudConsole = () => {
           : typeof payloadRecord.messageId === 'string'
             ? payloadRecord.messageId
             : null
-      const hasSelfLookMeta = entry.meta?.status_card === 'selfLook'
-      const shouldUpdateSelfLook =
-        isPlayerDescriptionMessageId(messageId) &&
-        (pendingSelfLookCommandRef.current || hasSelfLookMeta)
-      if (shouldUpdateSelfLook) {
-        candidateCards.push('selfLook')
-      }
 
       if (candidateCards.length > 0) {
         setStatusCards((prev) => {
@@ -370,11 +345,9 @@ export const MudConsole = () => {
           candidateCards.forEach((id) => {
             const base = next[id] ?? { ...defaultStatusCardsRef.current[id] }
             const commandFromPayload =
-              id === 'selfLook'
-                ? pendingSelfLookCommandRef.current || selfLookCommand || base.command
-                : (typeof payloadRecord?.verb === 'string' && payloadRecord.verb.trim()) ||
-                  (typeof payloadRecord?.command === 'string' && payloadRecord.command.trim()) ||
-                  base.command
+              (typeof payloadRecord?.verb === 'string' && payloadRecord.verb.trim()) ||
+              (typeof payloadRecord?.command === 'string' && payloadRecord.command.trim()) ||
+              base.command
 
             next[id] = {
               ...base,
@@ -390,14 +363,11 @@ export const MudConsole = () => {
           return next
         })
 
-        if (candidateCards.includes('selfLook')) {
-          pendingSelfLookCommandRef.current = null
-        }
       }
     })
 
     processedActivityRef.current = activity.length
-  }, [activity, selfLookCommand])
+  }, [activity])
 
   const renderCardContent = (card: StatusCardState) => {
     switch (card.id) {
@@ -436,12 +406,6 @@ export const MudConsole = () => {
                 'Look or DESCRIBE yourself to populate this panel.'
               }
             />
-          </p>
-        )
-      case 'selfLook':
-        return (
-          <p className="hud-line">
-            <GemstoneText text={card.lastSummary ?? 'Use LOOK <your name> to pin your current appearance.'} />
           </p>
         )
       case 'spells':
@@ -506,11 +470,6 @@ export const MudConsole = () => {
     event.preventDefault()
     const command = input.trim()
     if (!command) return
-
-    const normalized = command.toLowerCase()
-    if (/^look(?:\s+at)?\s+.+/.test(normalized)) {
-      pendingSelfLookCommandRef.current = selfLookCommand
-    }
 
     sendCommand(command)
     requestStatusRefresh()
