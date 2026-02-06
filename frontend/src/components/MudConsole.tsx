@@ -150,7 +150,7 @@ const STATUS_CARD_CONFIG: Record<StatusCardId, { title: string; command: string 
   spellbook: { title: 'Spellbook', command: 'spellbook' },
   spells: { title: 'Spells', command: 'spells' },
   description: { title: 'Description', command: 'describe' },
-  selfLook: { title: 'Self look', command: 'look self' },
+  selfLook: { title: 'Self look', command: 'look at self' },
   effects: { title: 'Effects', command: 'effects' },
 }
 
@@ -286,6 +286,11 @@ export const MudConsole = () => {
     [statusCards]
   )
 
+  const selfLookCommand = useMemo(() => {
+    const displayName = session?.playerId?.trim()
+    return displayName ? `look at ${displayName}` : 'look at self'
+  }, [session?.playerId])
+
   const location = useMemo(() => {
     if (!world || currentRoom === null) return null
     return world.locations.find((loc) => loc.id === currentRoom) ?? null
@@ -362,7 +367,7 @@ export const MudConsole = () => {
             const base = next[id] ?? { ...defaultStatusCardsRef.current[id] }
             const commandFromPayload =
               id === 'selfLook'
-                ? pendingSelfLookCommandRef.current || base.command
+                ? pendingSelfLookCommandRef.current || selfLookCommand || base.command
                 : (typeof payloadRecord?.verb === 'string' && payloadRecord.verb.trim()) ||
                   (typeof payloadRecord?.command === 'string' && payloadRecord.command.trim()) ||
                   base.command
@@ -388,7 +393,7 @@ export const MudConsole = () => {
     })
 
     processedActivityRef.current = activity.length
-  }, [activity])
+  }, [activity, selfLookCommand])
 
   const renderCardContent = (card: StatusCardState) => {
     switch (card.id) {
@@ -500,7 +505,7 @@ export const MudConsole = () => {
 
     const normalized = command.toLowerCase()
     if (/^look(?:\s+at)?\s+.+/.test(normalized)) {
-      pendingSelfLookCommandRef.current = command
+      pendingSelfLookCommandRef.current = selfLookCommand
     }
 
     sendCommand(command)

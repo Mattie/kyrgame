@@ -203,7 +203,7 @@ describe('MudConsole', () => {
     expect(mockSendCommand).toHaveBeenNthCalledWith(1, 'look hero')
 
     vi.advanceTimersByTime(5000)
-    expect(mockSendCommand).toHaveBeenLastCalledWith('look hero', {
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Hero', {
       silent: true,
       skipLog: true,
       meta: { status_card: 'selfLook' },
@@ -244,7 +244,7 @@ describe('MudConsole', () => {
     expect(screen.getByText('Self look')).toBeInTheDocument()
 
     vi.advanceTimersByTime(5000)
-    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Mattie4', {
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Hero', {
       silent: true,
       skipLog: true,
       meta: { status_card: 'selfLook' },
@@ -275,7 +275,7 @@ describe('MudConsole', () => {
     expect(screen.getByText('Self look')).toBeInTheDocument()
 
     vi.advanceTimersByTime(5000)
-    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Mattie4', {
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Hero', {
       silent: true,
       skipLog: true,
       meta: { status_card: 'selfLook' },
@@ -283,6 +283,39 @@ describe('MudConsole', () => {
     vi.useRealTimers()
   })
 
+
+
+  it('does not let plain look overwrite self-look refresh command', () => {
+    vi.useFakeTimers()
+    navigatorState.activity = []
+
+    const { rerender } = render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look at Hero' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    navigatorState.activity = [
+      {
+        id: 'self-look-initial',
+        type: 'command_response',
+        summary: 'Hero stands before you.',
+        payload: { event: 'room_message', message_id: 'MDES01', text: 'Hero stands before you.' },
+      },
+    ]
+    rerender(<MudConsole />)
+
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    vi.advanceTimersByTime(5000)
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Hero', {
+      silent: true,
+      skipLog: true,
+      meta: { status_card: 'selfLook' },
+    })
+    vi.useRealTimers()
+  })
 
   it('keeps full look-at command for self-look refresh after follow-up responses', () => {
     vi.useFakeTimers()
@@ -326,7 +359,7 @@ describe('MudConsole', () => {
     rerender(<MudConsole />)
 
     vi.advanceTimersByTime(5000)
-    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Mattie4', {
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Hero', {
       silent: true,
       skipLog: true,
       meta: { status_card: 'selfLook' },
