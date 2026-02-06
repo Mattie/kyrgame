@@ -113,9 +113,19 @@ type HudState = {
   inventory?: string[]
   effects?: string[]
   spellbook?: string[]
+  memorizedSpells?: string[]
+  level?: number
+  title?: string
 }
 
-type StatusCardId = 'hitpoints' | 'inventory' | 'spellbook' | 'description' | 'effects'
+type StatusCardId =
+  | 'hitpoints'
+  | 'inventory'
+  | 'spellbook'
+  | 'description'
+  | 'effects'
+  | 'selfLook'
+  | 'spells'
 
 type StatusCardState = {
   id: StatusCardId
@@ -130,7 +140,9 @@ const STATUS_CARD_CONFIG: Record<StatusCardId, { title: string; command: string 
   hitpoints: { title: 'Hitpoints', command: 'hitpoints' },
   inventory: { title: 'inventory', command: 'inv' },
   spellbook: { title: 'Spellbook', command: 'spellbook' },
+  spells: { title: 'Spells', command: 'spells' },
   description: { title: 'Description', command: 'describe' },
+  selfLook: { title: 'Self look', command: 'look self' },
   effects: { title: 'Effects', command: 'effects' },
 }
 
@@ -138,8 +150,10 @@ const STATUS_CARD_ORDER: StatusCardId[] = [
   'hitpoints',
   'inventory',
   'spellbook',
+  'spells',
   'effects',
   'description',
+  'selfLook',
 ]
 
 const createDefaultStatusCards = (): Record<StatusCardId, StatusCardState> =>
@@ -186,6 +200,19 @@ const extractHudFromEntry = (entry: { summary?: string; payload?: any }): HudSta
 
   if (payload.spellbook) {
     updates.spellbook = payload.spellbook
+  }
+
+  if (Array.isArray(payload.memorized_spell_names)) {
+    updates.memorizedSpells = payload.memorized_spell_names
+  }
+  if (typeof payload.spts === 'number') {
+    updates.spellPoints = { current: payload.spts, max: payload.spts }
+  }
+  if (typeof payload.level === 'number') {
+    updates.level = payload.level
+  }
+  if (typeof payload.title === 'string') {
+    updates.title = payload.title
   }
 
   const payloadEvent = typeof payload.event === 'string' ? payload.event : ''
@@ -236,6 +263,8 @@ export const MudConsole = () => {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const processedActivityRef = useRef(0)
   const defaultStatusCardsRef = useRef(createDefaultStatusCards())
+  const lastConnectionStatusRef = useRef(connectionStatus)
+  const pendingSelfLookCommandRef = useRef<string | null>(null)
 
   const hudVisible = useMemo(
     () => Object.values(statusCards).some((card) => card.active),
@@ -302,11 +331,24 @@ export const MudConsole = () => {
       if (updates.spellbook || payloadRecord.event === 'spellbook') {
         candidateCards.push('spellbook')
       }
+      if (updates.memorizedSpells || typeof payloadRecord.spts === 'number') {
+        candidateCards.push('spells')
+      }
       if (updates.description || payloadRecord.event === 'description') {
         candidateCards.push('description')
       }
       if (updates.effects || payloadRecord.event === 'effects') {
         candidateCards.push('effects')
+      }
+
+      const messageId =
+        typeof payloadRecord.message_id === 'string'
+          ? payloadRecord.message_id
+          : typeof payloadRecord.messageId === 'string'
+            ? payloadRecord.messageId
+            : null
+      if (pendingSelfLookCommandRef.current && messageId && ['MDES', 'FDES', 'INVDES', 'WILDES', 'PEGDES', 'PDRDES'].includes(messageId)) {
+        candidateCards.push('selfLook')
       }
 
       if (candidateCards.length > 0) {
@@ -315,6 +357,7 @@ export const MudConsole = () => {
           candidateCards.forEach((id) => {
             const base = next[id] ?? { ...defaultStatusCardsRef.current[id] }
             const commandFromPayload =
+              (id === 'selfLook' && pendingSelfLookCommandRef.current) ||
               (typeof payloadRecord?.verb === 'string' && payloadRecord.verb.trim()) ||
               (typeof payloadRecord?.command === 'string' && payloadRecord.command.trim()) ||
               base.command
@@ -332,6 +375,10 @@ export const MudConsole = () => {
           })
           return next
         })
+
+        if (candidateCards.includes('selfLook')) {
+          pendingSelfLookCommandRef.current = null
+        }
       }
     })
 
@@ -393,6 +440,19 @@ export const MudConsole = () => {
             />
           </p>
         )
+      case 'selfLook':
+        return (
+          <p className="hud-line">
+            <GemstoneText text={card.lastSummary ?? 'Use LOOK <your name> to pin your current appearance.'} />
+          </p>
+        )
+      case 'spells':
+        return (
+          <div className="hud-line">
+            <p>Memorized: {hud.memorizedSpells?.length ? hud.memorizedSpells.join(', ') : 'none'}</p>
+            <p>Spell points: {hud.spellPoints?.current ?? 0}</p>
+          </div>
+        )
       case 'effects':
         return hud.effects && hud.effects.length > 0 ? (
           <p className="hud-line">Effects: {hud.effects.join(', ')}</p>
@@ -425,6 +485,15 @@ export const MudConsole = () => {
   }, [activeStatusCards, connectionStatus, sendCommand])
 
   useEffect(() => {
+    const wasConnected = lastConnectionStatusRef.current === 'connected'
+    const isConnected = connectionStatus === 'connected'
+    if (isConnected && !wasConnected && activeStatusCards.some((card) => card.autoRefresh)) {
+      requestStatusRefresh()
+    }
+    lastConnectionStatusRef.current = connectionStatus
+  }, [activeStatusCards, connectionStatus, requestStatusRefresh])
+
+  useEffect(() => {
     if (connectionStatus !== 'connected') return
     if (!activeStatusCards.some((card) => card.autoRefresh)) return
 
@@ -437,7 +506,16 @@ export const MudConsole = () => {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    sendCommand(input)
+    const command = input.trim()
+    if (!command) return
+
+    const normalized = command.toLowerCase()
+    const selfName = session?.playerId?.trim().toLowerCase()
+    if (selfName && (normalized === `look ${selfName}` || normalized === `look at ${selfName}`)) {
+      pendingSelfLookCommandRef.current = command
+    }
+
+    sendCommand(command)
     requestStatusRefresh()
     setInput('')
   }
