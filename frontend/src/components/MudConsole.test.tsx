@@ -213,6 +213,45 @@ describe('MudConsole', () => {
 
 
 
+
+  it('pins self-look card when look-at returns room_message with FDES-style message id', () => {
+    vi.useFakeTimers()
+    navigatorState.activity = []
+
+    const { rerender } = render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look at Mattie4' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    navigatorState.activity = [
+      {
+        id: 'self-look-entry-room-message',
+        type: 'command_response',
+        summary: '...Mattie4 is a charming lady.',
+        payload: {
+          scope: 'player',
+          event: 'room_message',
+          type: 'room_message',
+          text: '...Mattie4 is a charming lady.',
+          message_id: 'FDES01',
+          command_id: 33,
+        },
+      },
+    ]
+    rerender(<MudConsole />)
+
+    expect(screen.getByText('Self look')).toBeInTheDocument()
+
+    vi.advanceTimersByTime(5000)
+    expect(mockSendCommand).toHaveBeenLastCalledWith('look at Mattie4', {
+      silent: true,
+      skipLog: true,
+      meta: { status_card: 'selfLook' },
+    })
+    vi.useRealTimers()
+  })
+
   it('pins self-look card for look-at commands even when name differs from session id', () => {
     vi.useFakeTimers()
     navigatorState.activity = []

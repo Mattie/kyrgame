@@ -90,6 +90,16 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
   d: 'east',
 }
 
+
+const isPlayerDescriptionMessageId = (messageId: string | null): boolean => {
+  if (!messageId) return false
+  return (
+    /^MDES\d*$/i.test(messageId) ||
+    /^FDES\d*$/i.test(messageId) ||
+    ['INVDES', 'WILDES', 'PEGDES', 'PDRDES'].includes(messageId.toUpperCase())
+  )
+}
+
 const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   if (payload === undefined || payload === null) return null
   if (typeof payload === 'object' && 'event' in payload) {
@@ -341,7 +351,7 @@ export const MudConsole = () => {
           : typeof payloadRecord.messageId === 'string'
             ? payloadRecord.messageId
             : null
-      if (pendingSelfLookCommandRef.current && messageId && ['MDES', 'FDES', 'INVDES', 'WILDES', 'PEGDES', 'PDRDES'].includes(messageId)) {
+      if (pendingSelfLookCommandRef.current && isPlayerDescriptionMessageId(messageId)) {
         candidateCards.push('selfLook')
       }
 
