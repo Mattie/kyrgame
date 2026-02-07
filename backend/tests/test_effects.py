@@ -1,3 +1,5 @@
+import random
+
 import pytest
 
 from kyrgame import constants, fixtures, models
@@ -85,3 +87,28 @@ def test_transformation_spells_toggle_player_flags(sample_player):
     willow = engine.cast_spell(player=sample_player, spell_id=62, target=None)
     assert willow.message_id == "S62M00"
     assert constants.PlayerFlag.WILLOW & sample_player.flags
+
+
+def test_forget_spells_apply_spellbook_effects(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages, rng=random.Random(1))
+
+    sample_player.spells.clear()
+    sample_player.spells.extend([1, 2, 3])
+    sample_player.nspells = 3
+
+    dumdum = engine.cast_spell(player=sample_player, spell_id=12, target=None)
+    assert dumdum.message_id == "S13M03"
+    assert sample_player.spells == []
+    assert sample_player.nspells == 0
+
+    sample_player.spells.clear()
+    sample_player.spells.extend([4, 5, 6])
+    sample_player.nspells = 3
+
+    saywhat = engine.cast_spell(player=sample_player, spell_id=50, target=None)
+    assert saywhat.message_id == "S51M03"
+    assert saywhat.context["forgot_spell_id"] in {4, 5, 6}
+    assert len(sample_player.spells) == 2
+    assert sample_player.nspells == 2

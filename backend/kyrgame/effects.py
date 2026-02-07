@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import random
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, Optional
 
 from . import constants, models
+from .spellbook import forget_all_memorized, forget_one_random_memorized
 
 
 class EffectError(Exception):
@@ -49,10 +51,12 @@ class SpellEffectEngine:
         spells: Iterable[models.SpellModel],
         messages: models.MessageBundleModel,
         clock: Callable[[], float] | None = None,
+        rng: random.Random | None = None,
     ):
         self.spells = {spell.id: spell for spell in spells}
         self.messages = messages
         self.clock = clock or time.monotonic
+        self.rng = rng or random.Random()
         self.cooldowns: Dict[str, Dict[int, float]] = {}
         self.effects: Dict[int, SpellEffect] = self._build_effects()
 
@@ -80,6 +84,22 @@ class SpellEffectEngine:
                 flag=constants.PlayerFlag.PEGASU,
                 direct_key="S16M00",
                 broadcast_key="S16M01",
+            )
+
+        if 12 in effects:
+            # Legacy spell: dumdum forgets all memorized spells (legacy/KYRSPEL.C lines 607-615).
+            effects[12].message_id = "S13M03"
+            effects[12].handler = self._forget_all_handler(
+                failure_key="S13M00",
+                success_key="S13M03",
+            )
+
+        if 50 in effects:
+            # Legacy spell: saywhat forgets one memorized spell (legacy/KYRSPEL.C lines 1047-1055).
+            effects[50].message_id = "S51M03"
+            effects[50].handler = self._forget_one_handler(
+                failure_key="S51M00",
+                success_key="S51M03",
             )
 
         if 62 in effects:
@@ -154,6 +174,66 @@ class SpellEffectEngine:
                     else broadcast_text,
                     "target": target,
                 },
+            )
+
+        return _handler
+
+    def _forget_all_handler(
+        self,
+        *,
+        failure_key: str,
+        success_key: str,
+    ) -> Callable[[models.PlayerModel, Optional[str], SpellEffect], EffectResult]:
+        def _handler(player: models.PlayerModel, target: Optional[str], effect: SpellEffect) -> EffectResult:  # noqa: ARG001
+            if player.charms[constants.OBJPRO] or player.nspells == 0:
+                text = self.messages.messages.get(failure_key, "")
+                return EffectResult(
+                    success=False,
+                    message_id=failure_key,
+                    text=text,
+                    animation=effect.animation,
+                    context={"target": target} if target else {},
+                )
+
+            forget_all_memorized(player)
+            text = self.messages.messages.get(success_key, "")
+            return EffectResult(
+                success=True,
+                message_id=success_key,
+                text=text,
+                animation=effect.animation,
+                context={"target": target} if target else {},
+            )
+
+        return _handler
+
+    def _forget_one_handler(
+        self,
+        *,
+        failure_key: str,
+        success_key: str,
+    ) -> Callable[[models.PlayerModel, Optional[str], SpellEffect], EffectResult]:
+        def _handler(player: models.PlayerModel, target: Optional[str], effect: SpellEffect) -> EffectResult:  # noqa: ARG001
+            if player.charms[constants.OBJPRO] or player.nspells == 0:
+                text = self.messages.messages.get(failure_key, "")
+                return EffectResult(
+                    success=False,
+                    message_id=failure_key,
+                    text=text,
+                    animation=effect.animation,
+                    context={"target": target} if target else {},
+                )
+
+            forgotten = forget_one_random_memorized(player, self.rng)
+            text = self.messages.messages.get(success_key, "")
+            context = {"target": target} if target else {}
+            context["forgot_spell_id"] = forgotten
+            return EffectResult(
+                success=True,
+                message_id=success_key,
+                text=text,
+                animation=effect.animation,
+                context=context,
             )
 
         return _handler

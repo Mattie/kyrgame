@@ -8,7 +8,13 @@ from sqlalchemy import select
 
 from . import constants, fixtures, models, repositories, room_spoilers
 from .inventory import pop_inventory_index
-from .spellbook import has_spell_in_book, list_spellbook_spells, memorize_spell
+from .spellbook import (
+    add_spell_to_book,
+    forget_all_memorized,
+    has_spell_in_book,
+    list_spellbook_spells,
+    memorize_spell,
+)
 
 
 class CommandError(Exception):
@@ -1743,17 +1749,11 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
                 command_id,
             )
         )
-        if spell.sbkref == constants.OFFENS:
-            state.player.offspls |= spell.bitdef
-        elif spell.sbkref == constants.DEFENS:
-            state.player.defspls |= spell.bitdef
-        else:
-            state.player.othspls |= spell.bitdef
+        add_spell_to_book(state.player, spell)
     else:
         failure = state.rng.randint(0, 8)
         if failure == 0:
-            state.player.spells = []
-            state.player.nspells = 0
+            forget_all_memorized(state.player)
             events.append(_message_event("player", "SCRLM0", _format_message(state, "SCRLM0", read_item), command_id))
         elif failure == 1:
             state.player.gpobjs.clear()

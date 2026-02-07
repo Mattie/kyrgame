@@ -1,3 +1,5 @@
+import random
+
 import pytest
 
 from kyrgame import constants, fixtures
@@ -5,10 +7,12 @@ from kyrgame.spellbook import (
     add_spell_to_book,
     forget_all_memorized,
     forget_memorized_spell,
+    forget_one_random_memorized,
     has_spell_in_book,
     list_memorized_spells,
     list_spellbook_spells,
     memorize_spell,
+    wipe_spellbook_bits,
 )
 
 
@@ -83,6 +87,35 @@ def test_forget_memorized_spell_and_forget_all_keep_nspells_in_sync():
     forget_all_memorized(player)
     assert player.spells == []
     assert player.nspells == 0
+
+
+def test_forget_one_random_memorized_removes_single_spell():
+    player = _fresh_player()
+    rng = random.Random(0)
+    player.spells.extend([1, 2, 3])
+    player.nspells = 3
+
+    removed = forget_one_random_memorized(player, rng)
+
+    assert removed in {1, 2, 3}
+    assert removed not in player.spells
+    assert len(player.spells) == 2
+    assert player.nspells == 2
+
+
+def test_wipe_spellbook_bits_clears_all_book_flags():
+    player = _fresh_player()
+    spells = fixtures.load_spells()
+
+    add_spell_to_book(player, spells[0])
+    add_spell_to_book(player, spells[1])
+    add_spell_to_book(player, spells[2])
+
+    wipe_spellbook_bits(player)
+
+    assert player.offspls == 0
+    assert player.defspls == 0
+    assert player.othspls == 0
 
 
 def test_list_spellbook_spells_and_memorized_spells_are_distinct():
