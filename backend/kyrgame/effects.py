@@ -114,7 +114,12 @@ class SpellEffectEngine:
         return effects
 
     def cast_spell(
-        self, player: models.PlayerModel, spell_id: int, target: Optional[str]
+        self,
+        player: models.PlayerModel,
+        spell_id: int,
+        target: Optional[str],
+        *,
+        apply_cost: bool = True,
     ) -> EffectResult:
         if spell_id not in self.effects:
             raise EffectError(f"Unknown spell {spell_id}")
@@ -131,10 +136,11 @@ class SpellEffectEngine:
         if effect.requires_target and not target:
             raise TargetingError("This spell requires a target")
 
-        if player.spts < effect.cost:
+        if apply_cost and player.spts < effect.cost:
             raise ResourceCostError("Not enough spell points to cast")
 
-        player.spts -= effect.cost
+        if apply_cost:
+            player.spts -= effect.cost
         player_cooldowns[spell_id] = now
 
         if effect.handler:
