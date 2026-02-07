@@ -7,10 +7,12 @@ from typing import Awaitable, Callable, Dict, List, Protocol, Set
 from sqlalchemy import select
 
 from . import constants, fixtures, models, repositories, room_spoilers
+from .effects import SpellEffectEngine
 from .inventory import pop_inventory_index
 from .spellbook import (
     add_spell_to_book,
     forget_all_memorized,
+    forget_memorized_spell,
     has_spell_in_book,
     list_spellbook_spells,
     memorize_spell,
@@ -788,6 +790,14 @@ def _message_event(
     return event
 
 
+def _sndutl_text(player: models.PlayerModel, template: str) -> str:
+    """Format a sndutl-style broadcast line for the room."""
+    # Legacy sndutl formats "*** <altnam> is <template % hisher>" for room broadcasts.
+    # (legacy/KYRUTIL.C:119-138)
+    if "%s" in template:
+        template = template % _hisher(player)
+    return f"*** {player.altnam} is {template}"
+
 
 
 def _find_spell_by_name(raw_name: str, spells_catalog: list[models.SpellModel]) -> models.SpellModel | None:
@@ -903,6 +913,141 @@ def _handle_memorize(state: GameState, args: dict) -> CommandResult:
             ),
         ],
     )
+
+
+def _handle_cast(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    raw_target = (args.get("raw") or args.get("target") or "").strip()
+    # Legacy caster(): arg checks, memorized gating, level/spts gates, rmvspl + spts decrement,
+    # then splrou execution (legacy/KYRSPEL.C:1512-1533).
+    if not raw_target:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "OBJM07",
+                    _format_message(state, "OBJM07"),
+                    command_id,
+                )
+            ],
+        )
+
+    tokens = raw_target.split(maxsplit=1)
+    spell_name = tokens[0]
+    target = tokens[1].strip() if len(tokens) > 1 else None
+
+    spells_catalog = fixtures.load_spells()
+    spell = _find_spell_by_name(spell_name, spells_catalog)
+    if spell is None or spell.id not in state.player.spells:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "NOTMEM",
+                    _format_message(state, "NOTMEM"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    "SPFAIL",
+                    _format_message(state, "SPFAIL", state.player.altnam),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    if spell.level > state.player.level:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "KSPM10",
+                    _format_message(state, "KSPM10"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "mouthing off."),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    if spell.level > state.player.spts:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "KSPM10",
+                    _format_message(state, "KSPM10"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "waving %s arms."),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    # Legacy rmvspl: remove spell from memorized list before effect execution.
+    # (legacy/KYRSPEL.C:1529-1532)
+    forget_memorized_spell(state.player, spell.id)
+    state.player.spts -= spell.level
+    _persist_player_state(state, state.player)
+
+    messages = state.messages or fixtures.load_messages()
+    effect_engine = SpellEffectEngine(
+        spells=spells_catalog, messages=messages, rng=state.rng
+    )
+    result = effect_engine.cast_spell(
+        state.player, spell.id, target, apply_cost=False
+    )
+
+    context = dict(result.context)
+    broadcast_text = context.pop("broadcast", None)
+    broadcast_message_id = context.pop("broadcast_message_id", None)
+
+    event = _message_event(
+        "player",
+        result.message_id,
+        result.text,
+        command_id,
+    )
+    event.update(
+        {
+            "spell_id": spell.id,
+            "spell_name": spell.name,
+            **context,
+        }
+    )
+    if result.animation:
+        event["animation"] = result.animation
+
+    events = [event]
+    if broadcast_text:
+        events.append(
+            _message_event(
+                "room",
+                broadcast_message_id,
+                broadcast_text,
+                command_id,
+                exclude_player=state.player.plyrid,
+            )
+        )
+
+    _persist_player_state(state, state.player)
+    return CommandResult(state=state, events=events)
+
 
 def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
     command_id = args.get("command_id")
@@ -1651,6 +1796,17 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
                 failure_message_id="CMPCMD1",
             ),
             _handle_memorize,
+        )
+    for verb in ("cast", "chant"):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            _handle_cast,
         )
     registry.register(
         CommandMetadata(
