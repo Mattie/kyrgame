@@ -8,6 +8,7 @@ This module keeps gmplyr spell invariants explicit:
 
 from __future__ import annotations
 
+import random
 from typing import Iterable
 
 from . import constants, models
@@ -77,8 +78,34 @@ def forget_memorized_spell(player: models.PlayerModel, spell_id: int) -> None:
 
 
 def forget_all_memorized(player: models.PlayerModel) -> None:
+    # Legacy parity: dumdum wipes memorized spells (legacy/KYRSPEL.C lines 607-615).
     player.spells.clear()
     player.nspells = 0
+
+
+def forget_one_random_memorized(
+    player: models.PlayerModel, rng: random.Random
+) -> int | None:
+    """Forget a random memorized spell, mirroring legacy single-loss behavior."""
+    if not player.spells:
+        return None
+    # Legacy parity: saywhat drops one memorized spell (legacy/KYRSPEL.C lines 1047-1055).
+    index = rng.randrange(len(player.spells))
+    forgotten = player.spells[index]
+    last_index = len(player.spells) - 1
+    if index != last_index:
+        player.spells[index] = player.spells[last_index]
+    player.spells.pop()
+    player.nspells = len(player.spells)
+    return forgotten
+
+
+def wipe_spellbook_bits(player: models.PlayerModel) -> None:
+    """Clear all spellbook ownership bitfields."""
+    # Legacy parity: bookworm zeros spellbook bitfields (legacy/KYRSPEL.C lines 497-515).
+    player.offspls = 0
+    player.defspls = 0
+    player.othspls = 0
 
 
 def list_spellbook_spells(

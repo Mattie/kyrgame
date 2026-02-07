@@ -75,7 +75,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 9 `chillou` (ice storm II)【F:legacy/KYRSPEL.C†L147-L154】
 - [ ] ID 10 `clutzopho` (drop all items)【F:legacy/KYRSPEL.C†L148-L155】
 - [ ] ID 11 `cuseme` (detect power)【F:legacy/KYRSPEL.C†L149-L156】
-- [ ] ID 12 `dumdum` (forget all spells)【F:legacy/KYRSPEL.C†L150-L157】
+- [x] ID 12 `dumdum` (forget all spells)【F:legacy/KYRSPEL.C†L150-L157】
 - [ ] ID 13 `feeluck` (teleport random)【F:legacy/KYRSPEL.C†L151-L158】
 - [ ] ID 14 `firstai` (heal III)【F:legacy/KYRSPEL.C†L152-L159】
 - [ ] ID 15 `flyaway` (pegasus transformation; needs timers/flags beyond current stub)【F:legacy/KYRSPEL.C†L153-L160】
@@ -113,7 +113,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 47 `pocus` (magic missile)【F:legacy/KYRSPEL.C†L185-L192】
 - [ ] ID 48 `polarba` (ice protection III)【F:legacy/KYRSPEL.C†L186-L193】
 - [ ] ID 49 `sapspel` (sap spell points II)【F:legacy/KYRSPEL.C†L187-L194】
-- [ ] ID 50 `saywhat` (forget one spell)【F:legacy/KYRSPEL.C†L188-L195】
+- [x] ID 50 `saywhat` (forget one spell)【F:legacy/KYRSPEL.C†L188-L195】
 - [ ] ID 51 `screwem` (fire storm)【F:legacy/KYRSPEL.C†L189-L196】
 - [ ] ID 52 `smokey` (fire protection I)【F:legacy/KYRSPEL.C†L190-L197】
 - [ ] ID 53 `snowjob` (cone of cold III)【F:legacy/KYRSPEL.C†L191-L198】
