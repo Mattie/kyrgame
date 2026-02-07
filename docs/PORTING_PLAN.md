@@ -23,6 +23,7 @@
 - [x] Match LOOK player targeting and level-driven appearance updates to legacy `findgp`/`glvutl`/`kyraedit` behavior.
 - [x] Added structured room spoiler metadata (legacy routines + YAML scripts) and a spoiler command for runtime parity guidance.
 - [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring/heart-and-soul/waterfall/Tashanna/reflection-pool/pantheon/portal/waller/slot-machine/misty-ruins/sandman/tulips/singer/forgtr/oflove/believ/philos/truthy/bodyma/mindma room routines plus object/spell effect engines with cooldowns, transformations, and costs. Track remaining gaps with the checkboxes in `docs/PORTING_PLAN_world_object_spell_gaps.md`—mark entries complete there as they’re implemented and only check off this line item once that appendix is fully completed.)*
+- [x] Port remaining room routines (rooms 288/291/293/295/302) via YAML scripts in `backend/fixtures/room_scripts/` unless YAML is insufficient; reuse established patterns and include legacy source line comments as required.
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
 - [x] Preserve non-editable player flags when applying admin editor updates to mirror `KYRSYSP.C` flag handling.
@@ -66,6 +67,7 @@
    - Added long-form room entry descriptions and initial inventory pickup/drop handling aligned to `getter`/`dropit` in `KYRCMDS.C`.
 4. **World, object, and spell services**
    - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests. (Progress: added YAML-driven routines for rooms 8, 9, 10, 12, 14, and 16.)
+   - Ported the remaining room routines (rooms 288/291/293/295/302) via YAML scripts in `backend/fixtures/room_scripts/`, reusing established patterns and adding legacy source file + line comments for reviewer parity checks.
    - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.
    - Captured Tashanna's heart-and-soul ritual (room 101) and the willowisp/pegasus transformation spells; flesh out remaining spellbook and room routines with legacy gating (inventory limits, level costs) and persistence hooks.
    - Expose APIs for content lookups (descriptions, auxiliary text) that reference the legacy message catalogs.

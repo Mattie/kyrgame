@@ -1,0 +1,45 @@
+# Legacy: legacy/KYRLOCS.C:349-356 (soulma); legacy/KYRROUS.C:1235-1251 (soulma)
+id: 291
+name: soulma
+spoiler_summary: "Soul mastery chamber where ignoring time grants the level 16 trial."
+spoiler_interaction: "Ignore time to attempt the level 16 ascension."
+legacy_ref: "legacy/KYRROUS.C:1235-1251"
+triggers:
+  - verbs: [ignore]
+    arg_matches:
+      - index: 0
+        value: time
+    actions:
+      - type: level_gate
+        target_level: 16
+        level_up: false
+        # Legacy chklvl gate before reward. (legacy/KYRROUS.C:1238-1246)
+        on_success:
+          # msgutl2(SOUL01, SOUL02) before ring reward + level-up. (legacy/KYRROUS.C:1239-1246)
+          - type: message
+            message_id: SOUL01
+            broadcast_message_id: SOUL02
+            broadcast_format: [player_altnam]
+          - type: conditional
+            conditions:
+              - inventory_lt: 6
+            else:
+              # Legacy tgmpobj(0) drops oldest item when pack is full. (legacy/KYRROUS.C:1240-1243)
+              - type: remove_inventory_index
+                index: 0
+              - type: message
+                message_id: SOUL03
+          # Grant ring (gmobjs[39]) and then glvutl(). (legacy/KYRROUS.C:1245-1246)
+          - type: grant_object
+            object: ring
+          - type: level_up
+        on_too_high:
+          - type: message
+            message_id: LVLM00
+            broadcast_message_id: LVLM01
+            broadcast_format: [player_altnam]
+        on_too_low:
+          - type: message
+            message_id: LVLM02
+            broadcast_message_id: LVLM03
+            broadcast_format: [player_altnam]

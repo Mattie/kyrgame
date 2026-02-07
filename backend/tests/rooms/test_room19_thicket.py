@@ -54,10 +54,9 @@ async def test_walk_thicket_damages_player_and_announces_burn(engine, player, sc
     assert player.hitpts == 2
 
     broadcast_texts = [
-        message.get("payload", {}).get("text")
-        for message in engine.gateway.messages
-        if message.get("type") == "room_broadcast"
-        and message.get("payload", {}).get("scope") == "broadcast"
+        event.get("text")
+        for event in engine.pending_events
+        if event.get("scope") == "room"
     ]
     assert any("burning in the flaming thicket" in text for text in broadcast_texts)
 
@@ -72,10 +71,9 @@ async def test_walk_thicket_surfaces_pain_even_without_inventory(engine, player,
     await asyncio.sleep(0.01)
 
     room_texts = [
-        message.get("payload", {}).get("text")
-        for message in engine.gateway.messages
-        if message.get("type") == "room_broadcast"
-        and message.get("payload", {}).get("scope") == "broadcast"
+        event.get("text")
+        for event in engine.pending_events
+        if event.get("scope") == "room"
     ]
     assert any("...Ouch" in text for text in room_texts)
 

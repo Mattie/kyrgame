@@ -16,10 +16,11 @@ class FakeGateway:
 
 
 def _broadcast_payloads(engine: RoomScriptEngine) -> list[dict]:
+    # Check pending events from the engine (scope "room" for broadcasts)
     return [
-        message.get("payload", {})
-        for message in engine.gateway.messages
-        if message.get("payload", {}).get("scope") == "broadcast"
+        event
+        for event in engine.pending_events
+        if event.get("scope") == "room"
     ]
 
 
@@ -68,15 +69,15 @@ async def test_terrace_drink_water_uses_helper(engine, player, scheduler):
 
     messages = fixtures.load_messages().messages
     direct_texts = [
-        message.get("payload", {}).get("text")
-        for message in engine.gateway.messages
-        if message.get("payload", {}).get("scope") == "direct"
-        and message.get("payload", {}).get("player") == player.plyrid
+        event.get("text")
+        for event in engine.pending_events
+        if event.get("scope") == "target"
+        and event.get("player") == player.plyrid
     ]
     broadcast_texts = [
-        message.get("payload", {}).get("text")
-        for message in engine.gateway.messages
-        if message.get("payload", {}).get("scope") == "broadcast"
+        event.get("text")
+        for event in engine.pending_events
+        if event.get("scope") == "room"
     ]
 
     assert messages["DRINK0"] in direct_texts

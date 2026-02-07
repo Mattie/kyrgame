@@ -1508,12 +1508,16 @@ def create_app() -> FastAPI:
 
                 command_text = payload.get("command", "")
                 args = payload.get("args", {}) or {}
-                tokens = command_text.strip().split()
-                verb = tokens[0].lower() if tokens else ""
-                if verb and verb not in commands.CommandVocabulary.chat_aliases:
-                    tokens = commands.normalize_tokens(tokens)
-                    verb = tokens[0].lower() if tokens else ""
-                arg_list = tokens[1:]
+                raw_tokens = command_text.strip().split()
+                raw_verb = raw_tokens[0].lower() if raw_tokens else ""
+                raw_args = raw_tokens[1:]
+                tokens = raw_tokens
+                if raw_verb and raw_verb not in commands.CommandVocabulary.chat_aliases:
+                    tokens = commands.normalize_tokens(raw_tokens)
+                verb = raw_verb or (tokens[0].lower() if tokens else "")
+                arg_list = raw_args
+                normalized_verb = tokens[0].lower() if tokens else ""
+                normalized_args = tokens[1:]
                 parsed = None
                 parse_error = None
                 try:
@@ -1535,7 +1539,7 @@ def create_app() -> FastAPI:
                 except commands.UnknownCommandError as exc:  # type: ignore[attr-defined]
                     parse_error = exc
 
-                if tokens and provider.room_scripts:
+                if raw_tokens and provider.room_scripts:
                     # Legacy kyra() runs the room routine before the command table.【F:legacy/KYRCMDS.C†L1251-L1257】
                     handled = await provider.room_scripts.handle_command(
                         player_id,
@@ -1544,6 +1548,17 @@ def create_app() -> FastAPI:
                         args=arg_list,
                         player=state.player,
                     )
+                    if not handled and tokens != raw_tokens:
+                        handled = await provider.room_scripts.handle_command(
+                            player_id,
+                            current_room,
+                            command=normalized_verb,
+                            args=normalized_args,
+                            player=state.player,
+                        )
+                        if handled:
+                            verb = normalized_verb
+                            arg_list = normalized_args
                     if handled:
                         commands._persist_player_state(state, state.player)
                         ack_payload = {
@@ -1589,6 +1604,14 @@ def create_app() -> FastAPI:
                                 await gateway.broadcast(
                                     current_room, envelope, sender=websocket, exclude=excluded_sockets
                                 )
+                            elif scope == "global":
+                                envelope = {"type": "system_broadcast", "payload": event}
+                                if meta:
+                                    envelope["meta"] = meta
+                                for target_socket in list(session_connections.values()):
+                                    if target_socket.application_state != WebSocketState.CONNECTED:
+                                        continue
+                                    await target_socket.send_json(envelope)
                             elif scope == "target":
                                 target_id = event.get("player")
                                 if not target_id:
