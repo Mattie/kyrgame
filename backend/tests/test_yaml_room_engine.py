@@ -774,6 +774,65 @@ def test_portal_enters_and_broadcasts_random_vision(base_player):
     assert messages.messages["OEPORT"] % (player.altnam, "he") in broadcast_texts
 
 
+def test_grant_spell_memorize_flag_controls_pre_memorization(base_player):
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    player = base_player.model_copy(update={"offspls": 0, "spells": [], "nspells": 0})
+
+    definitions = {
+        "rooms": [
+            {
+                "id": 997,
+                "name": "grant_spell_memorize_demo",
+                "triggers": [
+                    {
+                        "verbs": ["touch"],
+                        "actions": [
+                            {"type": "grant_spell", "spell": "clutzopho", "book": "offensive"},
+                            {"type": "message", "scope": "direct", "text": "book:%s", "format": ["granted_spell_name"]},
+                        ],
+                    },
+                    {
+                        "verbs": ["chant"],
+                        "actions": [
+                            {
+                                "type": "grant_spell",
+                                "spell": "frostie",
+                                "book": "offensive",
+                                "memorize": True,
+                            },
+                            {"type": "message", "scope": "direct", "text": "book:%s", "format": ["granted_spell_name"]},
+                        ],
+                    },
+                ],
+            }
+        ]
+    }
+
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+    )
+
+    no_memorize = engine.handle(player=player, room_id=997, command="touch", args=[])
+    assert no_memorize.handled is True
+    assert player.nspells == 0
+    assert player.spells == []
+    assert player.offspls & engine.spells_by_name["clutzopho"].bitdef
+    assert any(evt.get("text") == "book:clutzopho" for evt in no_memorize.events)
+
+    memorize = engine.handle(player=player, room_id=997, command="chant", args=[])
+    assert memorize.handled is True
+    assert player.spells[-1] == engine.spells_by_name["frostie"].id
+    assert player.nspells == 1
+    assert any(evt.get("text") == "book:frostie" for evt in memorize.events)
+
+
 def test_waller_chant_sets_sesame_flag(room_engine, base_player):
     result = room_engine.handle(
         player=base_player,

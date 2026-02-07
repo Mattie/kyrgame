@@ -10,7 +10,7 @@ from . import constants, models
 from .messaging import build_direct_and_others_events
 from .inventory import pop_inventory_index
 from .player_progression import level_up_player
-from .spellbook import add_spell_to_book
+from .spellbook import add_spell_to_book, memorize_spell
 
 
 @dataclass
@@ -433,7 +433,7 @@ class YamlRoomEngine:
     def _action_grant_spell(
         self, action: dict, player: models.PlayerModel, context: dict[str, Any]
     ):
-        """Grant a spell bit and optional memorization slot (e.g., druid orb routine in legacy/KYRROUS.C lines 620-639)."""
+        """Grant a spellbook bit, with optional pre-memorization for scripted exceptions."""
         spell_name = action.get("spell")
         spell = self.spells_by_name.get(spell_name.lower()) if spell_name else None
         if spell is None:
@@ -452,9 +452,13 @@ class YamlRoomEngine:
         elif isinstance(override, int):
             sbkref = override
 
-        # Legacy: grants set spellbook ownership bits; memorization is separate (legacy/KYRROUS.C:265-273).
+        # Legacy parity: room grants set spellbook bits; memorization is separate unless
+        # the room script explicitly opts in for special cases.
+        # Sources: legacy/KYRROUS.C:632-634 (druids bit grant), legacy/KYRSPEL.C:1491-1497 (memutl).
         spell = spell.model_copy(update={"sbkref": sbkref})
         add_spell_to_book(player, spell)
+        if bool(action.get("memorize", False)):
+            memorize_spell(player, spell)
 
         context["granted_spell_id"] = spell.id
         context["granted_spell_name"] = spell.name
