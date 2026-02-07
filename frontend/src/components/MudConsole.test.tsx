@@ -149,4 +149,54 @@ describe('MudConsole', () => {
     })
     vi.useRealTimers()
   })
+
+  it('refreshes active status cards after reconnecting', () => {
+    vi.useFakeTimers()
+    navigatorState.connectionStatus = 'disconnected'
+    navigatorState.activity = [
+      {
+        id: 'inventory-entry',
+        type: 'command_response',
+        summary: 'You have a ruby.',
+        payload: { event: 'inventory', inventory: ['ruby'] },
+      },
+    ]
+
+    const { rerender } = render(<MudConsole />)
+    expect(mockSendCommand).not.toHaveBeenCalled()
+
+    navigatorState.connectionStatus = 'connected'
+    rerender(<MudConsole />)
+
+    expect(mockSendCommand).toHaveBeenCalledWith('inv', {
+      silent: true,
+      skipLog: true,
+      meta: { status_card: 'inventory' },
+    })
+    vi.useRealTimers()
+    navigatorState.connectionStatus = 'connected'
+  })
+
+  it('renders a spells status card with memorized spells and spell points', () => {
+    navigatorState.activity = [
+      {
+        id: 'spells-entry',
+        type: 'command_response',
+        summary:
+          '"Fireball" and "Shield" memorized, and 42 spell points of energy.  You are at level 10, titled "Wizard".',
+        payload: {
+          memorized_spell_names: ['Fireball', 'Shield'],
+          spts: 42,
+          level: 10,
+          title: 'Wizard',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    expect(screen.getByText('Spells')).toBeInTheDocument()
+    expect(screen.getByText('Memorized: Fireball, Shield')).toBeInTheDocument()
+    expect(screen.getByText('Spell points: 42')).toBeInTheDocument()
+  })
 })

@@ -90,6 +90,7 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
   d: 'east',
 }
 
+
 const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   if (payload === undefined || payload === null) return null
   if (typeof payload === 'object' && 'event' in payload) {
@@ -113,9 +114,17 @@ type HudState = {
   inventory?: string[]
   effects?: string[]
   spellbook?: string[]
+  memorizedSpells?: string[]
+  level?: number
+  title?: string
 }
 
-type StatusCardId = 'hitpoints' | 'inventory' | 'spellbook' | 'description' | 'effects'
+type StatusCardId =
+  | 'inventory'
+  | 'spellbook'
+  | 'description'
+  | 'effects'
+  | 'spells'
 
 type StatusCardState = {
   id: StatusCardId
@@ -127,17 +136,17 @@ type StatusCardState = {
 }
 
 const STATUS_CARD_CONFIG: Record<StatusCardId, { title: string; command: string }> = {
-  hitpoints: { title: 'Hitpoints', command: 'hitpoints' },
   inventory: { title: 'inventory', command: 'inv' },
   spellbook: { title: 'Spellbook', command: 'spellbook' },
+  spells: { title: 'Spells', command: 'spells' },
   description: { title: 'Description', command: 'describe' },
   effects: { title: 'Effects', command: 'effects' },
 }
 
 const STATUS_CARD_ORDER: StatusCardId[] = [
-  'hitpoints',
   'inventory',
   'spellbook',
+  'spells',
   'effects',
   'description',
 ]
@@ -188,6 +197,19 @@ const extractHudFromEntry = (entry: { summary?: string; payload?: any }): HudSta
     updates.spellbook = payload.spellbook
   }
 
+  if (Array.isArray(payload.memorized_spell_names)) {
+    updates.memorizedSpells = payload.memorized_spell_names
+  }
+  if (typeof payload.spts === 'number') {
+    updates.spellPoints = { current: payload.spts, max: payload.spts }
+  }
+  if (typeof payload.level === 'number') {
+    updates.level = payload.level
+  }
+  if (typeof payload.title === 'string') {
+    updates.title = payload.title
+  }
+
   const payloadEvent = typeof payload.event === 'string' ? payload.event : ''
 
   if (payload.description) {
@@ -236,6 +258,7 @@ export const MudConsole = () => {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const processedActivityRef = useRef(0)
   const defaultStatusCardsRef = useRef(createDefaultStatusCards())
+  const lastConnectionStatusRef = useRef(connectionStatus)
 
   const hudVisible = useMemo(
     () => Object.values(statusCards).some((card) => card.active),
@@ -293,14 +316,14 @@ export const MudConsole = () => {
       const payload = entry.payload ?? {}
       const payloadRecord = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {}
       const candidateCards: StatusCardId[] = []
-      if (updates.hitpoints || updates.spellPoints || payloadRecord.event === 'hitpoints') {
-        candidateCards.push('hitpoints')
-      }
       if (updates.inventory || payloadRecord.event === 'inventory') {
         candidateCards.push('inventory')
       }
       if (updates.spellbook || payloadRecord.event === 'spellbook') {
         candidateCards.push('spellbook')
+      }
+      if (updates.memorizedSpells || typeof payloadRecord.spts === 'number') {
+        candidateCards.push('spells')
       }
       if (updates.description || payloadRecord.event === 'description') {
         candidateCards.push('description')
@@ -308,6 +331,13 @@ export const MudConsole = () => {
       if (updates.effects || payloadRecord.event === 'effects') {
         candidateCards.push('effects')
       }
+
+      const messageId =
+        typeof payloadRecord.message_id === 'string'
+          ? payloadRecord.message_id
+          : typeof payloadRecord.messageId === 'string'
+            ? payloadRecord.messageId
+            : null
 
       if (candidateCards.length > 0) {
         setStatusCards((prev) => {
@@ -332,6 +362,7 @@ export const MudConsole = () => {
           })
           return next
         })
+
       }
     })
 
@@ -340,22 +371,6 @@ export const MudConsole = () => {
 
   const renderCardContent = (card: StatusCardState) => {
     switch (card.id) {
-      case 'hitpoints':
-        return (
-          <>
-            {hud.hitpoints && (
-              <p className="hud-line">Hitpoints: {hud.hitpoints.current}/{hud.hitpoints.max}</p>
-            )}
-            {hud.spellPoints && (
-              <p className="hud-line">
-                Spell points: {hud.spellPoints.current}/{hud.spellPoints.max}
-              </p>
-            )}
-            {!hud.hitpoints && !hud.spellPoints && (
-              <p className="muted">Use HITPOINTS to pin your vitals.</p>
-            )}
-          </>
-        )
       case 'inventory':
         return card.lastSummary ? (
           <p className="hud-line">
@@ -393,6 +408,13 @@ export const MudConsole = () => {
             />
           </p>
         )
+      case 'spells':
+        return (
+          <div className="hud-line">
+            <p>Memorized: {hud.memorizedSpells?.length ? hud.memorizedSpells.join(', ') : 'none'}</p>
+            <p>Spell points: {hud.spellPoints?.current ?? 0}</p>
+          </div>
+        )
       case 'effects':
         return hud.effects && hud.effects.length > 0 ? (
           <p className="hud-line">Effects: {hud.effects.join(', ')}</p>
@@ -425,6 +447,15 @@ export const MudConsole = () => {
   }, [activeStatusCards, connectionStatus, sendCommand])
 
   useEffect(() => {
+    const wasConnected = lastConnectionStatusRef.current === 'connected'
+    const isConnected = connectionStatus === 'connected'
+    if (isConnected && !wasConnected && activeStatusCards.some((card) => card.autoRefresh)) {
+      requestStatusRefresh()
+    }
+    lastConnectionStatusRef.current = connectionStatus
+  }, [activeStatusCards, connectionStatus, requestStatusRefresh])
+
+  useEffect(() => {
     if (connectionStatus !== 'connected') return
     if (!activeStatusCards.some((card) => card.autoRefresh)) return
 
@@ -437,7 +468,10 @@ export const MudConsole = () => {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    sendCommand(input)
+    const command = input.trim()
+    if (!command) return
+
+    sendCommand(command)
     requestStatusRefresh()
     setInput('')
   }
