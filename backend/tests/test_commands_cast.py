@@ -3,7 +3,7 @@ import random
 import pytest
 
 from kyrgame import commands, constants, fixtures
-from kyrgame.effects import EffectResult
+from kyrgame.effects import EffectResult, SpellEffect
 
 
 class FakePresence:
@@ -155,6 +155,72 @@ async def test_cast_consumes_memorized_spell_and_triggers_effects(monkeypatch):
         "apply_cost": False,
     }
     assert result.events[0]["message_id"] == "SPLTEST"
+
+
+@pytest.mark.anyio
+async def test_cast_targeted_spell_resolves_player_and_calls_effect_engine(monkeypatch):
+    class StubEffectEngine:
+        last_call = None
+
+        def __init__(self, spells, messages, clock=None, rng=None, objects=None):  # noqa: D401, ARG002
+            self.spells = {spell.id: spell for spell in spells}
+            self.messages = messages
+            saywhat = self.spells[50]
+            self.effects = {
+                50: SpellEffect(
+                    spell=saywhat,
+                    cost=saywhat.level,
+                    cooldown=0.0,
+                    requires_target=True,
+                )
+            }
+
+        def cast_spell(self, player, spell_id, target, target_player=None, *, apply_cost=True):
+            StubEffectEngine.last_call = {
+                "spell_id": spell_id,
+                "target": target,
+                "target_player": target_player,
+                "apply_cost": apply_cost,
+            }
+            return EffectResult(
+                success=True,
+                message_id="S51M03",
+                text="cast ok",
+                animation="sparkle",
+                context={"target": target},
+            )
+
+    monkeypatch.setattr(commands, "SpellEffectEngine", StubEffectEngine)
+
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=10,
+        spts=15,
+        spells=[50],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="target",
+        altnam="Target",
+        gamloc=player.gamloc,
+    )
+    state = _build_state(player)
+    state.presence = TrackingPresence({player.plyrid, target.plyrid})
+    state.player_lookup = lambda pid: target if pid == target.plyrid else player
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "saywhat target"}, state)
+
+    assert StubEffectEngine.last_call == {
+        "spell_id": 50,
+        "target": "target",
+        "target_player": target,
+        "apply_cost": False,
+    }
+    assert result.events[0]["message_id"] == "S51M03"
 
 
 @pytest.mark.anyio
