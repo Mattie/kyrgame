@@ -332,6 +332,96 @@ def test_saywhat_fails_when_target_has_no_spells(sample_player):
     assert target.nspells == 0
 
 
+@pytest.mark.parametrize(
+    ("spell_id", "failure_ids"),
+    [
+        (49, ("S50M00", "S50M01", "S50M02")),
+        (56, ("S57M00", "S57M01", "S57M02")),
+    ],
+)
+def test_sap_spells_fail_on_objpro(sample_player, spell_id, failure_ids):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(spts=20)
+    target.charms[constants.OBJPRO] = 1
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=spell_id,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == failure_ids[0]
+    assert result.context["target_message_id"] == failure_ids[1]
+    assert result.context["broadcast_message_id"] == failure_ids[2]
+    assert target.spts == 20
+
+
+@pytest.mark.parametrize(
+    ("spell_id", "failure_ids"),
+    [
+        (49, ("S50M00", "S50M01", "S50M02")),
+        (56, ("S57M00", "S57M01", "S57M02")),
+    ],
+)
+def test_sap_spells_fail_on_zero_spell_points(
+    sample_player, spell_id, failure_ids
+):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(spts=0)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=spell_id,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == failure_ids[0]
+    assert result.context["target_message_id"] == failure_ids[1]
+    assert result.context["broadcast_message_id"] == failure_ids[2]
+    assert target.spts == 0
+
+
+@pytest.mark.parametrize(
+    ("spell_id", "success_ids", "starting_points", "expected_points"),
+    [
+        (49, ("S50M03", "S50M04", "S50M05"), 10, 0),
+        (56, ("S57M03", "S57M04", "S57M05"), 12, 4),
+    ],
+)
+def test_sap_spells_decrement_spell_points(
+    sample_player,
+    spell_id,
+    success_ids,
+    starting_points,
+    expected_points,
+):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(spts=starting_points)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=spell_id,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == success_ids[0]
+    assert result.context["target_message_id"] == success_ids[1]
+    assert result.context["broadcast_message_id"] == success_ids[2]
+    assert target.spts == expected_points
+
+
 def test_howru_uses_target_hp_in_message(sample_player):
     messages = fixtures.load_messages()
     spells = fixtures.load_spells()

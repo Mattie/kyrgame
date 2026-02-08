@@ -112,14 +112,14 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 46 `pickpoc` (steal item)【F:legacy/KYRSPEL.C†L184-L191】
 - [ ] ID 47 `pocus` (magic missile)【F:legacy/KYRSPEL.C†L185-L192】
 - [ ] ID 48 `polarba` (ice protection III)【F:legacy/KYRSPEL.C†L186-L193】
-- [ ] ID 49 `sapspel` (sap spell points II)【F:legacy/KYRSPEL.C†L187-L194】
+- [x] ID 49 `sapspel` (sap spell points II)【F:legacy/KYRSPEL.C†L187-L194】
 - [x] ID 50 `saywhat` (forget one spell)【F:legacy/KYRSPEL.C†L188-L195】
 - [ ] ID 51 `screwem` (fire storm)【F:legacy/KYRSPEL.C†L189-L196】
 - [ ] ID 52 `smokey` (fire protection I)【F:legacy/KYRSPEL.C†L190-L197】
 - [ ] ID 53 `snowjob` (cone of cold III)【F:legacy/KYRSPEL.C†L191-L198】
 - [ ] ID 54 `sunglass` (lightning protection I)【F:legacy/KYRSPEL.C†L192-L199】
 - [ ] ID 55 `surgless` (lightning protection III)【F:legacy/KYRSPEL.C†L193-L200】
-- [ ] ID 56 `takethat` (sap spell points I)【F:legacy/KYRSPEL.C†L194-L201】
+- [x] ID 56 `takethat` (sap spell points I)【F:legacy/KYRSPEL.C†L194-L201】
 - [ ] ID 57 `thedoc` (heal II)【F:legacy/KYRSPEL.C†L195-L202】
 - [ ] ID 58 `tiltowait` (earthquake)【F:legacy/KYRSPEL.C†L196-L203】
 - [ ] ID 59 `tinting` (lightning protection II)【F:legacy/KYRSPEL.C†L197-L204】

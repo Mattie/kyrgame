@@ -407,3 +407,44 @@ async def test_admin_player_patch_charms(monkeypatch):
                 json={"charms": [1, 2]},
             )
             assert invalid_resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_admin_player_patch_grants_all_spells(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "player-token": {
+                    "roles": ["player_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    spells = fixtures.load_spells()
+    expected_off = 0
+    expected_def = 0
+    expected_oth = 0
+    for spell in spells:
+        if spell.sbkref == constants.OFFENS:
+            expected_off |= spell.bitdef
+        elif spell.sbkref == constants.DEFENS:
+            expected_def |= spell.bitdef
+        else:
+            expected_oth |= spell.bitdef
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            update_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"grant_all_spells": True},
+            )
+            assert update_resp.status_code == 200
+            updated = update_resp.json()["player"]
+            assert updated["offspls"] == expected_off
+            assert updated["defspls"] == expected_def
+            assert updated["othspls"] == expected_oth

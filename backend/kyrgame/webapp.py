@@ -95,6 +95,7 @@ class PlayerAdminUpdate(BaseModel):
     cap_gold: int | None = None
     cap_hitpts: int | None = None
     cap_spts: int | None = None
+    grant_all_spells: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
@@ -321,6 +322,7 @@ def _apply_player_admin_update(
     updates: PlayerAdminUpdate,
     *,
     objects: list[models.GameObjectModel],
+    spells: list[models.SpellModel],
 ) -> models.PlayerModel:
     data = player.model_dump()
     objects_by_id, objects_by_name = _object_catalog_indexes(objects)
@@ -446,6 +448,21 @@ def _apply_player_admin_update(
         data["spouse"] = ""
     elif updates.spouse is not None:
         data["spouse"] = updates.spouse[: constants.ALSSIZ]
+
+    if updates.grant_all_spells:
+        offspls = 0
+        defspls = 0
+        othspls = 0
+        for spell in spells:
+            if spell.sbkref == constants.OFFENS:
+                offspls |= spell.bitdef
+            elif spell.sbkref == constants.DEFENS:
+                defspls |= spell.bitdef
+            else:
+                othspls |= spell.bitdef
+        data["offspls"] = offspls
+        data["defspls"] = defspls
+        data["othspls"] = othspls
 
     return models.PlayerModel(**data)
 
@@ -927,6 +944,7 @@ async def admin_patch_player(
         current,
         updates,
         objects=provider.cache["objects"],
+        spells=provider.cache["spells"],
     )
 
     for field, value in updated.model_dump().items():

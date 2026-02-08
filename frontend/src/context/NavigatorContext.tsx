@@ -80,6 +80,7 @@ export type AdminUpdatePayload = {
   cap_hitpts?: number
   cap_spts?: number
   charms?: number[]
+  grant_all_spells?: boolean
 }
 
 export type AdminPlayerRecord = {

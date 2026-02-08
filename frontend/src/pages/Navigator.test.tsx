@@ -465,6 +465,7 @@ describe('Navigator flow', () => {
           stones: [0, 1, 2, 3],
           stumpi: 5,
           charms: [0, 0, 0, 0, 7, 0],
+          grant_all_spells: true,
         })
         return Promise.resolve({
           ok: true,
@@ -524,6 +525,7 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/stump index/i), '5')
       await user.clear(screen.getByLabelText(/object protection charm/i))
       await user.type(screen.getByLabelText(/object protection charm/i), '7')
+      await user.click(screen.getByRole('checkbox', { name: /grant all spells/i }))
       await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
     })
 
