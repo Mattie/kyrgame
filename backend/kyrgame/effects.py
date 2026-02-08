@@ -136,6 +136,26 @@ class SpellEffectEngine:
                 success_broadcast_key="S51M05",
             )
 
+        if 49 in effects:
+            # Legacy spell: sapspel drains spell points (legacy/KYRSPEL.C:1028-1040).
+            effects[49].message_id = "S50M03"
+            effects[49].requires_target = True
+            effects[49].handler = self._sap_spell_points_handler(
+                amount=16,
+                failure_ids=("S50M00", "S50M01", "S50M02"),
+                success_ids=("S50M03", "S50M04", "S50M05"),
+            )
+
+        if 56 in effects:
+            # Legacy spell: takethat drains spell points (legacy/KYRSPEL.C:1093-1105).
+            effects[56].message_id = "S57M03"
+            effects[56].requires_target = True
+            effects[56].handler = self._sap_spell_points_handler(
+                amount=8,
+                failure_ids=("S57M00", "S57M01", "S57M02"),
+                success_ids=("S57M03", "S57M04", "S57M05"),
+            )
+
         if 62 in effects:
             # Legacy transformation: weewillo grants willowisp wings (legacy/KYRSPEL.C lines 1188-1195).
             effects[62].message_id = "S62M00"
@@ -237,6 +257,51 @@ class SpellEffectEngine:
             except TypeError:
                 return template
         return template
+
+    def _sap_spell_points_handler(
+        self,
+        *,
+        amount: int,
+        failure_ids: tuple[str, str, str],
+        success_ids: tuple[str, str, str],
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        # Legacy sap spell points handling (legacy/KYRSPEL.C:1028-1040, 1093-1105).
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+            if target_player.charms[constants.OBJPRO] or target_player.spts == 0:
+                return self._msgutl3(
+                    player,
+                    target_player,
+                    caster_key=failure_ids[0],
+                    target_key=failure_ids[1],
+                    broadcast_key=failure_ids[2],
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            target_player.spts = max(0, target_player.spts - amount)
+            return self._msgutl3(
+                player,
+                target_player,
+                caster_key=success_ids[0],
+                target_key=success_ids[1],
+                broadcast_key=success_ids[2],
+                target=target,
+                success=True,
+                effect=effect,
+            )
+
+        return _handler
 
     def _msgutl2(
         self,
