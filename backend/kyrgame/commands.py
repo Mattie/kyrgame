@@ -756,6 +756,25 @@ def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> b
     return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
 
 
+async def _find_player_by_name(
+    state: GameState, target_name: str, *, include_self: bool = True
+) -> models.PlayerModel | None:
+    if not state.presence or not state.player_lookup:
+        return None
+    occupants = await state.presence.players_in_room(state.player.gamloc)
+    for occupant_id in occupants:
+        candidate = state.player_lookup(occupant_id)
+        if not candidate:
+            continue
+        if not include_self and candidate.plyrid == state.player.plyrid:
+            continue
+        if _matches_player_name(target_name, candidate) and _can_see_player(
+            state.player, candidate
+        ):
+            return candidate
+    return None
+
+
 async def _find_player_in_room(
     state: GameState, target_name: str
 ) -> models.PlayerModel | None:
@@ -915,7 +934,7 @@ def _handle_memorize(state: GameState, args: dict) -> CommandResult:
     )
 
 
-def _handle_cast(state: GameState, args: dict) -> CommandResult:
+async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     command_id = args.get("command_id")
     raw_target = (args.get("raw") or args.get("target") or "").strip()
     # Legacy caster(): arg checks, memorized gating, level/spts gates, rmvspl + spts decrement,
@@ -1007,15 +1026,54 @@ def _handle_cast(state: GameState, args: dict) -> CommandResult:
 
     messages = state.messages or fixtures.load_messages()
     effect_engine = SpellEffectEngine(
-        spells=spells_catalog, messages=messages, rng=state.rng
+        spells=spells_catalog,
+        messages=messages,
+        rng=state.rng,
+        objects=state.objects.values() if state.objects else None,
     )
+    effect = effect_engine.effects.get(spell.id)
+
+    if effect and effect.requires_target and not target:
+        # Legacy chkstf() reports missing targets for player-directed spells
+        # (legacy/KYRSPEL.C:266-295).
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    None,
+                    "...Something is missing and the spell fails!",
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "trying to cast a spell, without success."),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    target_player = None
+    if effect and effect.requires_target and target:
+        target_player = await _find_player_by_name(state, target)
+        if not target_player:
+            return CommandResult(
+                state=state,
+                events=_spell_target_failure_events(state, target, command_id),
+            )
+
     result = effect_engine.cast_spell(
-        state.player, spell.id, target, apply_cost=False
+        state.player, spell.id, target, target_player, apply_cost=False
     )
 
     context = dict(result.context)
     broadcast_text = context.pop("broadcast", None)
     broadcast_message_id = context.pop("broadcast_message_id", None)
+    broadcast_exclude_player = context.pop("broadcast_exclude_player", None)
+    target_text = context.pop("target_text", None)
+    target_message_id = context.pop("target_message_id", None)
 
     event = _message_event(
         "player",
@@ -1034,6 +1092,15 @@ def _handle_cast(state: GameState, args: dict) -> CommandResult:
         event["animation"] = result.animation
 
     events = [event]
+    if target_message_id and target_player:
+        target_event = _message_event(
+            "target",
+            target_message_id,
+            target_text,
+            command_id,
+        )
+        target_event["player"] = target_player.plyrid
+        events.append(target_event)
     if broadcast_text:
         events.append(
             _message_event(
@@ -1041,12 +1108,99 @@ def _handle_cast(state: GameState, args: dict) -> CommandResult:
                 broadcast_message_id,
                 broadcast_text,
                 command_id,
-                exclude_player=state.player.plyrid,
+                exclude_player=broadcast_exclude_player or state.player.plyrid,
             )
         )
 
     _persist_player_state(state, state.player)
+    if target_player and target_player is not state.player:
+        _persist_player_state(state, target_player)
     return CommandResult(state=state, events=events)
+
+
+def _spell_target_failure_events(
+    state: GameState, target_name: str, command_id: int | None
+) -> list[dict]:
+    """Emit legacy chkstf failure messaging for missing player targets."""
+    # Legacy chkstf: object resistance (KSPM00/KSPM01) or phantom targets (KSPM02).
+    # Source: legacy/KYRSPEL.C:266-295.
+    objects = state.objects or {}
+    location = state.locations[state.player.gamloc]
+    obj_id = _find_object_in_location(location, objects, target_name)
+    obj = objects.get(obj_id) if obj_id is not None else None
+    if obj is None:
+        inventory_index = _find_inventory_index(state.player, target_name, objects)
+        if inventory_index is not None:
+            obj = objects.get(state.player.gpobjs[inventory_index])
+
+    if obj:
+        if obj.id == 52:
+            # Legacy chkstf backlash for targeting the dragon (legacy/KYRSPEL.C:277-285).
+            damage = state.rng.randint(20, 46)
+            state.player.hitpts = max(0, state.player.hitpts - damage)
+            _persist_player_state(state, state.player)
+            events = [
+                _message_event(
+                    "player",
+                    "ZMSG08",
+                    _format_message(state, "ZMSG08"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    "ZMSG09",
+                    _format_message(state, "ZMSG09", state.player.altnam, _hisher(state.player)),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ]
+            if state.player.hitpts <= 0:
+                events.append(
+                    _message_event(
+                        "player",
+                        "DIEMSG",
+                        _format_message(state, "DIEMSG"),
+                        command_id,
+                    )
+                )
+                events.append(
+                    _message_event(
+                        "room",
+                        "KILLED",
+                        _format_message(state, "KILLED", state.player.altnam),
+                        command_id,
+                        exclude_player=state.player.plyrid,
+                    )
+                )
+            return events
+
+        caster_text = _format_message(state, "KSPM00", obj.name)
+        room_text = _format_message(
+            state, "KSPM01", state.player.altnam, _object_with_article(obj)
+        )
+        return [
+            _message_event("player", "KSPM00", caster_text, command_id),
+            _message_event(
+                "room",
+                "KSPM01",
+                room_text,
+                command_id,
+                exclude_player=state.player.plyrid,
+            ),
+        ]
+
+    caster_text = _format_message(state, "KSPM02")
+    room_text = _sndutl_text(state.player, "casting at phantoms!")
+    return [
+        _message_event("player", "KSPM02", caster_text, command_id),
+        _message_event(
+            "room",
+            None,
+            room_text,
+            command_id,
+            exclude_player=state.player.plyrid,
+        ),
+    ]
 
 
 def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
@@ -1512,9 +1666,7 @@ def _inventory_summary_text(
         obj = objects.get(obj_id)
         if not obj:
             continue
-        needs_an = "NEEDAN" in obj.flags
-        article = "an" if needs_an else "a"
-        item_names.append(f"{article} {obj.name}")
+        item_names.append(_object_with_article(obj))
 
     catalog = state.messages.messages if state.messages else {}
     and_text = catalog.get("KUTM08", "and")
@@ -1524,6 +1676,12 @@ def _inventory_summary_text(
     if item_names:
         return f"{', '.join(item_names)}, {and_text} {spellbook_text}"
     return spellbook_text
+
+
+def _object_with_article(obj: models.GameObjectModel) -> str:
+    needs_an = "NEEDAN" in obj.flags
+    article = "an" if needs_an else "a"
+    return f"{article} {obj.name}"
 
 
 def _find_object_in_location(

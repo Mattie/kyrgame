@@ -67,7 +67,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 1 `allbettoo` (ultimate heal)【F:legacy/KYRSPEL.C†L138-L145】
 - [ ] ID 2 `blowitawa` (destroy one item)【F:legacy/KYRSPEL.C†L140-L146】
 - [ ] ID 3 `blowoutma` (destroy all items)【F:legacy/KYRSPEL.C†L140-L146】
-- [ ] ID 4 `bookworm` (zap other's spell book)【F:legacy/KYRSPEL.C†L141-L148】
+- [x] ID 4 `bookworm` (zap other's spell book)【F:legacy/KYRSPEL.C†L141-L148】
 - [ ] ID 5 `burnup` (fireball I)【F:legacy/KYRSPEL.C†L142-L149】
 - [ ] ID 6 `cadabra` (see invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
 - [ ] ID 7 `cantcmeha` (invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
@@ -96,7 +96,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 30 `hotfoot` (fireball II)【F:legacy/KYRSPEL.C†L168-L175】
 - [ ] ID 31 `hotkiss` (firebolt II)【F:legacy/KYRSPEL.C†L169-L176】
 - [ ] ID 32 `hotseat` (ice protection I)【F:legacy/KYRSPEL.C†L170-L177】
-- [ ] ID 33 `howru` (detect health)【F:legacy/KYRSPEL.C†L171-L178】
+- [x] ID 33 `howru` (detect health)【F:legacy/KYRSPEL.C†L171-L178】
 - [ ] ID 34 `hydrant` (fire protection II)【F:legacy/KYRSPEL.C†L172-L179】
 - [ ] ID 35 `ibebad` (ultimate protection II)【F:legacy/KYRSPEL.C†L173-L180】
 - [ ] ID 36 `icedtea` (ice storm I)【F:legacy/KYRSPEL.C†L174-L181】

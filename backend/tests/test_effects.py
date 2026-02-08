@@ -31,15 +31,21 @@ def test_spell_effects_respect_costs_and_cooldowns(sample_player):
     engine = SpellEffectEngine(spells=spells, messages=messages, clock=clock)
     base_points = sample_player.spts
 
-    result = engine.cast_spell(player=sample_player, spell_id=2, target="goblin")
+    result = engine.cast_spell(
+        player=sample_player, spell_id=2, target="goblin", target_player=None
+    )
     assert sample_player.spts < base_points
     assert result.animation == spells[2].splrou
 
     with pytest.raises(CooldownActiveError):
-        engine.cast_spell(player=sample_player, spell_id=2, target="goblin")
+        engine.cast_spell(
+            player=sample_player, spell_id=2, target="goblin", target_player=None
+        )
 
     now += engine.effects[2].cooldown
-    repeat = engine.cast_spell(player=sample_player, spell_id=2, target="ogre")
+    repeat = engine.cast_spell(
+        player=sample_player, spell_id=2, target="ogre", target_player=None
+    )
     assert repeat.context["target"] == "ogre"
 
 
@@ -51,11 +57,15 @@ def test_spell_effects_require_targets_and_resources(sample_player):
     engine = SpellEffectEngine(spells=spells, messages=messages)
 
     with pytest.raises(TargetingError):
-        engine.cast_spell(player=sample_player, spell_id=5, target=None)
+        engine.cast_spell(
+            player=sample_player, spell_id=5, target=None, target_player=None
+        )
 
     sample_player.spts = 1
     with pytest.raises(ResourceCostError):
-        engine.cast_spell(player=sample_player, spell_id=5, target="ogre")
+        engine.cast_spell(
+            player=sample_player, spell_id=5, target="ogre", target_player=None
+        )
 
 
 def test_object_effects_apply_cooldowns_and_require_targets():
@@ -80,11 +90,15 @@ def test_transformation_spells_toggle_player_flags(sample_player):
     spells = fixtures.load_spells()
     engine = SpellEffectEngine(spells=spells, messages=messages)
 
-    result = engine.cast_spell(player=sample_player, spell_id=16, target=None)
+    result = engine.cast_spell(
+        player=sample_player, spell_id=16, target=None, target_player=None
+    )
     assert result.message_id == "S16M00"
     assert constants.PlayerFlag.PEGASU & sample_player.flags
 
-    willow = engine.cast_spell(player=sample_player, spell_id=62, target=None)
+    willow = engine.cast_spell(
+        player=sample_player, spell_id=62, target=None, target_player=None
+    )
     assert willow.message_id == "S62M00"
     assert constants.PlayerFlag.WILLOW & sample_player.flags
 
@@ -94,21 +108,200 @@ def test_forget_spells_apply_spellbook_effects(sample_player):
     spells = fixtures.load_spells()
     engine = SpellEffectEngine(spells=spells, messages=messages, rng=random.Random(1))
 
-    sample_player.spells.clear()
-    sample_player.spells.extend([1, 2, 3])
-    sample_player.nspells = 3
+    target = _build_target(spells=[1, 2, 3], nspells=3)
 
-    dumdum = engine.cast_spell(player=sample_player, spell_id=12, target=None)
+    dumdum = engine.cast_spell(
+        player=sample_player, spell_id=12, target="target", target_player=target
+    )
     assert dumdum.message_id == "S13M03"
-    assert sample_player.spells == []
-    assert sample_player.nspells == 0
+    assert target.spells == []
+    assert target.nspells == 0
 
-    sample_player.spells.clear()
-    sample_player.spells.extend([4, 5, 6])
-    sample_player.nspells = 3
+    target = _build_target(spells=[4, 5, 6], nspells=3)
 
-    saywhat = engine.cast_spell(player=sample_player, spell_id=50, target=None)
+    saywhat = engine.cast_spell(
+        player=sample_player, spell_id=50, target="target", target_player=target
+    )
     assert saywhat.message_id == "S51M03"
     assert saywhat.context["forgot_spell_id"] in {4, 5, 6}
-    assert len(sample_player.spells) == 2
-    assert sample_player.nspells == 2
+    assert len(target.spells) == 2
+    assert target.nspells == 2
+
+
+def _build_target(**updates):
+    player = fixtures.build_player()
+    data = player.model_dump()
+    data.update(updates)
+    return player.model_copy(update=data)
+
+
+def _find_object_id(objects, name):
+    for obj in objects:
+        if obj.name == name:
+            return obj.id
+    raise AssertionError(f"Missing object {name}")
+
+
+def test_bookworm_wipes_target_spellbook_and_consumes_moonstone(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    moonstone_id = _find_object_id(objects, "moonstone")
+    engine = SpellEffectEngine(spells=spells, messages=messages, objects=objects)
+
+    sample_player = sample_player.model_copy(
+        update={"gpobjs": [moonstone_id], "obvals": [0], "npobjs": 1}
+    )
+    target = _build_target(offspls=1, defspls=2, othspls=3)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=4,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S05M03"
+    assert result.context["target_message_id"] == "S05M04"
+    assert result.context["broadcast_message_id"] == "S05M05"
+    assert target.offspls == 0
+    assert target.defspls == 0
+    assert target.othspls == 0
+    assert sample_player.gpobjs == []
+    assert sample_player.npobjs == 0
+
+
+def test_bookworm_blocks_objpro_without_consuming_moonstone(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    moonstone_id = _find_object_id(objects, "moonstone")
+    engine = SpellEffectEngine(spells=spells, messages=messages, objects=objects)
+
+    sample_player = sample_player.model_copy(
+        update={"gpobjs": [moonstone_id], "obvals": [0], "npobjs": 1}
+    )
+    target = _build_target(offspls=1, defspls=2, othspls=3)
+    target.charms[constants.OBJPRO] = 1
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=4,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S05M00"
+    assert result.context["target_message_id"] == "S05M01"
+    assert result.context["broadcast_message_id"] == "S05M02"
+    assert target.offspls == 1
+    assert sample_player.gpobjs == [moonstone_id]
+
+
+def test_bookworm_requires_moonstone(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    engine = SpellEffectEngine(spells=spells, messages=messages, objects=objects)
+    target = _build_target(offspls=1, defspls=2, othspls=3)
+    sample_player = sample_player.model_copy(
+        update={"gpobjs": [], "obvals": [], "npobjs": 0}
+    )
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=4,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "MISS00"
+    assert result.context["broadcast_message_id"] == "MISS01"
+    assert target.offspls == 1
+
+
+def test_dumdum_targets_other_player(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages, rng=random.Random(1))
+    target = _build_target(spells=[1, 2, 3], nspells=3)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=12,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S13M03"
+    assert result.context["target_message_id"] == "S13M04"
+    assert result.context["broadcast_message_id"] == "S13M05"
+    assert target.spells == []
+    assert target.nspells == 0
+
+
+def test_dumdum_respects_objpro(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages, rng=random.Random(1))
+    target = _build_target(spells=[1], nspells=1)
+    target.charms[constants.OBJPRO] = 1
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=12,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S13M00"
+    assert result.context["target_message_id"] == "S13M01"
+    assert result.context["broadcast_message_id"] == "S13M02"
+    assert target.nspells == 1
+
+
+def test_saywhat_forgets_one_spell_on_target(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages, rng=random.Random(2))
+    target = _build_target(spells=[4, 5, 6], nspells=3)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=50,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S51M03"
+    assert result.context["target_message_id"] == "S51M04"
+    assert result.context["broadcast_message_id"] == "S51M05"
+    assert result.context["forgot_spell_id"] in {4, 5, 6}
+    assert target.nspells == 2
+
+
+def test_howru_uses_target_hp_in_message(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(hitpts=17)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=33,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    expected_text = messages.messages["S34M00"] % target.hitpts
+    assert result.message_id == "S34M00"
+    assert result.text == expected_text
+    assert result.context["target_message_id"] == "S34M01"
+    assert result.context["broadcast_message_id"] == "S34M02"
