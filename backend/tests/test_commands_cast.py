@@ -1,3 +1,5 @@
+import random
+
 import pytest
 
 from kyrgame import commands, constants, fixtures
@@ -30,6 +32,14 @@ def _build_player(**updates):
     data = player.model_dump()
     data.update(updates)
     return player.model_copy(update=data)
+
+
+class TrackingPresence:
+    def __init__(self, occupants: set[str]):
+        self._occupants = occupants
+
+    async def players_in_room(self, room_id: int) -> set[str]:  # noqa: ARG002
+        return self._occupants
 
 
 @pytest.mark.anyio
@@ -100,14 +110,16 @@ async def test_cast_consumes_memorized_spell_and_triggers_effects(monkeypatch):
     class StubEffectEngine:
         last_call = None
 
-        def __init__(self, spells, messages, clock=None, rng=None):  # noqa: D401, ARG002
+        def __init__(self, spells, messages, clock=None, rng=None, objects=None):  # noqa: D401, ARG002
             self.spells = {spell.id: spell for spell in spells}
             self.messages = messages
+            self.effects = {}
 
-        def cast_spell(self, player, spell_id, target, *, apply_cost=True):
+        def cast_spell(self, player, spell_id, target, target_player=None, *, apply_cost=True):
             StubEffectEngine.last_call = {
                 "spell_id": spell_id,
                 "target": target,
+                "target_player": target_player,
                 "apply_cost": apply_cost,
             }
             return EffectResult(
@@ -136,5 +148,115 @@ async def test_cast_consumes_memorized_spell_and_triggers_effects(monkeypatch):
     assert state.player.spells == []
     assert state.player.nspells == 0
     assert state.player.spts == 3
-    assert StubEffectEngine.last_call == {"spell_id": 42, "target": None, "apply_cost": False}
+    assert StubEffectEngine.last_call == {
+        "spell_id": 42,
+        "target": None,
+        "target_player": None,
+        "apply_cost": False,
+    }
     assert result.events[0]["message_id"] == "SPLTEST"
+
+
+@pytest.mark.anyio
+async def test_cast_target_missing_emits_phantom_failure():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[4],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "bookworm nobody"}, state)
+
+    assert result.events[0]["message_id"] == "KSPM02"
+    assert result.events[1]["scope"] == "room"
+
+
+@pytest.mark.anyio
+async def test_cast_target_object_emits_kspm_resist_messages():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[4],
+        nspells=1,
+    )
+    state = _build_state(player)
+    location = state.locations[state.player.gamloc]
+    pearl_id = next(obj.id for obj in state.objects.values() if obj.name == "pearl")
+    location = location.model_copy(update={"objects": [pearl_id], "nlobjs": 1})
+    state.locations[location.id] = location
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "bookworm pearl"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["KSPM00", "KSPM01"]
+
+
+@pytest.mark.anyio
+async def test_cast_bookworm_broadcast_excludes_target_player():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[4],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="target",
+        altnam="Target",
+        gamloc=player.gamloc,
+        offspls=1,
+    )
+    state = _build_state(player)
+    state.presence = TrackingPresence({player.plyrid, target.plyrid})
+    state.player_lookup = lambda pid: target if pid == target.plyrid else player
+
+    moonstone_id = next(obj.id for obj in state.objects.values() if obj.name == "moonstone")
+    player = player.model_copy(
+        update={"gpobjs": [moonstone_id], "obvals": [0], "npobjs": 1}
+    )
+    state.player = player
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "bookworm target"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["S05M03", "S05M04", "S05M05"]
+    assert result.events[1]["player"] == target.plyrid
+    assert result.events[2]["exclude_player"] == target.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_targeting_dragon_backfires_on_caster():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[4],
+        nspells=1,
+        hitpts=60,
+    )
+    state = _build_state(player)
+    state.rng = random.Random(5)
+    location = state.locations[state.player.gamloc]
+    dragon_id = next(obj.id for obj in state.objects.values() if obj.name == "dragon")
+    location = location.model_copy(update={"objects": [dragon_id], "nlobjs": 1})
+    state.locations[location.id] = location
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "bookworm dragon"}, state)
+
+    expected_damage = random.Random(5).randint(20, 46)
+    assert [event["message_id"] for event in result.events[:2]] == ["ZMSG08", "ZMSG09"]
+    assert state.player.hitpts == 60 - expected_damage
