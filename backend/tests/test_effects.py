@@ -283,7 +283,53 @@ def test_saywhat_forgets_one_spell_on_target(sample_player):
     assert result.context["target_message_id"] == "S51M04"
     assert result.context["broadcast_message_id"] == "S51M05"
     assert result.context["forgot_spell_id"] in {4, 5, 6}
+    assert result.context["forgot_spell_id"] not in target.spells
+    assert len(target.spells) == 2
     assert target.nspells == 2
+
+
+def test_saywhat_respects_objpro(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages, rng=random.Random(2))
+    target = _build_target(spells=[4, 5], nspells=2, spts=12)
+    target.charms[constants.OBJPRO] = 1
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=50,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S51M00"
+    assert result.context["target_message_id"] == "S51M01"
+    assert result.context["broadcast_message_id"] == "S51M02"
+    assert target.spells == [4, 5]
+    assert target.nspells == 2
+    assert target.spts == 12
+
+
+def test_saywhat_fails_when_target_has_no_spells(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages, rng=random.Random(2))
+    target = _build_target(spells=[], nspells=0)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=50,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S51M00"
+    assert result.context["target_message_id"] == "S51M01"
+    assert result.context["broadcast_message_id"] == "S51M02"
+    assert target.spells == []
+    assert target.nspells == 0
 
 
 def test_howru_uses_target_hp_in_message(sample_player):
