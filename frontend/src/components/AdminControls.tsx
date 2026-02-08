@@ -95,6 +95,7 @@ export const AdminControls = () => {
   const [goldCap, setGoldCap] = useState('')
   const [spellCap, setSpellCap] = useState('')
   const [hitCap, setHitCap] = useState('')
+  const [grantAllSpells, setGrantAllSpells] = useState(false)
   const [charmSlots, setCharmSlots] = useState<string[]>(
     Array.from({ length: CHARM_SLOTS.length }, () => '')
   )
@@ -183,6 +184,7 @@ export const AdminControls = () => {
       setGold(String(player.gold ?? ''))
       setSpellPoints(String(player.spts ?? ''))
       setHitPoints(String(player.hitpts ?? ''))
+      setGrantAllSpells(false)
       const nextCharms = Array.from({ length: CHARM_SLOTS.length }, (_, index) =>
         player.charms?.[index] !== undefined ? String(player.charms[index]) : '0'
       )
@@ -277,6 +279,8 @@ export const AdminControls = () => {
     if (parsedSpellCap !== undefined) payload.cap_spts = parsedSpellCap
     const parsedHitCap = parseNumber(hitCap)
     if (parsedHitCap !== undefined) payload.cap_hitpts = parsedHitCap
+
+    if (grantAllSpells) payload.grant_all_spells = true
 
     if (charmsInitialized) {
       const resolvedCharms = charmSlots.map((value) => {
@@ -577,6 +581,16 @@ export const AdminControls = () => {
                         />
                       </div>
                     </div>
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        name="grant-all-spells"
+                        checked={grantAllSpells}
+                        onChange={(event) => setGrantAllSpells(event.target.checked)}
+                      />
+                      Grant all spells
+                    </label>
+                    <p className="field-hint">Adds every spell to the target spellbook for testing.</p>
                   </div>
                 )}
               </fieldset>
