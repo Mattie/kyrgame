@@ -68,68 +68,68 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 2 `blowitawa` (destroy one item)【F:legacy/KYRSPEL.C†L140-L146】
 - [ ] ID 3 `blowoutma` (destroy all items)【F:legacy/KYRSPEL.C†L140-L146】
 - [x] ID 4 `bookworm` (zap other's spell book)【F:legacy/KYRSPEL.C†L141-L148】
-- [ ] ID 5 `burnup` (fireball I)【F:legacy/KYRSPEL.C†L142-L149】
-- [x] ID 6 `cadabra` (see invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
+- [x] ID 5 `burnup` (fireball I)【F:legacy/KYRSPEL.C†L142-L149】
+- [ ] ID 6 `cadabra` (see invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
 - [ ] ID 7 `cantcmeha` (invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
 - [ ] ID 8 `canthur` (ultimate protection I)【F:legacy/KYRSPEL.C†L145-L152】
-- [ ] ID 9 `chillou` (ice storm II)【F:legacy/KYRSPEL.C†L147-L154】
-- [x] ID 10 `clutzopho` (drop all items)【F:legacy/KYRSPEL.C†L148-L155】
+- [x] ID 9 `chillou` (ice storm II)【F:legacy/KYRSPEL.C†L147-L154】
+- [ ] ID 10 `clutzopho` (drop all items)【F:legacy/KYRSPEL.C†L148-L155】
 - [ ] ID 11 `cuseme` (detect power)【F:legacy/KYRSPEL.C†L149-L156】
 - [x] ID 12 `dumdum` (forget all spells)【F:legacy/KYRSPEL.C†L150-L157】
 - [ ] ID 13 `feeluck` (teleport random)【F:legacy/KYRSPEL.C†L151-L158】
 - [ ] ID 14 `firstai` (heal III)【F:legacy/KYRSPEL.C†L152-L159】
 - [ ] ID 15 `flyaway` (pegasus transformation; needs timers/flags beyond current stub)【F:legacy/KYRSPEL.C†L153-L160】
-- [ ] ID 16 `fpandl` (firebolt I)【F:legacy/KYRSPEL.C†L154-L161】
+- [x] ID 16 `fpandl` (firebolt I)【F:legacy/KYRSPEL.C†L154-L161】
 - [x] ID 17 `freezuu` (ice ball II)【F:legacy/KYRSPEL.C†L155-L162】
 - [x] ID 18 `frostie` (cone of cold II)【F:legacy/KYRSPEL.C†L156-L163】
 - [x] ID 19 `frozenu` (ice ball I)【F:legacy/KYRSPEL.C†L157-L164】
 - [x] ID 20 `frythes` (firebolt III)【F:legacy/KYRSPEL.C†L158-L165】
 - [x] ID 21 `gotcha` (lightning bolt II)【F:legacy/KYRSPEL.C†L159-L166】
-- [x] ID 22 `goto` (teleport specific)【F:legacy/KYRSPEL.C†L160-L167】
+- [ ] ID 22 `goto` (teleport specific)【F:legacy/KYRSPEL.C†L160-L167】
 - [ ] ID 23 `gringri` (pseudo-dragon form)【F:legacy/KYRSPEL.C†L161-L168】
 - [ ] ID 24 `handsof` (object protection I)【F:legacy/KYRSPEL.C†L162-L169】
 - [ ] ID 25 `heater` (ice protection II)【F:legacy/KYRSPEL.C†L163-L170】
 - [ ] ID 26 `hehhehh` (lightning storm)【F:legacy/KYRSPEL.C†L164-L171】
-- [x] ID 27 `hocus` (dispel magic)【F:legacy/KYRSPEL.C†L165-L172】
-- [ ] ID 28 `holyshe` (lightning bolt III)【F:legacy/KYRSPEL.C†L166-L173】
+- [ ] ID 27 `hocus` (dispel magic)【F:legacy/KYRSPEL.C†L165-L172】
+- [x] ID 28 `holyshe` (lightning bolt III)【F:legacy/KYRSPEL.C†L166-L173】
 - [x] ID 29 `hotflas` (lightning ball)【F:legacy/KYRSPEL.C†L167-L174】
 - [x] ID 30 `hotfoot` (fireball II)【F:legacy/KYRSPEL.C†L168-L175】
 - [x] ID 31 `hotkiss` (firebolt II)【F:legacy/KYRSPEL.C†L169-L176】
-- [x] ID 32 `hotseat` (ice protection I)【F:legacy/KYRSPEL.C†L170-L177】
+- [ ] ID 32 `hotseat` (ice protection I)【F:legacy/KYRSPEL.C†L170-L177】
 - [x] ID 33 `howru` (detect health)【F:legacy/KYRSPEL.C†L171-L178】
 - [ ] ID 34 `hydrant` (fire protection II)【F:legacy/KYRSPEL.C†L172-L179】
 - [ ] ID 35 `ibebad` (ultimate protection II)【F:legacy/KYRSPEL.C†L173-L180】
-- [ ] ID 36 `icedtea` (ice storm I)【F:legacy/KYRSPEL.C†L174-L181】
-- [x] ID 37 `icutwo` (see invisibility III)【F:legacy/KYRSPEL.C†L175-L182】
+- [x] ID 36 `icedtea` (ice storm I)【F:legacy/KYRSPEL.C†L174-L181】
+- [ ] ID 37 `icutwo` (see invisibility III)【F:legacy/KYRSPEL.C†L175-L182】
 - [ ] ID 38 `iseeyou` (see invisibility II)【F:legacy/KYRSPEL.C†L176-L183】
-- [ ] ID 39 `koolit` (cone of cold I)【F:legacy/KYRSPEL.C†L177-L184】
-- [x] ID 40 `makemyd` (object protection II)【F:legacy/KYRSPEL.C†L178-L185】
+- [x] ID 39 `koolit` (cone of cold I)【F:legacy/KYRSPEL.C†L177-L184】
+- [ ] ID 40 `makemyd` (object protection II)【F:legacy/KYRSPEL.C†L178-L185】
 - [ ] ID 41 `mower` (destroy ground items)【F:legacy/KYRSPEL.C†L179-L186】
 - [ ] ID 42 `noouch` (heal I)【F:legacy/KYRSPEL.C†L180-L187】
 - [ ] ID 43 `nosey` (read memorized spells)【F:legacy/KYRSPEL.C†L181-L188】
 - [ ] ID 44 `peekabo` (invisibility II)【F:legacy/KYRSPEL.C†L182-L189】
 - [ ] ID 45 `peepint` (scry someone)【F:legacy/KYRSPEL.C†L183-L190】
 - [ ] ID 46 `pickpoc` (steal item)【F:legacy/KYRSPEL.C†L184-L191】
-- [ ] ID 47 `pocus` (magic missile)【F:legacy/KYRSPEL.C†L185-L192】
-- [x] ID 48 `polarba` (ice protection III)【F:legacy/KYRSPEL.C†L186-L193】
+- [x] ID 47 `pocus` (magic missile)【F:legacy/KYRSPEL.C†L185-L192】
+- [ ] ID 48 `polarba` (ice protection III)【F:legacy/KYRSPEL.C†L186-L193】
 - [x] ID 49 `sapspel` (sap spell points II)【F:legacy/KYRSPEL.C†L187-L194】
 - [x] ID 50 `saywhat` (forget one spell)【F:legacy/KYRSPEL.C†L188-L195】
-- [ ] ID 51 `screwem` (fire storm)【F:legacy/KYRSPEL.C†L189-L196】
-- [x] ID 52 `smokey` (fire protection I)【F:legacy/KYRSPEL.C†L190-L197】
-- [ ] ID 53 `snowjob` (cone of cold III)【F:legacy/KYRSPEL.C†L191-L198】
-- [x] ID 54 `sunglass` (lightning protection I)【F:legacy/KYRSPEL.C†L192-L199】
+- [x] ID 51 `screwem` (fire storm)【F:legacy/KYRSPEL.C†L189-L196】
+- [ ] ID 52 `smokey` (fire protection I)【F:legacy/KYRSPEL.C†L190-L197】
+- [x] ID 53 `snowjob` (cone of cold III)【F:legacy/KYRSPEL.C†L191-L198】
+- [ ] ID 54 `sunglass` (lightning protection I)【F:legacy/KYRSPEL.C†L192-L199】
 - [ ] ID 55 `surgless` (lightning protection III)【F:legacy/KYRSPEL.C†L193-L200】
 - [x] ID 56 `takethat` (sap spell points I)【F:legacy/KYRSPEL.C†L194-L201】
 - [ ] ID 57 `thedoc` (heal II)【F:legacy/KYRSPEL.C†L195-L202】
 - [ ] ID 58 `tiltowait` (earthquake)【F:legacy/KYRSPEL.C†L196-L203】
 - [ ] ID 59 `tinting` (lightning protection II)【F:legacy/KYRSPEL.C†L197-L204】
-- [ ] ID 60 `toastem` (fireball III)【F:legacy/KYRSPEL.C†L198-L205】
+- [x] ID 60 `toastem` (fireball III)【F:legacy/KYRSPEL.C†L198-L205】
 - [x] ID 61 `weewillo` (willowisp transformation; needs timer/animation)【F:legacy/KYRSPEL.C†L199-L205】
 - [ ] ID 62 `whereami` (location finder)【F:legacy/KYRSPEL.C†L200-L204】
 - [ ] ID 63 `whopper` (fire protection III)【F:legacy/KYRSPEL.C†L201-L205】
 - [ ] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
-- [ ] ID 65 `zapher` (lightning bolt I)【F:legacy/KYRSPEL.C†L203-L206】
-- [x] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
+- [x] ID 65 `zapher` (lightning bolt I)【F:legacy/KYRSPEL.C†L203-L206】
+- [ ] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
 
 Each spell entry above also ties to timers/charms processed in `splrtk` (regen and expiration logic) that need to be mirrored when wiring the Python spell timer repository.【F:legacy/KYRSPEL.C†L215-L259】
 

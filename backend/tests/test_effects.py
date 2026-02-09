@@ -58,13 +58,16 @@ def test_spell_effects_require_targets_and_resources(sample_player):
 
     with pytest.raises(TargetingError):
         engine.cast_spell(
-            player=sample_player, spell_id=5, target=None, target_player=None
+            player=sample_player, spell_id=16, target=None, target_player=None
         )
 
     sample_player.spts = 1
     with pytest.raises(ResourceCostError):
         engine.cast_spell(
-            player=sample_player, spell_id=5, target="ogre", target_player=None
+            player=sample_player,
+            spell_id=16,
+            target="ogre",
+            target_player=_build_target(),
         )
 
 
@@ -91,13 +94,13 @@ def test_transformation_spells_toggle_player_flags(sample_player):
     engine = SpellEffectEngine(spells=spells, messages=messages)
 
     result = engine.cast_spell(
-        player=sample_player, spell_id=16, target=None, target_player=None
+        player=sample_player, spell_id=15, target=None, target_player=None
     )
     assert result.message_id == "S16M00"
     assert constants.PlayerFlag.PEGASU & sample_player.flags
 
     willow = engine.cast_spell(
-        player=sample_player, spell_id=62, target=None, target_player=None
+        player=sample_player, spell_id=61, target=None, target_player=None
     )
     assert willow.message_id == "S62M00"
     assert constants.PlayerFlag.WILLOW & sample_player.flags
@@ -451,16 +454,16 @@ def _message_id_with_offset(base_id: str, offset: int) -> str:
 @pytest.mark.parametrize(
     ("spell_id", "base_id", "damage", "protection", "mercy_level"),
     [
-        (17, "S17M00", 4, constants.FIRPRO, 0),
-        (19, "S19M00", 16, constants.ICEPRO, 1),
-        (21, "S21M00", 22, constants.FIRPRO, 1),
-        (22, "S22M00", 18, constants.LIGPRO, 2),
-        (29, "S29M00", 24, constants.LIGPRO, 2),
-        (32, "S32M00", 10, constants.FIRPRO, 1),
-        (40, "S40M00", 6, constants.ICEPRO, 0),
-        (48, "S48M00", 2, constants.OBJPRO, 0),
-        (54, "S54M00", 20, constants.ICEPRO, 2),
-        (66, "S66M00", 8, constants.LIGPRO, 1),
+        (16, "S17M00", 4, constants.FIRPRO, 0),
+        (18, "S19M00", 16, constants.ICEPRO, 1),
+        (20, "S21M00", 22, constants.FIRPRO, 1),
+        (21, "S22M00", 18, constants.LIGPRO, 2),
+        (28, "S29M00", 24, constants.LIGPRO, 2),
+        (31, "S32M00", 10, constants.FIRPRO, 1),
+        (39, "S40M00", 6, constants.ICEPRO, 0),
+        (47, "S48M00", 2, constants.OBJPRO, 0),
+        (53, "S54M00", 20, constants.ICEPRO, 2),
+        (65, "S66M00", 8, constants.LIGPRO, 1),
     ],
 )
 def test_direct_damage_spells_apply_damage(
@@ -495,7 +498,7 @@ def test_direct_damage_spells_respect_protection(sample_player):
 
     result = engine.cast_spell(
         player=sample_player,
-        spell_id=17,
+        spell_id=16,
         target="target",
         target_player=target,
         apply_cost=False,
@@ -515,7 +518,7 @@ def test_direct_damage_spells_respect_mercy(sample_player):
 
     result = engine.cast_spell(
         player=sample_player,
-        spell_id=22,
+        spell_id=21,
         target="target",
         target_player=target,
         apply_cost=False,

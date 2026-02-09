@@ -334,7 +334,7 @@ async def test_cast_area_damage_spells_apply_damage_and_protection():
         flags=int(constants.PlayerFlag.LOADED),
         level=10,
         spts=25,
-        spells=[6],
+        spells=[5],
         nspells=1,
     )
     target = _build_player(
@@ -365,7 +365,7 @@ async def test_cast_area_damage_spells_apply_damage_and_protection():
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
 
-    result = await dispatcher.dispatch("cast", {"raw": "cadabra"}, state)
+    result = await dispatcher.dispatch("cast", {"raw": "burnup"}, state)
 
     message_ids = {event["message_id"] for event in result.events}
     assert "S06M00" in message_ids

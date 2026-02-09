@@ -88,11 +88,11 @@ class SpellEffectEngine:
                 message_id=f"SPL{spell.id:03d}",
             )
 
-        if 16 in effects:
+        if 15 in effects:
             # Legacy transformation: flyaway turns the caster into a pegasus (legacy/KYRSPEL.C lines 644-651).
-            effects[16].message_id = "S16M00"
-            effects[16].requires_target = False
-            effects[16].handler = self._transformation_handler(
+            effects[15].message_id = "S16M00"
+            effects[15].requires_target = False
+            effects[15].handler = self._transformation_handler(
                 flag=constants.PlayerFlag.PEGASU,
                 direct_key="S16M00",
                 broadcast_key="S16M01",
@@ -156,11 +156,11 @@ class SpellEffectEngine:
                 success_ids=("S57M03", "S57M04", "S57M05"),
             )
 
-        if 62 in effects:
+        if 61 in effects:
             # Legacy transformation: weewillo grants willowisp wings (legacy/KYRSPEL.C lines 1188-1195).
-            effects[62].message_id = "S62M00"
-            effects[62].requires_target = False
-            effects[62].handler = self._transformation_handler(
+            effects[61].message_id = "S62M00"
+            effects[61].requires_target = False
+            effects[61].handler = self._transformation_handler(
                 flag=constants.PlayerFlag.WILLOW,
                 direct_key="S62M00",
                 broadcast_key="S62M01",
@@ -169,16 +169,16 @@ class SpellEffectEngine:
         # Legacy direct damage spell behavior (striker/masshitr in legacy/KYRSPEL.C:339-429,
         # 520-1229).
         direct_damage = [
-            (17, "S17M00", 4, constants.FIRPRO, 0),  # spl017 freezuu
-            (19, "S19M00", 16, constants.ICEPRO, 1),  # spl019 frozenu
-            (21, "S21M00", 22, constants.FIRPRO, 1),  # spl021 gotcha
-            (22, "S22M00", 18, constants.LIGPRO, 2),  # spl022 goto
-            (29, "S29M00", 24, constants.LIGPRO, 2),  # spl029 hotflas
-            (32, "S32M00", 10, constants.FIRPRO, 1),  # spl032 hotseat
-            (40, "S40M00", 6, constants.ICEPRO, 0),  # spl040 makemyd
-            (48, "S48M00", 2, constants.OBJPRO, 0),  # spl048 polarba
-            (54, "S54M00", 20, constants.ICEPRO, 2),  # spl054 sunglass
-            (66, "S66M00", 8, constants.LIGPRO, 1),  # spl066 zelastone
+            (16, "S17M00", 4, constants.FIRPRO, 0),  # spl017 fpandl
+            (18, "S19M00", 16, constants.ICEPRO, 1),  # spl019 frostie
+            (20, "S21M00", 22, constants.FIRPRO, 1),  # spl021 frythes
+            (21, "S22M00", 18, constants.LIGPRO, 2),  # spl022 gotcha
+            (28, "S29M00", 24, constants.LIGPRO, 2),  # spl029 holyshe
+            (31, "S32M00", 10, constants.FIRPRO, 1),  # spl032 hotkiss
+            (39, "S40M00", 6, constants.ICEPRO, 0),  # spl040 koolit
+            (47, "S48M00", 2, constants.OBJPRO, 0),  # spl048 pocus
+            (53, "S54M00", 20, constants.ICEPRO, 2),  # spl054 snowjob
+            (65, "S66M00", 8, constants.LIGPRO, 1),  # spl066 zapher
         ]
         for spell_id, base_id, damage, protection, mercy_level in direct_damage:
             if spell_id not in effects:
@@ -193,16 +193,15 @@ class SpellEffectEngine:
             )
 
         area_damage = [
-            (6, "S06M00", "S06M01", "S06M02", "S06M03", "S06M04", 10, constants.FIRPRO, False, 1),  # spl006 cadabra
-            (10, "S10M00", "S10M01", "S10M02", "S10M03", "S10M04", 30, constants.ICEPRO, True, 3),  # spl010 clutzopho
-            (18, "S18M00", "S18M01", "S18M02", "S18M03", "S18M04", 26, constants.ICEPRO, False, 2),  # spl018 frostie
-            (20, "S20M00", "S20M01", "S20M02", "S20M03", "S20M04", 12, constants.ICEPRO, False, 1),  # spl020 frythes
-            (27, "S27M00", "S27M01", "S27M02", "S27M03", "S27M04", 32, constants.LIGPRO, True, 2),  # spl027 hocus
-            (30, "S30M00", "S30M01", "S30M02", "S30M03", "S30M04", 16, constants.LIGPRO, False, 2),  # spl030 hotfoot
-            (31, "S31M00", "S31M01", "S31M02", "S31M03", "S31M04", 22, constants.FIRPRO, False, 2),  # spl031 hotkiss
-            (37, "S37M00", "S37M01", "S37M02", "S37M03", "S37M04", 20, constants.ICEPRO, True, 2),  # spl037 icutwo
-            (52, "S52M00", "S52M01", "S52M02", "S52M03", "S52M04", 26, constants.FIRPRO, True, 2),  # spl052 smokey
-            (61, "S61M00", "S61M01", "S61M02", "S61M03", "S61M04", 32, constants.FIRPRO, False, 2),  # spl061 weewillo
+            (5, "S06M00", "S06M01", "S06M02", "S06M03", "S06M04", 10, constants.FIRPRO, False, 1),  # spl006 burnup
+            (9, "S10M00", "S10M01", "S10M02", "S10M03", "S10M04", 30, constants.ICEPRO, True, 3),  # spl010 chillou
+            (17, "S18M00", "S18M01", "S18M02", "S18M03", "S18M04", 26, constants.ICEPRO, False, 2),  # spl018 freezuu
+            (19, "S20M00", "S20M01", "S20M02", "S20M03", "S20M04", 12, constants.ICEPRO, False, 1),  # spl020 frozenu
+            (29, "S30M00", "S30M01", "S30M02", "S30M03", "S30M04", 16, constants.LIGPRO, False, 2),  # spl030 hotflas
+            (30, "S31M00", "S31M01", "S31M02", "S31M03", "S31M04", 22, constants.FIRPRO, False, 2),  # spl031 hotfoot
+            (36, "S37M00", "S37M01", "S37M02", "S37M03", "S37M04", 20, constants.ICEPRO, True, 2),  # spl037 icedtea
+            (51, "S52M00", "S52M01", "S52M02", "S52M03", "S52M04", 26, constants.FIRPRO, True, 2),  # spl052 screwem
+            (60, "S61M00", "S61M01", "S61M02", "S61M03", "S61M04", 32, constants.FIRPRO, False, 2),  # spl061 toastem
         ]
         for (
             spell_id,
