@@ -89,7 +89,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 23 `gringri` (pseudo-dragon form)【F:legacy/KYRSPEL.C†L161-L168】
 - [ ] ID 24 `handsof` (object protection I)【F:legacy/KYRSPEL.C†L162-L169】
 - [ ] ID 25 `heater` (ice protection II)【F:legacy/KYRSPEL.C†L163-L170】
-- [ ] ID 26 `hehhehh` (lightning storm)【F:legacy/KYRSPEL.C†L164-L171】
+- [x] ID 26 `hehhehh` (lightning storm)【F:legacy/KYRSPEL.C†L164-L171】
 - [ ] ID 27 `hocus` (dispel magic)【F:legacy/KYRSPEL.C†L165-L172】
 - [x] ID 28 `holyshe` (lightning bolt III)【F:legacy/KYRSPEL.C†L166-L173】
 - [x] ID 29 `hotflas` (lightning ball)【F:legacy/KYRSPEL.C†L167-L174】
