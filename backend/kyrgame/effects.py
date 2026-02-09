@@ -193,15 +193,17 @@ class SpellEffectEngine:
             )
 
         area_damage = [
-            (5, "S06M00", "S06M01", "S06M02", "S06M03", "S06M04", 10, constants.FIRPRO, False, 1),  # spl006 burnup
-            (9, "S10M00", "S10M01", "S10M02", "S10M03", "S10M04", 30, constants.ICEPRO, True, 3),  # spl010 chillou
-            (17, "S18M00", "S18M01", "S18M02", "S18M03", "S18M04", 26, constants.ICEPRO, False, 2),  # spl018 freezuu
-            (19, "S20M00", "S20M01", "S20M02", "S20M03", "S20M04", 12, constants.ICEPRO, False, 1),  # spl020 frozenu
-            (29, "S30M00", "S30M01", "S30M02", "S30M03", "S30M04", 16, constants.LIGPRO, False, 2),  # spl030 hotflas
-            (30, "S31M00", "S31M01", "S31M02", "S31M03", "S31M04", 22, constants.FIRPRO, False, 2),  # spl031 hotfoot
-            (36, "S37M00", "S37M01", "S37M02", "S37M03", "S37M04", 20, constants.ICEPRO, True, 2),  # spl037 icedtea
-            (51, "S52M00", "S52M01", "S52M02", "S52M03", "S52M04", 26, constants.FIRPRO, True, 2),  # spl052 screwem
-            (60, "S61M00", "S61M01", "S61M02", "S61M03", "S61M04", 32, constants.FIRPRO, False, 2),  # spl061 toastem
+            # (spell_id, caster_id, broadcast_id, hit_id, other_id, protect_id, damage, protection, hits_self, mercy_level, required_object)
+            (5, "S06M00", "S06M01", "S06M02", "S06M03", "S06M04", 10, constants.FIRPRO, False, 1, None),  # spl006 burnup
+            (9, "S10M00", "S10M01", "S10M02", "S10M03", "S10M04", 30, constants.ICEPRO, True, 3, "pearl"),  # spl010 chillou
+            (17, "S18M00", "S18M01", "S18M02", "S18M03", "S18M04", 26, constants.ICEPRO, False, 2, None),  # spl018 freezuu
+            (19, "S20M00", "S20M01", "S20M02", "S20M03", "S20M04", 12, constants.ICEPRO, False, 1, None),  # spl020 frozenu
+            (26, "S27M00", "S27M01", "S27M02", "S27M03", "S27M04", 32, constants.LIGPRO, True, 2, "opal"),  # spl027 hehhehh
+            (29, "S30M00", "S30M01", "S30M02", "S30M03", "S30M04", 16, constants.LIGPRO, False, 2, None),  # spl030 hotflas
+            (30, "S31M00", "S31M01", "S31M02", "S31M03", "S31M04", 22, constants.FIRPRO, False, 2, None),  # spl031 hotfoot
+            (36, "S37M00", "S37M01", "S37M02", "S37M03", "S37M04", 20, constants.ICEPRO, True, 2, None),  # spl037 icedtea
+            (51, "S52M00", "S52M01", "S52M02", "S52M03", "S52M04", 26, constants.FIRPRO, True, 2, None),  # spl052 screwem
+            (60, "S61M00", "S61M01", "S61M02", "S61M03", "S61M04", 32, constants.FIRPRO, False, 2, None),  # spl061 toastem
         ]
         for (
             spell_id,
@@ -214,6 +216,7 @@ class SpellEffectEngine:
             protection,
             hits_self,
             mercy_level,
+            required_object,
         ) in area_damage:
             if spell_id not in effects:
                 continue
@@ -229,6 +232,7 @@ class SpellEffectEngine:
                 protection=protection,
                 hits_self=hits_self,
                 mercy_level=mercy_level,
+                required_object=required_object,
             )
         return effects
 
@@ -435,6 +439,7 @@ class SpellEffectEngine:
         protection: int,
         hits_self: bool,
         mercy_level: int,
+        required_object: Optional[str] = None,
     ) -> Callable[
         [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
         EffectResult,
@@ -445,6 +450,23 @@ class SpellEffectEngine:
             target_player: Optional[models.PlayerModel],
             effect: SpellEffect,
         ) -> EffectResult:  # noqa: ARG001
+            # Check for required object (legacy/KYRSPEL.C:spl010,spl027)
+            if required_object:
+                object_id = None
+                for obj in self.objects.values():
+                    if obj.name.lower() == required_object.lower():
+                        object_id = obj.id
+                        break
+                if object_id is None or not remove_inventory_item(player, object_id):
+                    return self._msgutl2(
+                        player,
+                        caster_key="MISS00",
+                        broadcast_key="MISS01",
+                        target=target,
+                        success=False,
+                        effect=effect,
+                    )
+
             result = self._msgutl2(
                 player,
                 caster_key=caster_id,
