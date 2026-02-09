@@ -58,13 +58,16 @@ def test_spell_effects_require_targets_and_resources(sample_player):
 
     with pytest.raises(TargetingError):
         engine.cast_spell(
-            player=sample_player, spell_id=5, target=None, target_player=None
+            player=sample_player, spell_id=16, target=None, target_player=None
         )
 
     sample_player.spts = 1
     with pytest.raises(ResourceCostError):
         engine.cast_spell(
-            player=sample_player, spell_id=5, target="ogre", target_player=None
+            player=sample_player,
+            spell_id=16,
+            target="ogre",
+            target_player=_build_target(),
         )
 
 
@@ -91,13 +94,13 @@ def test_transformation_spells_toggle_player_flags(sample_player):
     engine = SpellEffectEngine(spells=spells, messages=messages)
 
     result = engine.cast_spell(
-        player=sample_player, spell_id=16, target=None, target_player=None
+        player=sample_player, spell_id=15, target=None, target_player=None
     )
     assert result.message_id == "S16M00"
     assert constants.PlayerFlag.PEGASU & sample_player.flags
 
     willow = engine.cast_spell(
-        player=sample_player, spell_id=62, target=None, target_player=None
+        player=sample_player, spell_id=61, target=None, target_player=None
     )
     assert willow.message_id == "S62M00"
     assert constants.PlayerFlag.WILLOW & sample_player.flags
@@ -441,3 +444,87 @@ def test_howru_uses_target_hp_in_message(sample_player):
     assert result.text == expected_text
     assert result.context["target_message_id"] == "S34M01"
     assert result.context["broadcast_message_id"] == "S34M02"
+
+
+def _message_id_with_offset(base_id: str, offset: int) -> str:
+    prefix, value = base_id[:-2], int(base_id[-2:])
+    return f"{prefix}{value + offset:02d}"
+
+
+@pytest.mark.parametrize(
+    ("spell_id", "base_id", "damage", "protection", "mercy_level"),
+    [
+        (16, "S17M00", 4, constants.FIRPRO, 0),
+        (18, "S19M00", 16, constants.ICEPRO, 1),
+        (20, "S21M00", 22, constants.FIRPRO, 1),
+        (21, "S22M00", 18, constants.LIGPRO, 2),
+        (28, "S29M00", 24, constants.LIGPRO, 2),
+        (31, "S32M00", 10, constants.FIRPRO, 1),
+        (39, "S40M00", 6, constants.ICEPRO, 0),
+        (47, "S48M00", 2, constants.OBJPRO, 0),
+        (53, "S54M00", 20, constants.ICEPRO, 2),
+        (65, "S66M00", 8, constants.LIGPRO, 1),
+    ],
+)
+def test_direct_damage_spells_apply_damage(
+    sample_player, spell_id, base_id, damage, protection, mercy_level
+):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(hitpts=40, level=mercy_level + 1)
+    target.charms[protection] = 0
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=spell_id,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == _message_id_with_offset(base_id, 3)
+    assert result.context["target_message_id"] == _message_id_with_offset(base_id, 4)
+    assert result.context["broadcast_message_id"] == _message_id_with_offset(base_id, 5)
+    assert target.hitpts == 40 - damage
+
+
+def test_direct_damage_spells_respect_protection(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(hitpts=40)
+    target.charms[constants.FIRPRO] = 2
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=16,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S17M00"
+    assert result.context["target_message_id"] == "S17M01"
+    assert result.context["broadcast_message_id"] == "S17M02"
+    assert target.hitpts == 40
+
+
+def test_direct_damage_spells_respect_mercy(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(hitpts=40, level=2)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=21,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "MERCYA"
+    assert result.context["target_message_id"] == "MERCYB"
+    assert result.context["broadcast_message_id"] == "MERCYC"
+    assert target.hitpts == 40

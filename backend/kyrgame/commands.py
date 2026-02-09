@@ -1074,6 +1074,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     broadcast_exclude_player = context.pop("broadcast_exclude_player", None)
     target_text = context.pop("target_text", None)
     target_message_id = context.pop("target_message_id", None)
+    area_damage = context.pop("area_damage", None)
 
     event = _message_event(
         "player",
@@ -1111,6 +1112,8 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                 exclude_player=broadcast_exclude_player or state.player.plyrid,
             )
         )
+    if area_damage:
+        await _apply_area_damage(state, command_id, area_damage, events)
 
     _persist_player_state(state, state.player)
     if target_player and target_player is not state.player:
@@ -1201,6 +1204,77 @@ def _spell_target_failure_events(
             exclude_player=state.player.plyrid,
         ),
     ]
+
+
+async def _apply_area_damage(
+    state: GameState,
+    command_id: int | None,
+    area_damage: dict,
+    events: list[dict],
+) -> None:
+    # Legacy masshitr handling (legacy/KYRSPEL.C:400-429).
+    if not state.presence or not state.player_lookup:
+        return
+    occupants = await state.presence.players_in_room(state.player.gamloc)
+    for occupant_id in occupants:
+        if not area_damage.get("hits_self") and occupant_id == state.player.plyrid:
+            continue
+        target = state.player_lookup(occupant_id)
+        if not target:
+            continue
+
+        protection = area_damage["protection"]
+        if target.charms[protection]:
+            caster_text = _format_message(
+                state, area_damage["protect_id"], target.altnam
+            )
+            events.append(
+                _message_event(
+                    "player", area_damage["protect_id"], caster_text, command_id
+                )
+            )
+            continue
+
+        if target.level <= area_damage["mercy_level"]:
+            target_text = _format_message(state, "MERCYU")
+            target_event = _message_event("target", "MERCYU", target_text, command_id)
+            target_event["player"] = target.plyrid
+            events.append(target_event)
+
+            broadcast_text = _format_message(state, "MERCYO", target.altnam)
+            events.append(
+                _message_event(
+                    "room",
+                    "MERCYO",
+                    broadcast_text,
+                    command_id,
+                    exclude_player=target.plyrid,
+                )
+            )
+            continue
+
+        target.hitpts = max(0, target.hitpts - area_damage["damage"])
+        _persist_player_state(state, target)
+
+        target_text = _format_message(state, area_damage["hit_id"])
+        target_event = _message_event(
+            "target", area_damage["hit_id"], target_text, command_id
+        )
+        target_event["player"] = target.plyrid
+        events.append(target_event)
+
+        broadcast_text = _format_message(
+            state, area_damage["other_id"], target.altnam
+        )
+        events.append(
+            _message_event(
+                "room",
+                area_damage["other_id"],
+                broadcast_text,
+                command_id,
+                exclude_player=target.plyrid,
+            )
+        )
 
 
 def _handle_spellbook(state: GameState, args: dict) -> CommandResult:

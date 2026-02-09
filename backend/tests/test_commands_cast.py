@@ -326,3 +326,52 @@ async def test_cast_targeting_dragon_backfires_on_caster():
     expected_damage = random.Random(5).randint(20, 46)
     assert [event["message_id"] for event in result.events[:2]] == ["ZMSG08", "ZMSG09"]
     assert state.player.hitpts == 60 - expected_damage
+
+
+@pytest.mark.anyio
+async def test_cast_area_damage_spells_apply_damage_and_protection():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=10,
+        spts=25,
+        spells=[5],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="target",
+        altnam="Target",
+        gamloc=player.gamloc,
+        hitpts=30,
+        level=5,
+    )
+    protected = _build_player(
+        plyrid="shielded",
+        attnam="shielded",
+        altnam="Shielded",
+        gamloc=player.gamloc,
+        hitpts=30,
+        level=5,
+    )
+    protected.charms[constants.FIRPRO] = 1
+    state = _build_state(player)
+    state.presence = TrackingPresence({player.plyrid, target.plyrid, protected.plyrid})
+    state.player_lookup = lambda pid: {
+        player.plyrid: player,
+        target.plyrid: target,
+        protected.plyrid: protected,
+    }.get(pid)
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "burnup"}, state)
+
+    message_ids = {event["message_id"] for event in result.events}
+    assert "S06M00" in message_ids
+    assert "S06M01" in message_ids
+    assert "S06M02" in message_ids
+    assert "S06M03" in message_ids
+    assert "S06M04" in message_ids
+    assert target.hitpts == 20
+    assert protected.hitpts == 30

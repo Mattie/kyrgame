@@ -88,11 +88,11 @@ class SpellEffectEngine:
                 message_id=f"SPL{spell.id:03d}",
             )
 
-        if 16 in effects:
+        if 15 in effects:
             # Legacy transformation: flyaway turns the caster into a pegasus (legacy/KYRSPEL.C lines 644-651).
-            effects[16].message_id = "S16M00"
-            effects[16].requires_target = False
-            effects[16].handler = self._transformation_handler(
+            effects[15].message_id = "S16M00"
+            effects[15].requires_target = False
+            effects[15].handler = self._transformation_handler(
                 flag=constants.PlayerFlag.PEGASU,
                 direct_key="S16M00",
                 broadcast_key="S16M01",
@@ -156,14 +156,83 @@ class SpellEffectEngine:
                 success_ids=("S57M03", "S57M04", "S57M05"),
             )
 
-        if 62 in effects:
+        if 61 in effects:
             # Legacy transformation: weewillo grants willowisp wings (legacy/KYRSPEL.C lines 1188-1195).
-            effects[62].message_id = "S62M00"
-            effects[62].requires_target = False
-            effects[62].handler = self._transformation_handler(
+            effects[61].message_id = "S62M00"
+            effects[61].requires_target = False
+            effects[61].handler = self._transformation_handler(
                 flag=constants.PlayerFlag.WILLOW,
                 direct_key="S62M00",
                 broadcast_key="S62M01",
+            )
+
+        # Legacy direct damage spell behavior (striker/masshitr in legacy/KYRSPEL.C:339-429,
+        # 520-1229).
+        direct_damage = [
+            (16, "S17M00", 4, constants.FIRPRO, 0),  # spl017 fpandl
+            (18, "S19M00", 16, constants.ICEPRO, 1),  # spl019 frostie
+            (20, "S21M00", 22, constants.FIRPRO, 1),  # spl021 frythes
+            (21, "S22M00", 18, constants.LIGPRO, 2),  # spl022 gotcha
+            (28, "S29M00", 24, constants.LIGPRO, 2),  # spl029 holyshe
+            (31, "S32M00", 10, constants.FIRPRO, 1),  # spl032 hotkiss
+            (39, "S40M00", 6, constants.ICEPRO, 0),  # spl040 koolit
+            (47, "S48M00", 2, constants.OBJPRO, 0),  # spl048 pocus
+            (53, "S54M00", 20, constants.ICEPRO, 2),  # spl054 snowjob
+            (65, "S66M00", 8, constants.LIGPRO, 1),  # spl066 zapher
+        ]
+        for spell_id, base_id, damage, protection, mercy_level in direct_damage:
+            if spell_id not in effects:
+                continue
+            effects[spell_id].requires_target = True
+            effects[spell_id].message_id = base_id
+            effects[spell_id].handler = self._direct_damage_handler(
+                damage=damage,
+                protection=protection,
+                mercy_level=mercy_level,
+                base_id=base_id,
+            )
+
+        area_damage = [
+            # (spell_id, caster_id, broadcast_id, hit_id, other_id, protect_id, damage, protection, hits_self, mercy_level, required_object)
+            (5, "S06M00", "S06M01", "S06M02", "S06M03", "S06M04", 10, constants.FIRPRO, False, 1, None),  # spl006 burnup
+            (9, "S10M00", "S10M01", "S10M02", "S10M03", "S10M04", 30, constants.ICEPRO, True, 3, "pearl"),  # spl010 chillou
+            (17, "S18M00", "S18M01", "S18M02", "S18M03", "S18M04", 26, constants.ICEPRO, False, 2, None),  # spl018 freezuu
+            (19, "S20M00", "S20M01", "S20M02", "S20M03", "S20M04", 12, constants.ICEPRO, False, 1, None),  # spl020 frozenu
+            (26, "S27M00", "S27M01", "S27M03", "S27M04", "S27M02", 32, constants.LIGPRO, True, 2, "opal"),  # spl027 hehhehh (reordered: hit=M03, broadcast=M04, protection=M02)
+            (29, "S30M00", "S30M01", "S30M02", "S30M03", "S30M04", 16, constants.LIGPRO, False, 2, None),  # spl030 hotflas
+            (30, "S31M00", "S31M01", "S31M03", "S31M04", "S31M02", 22, constants.FIRPRO, False, 2, None),  # spl031 hotfoot (reordered: hit=M03, broadcast=M04, protection=M02)
+            (36, "S37M00", "S37M01", "S37M02", "S37M03", "S37M04", 20, constants.ICEPRO, True, 2, None),  # spl037 icedtea
+            (51, "S52M00", "S52M01", "S52M03", "S52M04", "S52M02", 26, constants.FIRPRO, True, 2, None),  # spl052 screwem (reordered: hit=M03, broadcast=M04, protection=M02)
+            (60, "S61M00", "S61M01", "S61M02", "S61M03", "S61M04", 32, constants.FIRPRO, False, 2, None),  # spl061 toastem
+        ]
+        for (
+            spell_id,
+            caster_id,
+            broadcast_id,
+            hit_id,
+            other_id,
+            protect_id,
+            damage,
+            protection,
+            hits_self,
+            mercy_level,
+            required_object,
+        ) in area_damage:
+            if spell_id not in effects:
+                continue
+            effects[spell_id].requires_target = False
+            effects[spell_id].message_id = caster_id
+            effects[spell_id].handler = self._area_damage_handler(
+                caster_id=caster_id,
+                broadcast_id=broadcast_id,
+                hit_id=hit_id,
+                other_id=other_id,
+                protect_id=protect_id,
+                damage=damage,
+                protection=protection,
+                hits_self=hits_self,
+                mercy_level=mercy_level,
+                required_object=required_object,
             )
         return effects
 
@@ -257,6 +326,167 @@ class SpellEffectEngine:
             except TypeError:
                 return template
         return template
+
+    def _kheshe(self, player: models.PlayerModel) -> str:
+        if player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0:
+            return "it"
+        return "she" if player.flags & constants.PlayerFlag.FEMALE else "he"
+
+    def _message_id_with_offset(self, base_id: str, offset: int) -> str:
+        prefix, value = base_id[:-2], int(base_id[-2:])
+        return f"{prefix}{value + offset:02d}"
+
+    def _direct_damage_handler(
+        self,
+        *,
+        damage: int,
+        protection: int,
+        mercy_level: int,
+        base_id: str,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+
+            if target_player.charms[protection]:
+                caster_id = base_id
+                target_id = self._message_id_with_offset(base_id, 1)
+                broadcast_id = self._message_id_with_offset(base_id, 2)
+                caster_text = self._format_message(caster_id, target_player.altnam)
+                target_text = self._format_message(target_id, player.altnam)
+                broadcast_text = self._format_message(
+                    broadcast_id, player.altnam, target_player.altnam
+                )
+                return EffectResult(
+                    success=False,
+                    message_id=caster_id,
+                    text=caster_text,
+                    animation=effect.animation,
+                    context={
+                        "target_message_id": target_id,
+                        "target_text": target_text,
+                        "broadcast": broadcast_text,
+                        "broadcast_message_id": broadcast_id,
+                        "broadcast_exclude_player": target_player.plyrid,
+                        "target": target,
+                    },
+                )
+
+            if target_player.level <= mercy_level:
+                caster_text = self._format_message("MERCYA", target_player.altnam)
+                target_text = self._format_message("MERCYB", player.altnam)
+                broadcast_text = self._format_message(
+                    "MERCYC", player.altnam, target_player.altnam, self._kheshe(target_player)
+                )
+                return EffectResult(
+                    success=False,
+                    message_id="MERCYA",
+                    text=caster_text,
+                    animation=effect.animation,
+                    context={
+                        "target_message_id": "MERCYB",
+                        "target_text": target_text,
+                        "broadcast": broadcast_text,
+                        "broadcast_message_id": "MERCYC",
+                        "broadcast_exclude_player": target_player.plyrid,
+                        "target": target,
+                    },
+                )
+
+            caster_id = self._message_id_with_offset(base_id, 3)
+            target_id = self._message_id_with_offset(base_id, 4)
+            broadcast_id = self._message_id_with_offset(base_id, 5)
+            target_player.hitpts = max(0, target_player.hitpts - damage)
+            caster_text = self._format_message(caster_id, target_player.altnam)
+            target_text = self._format_message(target_id, player.altnam, damage)
+            broadcast_text = self._format_message(
+                broadcast_id, player.altnam, target_player.altnam, self._kheshe(target_player)
+            )
+            return EffectResult(
+                success=True,
+                message_id=caster_id,
+                text=caster_text,
+                animation=effect.animation,
+                context={
+                    "target_message_id": target_id,
+                    "target_text": target_text,
+                    "broadcast": broadcast_text,
+                    "broadcast_message_id": broadcast_id,
+                    "broadcast_exclude_player": target_player.plyrid,
+                    "target": target,
+                },
+            )
+
+        return _handler
+
+    def _area_damage_handler(
+        self,
+        *,
+        caster_id: str,
+        broadcast_id: str,
+        hit_id: str,
+        other_id: str,
+        protect_id: str,
+        damage: int,
+        protection: int,
+        hits_self: bool,
+        mercy_level: int,
+        required_object: Optional[str] = None,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            # Check for required object (legacy/KYRSPEL.C:spl010,spl027)
+            if required_object:
+                object_id = None
+                for obj in self.objects.values():
+                    if obj.name.lower() == required_object.lower():
+                        object_id = obj.id
+                        break
+                if object_id is None or not remove_inventory_item(player, object_id):
+                    return self._msgutl2(
+                        player,
+                        caster_key="MISS00",
+                        broadcast_key="MISS01",
+                        target=target,
+                        success=False,
+                        effect=effect,
+                    )
+
+            result = self._msgutl2(
+                player,
+                caster_key=caster_id,
+                broadcast_key=broadcast_id,
+                target=target,
+                success=True,
+                effect=effect,
+            )
+            result.context["area_damage"] = {
+                "hit_id": hit_id,
+                "other_id": other_id,
+                "protect_id": protect_id,
+                "damage": damage,
+                "protection": protection,
+                "hits_self": hits_self,
+                "mercy_level": mercy_level,
+            }
+            return result
+
+        return _handler
 
     def _sap_spell_points_handler(
         self,
