@@ -124,7 +124,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 58 `tiltowait` (earthquake)【F:legacy/KYRSPEL.C†L196-L203】
 - [ ] ID 59 `tinting` (lightning protection II)【F:legacy/KYRSPEL.C†L197-L204】
 - [x] ID 60 `toastem` (fireball III)【F:legacy/KYRSPEL.C†L198-L205】
-- [x] ID 61 `weewillo` (willowisp transformation; needs timer/animation)【F:legacy/KYRSPEL.C†L199-L205】
+- [ ] ID 61 `weewillo` (willowisp transformation; needs timer/animation)【F:legacy/KYRSPEL.C†L199-L205】
 - [ ] ID 62 `whereami` (location finder)【F:legacy/KYRSPEL.C†L200-L204】
 - [ ] ID 63 `whopper` (fire protection III)【F:legacy/KYRSPEL.C†L201-L205】
 - [ ] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
