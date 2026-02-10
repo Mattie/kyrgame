@@ -75,7 +75,7 @@
    - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests. (Progress: added YAML-driven routines for rooms 8, 9, 10, 12, 14, and 16.)
    - Ported the remaining room routines (rooms 288/291/293/295/302) via YAML scripts in `backend/fixtures/room_scripts/`, reusing established patterns and adding legacy source file + line comments for reviewer parity checks.
    - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.
-   - Use `backend/kyrgame/timing/TickScheduler` to register recurring spell/effect/mob timers (e.g., `register_spell_tick`, `register_animation_tick`, or `register_effect_tick`) and wire them into runtime services as those handlers are ported.
+   - Use `backend/kyrgame/timing/TickScheduler` to register recurring spell/effect/mob timers (e.g., `register_spell_tick`, `register_animation_tick`, or `register_recurring_timer`) and wire them into runtime services as those handlers are ported.
    - Captured Tashanna's heart-and-soul ritual (room 101) and the willowisp/pegasus transformation spells; flesh out remaining spellbook and room routines with legacy gating (inventory limits, level costs) and persistence hooks.
    - Expose APIs for content lookups (descriptions, auxiliary text) that reference the legacy message catalogs.
 5. **Auth/session lifecycle**

@@ -48,13 +48,13 @@ def test_tick_scheduler_registers_spell_and_animation_ticks():
     assert scheduler.calls[1]["callback"] is animation_tick
 
 
-def test_tick_scheduler_registers_effect_ticks():
+def test_tick_scheduler_registers_custom_recurring_timer():
     scheduler = _FakeScheduler()
     service = TickScheduler(scheduler)
 
     effect_tick = lambda: None
 
-    service.register_effect_tick("mob_tick", 12, effect_tick)
+    service.register_recurring_timer("mob_tick", 12, effect_tick)
 
     assert scheduler.calls[0]["delay"] == 12.0
     assert scheduler.calls[0]["interval"] == 12.0

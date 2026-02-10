@@ -76,16 +76,16 @@ class TickScheduler:
 
         return self.register_recurring("animation_tick", 15, callback)
 
-    def register_effect_tick(
+    def register_recurring_timer(
         self,
         name: str,
         interval_ticks: float,
         callback: Callback,
     ) -> ScheduledHandle:
-        """Register recurring effect or mob timers.
+        """Register a recurring timer beyond the spell/animation defaults.
 
-        Use this for porting KYRSPEL/KYRANIM-driven timers that are neither
-        spell ticks nor animation ticks, but still rely on rtkick-style cadence.
+        Prefer this when you want a descriptive timer name but do not want to
+        add another dedicated helper (it wraps ``register_recurring``).
         """
 
         return self.register_recurring(name, interval_ticks, callback)
