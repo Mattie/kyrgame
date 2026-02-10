@@ -37,6 +37,8 @@
 - [x] Updated YAML `grant_spell` actions to default to spellbook-bit grants only, with optional `memorize: true` for explicit scripted pre-memorization exceptions (legacy parity with separate grant/memorize flow).
 - [x] Ported full spellbook rendering for `look spellbook`/`read spellbook` to legacy `seesbk` semantics (ordered bitfield scan, 3-column `SBOOK2` rows, `SBOOK3` empty state, and `SBOOK4` footer with title/player substitution).
 
+- [x] Added a tick-based scheduler service to mirror MajorBBS `rtkick` intervals for spell/animation timers (`KYRSPEL.C`/`KYRANIM.C`).
+
 - [x] Ported `learn`/`memorize` command handling to legacy `memori`/`memutl` parity (`KSPM09` ownership failures, `GAISPL`/`LOSSPL` MAXSPL messaging, `MEMSPL` room broadcast excluding caster, and persisted memorized slots).
 - [x] Ported `spells` command handling to legacy `shwsutl` parity (exact memorized-list grammar, spell point + level/title status text in a single response event, and structured memorized spell metadata payloads for UI cards).
 - [x] Ported `cast`/`chant` command handling to legacy `caster` gating (missing spell, memorized checks, level/spell-point gates, and spell-point consumption) with broadcast parity.
@@ -73,6 +75,7 @@
    - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests. (Progress: added YAML-driven routines for rooms 8, 9, 10, 12, 14, and 16.)
    - Ported the remaining room routines (rooms 288/291/293/295/302) via YAML scripts in `backend/fixtures/room_scripts/`, reusing established patterns and adding legacy source file + line comments for reviewer parity checks.
    - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.
+   - Use `backend/kyrgame/timing/TickScheduler` to register recurring spell/effect/mob timers (e.g., `register_spell_tick`, `register_animation_tick`, or `register_recurring_timer`) and wire them into runtime services as those handlers are ported.
    - Captured Tashanna's heart-and-soul ritual (room 101) and the willowisp/pegasus transformation spells; flesh out remaining spellbook and room routines with legacy gating (inventory limits, level costs) and persistence hooks.
    - Expose APIs for content lookups (descriptions, auxiliary text) that reference the legacy message catalogs.
 5. **Auth/session lifecycle**
