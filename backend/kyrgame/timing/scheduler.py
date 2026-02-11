@@ -94,3 +94,7 @@ class TickScheduler:
         handle = self._handles.pop(name, None)
         if handle:
             handle.cancel()
+
+    def cancel_all(self) -> None:
+        for name in list(self._handles):
+            self.cancel(name)

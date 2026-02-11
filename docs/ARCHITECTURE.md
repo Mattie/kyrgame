@@ -42,3 +42,15 @@ The core executable also expects supporting data files for players and locations
 - Convert file-based persistence (`elwkyr.dat`, `elwkyr.lcs`) into a database-backed layer, ensuring that session-scoped runtime data (like timed effects) is modeled separately from durable character progression.
 
 Use this map as a starting point when carving the C logic into API endpoints, socket events, and front-end UI flows; aligning the modern modules with the legacy responsibilities will help preserve behavior while decoupling from the BBS runtime.
+
+
+## Runtime tick scheduling in the Python backend
+
+The FastAPI runtime bootstraps a low-level `SchedulerService` plus a `TickScheduler` wrapper during startup (`bootstrap_app`). `TickScheduler` exposes legacy-friendly tick units so modern handlers can mirror MajorBBS `rtkick` behavior while still running on asyncio timers.
+
+- `app.state.scheduler`: second-based scheduling primitives
+- `app.state.tick_scheduler`: tick-based adapter for gameplay timers
+- `KYRGAME_TICK_SECONDS`: env knob for tick length (defaults to `1.0`)
+
+When porting timer-driven logic from `KYRSPEL.C`/`KYRANIM.C`, register recurring callbacks through `TickScheduler` (`register_spell_tick`, `register_animation_tick`, or `register_recurring_timer`) so cadence remains explicit and consistent. Runtime shutdown cancels registered tick handles before stopping the scheduler task, preventing timer leakage across restarts.
+
