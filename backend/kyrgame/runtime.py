@@ -12,6 +12,7 @@ from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .scheduler import SchedulerService
+from .timing.scheduler import TickScheduler
 
 
 @dataclass
@@ -77,6 +78,10 @@ async def bootstrap_app(app: FastAPI):
     app.state.presence = PresenceService()
     app.state.scheduler = SchedulerService()
     await app.state.scheduler.start()
+    app.state.tick_scheduler = TickScheduler(
+        app.state.scheduler,
+        tick_seconds=_tick_seconds_from_env(),
+    )
 
     message_bundles = fixtures.load_message_bundles(seed_root)
     default_messages = message_bundles[fixtures.DEFAULT_LOCALE]
@@ -152,6 +157,10 @@ async def shutdown_app(app: FastAPI):
     if gateway:
         await gateway.close_all()
 
+    tick_scheduler = getattr(app.state, "tick_scheduler", None)
+    if tick_scheduler:
+        tick_scheduler.cancel_all()
+
     scheduler = getattr(app.state, "scheduler", None)
     if scheduler:
         await scheduler.stop()
@@ -165,3 +174,18 @@ async def _heartbeat_task(app: FastAPI):
     while True:
         await asyncio.sleep(1.0)
         app.state.last_heartbeat = app.state.__dict__.get("last_heartbeat", 0) + 1
+
+
+def _tick_seconds_from_env() -> float:
+    raw_value = os.getenv("KYRGAME_TICK_SECONDS")
+    if raw_value is None:
+        return 1.0
+
+    try:
+        tick_seconds = float(raw_value)
+    except ValueError:
+        return 1.0
+
+    if tick_seconds <= 0:
+        return 1.0
+    return tick_seconds

@@ -59,3 +59,19 @@ def test_tick_scheduler_registers_custom_recurring_timer():
     assert scheduler.calls[0]["delay"] == 12.0
     assert scheduler.calls[0]["interval"] == 12.0
     assert scheduler.calls[0]["callback"] is effect_tick
+
+
+def test_tick_scheduler_cancel_all_registered_handles():
+    scheduler = _FakeScheduler()
+    service = TickScheduler(scheduler)
+
+    spell_handle = service.register_recurring_timer("spell_tick", 30, lambda: None)
+    animation_handle = service.register_recurring_timer("animation_tick", 15, lambda: None)
+
+    assert not spell_handle.cancelled
+    assert not animation_handle.cancelled
+
+    service.cancel_all()
+
+    assert spell_handle.cancelled
+    assert animation_handle.cancelled

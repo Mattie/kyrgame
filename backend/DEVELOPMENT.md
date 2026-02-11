@@ -66,6 +66,40 @@ curl http://localhost:8000/
 
 Press `Ctrl+C` in the terminal where uvicorn is running to stop the server.
 
+
+## Tick scheduler runtime and timer registration
+
+The backend runtime creates two scheduler layers during startup:
+
+- `SchedulerService` (`app.state.scheduler`) provides low-level delayed/repeating callback execution.
+- `TickScheduler` (`app.state.tick_scheduler`) wraps that service with legacy-style tick units so gameplay code can stay aligned with MajorBBS `rtkick` cadence.
+
+Tick duration is configurable with `KYRGAME_TICK_SECONDS` and defaults to `1.0` seconds (matching current `TickScheduler` behavior):
+
+```bash
+export KYRGAME_TICK_SECONDS=1.0
+```
+
+When adding a new recurring gameplay timer, register it through `app.state.tick_scheduler` rather than scheduling raw seconds directly. This keeps all gameplay timers consistent with the legacy tick model and ensures they are cancelled during app shutdown.
+
+Example pattern:
+
+```python
+# inside bootstrap wiring for a gameplay service
+app.state.tick_scheduler.register_recurring_timer(
+    "zar_patrol_tick",
+    30,
+    zar_service.on_tick,
+)
+```
+
+You can also use dedicated helpers when relevant:
+
+- `register_spell_tick(callback)`
+- `register_animation_tick(callback)`
+
+During shutdown, runtime calls `app.state.tick_scheduler.cancel_all()` before stopping `app.state.scheduler`, so registered tick handles do not leak across restarts.
+
 ## Sanity checks
 
 Run the test suite to confirm the tools are present and working:
