@@ -166,6 +166,57 @@ class SpellEffectEngine:
                 broadcast_key="S62M01",
             )
 
+        protection_spells: dict[int, tuple[dict[int, int], bool, str, str]] = {
+            1: ({constants.OBJPRO: 2 * 4}, True, "SPM000", "SPM001"),  # Legacy: abbracada (legacy/KYRSPEL.C:437-441).
+            8: (
+                {
+                    constants.FIRPRO: 2 * 2,
+                    constants.ICEPRO: 2 * 2,
+                    constants.LIGPRO: 2 * 2,
+                    constants.OBJPRO: 2 * 2,
+                },
+                False,
+                "S09M00",
+                "S09M01",
+            ),  # Legacy: canthur (legacy/KYRSPEL.C:541-548).
+            24: ({constants.OBJPRO: 2 * 2}, False, "S25M00", "S25M01"),  # Legacy: handsof (legacy/KYRSPEL.C:729-733).
+            25: ({constants.ICEPRO: 2 * 8}, False, "S26M00", "S26M01"),  # Legacy: heater (legacy/KYRSPEL.C:736-740).
+            32: ({constants.ICEPRO: 2 * 3}, False, "S33M00", "S33M01"),  # Legacy: hotseat (legacy/KYRSPEL.C:808-812).
+            34: ({constants.FIRPRO: 2 * 8}, False, "S35M00", "S35M01"),  # Legacy: hydrant (legacy/KYRSPEL.C:828-832).
+            40: ({constants.OBJPRO: 2 * 3}, False, "S41M00", "S41M01"),  # Legacy: makemyd (legacy/KYRSPEL.C:882-885).
+            48: ({constants.ICEPRO: 2 * 10}, False, "S49M00", "S49M01"),  # Legacy: polarba (legacy/KYRSPEL.C:1021-1025).
+            52: ({constants.FIRPRO: 2 * 3}, False, "S53M00", "S53M01"),  # Legacy: smokey (legacy/KYRSPEL.C:1066-1070).
+            54: ({constants.LIGPRO: 2 * 3}, False, "S55M00", "S55M01"),  # Legacy: sunglass (legacy/KYRSPEL.C:1079-1083).
+            55: ({constants.LIGPRO: 2 * 10}, False, "S56M00", "S56M01"),  # Legacy: surgless (legacy/KYRSPEL.C:1086-1090).
+            59: ({constants.LIGPRO: 2 * 8}, False, "S60M00", "S60M01"),  # Legacy: tinting (legacy/KYRSPEL.C:1167-1171).
+            63: ({constants.FIRPRO: 2 * 10}, False, "S64M00", "S64M01"),  # Legacy: whopper (legacy/KYRSPEL.C:1207-1211).
+        }
+        for spell_id, (updates, additive, caster_key, broadcast_key) in protection_spells.items():
+            if spell_id not in effects:
+                continue
+            effects[spell_id].message_id = caster_key
+            effects[spell_id].requires_target = False
+            effects[spell_id].handler = self._protection_handler(
+                updates=updates,
+                additive=additive,
+                caster_key=caster_key,
+                broadcast_key=broadcast_key,
+            )
+
+        if 35 in effects:
+            # Legacy: ibebad requires sapphire and sets full protections (legacy/KYRSPEL.C:835-851).
+            effects[35].message_id = "S36M00"
+            effects[35].requires_target = False
+            effects[35].handler = self._ibebad_handler(
+                required_object="sapphire",
+                updates={
+                    constants.FIRPRO: 2 * 4,
+                    constants.ICEPRO: 2 * 4,
+                    constants.LIGPRO: 2 * 4,
+                    constants.OBJPRO: 2 * 4,
+                },
+            )
+
         # Legacy direct damage spell behavior (striker/masshitr in legacy/KYRSPEL.C:339-429,
         # 520-1229).
         direct_damage = [
@@ -332,9 +383,42 @@ class SpellEffectEngine:
             return "it"
         return "she" if player.flags & constants.PlayerFlag.FEMALE else "he"
 
+    def _hisher(self, player: models.PlayerModel) -> str:
+        if player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0:
+            return "its"
+        return "her" if player.flags & constants.PlayerFlag.FEMALE else "his"
+
+    def _himher(self, player: models.PlayerModel) -> str:
+        if player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0:
+            return "it"
+        return "her" if player.flags & constants.PlayerFlag.FEMALE else "him"
+
     def _message_id_with_offset(self, base_id: str, offset: int) -> str:
         prefix, value = base_id[:-2], int(base_id[-2:])
         return f"{prefix}{value + offset:02d}"
+
+    def _object_id_by_name(self, name: str) -> Optional[int]:
+        for obj in self.objects.values():
+            if obj.name.lower() == name.lower():
+                return obj.id
+        return None
+
+    def _consume_required_object(
+        self, player: models.PlayerModel, object_name: str
+    ) -> bool:
+        object_id = self._object_id_by_name(object_name)
+        if object_id is None:
+            return False
+        return remove_inventory_item(player, object_id)
+
+    def _apply_charm_updates(
+        self, player: models.PlayerModel, updates: dict[int, int], *, additive: bool
+    ) -> None:
+        for slot, value in updates.items():
+            if additive:
+                player.charms[slot] += value
+            else:
+                player.charms[slot] = value
 
     def _direct_damage_handler(
         self,
@@ -452,12 +536,7 @@ class SpellEffectEngine:
         ) -> EffectResult:  # noqa: ARG001
             # Check for required object (legacy/KYRSPEL.C:spl010,spl027)
             if required_object:
-                object_id = None
-                for obj in self.objects.values():
-                    if obj.name.lower() == required_object.lower():
-                        object_id = obj.id
-                        break
-                if object_id is None or not remove_inventory_item(player, object_id):
+                if not self._consume_required_object(player, required_object):
                     return self._msgutl2(
                         player,
                         caster_key="MISS00",
@@ -529,6 +608,86 @@ class SpellEffectEngine:
                 target=target,
                 success=True,
                 effect=effect,
+            )
+
+        return _handler
+
+    def _protection_handler(
+        self,
+        *,
+        updates: dict[int, int],
+        additive: bool,
+        caster_key: str,
+        broadcast_key: str,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            self._apply_charm_updates(player, updates, additive=additive)
+            return self._msgutl2(
+                player,
+                caster_key=caster_key,
+                broadcast_key=broadcast_key,
+                target=target,
+                success=True,
+                effect=effect,
+            )
+
+        return _handler
+
+    def _ibebad_handler(
+        self,
+        *,
+        required_object: str,
+        updates: dict[int, int],
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            if not self._consume_required_object(player, required_object):
+                return self._msgutl2(
+                    player,
+                    caster_key="MISS00",
+                    broadcast_key="MISS01",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            self._apply_charm_updates(player, updates, additive=False)
+            caster_text = self._format_message("S36M00")
+            broadcast_text = self._format_message(
+                "S36M01",
+                player.altnam,
+                player.altnam,
+                self._hisher(player),
+                player.altnam,
+                self._himher(player),
+            )
+            context = {
+                "broadcast": broadcast_text,
+                "broadcast_message_id": "S36M01",
+            }
+            if target:
+                context["target"] = target
+            return EffectResult(
+                success=True,
+                message_id="S36M00",
+                text=caster_text,
+                animation=effect.animation,
+                context=context,
             )
 
         return _handler
