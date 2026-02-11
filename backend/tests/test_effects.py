@@ -425,6 +425,117 @@ def test_sap_spells_decrement_spell_points(
     assert target.spts == expected_points
 
 
+def _build_caster(**updates):
+    player = fixtures.build_player()
+    data = player.model_dump()
+    data["spts"] = 50
+    data.update(updates)
+    return player.model_copy(update=data)
+
+
+@pytest.mark.parametrize(
+    ("spell_id", "expected_charms"),
+    [
+        (8, {constants.FIRPRO: 4, constants.ICEPRO: 4, constants.LIGPRO: 4, constants.OBJPRO: 4}),
+        (24, {constants.OBJPRO: 4}),
+        (25, {constants.ICEPRO: 16}),
+        (32, {constants.ICEPRO: 6}),
+        (34, {constants.FIRPRO: 16}),
+        (40, {constants.OBJPRO: 6}),
+        (48, {constants.ICEPRO: 20}),
+        (52, {constants.FIRPRO: 6}),
+        (54, {constants.LIGPRO: 6}),
+        (55, {constants.LIGPRO: 20}),
+        (59, {constants.LIGPRO: 16}),
+        (63, {constants.FIRPRO: 20}),
+    ],
+)
+def test_protection_spells_set_charm_values(spell_id, expected_charms):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    player = _build_caster()
+    player.charms = [1 for _ in player.charms]
+
+    engine.cast_spell(
+        player=player,
+        spell_id=spell_id,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    for slot, expected in expected_charms.items():
+        assert player.charms[slot] == expected
+
+
+def test_abbracada_adds_object_protection():
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    player = _build_caster()
+    player.charms[constants.OBJPRO] = 3
+
+    result = engine.cast_spell(
+        player=player,
+        spell_id=1,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "SPM000"
+    assert player.charms[constants.OBJPRO] == 11
+
+
+def test_ibebad_requires_sapphire_and_sets_protection():
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    sapphire_id = _find_object_id(objects, "sapphire")
+    engine = SpellEffectEngine(spells=spells, messages=messages, objects=objects)
+    player = _build_caster(gpobjs=[sapphire_id], obvals=[0], npobjs=1)
+
+    result = engine.cast_spell(
+        player=player,
+        spell_id=35,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S36M00"
+    assert player.gpobjs == []
+    assert player.npobjs == 0
+    assert player.charms[constants.FIRPRO] == 8
+    assert player.charms[constants.ICEPRO] == 8
+    assert player.charms[constants.LIGPRO] == 8
+    assert player.charms[constants.OBJPRO] == 8
+
+
+def test_ibebad_fails_without_sapphire():
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    engine = SpellEffectEngine(spells=spells, messages=messages, objects=objects)
+    player = _build_caster()
+    player.charms = [0 for _ in player.charms]
+
+    result = engine.cast_spell(
+        player=player,
+        spell_id=35,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "MISS00"
+    assert player.charms[constants.FIRPRO] == 0
+    assert player.charms[constants.ICEPRO] == 0
+    assert player.charms[constants.LIGPRO] == 0
+    assert player.charms[constants.OBJPRO] == 0
+
+
 def test_howru_uses_target_hp_in_message(sample_player):
     messages = fixtures.load_messages()
     spells = fixtures.load_spells()
