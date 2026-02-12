@@ -131,7 +131,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 65 `zapher` (lightning bolt I)【F:legacy/KYRSPEL.C†L203-L206】
 - [ ] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
 
-Each spell entry above also ties to timers/charms processed in `splrtk` (regen and expiration logic) that need to be mirrored when wiring the Python spell timer repository.【F:legacy/KYRSPEL.C†L215-L259】
+Spell timer cadence (`splrtk`) now runs through `SpellTickSystem` (macro reset, spell-point regen, charm countdown, and ALTNAM reversion), while individual spell effects above remain the parity gaps listed here.【F:legacy/KYRSPEL.C†L215-L259】
 
 ## Animation routines still to port (`KYRANIM.C`)
 Legacy animation ticks coordinate Zar, dryads, elves, brownies, and gem spawns. Mirror these behaviors in a scheduler-driven service and check them off once parity behavior (including broadcasts and damage) is covered:
