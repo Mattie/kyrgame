@@ -40,6 +40,7 @@
 - [x] Added a tick-based scheduler service to mirror MajorBBS `rtkick` intervals for spell/animation timers (`KYRSPEL.C`/`KYRANIM.C`).
 
 - [x] Wired `bootstrap_app`/`shutdown_app` to own `TickScheduler` lifecycle (env-driven `KYRGAME_TICK_SECONDS`, timer registration, and cleanup before scheduler shutdown).
+- [x] Added `RuntimeTickCoordinator` to centralize recurring timer registration (spell/animation now, future timers later) and lifecycle hooks in `bootstrap_app`/`shutdown_app`.
 
 - [x] Documented runtime tick-scheduler usage (`KYRGAME_TICK_SECONDS`, registration helpers, shutdown cleanup) in backend architecture/development docs for future timer ports.
 
