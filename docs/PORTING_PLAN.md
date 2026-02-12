@@ -41,6 +41,7 @@
 
 - [x] Wired `bootstrap_app`/`shutdown_app` to own `TickScheduler` lifecycle (env-driven `KYRGAME_TICK_SECONDS`, timer registration, and cleanup before scheduler shutdown).
 - [x] Added `RuntimeTickCoordinator` to centralize recurring timer registration (spell/animation now, future timers later) and lifecycle hooks in `bootstrap_app`/`shutdown_app`.
+- [x] Ported `splrtk` into a stateless `SpellTickSystem` with scheduler registration, macro reset, +2 spell-point regen cap, and ALTNAM expiry/reversion side effects (`backend/kyrgame/spells/tick_system.py`).
 
 - [x] Documented runtime tick-scheduler usage (`KYRGAME_TICK_SECONDS`, registration helpers, shutdown cleanup) in backend architecture/development docs for future timer ports.
 
