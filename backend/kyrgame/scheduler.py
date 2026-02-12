@@ -1,9 +1,12 @@
 import asyncio
 import contextlib
 import heapq
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 Callback = Callable[[], Awaitable[None] | None]
@@ -97,9 +100,12 @@ class SchedulerService:
             item = heapq.heappop(self._items)
             if item.cancelled:
                 continue
-            result = item.callback()
-            if asyncio.iscoroutine(result):
-                await result
+            try:
+                result = item.callback()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:
+                logger.exception("Scheduled callback raised an exception")
             if item.interval is not None and not item.cancelled:
                 item.run_at = self.clock() + item.interval
                 heapq.heappush(self._items, item)
