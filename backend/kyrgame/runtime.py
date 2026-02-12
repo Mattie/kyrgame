@@ -12,6 +12,7 @@ from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .scheduler import SchedulerService
+from .timing.runtime import RuntimeTickCoordinator
 from .timing.scheduler import TickScheduler
 
 
@@ -82,6 +83,12 @@ async def bootstrap_app(app: FastAPI):
         app.state.scheduler,
         tick_seconds=_tick_seconds_from_env(),
     )
+    app.state.tick_runtime = RuntimeTickCoordinator(
+        tick_scheduler=app.state.tick_scheduler,
+        spell_tick=_spell_tick,
+        animation_tick=_animation_tick,
+    )
+    app.state.tick_runtime.start()
 
     message_bundles = fixtures.load_message_bundles(seed_root)
     default_messages = message_bundles[fixtures.DEFAULT_LOCALE]
@@ -157,6 +164,10 @@ async def shutdown_app(app: FastAPI):
     if gateway:
         await gateway.close_all()
 
+    tick_runtime = getattr(app.state, "tick_runtime", None)
+    if tick_runtime:
+        tick_runtime.stop()
+
     tick_scheduler = getattr(app.state, "tick_scheduler", None)
     if tick_scheduler:
         tick_scheduler.cancel_all()
@@ -189,3 +200,17 @@ def _tick_seconds_from_env() -> float:
     if tick_seconds <= 0:
         return 1.0
     return tick_seconds
+
+
+def _spell_tick() -> None:
+    """Spell tick placeholder until the full spell timer loop is ported.
+
+    Legacy parity target: KYRSPEL.C `splrtk()` (lines 216-263).
+    """
+
+
+def _animation_tick() -> None:
+    """Animation tick placeholder until animation timers are ported.
+
+    Legacy parity target: KYRANIM.C `animat()` (lines 89-151).
+    """

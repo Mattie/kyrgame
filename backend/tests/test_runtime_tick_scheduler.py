@@ -14,7 +14,13 @@ async def test_bootstrap_initializes_tick_scheduler_and_shutdown_cancels_timers(
     await bootstrap_app(app)
 
     assert hasattr(app.state, "tick_scheduler")
+    assert hasattr(app.state, "tick_runtime")
     assert app.state.tick_scheduler.tick_seconds == 0.25
+
+    spell_handle = app.state.tick_runtime.handles["spell_tick"]
+    animation_handle = app.state.tick_runtime.handles["animation_tick"]
+    assert not spell_handle.cancelled
+    assert not animation_handle.cancelled
 
     handle = app.state.tick_scheduler.register_recurring_timer(
         "test_tick", 1, lambda: None
@@ -23,6 +29,8 @@ async def test_bootstrap_initializes_tick_scheduler_and_shutdown_cancels_timers(
 
     await shutdown_app(app)
 
+    assert spell_handle.cancelled
+    assert animation_handle.cancelled
     assert handle.cancelled
     assert app.state.scheduler._task is None
 
