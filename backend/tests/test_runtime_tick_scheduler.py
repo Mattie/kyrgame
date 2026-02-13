@@ -15,6 +15,7 @@ async def test_bootstrap_initializes_tick_scheduler_and_shutdown_cancels_timers(
 
     assert hasattr(app.state, "tick_scheduler")
     assert hasattr(app.state, "tick_runtime")
+    assert hasattr(app.state, "animation_tick_system")
     assert app.state.tick_scheduler.tick_seconds == 0.25
 
     spell_handle = app.state.tick_runtime.handles["spell_tick"]

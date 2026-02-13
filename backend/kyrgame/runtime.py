@@ -20,6 +20,10 @@ from .spells.tick_system import (
 )
 from .timing.runtime import RuntimeTickCoordinator
 from .timing.scheduler import TickScheduler
+from .world.animation_tick_system import (
+    AnimationTickSystem,
+    InMemoryAnimationTickPersistence,
+)
 
 
 @dataclass
@@ -98,10 +102,14 @@ async def bootstrap_app(app: FastAPI):
         constants=SpellTickConstants(),
         message_lookup=lambda key: messages_catalog.get(key, ""),
     )
+    app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
+    app.state.animation_tick_system = AnimationTickSystem(
+        persistence=app.state.animation_tick_persistence
+    )
     app.state.tick_runtime = RuntimeTickCoordinator(
         tick_scheduler=app.state.tick_scheduler,
         spell_tick=app.state.spell_tick_system,
-        animation_tick=_animation_tick,
+        animation_tick=app.state.animation_tick_system.tick,
     )
     app.state.tick_runtime.start()
 
@@ -215,9 +223,3 @@ def _tick_seconds_from_env() -> float:
         return 1.0
     return tick_seconds
 
-
-def _animation_tick() -> None:
-    """Animation tick placeholder until animation timers are ported.
-
-    Legacy parity target: KYRANIM.C `animat()` (lines 89-151).
-    """
