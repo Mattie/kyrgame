@@ -21,6 +21,7 @@ from .spells.tick_system import (
 from .timing.runtime import RuntimeTickCoordinator
 from .timing.scheduler import TickScheduler
 from .world.animation_tick_system import (
+    AnimationTickRuntimeBridge,
     AnimationTickSystem,
     InMemoryAnimationTickPersistence,
 )
@@ -106,12 +107,6 @@ async def bootstrap_app(app: FastAPI):
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence
     )
-    app.state.tick_runtime = RuntimeTickCoordinator(
-        tick_scheduler=app.state.tick_scheduler,
-        spell_tick=app.state.spell_tick_system,
-        animation_tick=app.state.animation_tick_system.tick,
-    )
-    app.state.tick_runtime.start()
 
     default_messages = message_bundles[fixtures.DEFAULT_LOCALE]
     content_mappings = fixtures.load_content_mappings(seed_root)
@@ -171,6 +166,47 @@ async def bootstrap_app(app: FastAPI):
         objects=app.state.fixture_cache["objects"],
         spells=app.state.fixture_cache["spells"],
     )
+
+    def _get_room_flag(room_id: int, key: str) -> int:
+        if not app.state.room_scripts.yaml_engine:
+            return 0
+        return int(app.state.room_scripts.yaml_engine.get_room_state(room_id).get(key, 0))
+
+    def _set_room_flag(room_id: int, key: str, value: int) -> None:
+        if not app.state.room_scripts.yaml_engine:
+            return
+        app.state.room_scripts.yaml_engine.get_room_state(room_id)[key] = value
+
+    async def _dispatch_animation_event(event):
+        text = app.state.animation_tick_callback.resolve_event_text(event)
+        if not text:
+            return
+        payload = {
+            "event": "room_message",
+            "scope": "room",
+            "type": "room_message",
+            "message_id": event.message_id,
+            "text": text,
+            "animation_flag": event.flag,
+        }
+        await app.state.gateway.broadcast(
+            event.room_id,
+            app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),
+        )
+
+    app.state.animation_tick_callback = AnimationTickRuntimeBridge(
+        system=app.state.animation_tick_system,
+        room_flag_getter=_get_room_flag,
+        room_flag_setter=_set_room_flag,
+        message_lookup=lambda key: messages_catalog.get(key, ""),
+        event_dispatcher=_dispatch_animation_event,
+    )
+    app.state.tick_runtime = RuntimeTickCoordinator(
+        tick_scheduler=app.state.tick_scheduler,
+        spell_tick=app.state.spell_tick_system,
+        animation_tick=app.state.animation_tick_callback,
+    )
+    app.state.tick_runtime.start()
 
     app.state.background_tasks = [asyncio.create_task(_heartbeat_task(app))]
 

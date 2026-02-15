@@ -48,3 +48,19 @@ async def test_bootstrap_uses_default_tick_seconds_when_env_missing(monkeypatch)
     assert app.state.tick_scheduler.tick_seconds == 1.0
 
     await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_tick_callback_syncs_room_flags_and_clears_one_shots(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+
+    app.state.room_scripts.yaml_engine.get_room_state(185)["sesame"] = 1
+    await app.state.animation_tick_callback()
+
+    assert app.state.room_scripts.yaml_engine.get_room_state(185)["sesame"] == 0
+
+    await shutdown_app(app)

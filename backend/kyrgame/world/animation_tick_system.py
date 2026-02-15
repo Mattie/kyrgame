@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Mapping, MutableMapping, Protocol
+import asyncio
+from typing import Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol
 
 
 @dataclass(eq=True, frozen=True)
@@ -66,6 +67,10 @@ class InMemoryAnimationTickPersistence:
 RoutineHandler = Callable[[AnimationTickState], None]
 MobUpdateHandler = Callable[[AnimationTickState], None]
 TimedFlagHandler = Callable[[AnimationTickState], AnimationTickEvent]
+MessageLookup = Callable[[str], str | None]
+RoomFlagGetter = Callable[[int, str], int]
+RoomFlagSetter = Callable[[int, str, int], None]
+EventDispatcher = Callable[[AnimationTickEvent], Awaitable[None] | None]
 
 
 def _noop_handler(_: AnimationTickState) -> None:
@@ -195,3 +200,55 @@ class AnimationTickSystem:
             zar_counter=int(payload.get("zar_counter", 0)),
             timed_flags=normalized_flags,
         )
+
+
+class AnimationTickRuntimeBridge:
+    """Bridge animation ticks into room-state flags + room broadcasts.
+
+    Legacy reference: KYRANIM.C `animat()` checks global one-shot flags after the
+    rotating routine and emits room-wide text before clearing the globals (lines
+    135-149). This bridge syncs those one-shot flags from room script state and
+    broadcasts equivalent room events on each scheduled animation tick.
+    """
+
+    _ROOM_FLAG_BINDINGS: dict[str, tuple[int, str]] = {
+        "sesame": (185, "sesame"),
+        "chantd": (7, "chantd"),
+        "rockpr": (27, "rockpr"),
+    }
+
+    def __init__(
+        self,
+        *,
+        system: AnimationTickSystem,
+        room_flag_getter: RoomFlagGetter,
+        room_flag_setter: RoomFlagSetter,
+        message_lookup: MessageLookup,
+        event_dispatcher: EventDispatcher,
+    ) -> None:
+        self._system = system
+        self._room_flag_getter = room_flag_getter
+        self._room_flag_setter = room_flag_setter
+        self._message_lookup = message_lookup
+        self._event_dispatcher = event_dispatcher
+
+    async def __call__(self) -> None:
+        self._sync_flags_from_rooms()
+        result = self._system.tick()
+        for event in result.timed_events:
+            self._room_flag_setter(event.room_id, event.flag, 0)
+            maybe_awaitable = self._event_dispatcher(event)
+            if asyncio.iscoroutine(maybe_awaitable):
+                await maybe_awaitable
+
+    def _sync_flags_from_rooms(self) -> None:
+        for flag, (room_id, room_key) in self._ROOM_FLAG_BINDINGS.items():
+            if self._room_flag_getter(room_id, room_key) > 0:
+                self._system.state.timed_flags[flag] = 1
+
+    def resolve_event_text(self, event: AnimationTickEvent) -> str:
+        if event.message_text:
+            return event.message_text
+        if event.message_id:
+            return self._message_lookup(event.message_id) or ""
+        return ""
