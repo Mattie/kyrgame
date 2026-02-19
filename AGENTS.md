@@ -6,4 +6,5 @@
 - When preparing pull requests, leverage the shared PR template documented in `docs/PR_TEMPLATE.md` to keep submissions consistent.
 - Capture screenshots for any UI changes to demonstrate that the updated interfaces work correctly and include them with your changes.
 - Maintain the new checklist in `docs/PORTING_PLAN.md` as part of every PR that touches backend/porting work—check off completed items and add any new gaps discovered.
+- For every change summary and PR description, include a dedicated **Manual E2E Demo Checklist** section listing realistic end-to-end human test steps that can be executed after submission (when applicable).
 - When porting legacy gameplay logic, add a short comment in the new code that points back to the legacy source location (file + line numbers) so reviewers can compare behavior quickly.
