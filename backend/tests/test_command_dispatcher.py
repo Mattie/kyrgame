@@ -14,6 +14,14 @@ class FakeClock:
         self.now += seconds
 
 
+class StubPresence:
+    def __init__(self, occupants):
+        self.occupants = occupants
+
+    async def players_in_room(self, room_id: int):  # noqa: ARG002
+        return set(self.occupants)
+
+
 @pytest.fixture
 def base_state():
     locations = {location.id: location for location in fixtures.load_locations()}
@@ -200,10 +208,38 @@ def test_command_vocabulary_preserves_chat_text():
         fixtures.load_commands(), fixtures.load_messages()
     )
 
-    parsed = vocabulary.parse_text("whisper to alice hello")
+    parsed = vocabulary.parse_text("say \"hello there\"")
 
     assert parsed.verb == "chat"
-    assert parsed.args["text"] == "to alice hello"
+    assert parsed.args["text"] == '"hello there"'
+
+
+def test_command_vocabulary_parses_whisper_target_and_quoted_text():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed = vocabulary.parse_text("whisper to alice \"hello there\"")
+
+    assert parsed.verb == "whisper"
+    assert parsed.args["target_player"] == "alice"
+    assert parsed.args["text"] == '"hello there"'
+
+
+def test_command_vocabulary_parses_give_gold_and_item_patterns():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    gold = vocabulary.parse_text("give 5 gold to seer")
+    assert gold.verb == "give"
+    assert gold.args["gold_amount"] == "5"
+    assert gold.args["target_player"] == "seer"
+
+    item = vocabulary.parse_text("give ruby to seer")
+    assert item.verb == "give"
+    assert item.args["target_item"] == "ruby"
+    assert item.args["target_player"] == "seer"
 
 
 @pytest.mark.parametrize(
@@ -459,3 +495,44 @@ async def test_payonl_commands_require_live_flag(base_state):
         await dispatcher.dispatch_parsed(parsed, base_state)
 
     assert excinfo.value.message_id == "CMPCMD1"
+
+
+@pytest.mark.anyio
+async def test_give_gold_moves_currency_to_target(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+    base_state.player.gold = 100
+
+    parsed = vocabulary.parse_text("give 5 gold to seer")
+    await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert base_state.player.gold == 95
+    assert target.gold >= 5
+
+
+@pytest.mark.anyio
+async def test_whisper_emits_target_and_room_events(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+
+    parsed = vocabulary.parse_text('whisper seer "keep quiet"')
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)
+    assert any(evt.get("scope") == "room" and evt.get("message_id") == "WHISPR3" for evt in result.events)

@@ -238,6 +238,10 @@ _PICKUP_VERBS = {
     "steal",
     "take",
 }
+
+_SAY_VERBS = {"say", "comment", "note"}
+_YELL_VERBS = {"scream", "shout", "shriek", "yell"}
+_GIVE_VERBS = {"give", "hand", "pass"}
 # Pickup verbs mirror legacy getter aliases in KYRCMDS.C (gi_cmdarr).【F:legacy/KYRCMDS.C†L117-L174】
 
 _NORMALIZE_ARTICLES = {"the", "a", "an"}
@@ -1798,19 +1802,337 @@ def _handle_stub(state: GameState, args: dict) -> CommandResult:  # noqa: ARG001
     )
 
 
+def _unquote_text(text: str) -> str:
+    stripped = text.strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"\"", "'"}:
+        return stripped[1:-1]
+    return stripped
+
+
+def _handle_help(state: GameState, args: dict) -> CommandResult:
+    """Port of legacy helper() topic routing.
+
+    Legacy behavior chooses a help screen by the first letter of the optional
+    topic token and falls back to NOHELP when unknown.
+    See legacy/KYRCMDS.C:973-1008.
+    """
+    command_id = args.get("command_id")
+    topic = (args.get("raw") or "").strip()
+
+    if topic:
+        # Legacy helper() topic switch in KYRCMDS.C:973-1008.
+        topic_map = {
+            "c": "HLPCOM",
+            "f": "HLPFAN",
+            "g": "HLPGOL",
+            "h": "HLPHIT",
+            "l": "HLPLEV",
+            "s": "HLPSPE",
+            "w": "HLPWIN",
+        }
+        message_id = topic_map.get(topic[0].lower(), "NOHELP")
+        text = (
+            _format_message(state, "NOHELP", topic)
+            if message_id == "NOHELP"
+            else _format_message(state, message_id)
+        )
+    else:
+        message_id = "HLPMSG"
+        text = _format_message(state, message_id)
+
+    return CommandResult(state=state, events=[_message_event("player", message_id, text, command_id)])
+
+
+def _handle_brief(state: GameState, args: dict) -> CommandResult:
+    """Port of briefr() with optional on/off toggles.
+
+    In legacy Kyrandia, `brief` (or `brief on`) enables BRFSTF while
+    `brief off` delegates to unbrief behavior.
+    See legacy/KYRCMDS.C:1010-1025.
+    """
+    command_id = args.get("command_id")
+    raw = (args.get("raw") or "").strip().lower()
+    if not raw or raw == "on":
+        state.player.flags |= int(constants.PlayerFlag.BRFSTF)
+        message_id = "BRIEFR1"
+    elif raw == "off":
+        state.player.flags &= ~int(constants.PlayerFlag.BRFSTF)
+        message_id = "UNBRIEF"
+    else:
+        message_id = "BRIEFR2"
+    return CommandResult(
+        state=state,
+        events=[_message_event("player", message_id, _format_message(state, message_id), command_id)],
+    )
+
+
+def _handle_unbrief(state: GameState, args: dict) -> CommandResult:
+    """Port of ubrief() to disable brief room descriptions.
+
+    Clears BRFSTF and emits UNBRIEF.
+    See legacy/KYRCMDS.C:1027-1031.
+    """
+    command_id = args.get("command_id")
+    state.player.flags &= ~int(constants.PlayerFlag.BRFSTF)
+    return CommandResult(
+        state=state,
+        events=[_message_event("player", "UNBRIEF", _format_message(state, "UNBRIEF"), command_id)],
+    )
+
+
+def _handle_count(state: GameState, args: dict) -> CommandResult:
+    """Port of countr() generic counting flow.
+
+    Supports bare `count`, `count gold` (delegates to gold counter), and the
+    generic failure response for unsupported targets.
+    See legacy/KYRCMDS.C:469-483.
+    """
+    raw = (args.get("raw") or "").strip().lower()
+    if not raw:
+        return CommandResult(state=state, events=[_message_event("player", "COUNTR1", _format_message(state, "COUNTR1"), args.get("command_id"))])
+    if raw == "gold":
+        return _handle_gold(state, args)
+    return CommandResult(state=state, events=[_message_event("player", "COUNTR2", _format_message(state, "COUNTR2"), args.get("command_id"))])
+
+
+def _handle_gold(state: GameState, args: dict) -> CommandResult:
+    """Port of gldcnt() with singular/plural suffix handling.
+
+    Emits GLDCNT formatted with player's current gold amount.
+    See legacy/KYRCMDS.C:485-491.
+    """
+    command_id = args.get("command_id")
+    text = _format_message(state, "GLDCNT", state.player.gold, "" if state.player.gold == 1 else "s")
+    return CommandResult(state=state, events=[_message_event("player", "GLDCNT", text, command_id)])
+
+
+def _handle_hits(state: GameState, args: dict) -> CommandResult:
+    """Port of hitctr() health-status output.
+
+    Legacy displays current HP against the level-based cap (4 * level).
+    See legacy/KYRCMDS.C:1159-1164.
+    """
+    command_id = args.get("command_id")
+    text = _format_message(state, "HITCTR", state.player.hitpts, 4 * state.player.level)
+    return CommandResult(state=state, events=[_message_event("player", "HITCTR", text, command_id)])
+
+
+def _handle_ponder(state: GameState, args: dict) -> CommandResult:
+    """Port of ponder() rhetorical response command.
+
+    Uses the invoked verb uppercased as the display token (what?/where?/etc.).
+    See legacy/KYRCMDS.C:369-376.
+    """
+    command_id = args.get("command_id")
+    verb = (args.get("verb") or "what?").upper()
+    text = _format_message(state, "PONDER1", verb)
+    return CommandResult(state=state, events=[_message_event("player", "PONDER1", text, command_id)])
+
+
+def _handle_pray(state: GameState, args: dict) -> CommandResult:
+    """Port of prayer() canned prayer messaging.
+
+    Emits PRAYER to the actor and follows legacy room flavor semantics in the
+    surrounding event pipeline.
+    See legacy/KYRCMDS.C:1151-1157.
+    """
+    return CommandResult(
+        state=state,
+        events=[_message_event("player", "PRAYER", _format_message(state, "PRAYER"), args.get("command_id"))],
+    )
+
+
+async def _handle_whisper(state: GameState, args: dict) -> CommandResult:
+    """Port of whispr() targeted private speech.
+
+    Validates minimum argument shape, enforces the level-3 gag branch, and then
+    sends WHISPR1 to target, WHISPR2 to actor, and WHISPR3 to the room excluding
+    the target (legacy sndbt2-style fan-out).
+    See legacy/KYRCMDS.C:266-296.
+    """
+    command_id = args.get("command_id")
+    target_name = (args.get("target_player") or "").strip()
+    text = _unquote_text((args.get("text") or "").strip())
+    if not target_name or not text:
+        return CommandResult(state=state, events=[_message_event("player", "WHAT", _format_message(state, "WHAT"), command_id)])
+    if state.player.level == 3:
+        return CommandResult(state=state, events=[_message_event("player", "WATCHIT", _format_message(state, "WATCHIT"), command_id)])
+
+    target_player = await _find_player_in_room(state, target_name)
+    if not target_player:
+        return CommandResult(state=state, events=[_message_event("player", "NOSUCHP", _format_message(state, "NOSUCHP"), command_id)])
+
+    return CommandResult(
+        state=state,
+        events=[
+            {
+                **_message_event("target", "WHISPR1", _format_message(state, "WHISPR1", state.player.altnam, text), command_id),
+                "player": target_player.plyrid,
+            },
+            _message_event("player", "WHISPR2", _format_message(state, "WHISPR2", target_player.plyrid), command_id),
+            _message_event("room", "WHISPR3", _format_message(state, "WHISPR3", state.player.altnam, target_player.altnam), command_id, exclude_player=target_player.plyrid),
+        ],
+    )
+
+
+def _handle_say(state: GameState, args: dict) -> CommandResult:
+    """Port of speakr() normal speech mode for say/comment/note.
+
+    This handler models the direct speech branch (non-empty text and non-gagged
+    player) with legacy message IDs.
+    See legacy/KYRCMDS.C:241-264.
+    """
+    command_id = args.get("command_id")
+    text = _unquote_text((args.get("text") or "").strip())
+    if not text:
+        return CommandResult(state=state, events=[_message_event("player", "HUH", _format_message(state, "HUH"), command_id)])
+    if state.player.level == 3:
+        return CommandResult(state=state, events=[_message_event("player", "NOWNOW", _format_message(state, "NOWNOW"), command_id)])
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event("player", "SAIDIT", _format_message(state, "SAIDIT"), command_id),
+            _message_event("room", "SPEAK2", _format_message(state, "SPEAK2", text), command_id, exclude_player=state.player.plyrid),
+        ],
+    )
+
+
+def _handle_yell(state: GameState, args: dict) -> CommandResult:
+    """Port of yeller() loud speech variant.
+
+    Emits VOICE for missing text and uppercases the spoken payload for the
+    successful branch, matching the legacy all-caps yell presentation.
+    See legacy/KYRCMDS.C:298-326.
+    """
+    command_id = args.get("command_id")
+    text = _unquote_text((args.get("text") or "").strip())
+    if not text:
+        return CommandResult(state=state, events=[_message_event("player", "VOICE", _format_message(state, "VOICE"), command_id)])
+    events = [_message_event("player", "YELLER3", _format_message(state, "YELLER3"), command_id)]
+    if state.player.level < 3:
+        up = text.upper()
+        events.append(_message_event("room", "YELLER5", _format_message(state, "YELLER5", up), command_id, exclude_player=state.player.plyrid))
+    return CommandResult(state=state, events=events)
+
+
+def _parse_give_args(raw: str) -> dict:
+    """Parse give-family argument layouts used by giveit().
+
+    Supports:
+    - `<amount> gold [to] <target>` (legacy givcrd paths)
+    - `<item> to <target>` / `<target> <item>` (legacy giveru paths)
+    See legacy/KYRCMDS.C:493-515.
+    """
+    tokens = raw.split()
+    if not tokens:
+        return {}
+    if len(tokens) >= 4 and tokens[1].lower() == "gold" and tokens[2].lower() == "to":
+        return {"gold_amount": tokens[0], "target_player": tokens[3]}
+    if len(tokens) >= 3 and tokens[1].lower() == "gold":
+        return {"gold_amount": tokens[0], "target_player": tokens[2]}
+    if len(tokens) >= 3 and tokens[1].lower() == "to":
+        return {"target_item": tokens[0], "target_player": tokens[2]}
+    if len(tokens) >= 2:
+        return {"target_item": tokens[0], "target_player": tokens[1]}
+    return {}
+
+
+async def _handle_give(state: GameState, args: dict) -> CommandResult:
+    """Port of giveit()/givcrd()/giveru() player-to-player transfers.
+
+    Handles both gold transfers and inventory item handoffs with legacy-style
+    target resolution and messaging IDs.
+    See legacy/KYRCMDS.C:493-625.
+    """
+    command_id = args.get("command_id")
+    target_name = (args.get("target_player") or "").strip()
+    if not target_name:
+        return CommandResult(state=state, events=[_message_event("player", "GIVIT1", _format_message(state, "GIVIT1"), command_id)])
+
+    target_player = await _find_player_in_room(state, target_name)
+    if not target_player:
+        return CommandResult(state=state, events=[_message_event("player", "GIVCRD3", _format_message(state, "GIVCRD3"), command_id)])
+
+    gold_amount = args.get("gold_amount")
+    if gold_amount is not None:
+        try:
+            amount = int(gold_amount)
+        except ValueError:
+            amount = -1
+        if amount < 0:
+            return CommandResult(state=state, events=[_message_event("player", "GIVCRD1", _format_message(state, "GIVCRD1"), command_id)])
+        if amount > state.player.gold:
+            return CommandResult(state=state, events=[_message_event("player", "GIVCRD2", _format_message(state, "GIVCRD2"), command_id)])
+        state.player.gold -= amount
+        target_player.gold += amount
+        _persist_player_state(state, target_player)
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event("player", "GIVCRD4", _format_message(state, "GIVCRD4"), command_id),
+                {
+                    **_message_event("target", "GIVCRD5", _format_message(state, "GIVCRD5", state.player.altnam, amount, "" if amount == 1 else "s"), command_id),
+                    "player": target_player.plyrid,
+                },
+            ],
+        )
+
+    item_name = (args.get("target_item") or "").strip().lower()
+    if not item_name:
+        return CommandResult(state=state, events=[_message_event("player", "GIVIT1", _format_message(state, "GIVIT1"), command_id)])
+    if target_player.plyrid == state.player.plyrid:
+        return CommandResult(state=state, events=[_message_event("player", "GIVERU2", _format_message(state, "GIVERU2"), command_id)])
+
+    objects = state.objects or {}
+    inventory_index = _find_inventory_index(state.player, item_name, objects)
+    if inventory_index is None:
+        return CommandResult(state=state, events=[_message_event("player", "GIVERU3", _format_message(state, "GIVERU3"), command_id)])
+
+    obj_id, value = pop_inventory_index(state.player, inventory_index)
+    target_player.gpobjs.append(obj_id)
+    target_player.obvals.append(value)
+    target_player.npobjs = len(target_player.gpobjs)
+    _persist_player_inventory(state, target_player)
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event("player", "DONE", _format_message(state, "DONE"), command_id),
+            {
+                **_message_event("target", "GIVERU10", _format_message(state, "GIVERU10", _object_with_article(objects[obj_id])), command_id),
+                "player": target_player.plyrid,
+            },
+        ],
+    )
+
+
+async def _handle_wink(state: GameState, args: dict) -> CommandResult:
+    """Port of winker() emote flow.
+
+    Supports no-target wink text, targeted wink fan-out, and NOSUCHP-style
+    failure branch for absent targets.
+    See legacy/KYRCMDS.C:895-917.
+    """
+    command_id = args.get("command_id")
+    target_name = (args.get("raw") or "").strip()
+    if not target_name:
+        return CommandResult(state=state, events=[_message_event("player", "WINKER1", _format_message(state, "WINKER1"), command_id)])
+    target_player = await _find_player_in_room(state, target_name)
+    if not target_player:
+        return CommandResult(state=state, events=[_message_event("player", "WINKER5", _format_message(state, "WINKER5"), command_id)])
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event("player", "WINKER2", _format_message(state, "WINKER2"), command_id),
+            {**_message_event("target", "WINKER3", _format_message(state, "WINKER3", state.player.altnam), command_id), "player": target_player.plyrid},
+            _message_event("room", "WINKER4", _format_message(state, "WINKER4", state.player.altnam, target_player.altnam), command_id, exclude_player=target_player.plyrid),
+        ],
+    )
+
+
 class CommandVocabulary:
     """Fixture-driven parser for mapping raw command text to dispatcher inputs."""
 
-    chat_aliases = {
-        "say",
-        "comment",
-        "note",
-        "shout",
-        "scream",
-        "shriek",
-        "yell",
-        "whisper",
-    }
+    chat_aliases = _SAY_VERBS | _YELL_VERBS | {"whisper"}
 
     def __init__(self, commands: List[models.CommandModel], messages: models.MessageBundleModel):
         self.commands = {command.command.lower(): command for command in commands}
@@ -1891,12 +2213,44 @@ class CommandVocabulary:
                 pay_only=pay_only,
             )
 
-        if verb in self.chat_aliases:
+        if verb in _SAY_VERBS | _YELL_VERBS:
             command_id = command_id or self._lookup_command_id("say")
             message_id = message_id or self._message_for_command(command_id)
             return ParsedCommand(
                 verb="chat",
                 args={"text": remainder, "mode": verb},
+                command_id=command_id,
+                message_id=message_id,
+                pay_only=pay_only,
+            )
+
+        if verb == "whisper":
+            command_id = command_id or self._lookup_command_id("whisper")
+            message_id = message_id or self._message_for_command(command_id)
+            whisper_target = ""
+            whisper_text = ""
+            whisper_tokens = remainder.split(maxsplit=2)
+            if whisper_tokens:
+                if whisper_tokens[0].lower() == "to" and len(whisper_tokens) >= 2:
+                    whisper_target = whisper_tokens[1]
+                    whisper_text = whisper_tokens[2] if len(whisper_tokens) == 3 else ""
+                else:
+                    whisper_target = whisper_tokens[0]
+                    whisper_text = whisper_tokens[1] if len(whisper_tokens) >= 2 else ""
+            return ParsedCommand(
+                verb="whisper",
+                args={"target_player": whisper_target, "text": whisper_text},
+                command_id=command_id,
+                message_id=message_id,
+                pay_only=pay_only,
+            )
+
+        if verb in _GIVE_VERBS:
+            command_id = command_id or self._lookup_command_id(verb)
+            message_id = message_id or self._message_for_command(command_id)
+            return ParsedCommand(
+                verb=verb,
+                args={"raw": remainder, **_parse_give_args(remainder)},
                 command_id=command_id,
                 message_id=message_id,
                 pay_only=pay_only,
@@ -1957,6 +2311,20 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         _handle_move,
     )
     registry.register(CommandMetadata(verb="chat", cooldown_seconds=1.5), _handle_chat)
+    for verb in sorted(_SAY_VERBS):
+        registry.register(
+            CommandMetadata(verb=verb, command_id=vocabulary._lookup_command_id(verb)),
+            _handle_say,
+        )
+    for verb in sorted(_YELL_VERBS):
+        registry.register(
+            CommandMetadata(verb=verb, command_id=vocabulary._lookup_command_id(verb)),
+            _handle_yell,
+        )
+    registry.register(
+        CommandMetadata(verb="whisper", command_id=vocabulary._lookup_command_id("whisper")),
+        _handle_whisper,
+    )
     registry.register(CommandMetadata(verb="inventory"), _handle_inventory)
     registry.register(
         CommandMetadata(
@@ -1986,6 +2354,49 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         ),
         _handle_drop,
     )
+    for verb in sorted(_GIVE_VERBS):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            _handle_give,
+        )
+    registry.register(
+        CommandMetadata(verb="help", command_id=vocabulary._lookup_command_id("help")),
+        _handle_help,
+    )
+    registry.register(
+        CommandMetadata(verb="?", command_id=vocabulary._lookup_command_id("?")),
+        _handle_help,
+    )
+    registry.register(
+        CommandMetadata(verb="brief", command_id=vocabulary._lookup_command_id("brief")),
+        _handle_brief,
+    )
+    registry.register(
+        CommandMetadata(verb="unbrief", command_id=vocabulary._lookup_command_id("unbrief")),
+        _handle_unbrief,
+    )
+    for verb, handler in (
+        ("check", _handle_count),
+        ("count", _handle_count),
+        ("gold", _handle_gold),
+        ("hits", _handle_hits),
+        ("pray", _handle_pray),
+        ("wink", _handle_wink),
+        ("what?", _handle_ponder),
+        ("where?", _handle_ponder),
+        ("why?", _handle_ponder),
+        ("how?", _handle_ponder),
+    ):
+        registry.register(
+            CommandMetadata(verb=verb, command_id=vocabulary._lookup_command_id(verb)),
+            handler,
+        )
     registry.register(
         CommandMetadata(
             verb="look",
