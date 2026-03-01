@@ -60,9 +60,9 @@
 - [x] Normalize non-chat command tokenization to strip articles/prepositions per `GAMUTILS.C` (`gi_bagthe`/`bagprep`).
 - [x] Preserve CRLF line breaks from the legacy `.MSG` files in the message bundle fixtures for accurate display formatting.
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
-- [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
-- [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures.
-- [ ] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling.
+- [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments. *(Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.)* [Tracker: command + client integration parity in `docs/legacy_command_porting.md`; world/object/spell parity dependencies in `docs/PORTING_PLAN_world_object_spell_gaps.md`]
+- [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures. *(Acceptance criteria: an automated suite launches frontend + backend together, validates `/auth/session` -> WS join -> command/broadcast rendering loop, and runs in CI.)* [Tracker: `docs/legacy_command_porting.md`]
+- [ ] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling. *(Acceptance criteria: response contract includes expiry metadata, `backend/tests/test_app_contracts.py` asserts presence/shape, and the navigator handles expiry/reconnect states.)* [Tracker: `docs/legacy_command_porting.md`]
 
 ## Remaining Implementation Task Plan
 
@@ -164,22 +164,27 @@
 
 ## Next Steps: View-Only Developer Navigator UI
 1. **Lock in client contracts**
-   - [x] Document the minimal payloads the UI will consume: session creation shape, location listing (IDs, exits, descriptions), object catalog, and room broadcast envelope (`room_broadcast`, `command_response`).
-   - [ ] Add an `/auth/session` convenience option for specifying a starting room to simplify navigating fixtures without gameplay gates.
-   - [ ] Capture token lifetime/refresh requirements (currently missing from HTTP responses even though the repository stores `expires_at`).
+   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`)._
+   - [x] Document the minimal payloads the UI will consume: session creation shape, location listing (IDs, exits, descriptions), object catalog, and room broadcast envelope (`room_broadcast`, `command_response`). [Tracker: `docs/legacy_command_porting.md`]
+   - [x] Add an `/auth/session` convenience option for specifying a starting room to simplify navigating fixtures without gameplay gates. [Tracker: `docs/legacy_command_porting.md`]
+   - [ ] Capture token lifetime/refresh requirements (currently missing from HTTP responses even though the repository stores `expires_at`). *(Acceptance criteria: define token TTL + refresh policy in docs, return TTL metadata from `/auth/session`, and cover the contract in `backend/tests/test_app_contracts.py`.)* [Tracker: `docs/legacy_command_porting.md`]
 2. **Bootstrap the front-end workspace**
-   - [x] Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards.
-   - [x] Wire shared configuration for API base URL and WebSocket endpoint (token injection to follow).
-   - [x] Enable CORS defaults for the navigator dev origin (`localhost:5173`) with an environment override knob (`KYRGAME_CORS_ORIGINS`).
+   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`)._
+   - [x] Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards. [Tracker: `docs/legacy_command_porting.md`]
+   - [x] Wire shared configuration for API base URL and WebSocket endpoint (token injection to follow). [Tracker: `docs/legacy_command_porting.md`]
+   - [x] Enable CORS defaults for the navigator dev origin (`localhost:5173`) with an environment override knob (`KYRGAME_CORS_ORIGINS`). [Tracker: `docs/legacy_command_porting.md`]
 3. **Implement a "view-only" navigator flow**
-   - Simple session form that requests a token for a chosen player ID and optional room ID; persist token in memory for the session.
-   - Fetch world data on load (`/world/locations`, `/objects`, `/commands`, `/i18n/<locale>/messages`) and cache in state for rendering labels/tooltips.
-   - Connect to `/ws/rooms/{room_id}?token=...` and render the welcome payload plus ongoing `room_broadcast` events in an activity log.
-   - Present a room panel showing description, exits, ground objects, and current occupants; add an exit list that dispatches `move` commands over WebSocket to change rooms.
+   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`, and world parity tracker status in `docs/PORTING_PLAN_world_object_spell_gaps.md`)._
+   - [ ] Simple session form that requests a token for a chosen player ID and optional room ID; persist token in memory for the session. [Tracker: `docs/legacy_command_porting.md`]
+   - [ ] Fetch world data on load (`/world/locations`, `/objects`, `/commands`, `/i18n/<locale>/messages`) and cache in state for rendering labels/tooltips. [Tracker: `docs/legacy_command_porting.md`]
+   - [ ] Connect to `/ws/rooms/{room_id}?token=...` and render the welcome payload plus ongoing `room_broadcast` events in an activity log. [Tracker: `docs/legacy_command_porting.md`]
+   - [ ] Present a room panel showing description, exits, ground objects, and current occupants; add an exit list that dispatches `move` commands over WebSocket to change rooms. [Tracker: `docs/legacy_command_porting.md`]
 4. **Developer ergonomics for exploration**
-   - Add a lightweight world map/index view listing all locations with search/filter so developers can jump directly to a room via session reset.
-   - Include debug toggles to show raw event JSON and command IDs to aid future parity work.
-   - Provide graceful fallbacks when the WebSocket closes (e.g., token expired) and a reconnect button to resume the navigator session.
+   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`)._
+   - [ ] Add a lightweight world map/index view listing all locations with search/filter so developers can jump directly to a room via session reset. [Tracker: `docs/legacy_command_porting.md`]
+   - [ ] Include debug toggles to show raw event JSON and command IDs to aid future parity work. [Tracker: `docs/legacy_command_porting.md`]
+   - [ ] Provide graceful fallbacks when the WebSocket closes (e.g., token expired) and a reconnect button to resume the navigator session. *(Acceptance criteria: navigator displays explicit expired/closed state and supports user-triggered reconnect using a fresh valid token.)* [Tracker: `docs/legacy_command_porting.md`]
 5. **Testing + docs**
-   - Add Vitest unit tests for parsing room data and rendering components; include a Cypress/Vitest integration that spins up the FastAPI test app and confirms room joins/moves render correctly.
-   - Update README/back-end docs with steps for launching the navigator UI alongside the API for local exploration.
+   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`, and world parity tracker status in `docs/PORTING_PLAN_world_object_spell_gaps.md`)._
+   - [ ] Add Vitest unit tests for parsing room data and rendering components; include a Cypress/Vitest integration that spins up the FastAPI test app and confirms room joins/moves render correctly. *(Acceptance criteria: unit tests cover room payload parsing + UI rendering branches, and integration coverage asserts end-to-end room join/move updates.)* [Tracker: command/client behavior in `docs/legacy_command_porting.md`; world/object/spell dependencies in `docs/PORTING_PLAN_world_object_spell_gaps.md`]
+   - [ ] Update README/back-end docs with steps for launching the navigator UI alongside the API for local exploration. [Tracker: `docs/legacy_command_porting.md`]
