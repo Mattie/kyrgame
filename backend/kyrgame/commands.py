@@ -2065,6 +2065,8 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
             return CommandResult(state=state, events=[_message_event("player", "GIVCRD2", _format_message(state, "GIVCRD2"), command_id)])
         state.player.gold -= amount
         target_player.gold += amount
+        # Legacy giveit()/givcrd() updates both players immediately (KYRCMDS.C:537-550).
+        _persist_player_state(state, state.player)
         _persist_player_state(state, target_player)
         return CommandResult(
             state=state,
@@ -2092,6 +2094,8 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
     target_player.gpobjs.append(obj_id)
     target_player.obvals.append(value)
     target_player.npobjs = len(target_player.gpobjs)
+    # Legacy giveru() mutates the giver and recipient inventory atomically (KYRCMDS.C:597-614).
+    _persist_player_inventory(state, state.player)
     _persist_player_inventory(state, target_player)
     return CommandResult(
         state=state,

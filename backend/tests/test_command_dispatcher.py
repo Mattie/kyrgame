@@ -1,6 +1,8 @@
 import pytest
+from sqlalchemy import select
 
 from kyrgame import commands, constants, fixtures, models
+from kyrgame.database import create_session, get_engine, init_db_schema
 
 
 class FakeClock:
@@ -528,6 +530,82 @@ async def test_give_gold_moves_currency_to_target(base_state):
 
     assert base_state.player.gold == 95
     assert target.gold >= 5
+
+
+@pytest.mark.anyio
+async def test_give_gold_persists_both_players(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        target = base_state.player.model_copy(
+            update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc, "gold": 0}
+        )
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.add(models.Player(**target.model_dump()))
+        session.commit()
+
+        players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+        base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+        base_state.player_lookup = players.get
+        base_state.player.gold = 100
+        base_state.db_session = session
+
+        parsed = vocabulary.parse_text("give 5 gold to seer")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        giver_record = session.scalar(select(models.Player).where(models.Player.plyrid == base_state.player.plyrid))
+        target_record = session.scalar(select(models.Player).where(models.Player.plyrid == target.plyrid))
+
+        assert giver_record is not None
+        assert target_record is not None
+        assert giver_record.gold == 95
+        assert target_record.gold == 5
+
+
+@pytest.mark.anyio
+async def test_give_item_persists_both_players_inventory(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        target = base_state.player.model_copy(
+            update={
+                "plyrid": "seer",
+                "attnam": "seer",
+                "altnam": "Seer",
+                "gamloc": base_state.player.gamloc,
+                "gpobjs": [],
+                "obvals": [],
+                "npobjs": 0,
+            }
+        )
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.add(models.Player(**target.model_dump()))
+        session.commit()
+
+        players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+        base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+        base_state.player_lookup = players.get
+        base_state.db_session = session
+
+        given_obj_id = base_state.player.gpobjs[0]
+        given_obj_name = base_state.objects[given_obj_id].name
+
+        parsed = vocabulary.parse_text(f"give {given_obj_name} seer")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        giver_record = session.scalar(select(models.Player).where(models.Player.plyrid == base_state.player.plyrid))
+        target_record = session.scalar(select(models.Player).where(models.Player.plyrid == target.plyrid))
+
+        assert giver_record is not None
+        assert target_record is not None
+        assert given_obj_id not in giver_record.gpobjs
+        assert given_obj_id in target_record.gpobjs
 
 
 @pytest.mark.anyio
