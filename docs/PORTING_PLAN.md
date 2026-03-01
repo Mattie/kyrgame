@@ -58,6 +58,7 @@
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).
 - [x] Normalize non-chat command tokenization to strip articles/prepositions per `GAMUTILS.C` (`gi_bagthe`/`bagprep`).
+- [x] Preserve full whisper payloads for `whisper <target> <message...>` parsing so `whispr` receives complete `margv[2]` text (including quoted multi-word content).
 - [x] Preserve CRLF line breaks from the legacy `.MSG` files in the message bundle fixtures for accurate display formatting.
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments. *(Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.)* [Tracker: command + client integration parity in `docs/legacy_command_porting.md`; world/object/spell parity dependencies in `docs/PORTING_PLAN_world_object_spell_gaps.md`]

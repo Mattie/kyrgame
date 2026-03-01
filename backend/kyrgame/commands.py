@@ -2231,12 +2231,16 @@ class CommandVocabulary:
             whisper_text = ""
             whisper_tokens = remainder.split(maxsplit=2)
             if whisper_tokens:
+                # Legacy whispr() expects the full text payload as margv[2], not just one token.
+                # Reference: legacy/KYRCMDS.C lines 266-289.
                 if whisper_tokens[0].lower() == "to" and len(whisper_tokens) >= 2:
                     whisper_target = whisper_tokens[1]
                     whisper_text = whisper_tokens[2] if len(whisper_tokens) == 3 else ""
                 else:
                     whisper_target = whisper_tokens[0]
                     whisper_text = whisper_tokens[1] if len(whisper_tokens) >= 2 else ""
+                    if len(whisper_tokens) == 3:
+                        whisper_text = f"{whisper_text} {whisper_tokens[2]}"
             return ParsedCommand(
                 verb="whisper",
                 args={"target_player": whisper_target, "text": whisper_text},

@@ -226,6 +226,18 @@ def test_command_vocabulary_parses_whisper_target_and_quoted_text():
     assert parsed.args["text"] == '"hello there"'
 
 
+def test_command_vocabulary_preserves_full_whisper_text_without_to_prefix():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed = vocabulary.parse_text('whisper seer "keep very quiet"')
+
+    assert parsed.verb == "whisper"
+    assert parsed.args["target_player"] == "seer"
+    assert parsed.args["text"] == '"keep very quiet"'
+
+
 def test_command_vocabulary_parses_give_gold_and_item_patterns():
     vocabulary = commands.CommandVocabulary(
         fixtures.load_commands(), fixtures.load_messages()
