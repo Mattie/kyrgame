@@ -197,7 +197,8 @@ async def test_websocket_give_item_target_payload_includes_giver_name():
                 await _recv_matching(seer_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
                 await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "player_enter")
 
-                await hero_ws.send(json.dumps({"type": "command", "command": "give ruby seer"}))
+                # Legacy target-first order: give <target> <item> (KYRCMDS.C:503-504)
+                await hero_ws.send(json.dumps({"type": "command", "command": "give seer ruby"}))
 
                 seer_msg = await _recv_matching(
                     seer_ws,
