@@ -16,11 +16,13 @@
 - [x] Expand player modeling to cover the full legacy state (timers, spell slots, inventories, gems) with validation and serialization parity to `gmplyr`.
 - [x] Validated gmplyr player field ranges (charm timers, gem/stump indices, macro cap, spell IDs) across models + fixtures.
 - [x] Persist player sessions and runtime state in a real database (PostgreSQL) with migrations, replacing the current in-memory SQLite bootstrap.
-- [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
+- [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks. *(Updated give-recipient messaging to include the legacy `gmsgutl` actor prefix before `GIVERU10` text so UI renders the giver identity.)*
+- [x] Persist both giver and recipient state for `give` gold/item transfers so DB-backed sessions cannot duplicate resources after reconnect.
 - [x] Port look/examine/see (looker) command handling with tests to mirror legacy room/object/player inspection.
 - [x] Align looker player descriptions with FEMALE flag (FDES vs MDES) for parity with `KYRANDIA.C`/`KYRSYSP.C`.
 - [x] Ensure WebSocket sessions hydrate player identity fields (altnam/attnam) from persisted records for looker messaging.
 - [x] Match LOOK player targeting and level-driven appearance updates to legacy `findgp`/`glvutl`/`kyraedit` behavior.
+- [x] Enforced `findgp`-style invisibility gating (`ckinvs`) for targeted player verbs (`whisper`/`give`/`wink`/player-targeted `get`) so invisible occupants cannot be resolved without see-invisibility parity.
 - [x] Added structured room spoiler metadata (legacy routines + YAML scripts) and a spoiler command for runtime parity guidance.
 - [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring/heart-and-soul/waterfall/Tashanna/reflection-pool/pantheon/portal/waller/slot-machine/misty-ruins/sandman/tulips/singer/forgtr/oflove/believ/philos/truthy/bodyma/mindma room routines plus object/spell effect engines with cooldowns, transformations, costs, and sap spell points support for sapspel/takethat. Track remaining gaps with the checkboxes in `docs/PORTING_PLAN_world_object_spell_gaps.md`—mark entries complete there as they’re implemented and only check off this line item once that appendix is fully completed.)*
 - [x] Port remaining room routines (rooms 288/291/293/295/302) via YAML scripts in `backend/fixtures/room_scripts/` unless YAML is insufficient; reuse established patterns and include legacy source line comments as required.
@@ -58,6 +60,7 @@
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).
 - [x] Normalize non-chat command tokenization to strip articles/prepositions per `GAMUTILS.C` (`gi_bagthe`/`bagprep`).
+- [x] Preserve full whisper payloads for `whisper <target> <message...>` parsing so `whispr` receives complete `margv[2]` text (including quoted multi-word content).
 - [x] Preserve CRLF line breaks from the legacy `.MSG` files in the message bundle fixtures for accurate display formatting.
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments. *(Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.)* [Tracker: command + client integration parity in `docs/legacy_command_porting.md`; world/object/spell parity dependencies in `docs/PORTING_PLAN_world_object_spell_gaps.md`]
