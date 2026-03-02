@@ -2119,8 +2119,10 @@ def _parse_give_args(raw: str) -> dict:
     """Parse give-family argument layouts used by giveit().
 
     Supports:
-    - `<amount> gold [to] <target>` (legacy givcrd paths)
-    - `<item> to <target>` / `<target> <item>` (legacy giveru paths)
+    - `<amount> gold to <target>` (legacy givcrd, margc==5, KYRCMDS.C:497-498)
+    - `<target> <amount> gold` (legacy givcrd, margc==4, KYRCMDS.C:500-501)
+    - `<item> to <target>` (legacy giveru, margc==4 with "to", KYRCMDS.C:506-507)
+    - `<target> <item>` (legacy giveru, margc==3, KYRCMDS.C:503-504)
     See legacy/KYRCMDS.C:493-515.
     """
     tokens = raw.split()
@@ -2128,12 +2130,14 @@ def _parse_give_args(raw: str) -> dict:
         return {}
     if len(tokens) >= 4 and tokens[1].lower() == "gold" and tokens[2].lower() == "to":
         return {"gold_amount": tokens[0], "target_player": tokens[3]}
-    if len(tokens) >= 3 and tokens[1].lower() == "gold":
-        return {"gold_amount": tokens[0], "target_player": tokens[2]}
+    if len(tokens) >= 3 and tokens[2].lower() == "gold":
+        # Legacy: give <target> <amount> gold → givcrd(2,1) (KYRCMDS.C:500-501)
+        return {"target_player": tokens[0], "gold_amount": tokens[1]}
     if len(tokens) >= 3 and tokens[1].lower() == "to":
         return {"target_item": tokens[0], "target_player": tokens[2]}
     if len(tokens) >= 2:
-        return {"target_item": tokens[0], "target_player": tokens[1]}
+        # Legacy: give <target> <item> → giveru(margv[1], margv[2]) (KYRCMDS.C:503-504)
+        return {"target_player": tokens[0], "target_item": tokens[1]}
     return {}
 
 
@@ -2365,9 +2369,14 @@ class CommandVocabulary:
         if verb in _GIVE_VERBS:
             command_id = command_id or self._lookup_command_id(verb)
             message_id = message_id or self._message_for_command(command_id)
+            # Legacy giveit() only strips articles via gi_bagthe(), NOT prepositions via
+            # bagprep() (KYRCMDS.C:495-496). Bypass the normalized remainder so that "to"
+            # is preserved for `give <item> to <target>` detection in _parse_give_args.
+            give_tokens = [t for t in raw.split()[1:] if t.lower() not in _NORMALIZE_ARTICLES]
+            give_remainder = " ".join(give_tokens)
             return ParsedCommand(
                 verb=verb,
-                args={"raw": remainder, **_parse_give_args(remainder)},
+                args={"raw": give_remainder, **_parse_give_args(give_remainder)},
                 command_id=command_id,
                 message_id=message_id,
                 pay_only=pay_only,

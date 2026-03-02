@@ -250,10 +250,22 @@ def test_command_vocabulary_parses_give_gold_and_item_patterns():
     assert gold.args["gold_amount"] == "5"
     assert gold.args["target_player"] == "seer"
 
+    # Legacy target-first gold form: give <target> <amount> gold (KYRCMDS.C:500-501)
+    gold_target_first = vocabulary.parse_text("give seer 5 gold")
+    assert gold_target_first.verb == "give"
+    assert gold_target_first.args["gold_amount"] == "5"
+    assert gold_target_first.args["target_player"] == "seer"
+
     item = vocabulary.parse_text("give ruby to seer")
     assert item.verb == "give"
     assert item.args["target_item"] == "ruby"
     assert item.args["target_player"] == "seer"
+
+    # Legacy target-first item form: give <target> <item> (KYRCMDS.C:503-504)
+    item_target_first = vocabulary.parse_text("give seer ruby")
+    assert item_target_first.verb == "give"
+    assert item_target_first.args["target_item"] == "ruby"
+    assert item_target_first.args["target_player"] == "seer"
 
 
 @pytest.mark.parametrize(
@@ -643,7 +655,8 @@ async def test_give_item_persists_both_players_inventory(tmp_path, base_state):
         given_obj_id = base_state.player.gpobjs[0]
         given_obj_name = base_state.objects[given_obj_id].name
 
-        parsed = vocabulary.parse_text(f"give {given_obj_name} seer")
+        # Legacy order: give <target> <item>  (KYRCMDS.C:503-504)
+        parsed = vocabulary.parse_text(f"give seer {given_obj_name}")
         await dispatcher.dispatch_parsed(parsed, base_state)
 
         giver_record = session.scalar(select(models.Player).where(models.Player.plyrid == base_state.player.plyrid))
@@ -667,7 +680,8 @@ async def test_give_item_target_message_includes_giver_name(base_state):
     base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
     base_state.player_lookup = players.get
 
-    parsed = vocabulary.parse_text("give ruby seer")
+    # Legacy order: give <target> <item>  (KYRCMDS.C:503-504)
+    parsed = vocabulary.parse_text("give seer ruby")
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
     target_event = next(evt for evt in result.events if evt.get("scope") == "target")
