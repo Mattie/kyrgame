@@ -1,6 +1,8 @@
 import pytest
+from sqlalchemy import select
 
 from kyrgame import commands, constants, fixtures, models
+from kyrgame.database import create_session, get_engine, init_db_schema
 
 
 class FakeClock:
@@ -12,6 +14,14 @@ class FakeClock:
 
     def advance(self, seconds: float):
         self.now += seconds
+
+
+class StubPresence:
+    def __init__(self, occupants):
+        self.occupants = occupants
+
+    async def players_in_room(self, room_id: int):  # noqa: ARG002
+        return set(self.occupants)
 
 
 @pytest.fixture
@@ -200,10 +210,50 @@ def test_command_vocabulary_preserves_chat_text():
         fixtures.load_commands(), fixtures.load_messages()
     )
 
-    parsed = vocabulary.parse_text("whisper to alice hello")
+    parsed = vocabulary.parse_text("say \"hello there\"")
 
-    assert parsed.verb == "chat"
-    assert parsed.args["text"] == "to alice hello"
+    assert parsed.verb == "say"
+    assert parsed.args["text"] == '"hello there"'
+
+
+def test_command_vocabulary_parses_whisper_target_and_quoted_text():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed = vocabulary.parse_text("whisper to alice \"hello there\"")
+
+    assert parsed.verb == "whisper"
+    assert parsed.args["target_player"] == "alice"
+    assert parsed.args["text"] == '"hello there"'
+
+
+def test_command_vocabulary_preserves_full_whisper_text_without_to_prefix():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    parsed = vocabulary.parse_text('whisper seer "keep very quiet"')
+
+    assert parsed.verb == "whisper"
+    assert parsed.args["target_player"] == "seer"
+    assert parsed.args["text"] == '"keep very quiet"'
+
+
+def test_command_vocabulary_parses_give_gold_and_item_patterns():
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+
+    gold = vocabulary.parse_text("give 5 gold to seer")
+    assert gold.verb == "give"
+    assert gold.args["gold_amount"] == "5"
+    assert gold.args["target_player"] == "seer"
+
+    item = vocabulary.parse_text("give ruby to seer")
+    assert item.verb == "give"
+    assert item.args["target_item"] == "ruby"
+    assert item.args["target_player"] == "seer"
 
 
 @pytest.mark.parametrize(
@@ -379,16 +429,15 @@ def test_vocabulary_maps_aliases_to_canonical_commands():
     )
 
     parsed_move = vocabulary.parse_text("n")
-    parsed_chat = vocabulary.parse_text("say hello there")
+    parsed_say = vocabulary.parse_text("say hello there")
 
     assert parsed_move.verb == "move"
     assert parsed_move.args["direction"] == "north"
     assert parsed_move.command_id == 37  # legacy command id for "n"
 
-    assert parsed_chat.verb == "chat"
-    assert parsed_chat.args["text"] == "hello there"
-    assert parsed_chat.args["mode"] == "say"
-    assert parsed_chat.command_id == 53  # legacy command id for "say"
+    assert parsed_say.verb == "say"
+    assert parsed_say.args["text"] == "hello there"
+    assert parsed_say.command_id == 53  # legacy command id for "say"
 
 
 def test_vocabulary_parses_player_targeted_get_patterns():
@@ -459,3 +508,379 @@ async def test_payonl_commands_require_live_flag(base_state):
         await dispatcher.dispatch_parsed(parsed, base_state)
 
     assert excinfo.value.message_id == "CMPCMD1"
+
+
+@pytest.mark.anyio
+async def test_give_gold_moves_currency_to_target(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+    base_state.player.gold = 100
+
+    parsed = vocabulary.parse_text("give 5 gold to seer")
+    await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert base_state.player.gold == 95
+    assert target.gold >= 5
+
+
+@pytest.mark.anyio
+async def test_give_negative_gold_to_missing_player_returns_givcrd1(base_state):
+    """Legacy givcrd() validates amount before target lookup; negative gold returns GIVCRD1 (KYRCMDS.C:523-527)."""
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.presence = StubPresence({base_state.player.plyrid})
+    base_state.player_lookup = {base_state.player.plyrid: base_state.player}.get
+    base_state.player.gold = 100
+
+    parsed = vocabulary.parse_text("give -1 gold to nosuch")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "GIVCRD1" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_give_excess_gold_to_missing_player_returns_givcrd2(base_state):
+    """Legacy givcrd() validates amount before target lookup; excess gold returns GIVCRD2 (KYRCMDS.C:528-532)."""
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.presence = StubPresence({base_state.player.plyrid})
+    base_state.player_lookup = {base_state.player.plyrid: base_state.player}.get
+    base_state.player.gold = 10
+
+    parsed = vocabulary.parse_text("give 999 gold to nosuch")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "GIVCRD2" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_give_gold_to_missing_player_returns_givcrd3(base_state):
+    """Valid gold amount with missing target returns GIVCRD3 (KYRCMDS.C:533-536)."""
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.presence = StubPresence({base_state.player.plyrid})
+    base_state.player_lookup = {base_state.player.plyrid: base_state.player}.get
+    base_state.player.gold = 100
+
+    parsed = vocabulary.parse_text("give 5 gold to nosuch")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "GIVCRD3" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_give_gold_persists_both_players(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        target = base_state.player.model_copy(
+            update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc, "gold": 0}
+        )
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.add(models.Player(**target.model_dump()))
+        session.commit()
+
+        players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+        base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+        base_state.player_lookup = players.get
+        base_state.player.gold = 100
+        base_state.db_session = session
+
+        parsed = vocabulary.parse_text("give 5 gold to seer")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        giver_record = session.scalar(select(models.Player).where(models.Player.plyrid == base_state.player.plyrid))
+        target_record = session.scalar(select(models.Player).where(models.Player.plyrid == target.plyrid))
+
+        assert giver_record is not None
+        assert target_record is not None
+        assert giver_record.gold == 95
+        assert target_record.gold == 5
+
+
+@pytest.mark.anyio
+async def test_give_item_persists_both_players_inventory(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        target = base_state.player.model_copy(
+            update={
+                "plyrid": "seer",
+                "attnam": "seer",
+                "altnam": "Seer",
+                "gamloc": base_state.player.gamloc,
+                "gpobjs": [],
+                "obvals": [],
+                "npobjs": 0,
+            }
+        )
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.add(models.Player(**target.model_dump()))
+        session.commit()
+
+        players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+        base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+        base_state.player_lookup = players.get
+        base_state.db_session = session
+
+        given_obj_id = base_state.player.gpobjs[0]
+        given_obj_name = base_state.objects[given_obj_id].name
+
+        parsed = vocabulary.parse_text(f"give {given_obj_name} seer")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        giver_record = session.scalar(select(models.Player).where(models.Player.plyrid == base_state.player.plyrid))
+        target_record = session.scalar(select(models.Player).where(models.Player.plyrid == target.plyrid))
+
+        assert giver_record is not None
+        assert target_record is not None
+        assert given_obj_id not in giver_record.gpobjs
+        assert given_obj_id in target_record.gpobjs
+
+
+@pytest.mark.anyio
+async def test_give_item_target_message_includes_giver_name(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+
+    parsed = vocabulary.parse_text("give ruby seer")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    target_event = next(evt for evt in result.events if evt.get("scope") == "target")
+    assert target_event["message_id"] == "GIVERU10"
+    assert base_state.player.altnam in target_event["text"]
+    assert "given you a ruby!" in target_event["text"]
+
+
+@pytest.mark.anyio
+async def test_whisper_emits_target_and_room_events(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+
+    parsed = vocabulary.parse_text('whisper seer "keep quiet"')
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)
+    assert any(evt.get("scope") == "room" and evt.get("message_id") == "WHISPR3" for evt in result.events)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "raw_command,expected_message_id",
+    [
+        ('whisper seer "keep quiet"', "NOSUCHP"),
+        ("give 5 gold to seer", "GIVCRD3"),
+        ("wink seer", "WINKER5"),
+    ],
+)
+async def test_targeted_commands_cannot_find_invisible_players_without_see_invis(base_state, raw_command, expected_message_id):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={
+            "plyrid": "seer",
+            "attnam": "seer",
+            "altnam": "Seer",
+            "gamloc": base_state.player.gamloc,
+            "flags": int(base_state.player.flags | constants.PlayerFlag.INVISF),
+        }
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+
+    parsed = vocabulary.parse_text(raw_command)
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert len(result.events) == 1
+    assert result.events[0]["scope"] == "player"
+    assert result.events[0]["message_id"] == expected_message_id
+
+
+@pytest.mark.anyio
+async def test_whisper_can_target_invisible_player_with_see_invis_charm(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={
+            "plyrid": "seer",
+            "attnam": "seer",
+            "altnam": "Seer",
+            "gamloc": base_state.player.gamloc,
+            "flags": int(base_state.player.flags | constants.PlayerFlag.INVISF),
+        }
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+    base_state.player.charms[constants.CharmSlot.INVISIBILITY] = 2
+
+    parsed = vocabulary.parse_text('whisper seer "keep quiet"')
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_yell_with_text_broadcasts_to_nearby_rooms(base_state):
+    """Legacy yeller() calls sndnear() to send YELLER6 to adjacent rooms.
+
+    See legacy/KYRCMDS.C:319-322 and legacy/KYRUTIL.C:193-208.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    nearby_events = [e for e in result.events if e.get("scope") == "nearby_room"]
+    loc = base_state.locations[base_state.player.gamloc]
+    expected_rooms = {r for r in (loc.gi_north, loc.gi_south, loc.gi_east, loc.gi_west) if r >= 0 and r != base_state.player.gamloc}
+    assert len(nearby_events) == len(expected_rooms)
+    for evt in nearby_events:
+        assert evt["message_id"] == "YELLER6"
+        assert evt["room_id"] in expected_rooms
+        assert "HELLO WORLD" in (evt.get("text") or "")
+
+
+@pytest.mark.anyio
+async def test_yell_without_text_broadcasts_yeller2_to_nearby_rooms(base_state):
+    """Legacy yeller() also calls sndnear() with YELLER2 when no text given.
+
+    See legacy/KYRCMDS.C:308 and legacy/KYRUTIL.C:193-208.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    nearby_events = [e for e in result.events if e.get("scope") == "nearby_room"]
+    loc = base_state.locations[base_state.player.gamloc]
+    expected_rooms = {r for r in (loc.gi_north, loc.gi_south, loc.gi_east, loc.gi_west) if r >= 0 and r != base_state.player.gamloc}
+    assert len(nearby_events) == len(expected_rooms)
+    for evt in nearby_events:
+        assert evt["message_id"] == "YELLER2"
+        assert evt["room_id"] in expected_rooms
+
+
+@pytest.mark.anyio
+async def test_say_broadcasts_speak3_to_nearby_rooms(base_state):
+    """Legacy speakr() calls sndnear() to send SPEAK3 to adjacent rooms.
+
+    See legacy/KYRCMDS.C:260-261 and legacy/KYRUTIL.C:193-208.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("say hello")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    nearby_events = [e for e in result.events if e.get("scope") == "nearby_room"]
+    loc = base_state.locations[base_state.player.gamloc]
+    expected_rooms = {r for r in (loc.gi_north, loc.gi_south, loc.gi_east, loc.gi_west) if r >= 0 and r != base_state.player.gamloc}
+    assert len(nearby_events) == len(expected_rooms)
+    for evt in nearby_events:
+        assert evt["message_id"] == "SPEAK3"
+        assert evt["room_id"] in expected_rooms
+
+
+@pytest.mark.anyio
+async def test_say_room_broadcast_includes_player_context(base_state):
+    """Legacy speakr() sends SPEAK1 (actor context) + SPEAK2 (text) via sndoth().
+
+    The room event text must include the player name so other players know who spoke.
+    See legacy/KYRCMDS.C:254-259.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("say hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    room_events = [e for e in result.events if e.get("scope") == "room"]
+    assert len(room_events) == 1
+    room_text = room_events[0].get("text") or ""
+    assert base_state.player.altnam in room_text
+    assert "hello world" in room_text
+
+
+@pytest.mark.anyio
+async def test_yell_room_broadcast_includes_player_context(base_state):
+    """Legacy yeller() sends YELLER4 (actor context) + YELLER5 (text) via sndoth().
+
+    The room event text must include the player name so other players know who yelled.
+    See legacy/KYRCMDS.C:314-319.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    room_events = [e for e in result.events if e.get("scope") == "room"]
+    assert len(room_events) == 1
+    room_text = room_events[0].get("text") or ""
+    assert base_state.player.altnam in room_text
+    assert "HELLO WORLD" in room_text
+
+
+@pytest.mark.anyio
+async def test_yell_without_text_room_broadcast_includes_player_context(base_state):
+    """Legacy yeller() sends YELLER1 (actor context) to room when no text given.
+
+    See legacy/KYRCMDS.C:305-306.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    room_events = [e for e in result.events if e.get("scope") == "room"]
+    assert len(room_events) == 1
+    assert room_events[0]["message_id"] == "YELLER1"
+    room_text = room_events[0].get("text") or ""
+    assert base_state.player.altnam in room_text

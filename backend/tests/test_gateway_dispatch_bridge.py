@@ -128,6 +128,90 @@ async def test_websocket_bridge_emits_legacy_command_metadata():
 
 
 @pytest.mark.anyio
+async def test_websocket_whisper_emits_targeted_and_room_payloads():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 0})
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_session.json()['session']['token']}"
+        uri_room0_seer = f"ws://{host}:{port}/ws/rooms/0?token={seer_session.json()['session']['token']}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+            async with websockets.connect(uri_room0_seer) as seer_ws:
+                await _recv_matching(seer_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+                await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "player_enter")
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "whisper seer hush"}))
+
+                hero_ack = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "WHISPR2",
+                )
+                assert hero_ack["payload"]["message_id"] == "WHISPR2"
+
+                seer_msg = await _recv_matching(
+                    seer_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "WHISPR1",
+                )
+                assert seer_msg["payload"]["message_id"] == "WHISPR1"
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_give_item_target_payload_includes_giver_name():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 0})
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_session.json()['session']['token']}"
+        uri_room0_seer = f"ws://{host}:{port}/ws/rooms/0?token={seer_session.json()['session']['token']}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+            async with websockets.connect(uri_room0_seer) as seer_ws:
+                await _recv_matching(seer_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+                await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "player_enter")
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "give ruby seer"}))
+
+                seer_msg = await _recv_matching(
+                    seer_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "GIVERU10",
+                )
+                assert "Hero Alt" in seer_msg["payload"]["text"]
+                assert "given you a ruby!" in seer_msg["payload"]["text"]
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_look_uses_persisted_altnam_for_looker3():
     app = create_app()
     host = "127.0.0.1"
