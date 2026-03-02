@@ -813,6 +813,16 @@ def _message_event(
     return event
 
 
+def _give_actor_prefix(state: GameState, verb: str) -> str:
+    """Mirror gmsgutl() actor preface used before giveru target text."""
+    # Legacy gmsgutl() concatenates GMSGUTL1 + (GMSGUTL2|GMSGUTL3) before GIVERU10.
+    # (legacy/KYRCMDS.C:612-629)
+    prefix = _format_message(state, "GMSGUTL1", state.player.altnam)
+    if verb == "give":
+        return f"{prefix}{_format_message(state, 'GMSGUTL2')}"
+    return f"{prefix}{_format_message(state, 'GMSGUTL3', verb)}"
+
+
 def _sndutl_text(player: models.PlayerModel, template: str) -> str:
     """Format a sndutl-style broadcast line for the room."""
     # Legacy sndutl formats "*** <altnam> is <template % hisher>" for room broadcasts.
@@ -2102,7 +2112,12 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
         events=[
             _message_event("player", "DONE", _format_message(state, "DONE"), command_id),
             {
-                **_message_event("target", "GIVERU10", _format_message(state, "GIVERU10", _object_with_article(objects[obj_id])), command_id),
+                **_message_event(
+                    "target",
+                    "GIVERU10",
+                    f"{_give_actor_prefix(state, str(args.get('verb') or 'give').lower())}{_format_message(state, 'GIVERU10', _object_with_article(objects[obj_id]))}",
+                    command_id,
+                ),
                 "player": target_player.plyrid,
             },
         ],
