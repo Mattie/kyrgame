@@ -212,7 +212,7 @@ def test_command_vocabulary_preserves_chat_text():
 
     parsed = vocabulary.parse_text("say \"hello there\"")
 
-    assert parsed.verb == "chat"
+    assert parsed.verb == "say"
     assert parsed.args["text"] == '"hello there"'
 
 
@@ -429,16 +429,15 @@ def test_vocabulary_maps_aliases_to_canonical_commands():
     )
 
     parsed_move = vocabulary.parse_text("n")
-    parsed_chat = vocabulary.parse_text("say hello there")
+    parsed_say = vocabulary.parse_text("say hello there")
 
     assert parsed_move.verb == "move"
     assert parsed_move.args["direction"] == "north"
     assert parsed_move.command_id == 37  # legacy command id for "n"
 
-    assert parsed_chat.verb == "chat"
-    assert parsed_chat.args["text"] == "hello there"
-    assert parsed_chat.args["mode"] == "say"
-    assert parsed_chat.command_id == 53  # legacy command id for "say"
+    assert parsed_say.verb == "say"
+    assert parsed_say.args["text"] == "hello there"
+    assert parsed_say.command_id == 53  # legacy command id for "say"
 
 
 def test_vocabulary_parses_player_targeted_get_patterns():

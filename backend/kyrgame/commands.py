@@ -2049,16 +2049,43 @@ def _handle_yell(state: GameState, args: dict) -> CommandResult:
 
     Emits VOICE for missing text and uppercases the spoken payload for the
     successful branch, matching the legacy all-caps yell presentation.
+    Also calls sndnear() equivalent to broadcast to adjacent rooms.
     See legacy/KYRCMDS.C:298-326.
     """
     command_id = args.get("command_id")
     text = _unquote_text((args.get("text") or "").strip())
+    verb = args.get("verb", "yell")
     if not text:
-        return CommandResult(state=state, events=[_message_event("player", "VOICE", _format_message(state, "VOICE"), command_id)])
+        # Legacy yeller(): VOICE to player, then YELLER2 to nearby via sndnear().
+        events: List[dict] = [_message_event("player", "VOICE", _format_message(state, "VOICE"), command_id)]
+        nearby_text = _format_message(state, "YELLER2", verb)
+        for room_id in _adjacent_room_ids(state):
+            events.append({
+                "scope": "nearby_room",
+                "room_id": room_id,
+                "event": "room_message",
+                "type": "room_message",
+                "text": nearby_text,
+                "message_id": "YELLER2",
+                "command_id": command_id,
+            })
+        return CommandResult(state=state, events=events)
     events = [_message_event("player", "YELLER3", _format_message(state, "YELLER3"), command_id)]
     if state.player.level < 3:
         up = text.upper()
         events.append(_message_event("room", "YELLER5", _format_message(state, "YELLER5", up), command_id, exclude_player=state.player.plyrid))
+        # Legacy yeller(): sndnear() broadcasts YELLER6 to adjacent rooms.
+        nearby_text = _format_message(state, "YELLER6", up)
+        for room_id in _adjacent_room_ids(state):
+            events.append({
+                "scope": "nearby_room",
+                "room_id": room_id,
+                "event": "room_message",
+                "type": "room_message",
+                "text": nearby_text,
+                "message_id": "YELLER6",
+                "command_id": command_id,
+            })
     return CommandResult(state=state, events=events)
 
 
@@ -2274,11 +2301,11 @@ class CommandVocabulary:
             )
 
         if verb in _SAY_VERBS | _YELL_VERBS:
-            command_id = command_id or self._lookup_command_id("say")
+            command_id = command_id or self._lookup_command_id(verb)
             message_id = message_id or self._message_for_command(command_id)
             return ParsedCommand(
-                verb="chat",
-                args={"text": remainder, "mode": verb},
+                verb=verb,
+                args={"text": remainder},
                 command_id=command_id,
                 message_id=message_id,
                 pay_only=pay_only,
