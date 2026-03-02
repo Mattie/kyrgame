@@ -1851,6 +1851,15 @@ def create_app() -> FastAPI:
                         await gateway.broadcast(
                             current_room, envelope, sender=websocket, exclude=excluded_sockets
                         )
+                    elif scope == "nearby_room":
+                        # Legacy sndnear(): broadcast to players in adjacent rooms.
+                        # See legacy/KYRUTIL.C:193-208.
+                        nearby_room_id = event.get("room_id")
+                        if nearby_room_id is not None:
+                            envelope = {"type": "room_broadcast", "room": nearby_room_id, "payload": event}
+                            if meta:
+                                envelope["meta"] = meta
+                            await gateway.broadcast(nearby_room_id, envelope)
                     elif scope == "target":
                         target_id = event.get("player")
                         if not target_id:

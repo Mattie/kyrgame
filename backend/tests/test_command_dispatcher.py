@@ -708,3 +708,61 @@ async def test_whisper_can_target_invisible_player_with_see_invis_charm(base_sta
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
     assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_yell_with_text_broadcasts_to_nearby_rooms(base_state):
+    """Legacy yeller() calls sndnear() to send YELLER6 to adjacent rooms.
+
+    See legacy/KYRCMDS.C:319-322 and legacy/KYRUTIL.C:193-208.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    nearby_events = [e for e in result.events if e.get("scope") == "nearby_room"]
+    loc = base_state.locations[base_state.player.gamloc]
+    expected_rooms = {r for r in (loc.gi_north, loc.gi_south, loc.gi_east, loc.gi_west) if r >= 0 and r != base_state.player.gamloc}
+    assert len(nearby_events) == len(expected_rooms)
+    for evt in nearby_events:
+        assert evt["message_id"] == "YELLER6"
+        assert evt["room_id"] in expected_rooms
+        assert "HELLO WORLD" in (evt.get("text") or "")
+
+
+@pytest.mark.anyio
+async def test_yell_without_text_broadcasts_yeller2_to_nearby_rooms(base_state):
+    """Legacy yeller() also calls sndnear() with YELLER2 when no text given.
+
+    See legacy/KYRCMDS.C:308 and legacy/KYRUTIL.C:193-208.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    nearby_events = [e for e in result.events if e.get("scope") == "nearby_room"]
+    loc = base_state.locations[base_state.player.gamloc]
+    expected_rooms = {r for r in (loc.gi_north, loc.gi_south, loc.gi_east, loc.gi_west) if r >= 0 and r != base_state.player.gamloc}
+    assert len(nearby_events) == len(expected_rooms)
+    for evt in nearby_events:
+        assert evt["message_id"] == "YELLER2"
+        assert evt["room_id"] in expected_rooms
+
+
+@pytest.mark.anyio
+async def test_say_does_not_broadcast_to_nearby_rooms(base_state):
+    """Non-yell speech should never emit nearby_room events."""
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("say hello")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert not any(e.get("scope") == "nearby_room" for e in result.events)
