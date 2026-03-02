@@ -167,13 +167,13 @@ def test_dragonstaff_rub_requires_callback_and_reports_pending_when_missing():
     assert calls == [(player.plyrid, 42)]
 
 
-def test_attack_items_require_target_and_non_props_enforce_room_context():
+def test_aim_items_require_target_and_non_props_enforce_room_context():
     objects = fixtures.load_objects()
     messages = fixtures.load_messages()
     engine = ObjectEffectEngine(objects=objects, messages=messages)
 
     with pytest.raises(TargetingError):
-        engine.use_object(player_id="hero", object_id=34, room_id=7, action="attack")
+        engine.use_object(player_id="hero", object_id=34, room_id=7, action="aim")
 
     with pytest.raises(TargetingError):
         engine.use_object(player_id="hero", object_id=45, room_id=7, action="get")

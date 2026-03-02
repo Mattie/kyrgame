@@ -898,3 +898,62 @@ async def test_yell_without_text_room_broadcast_includes_player_context(base_sta
     assert room_events[0]["message_id"] == "YELLER1"
     room_text = room_events[0].get("text") or ""
     assert base_state.player.altnam in room_text
+
+@pytest.mark.anyio
+async def test_drink_consumes_drinkable_inventory_item(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player = base_state.player.model_copy(update={"gpobjs": [12], "obvals": [0], "npobjs": 1})
+
+    parsed = vocabulary.parse_text("drink elixir")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "OBJM08" for evt in result.events)
+    assert base_state.player.gpobjs == []
+    assert base_state.player.npobjs == 0
+
+
+@pytest.mark.anyio
+async def test_rub_non_rubbable_item_returns_objm01(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player = base_state.player.model_copy(update={"gpobjs": [13], "obvals": [0], "npobjs": 1})
+
+    parsed = vocabulary.parse_text("rub staff")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "OBJM01" for evt in result.events)
+    assert base_state.player.gpobjs == [13]
+
+
+@pytest.mark.anyio
+async def test_rub_dragonstaff_uses_legacy_rub_path(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player = base_state.player.model_copy(update={"gpobjs": [30], "obvals": [0], "npobjs": 1})
+
+    parsed = vocabulary.parse_text("rub dragonstaff")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "ZMSG14" for evt in result.events)
+    assert base_state.player.gpobjs == []
+
+
+@pytest.mark.anyio
+async def test_point_requires_target_player(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player = base_state.player.model_copy(update={"gpobjs": [34], "obvals": [0], "npobjs": 1})
+
+    parsed = vocabulary.parse_text("point sword")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "OBJM05" for evt in result.events)

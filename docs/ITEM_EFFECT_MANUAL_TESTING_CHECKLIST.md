@@ -5,7 +5,7 @@ This checklist is intended for admins/testers validating recently ported object 
 ## Scope covered in this revision
 
 - Object effect mappings for IDs 0–53 where applicable to player commands.
-- Action-gated item behavior for `drink`, `read`, `rub`, and `attack` flows.
+- Action-gated item behavior for `drink`, `read`, `rub`, and `aim/point` flows.
 - Consumable inventory mutation for drinkables/readables/dragonstaff.
 - Room/context restrictions for non-portable scenery props.
 - Dragonstaff bridge behavior pending full Zar animation/service wiring.
@@ -18,7 +18,7 @@ This checklist is intended for admins/testers validating recently ported object 
 - [ ] Tester can log in as a regular player and at least one admin/debug-capable account.
 - [ ] Admin has a way to grant or spawn specific inventory items for the test player.
 - [ ] Test player starts with an empty or known inventory baseline.
-- [ ] Optional: keep a second player online for attack/target command validation.
+- [ ] Optional: keep a second player online for aim/point target-command validation.
 
 ---
 
@@ -66,14 +66,14 @@ This checklist is intended for admins/testers validating recently ported object 
 
 ## D. Combat items (`dagger`, `sword`)
 
-> Ported behavior: attack-item usage requires attack semantics and a target.
+> Ported behavior: legacy uses the `aim` / `point` verb family (not a dedicated `attack` command), and weapon-style object usage requires a target.
 
-- [ ] Grant `dagger` and issue attack without target (`attack dagger` where UI allows).
+- [ ] Grant `dagger` and issue `point dagger` (or `aim dagger`) without a target.
+  - Expected: rejected due to missing target (`OBJM05`-style response).
+- [ ] Grant `sword` and issue `point sword` without a target.
   - Expected: rejected due to missing target.
-- [ ] Grant `sword` and issue attack without target.
-  - Expected: rejected due to missing target.
-- [ ] With second player online, issue target form (example pattern: `attack sword at <player>` based on UI command style).
-  - Expected: action is accepted when target is valid/resolvable.
+- [ ] With second player online, issue target form (`point sword at <player>`).
+  - Expected: action is accepted when target is valid/resolvable in-room.
 
 ---
 

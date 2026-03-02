@@ -7,7 +7,7 @@ from typing import Awaitable, Callable, Dict, List, Protocol, Set
 from sqlalchemy import select
 
 from . import constants, fixtures, models, repositories, room_spoilers
-from .effects import SpellEffectEngine
+from .effects import EffectError, ObjectEffectEngine, SpellEffectEngine
 from .inventory import pop_inventory_index
 from .spellbook import (
     add_spell_to_book,
@@ -1849,6 +1849,157 @@ def _handle_stub(state: GameState, args: dict) -> CommandResult:  # noqa: ARG001
     )
 
 
+def _build_object_engine(state: GameState) -> ObjectEffectEngine:
+    return ObjectEffectEngine(
+        objects=state.objects.values() if state.objects else [],
+        messages=state.messages or fixtures.load_messages(),
+    )
+
+
+def _handle_drink(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    raw = (args.get("raw") or "").strip().lower()
+    if not raw:
+        # Legacy drinkr() with no args => OBJM07 (legacy/KYROBJR.C:162-165).
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM07", _format_message(state, "OBJM07"), command_id)],
+        )
+
+    objects = state.objects or {}
+    inventory_index = _find_inventory_index(state.player, raw, objects)
+    if inventory_index is None:
+        # Legacy nohutl() path for missing held item (legacy/KYROBJR.C:166-168,185-189).
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM09", _format_message(state, "OBJM09"), command_id)],
+        )
+
+    object_id = state.player.gpobjs[inventory_index]
+    obj = objects.get(object_id)
+    if obj is None or "DRIABL" not in obj.flags:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM07", _format_message(state, "OBJM07"), command_id)],
+        )
+
+    effect = _build_object_engine(state).use_object(
+        player_id=state.player.plyrid,
+        object_id=object_id,
+        room_id=state.player.gamloc,
+        action="drink",
+        player=state.player,
+    )
+    _persist_player_state(state, state.player)
+    return CommandResult(
+        state=state,
+        events=[_message_event("player", effect.message_id, effect.text, command_id)],
+    )
+
+
+def _handle_rub(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    raw = (args.get("raw") or "").strip().lower()
+    if not raw:
+        # Legacy rubber() with no args => OBJM00 (legacy/KYROBJR.C:72-75).
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM00", _format_message(state, "OBJM00"), command_id)],
+        )
+
+    objects = state.objects or {}
+    inventory_index = _find_inventory_index(state.player, raw, objects)
+    if inventory_index is None:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM09", _format_message(state, "OBJM09"), command_id)],
+        )
+
+    object_id = state.player.gpobjs[inventory_index]
+    obj = objects.get(object_id)
+    if obj is None or "RUBABL" not in obj.flags:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM01", _format_message(state, "OBJM01"), command_id)],
+        )
+
+    effect = _build_object_engine(state).use_object(
+        player_id=state.player.plyrid,
+        object_id=object_id,
+        room_id=state.player.gamloc,
+        action="rub",
+        player=state.player,
+    )
+    _persist_player_state(state, state.player)
+    return CommandResult(
+        state=state,
+        events=[_message_event("player", effect.message_id, effect.text, command_id)],
+    )
+
+
+async def _handle_aim(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    raw = (args.get("raw") or "").strip().lower()
+    if not raw:
+        # Legacy aimer() no-arg path (legacy/KYROBJR.C:122-124).
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM03", _format_message(state, "OBJM03"), command_id)],
+        )
+
+    item_name = raw
+    target_name = ""
+    if " at " in raw:
+        item_name, target_name = [part.strip() for part in raw.split(" at ", 1)]
+    else:
+        tokens = raw.split()
+        if len(tokens) >= 2:
+            item_name = tokens[0]
+            target_name = tokens[-1]
+
+    objects = state.objects or {}
+    inventory_index = _find_inventory_index(state.player, item_name, objects)
+    if inventory_index is None:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM09", _format_message(state, "OBJM09"), command_id)],
+        )
+
+    if not target_name:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM05", _format_message(state, "OBJM05"), command_id)],
+        )
+
+    target_player = await _find_player_in_room(state, target_name)
+    if target_player is None:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM06", _format_message(state, "OBJM06"), command_id)],
+        )
+
+    object_id = state.player.gpobjs[inventory_index]
+    try:
+        effect = _build_object_engine(state).use_object(
+            player_id=state.player.plyrid,
+            object_id=object_id,
+            room_id=state.player.gamloc,
+            target=target_player.attnam,
+            action="aim",
+            player=state.player,
+        )
+    except EffectError:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM04", _format_message(state, "OBJM04"), command_id)],
+        )
+
+    return CommandResult(
+        state=state,
+        events=[_message_event("player", effect.message_id, effect.text, command_id)],
+    )
+
+
 def _unquote_text(text: str) -> str:
     stripped = text.strip()
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"\"", "'"}:
@@ -2554,6 +2705,28 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         ),
         _handle_read,
     )
+    for verb, handler in (("drink", _handle_drink), ("swallow", _handle_drink), ("rub", _handle_rub)):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            handler,
+        )
+    for verb in ("aim", "point"):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            _handle_aim,
+        )
 
     for verb in ("learn", "memorize"):
         registry.register(

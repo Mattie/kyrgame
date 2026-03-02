@@ -1029,10 +1029,10 @@ class ObjectEffectEngine:
 
         for object_id in (33, 34):
             if object_id in effects:
-                # Legacy aimer path requires explicit target for weapon attacks (legacy/KYROBJR.C:120-157).
+                # Legacy aimer/point path requires explicit target resolution for weapon use (legacy/KYROBJR.C:120-157).
                 effects[object_id].message_id = "OBJM05"
                 effects[object_id].requires_target = True
-                effects[object_id].requires_action = "attack"
+                effects[object_id].requires_action = "aim"
                 effects[object_id].cooldown = 1.5
 
         for object_id in range(45, 54):
