@@ -2030,18 +2030,34 @@ def _handle_say(state: GameState, args: dict) -> CommandResult:
     See legacy/KYRCMDS.C:241-264.
     """
     command_id = args.get("command_id")
+    verb = args.get("verb", "say")
     text = _unquote_text((args.get("text") or "").strip())
     if not text:
         return CommandResult(state=state, events=[_message_event("player", "HUH", _format_message(state, "HUH"), command_id)])
     if state.player.level == 3:
         return CommandResult(state=state, events=[_message_event("player", "NOWNOW", _format_message(state, "NOWNOW"), command_id)])
-    return CommandResult(
-        state=state,
-        events=[
-            _message_event("player", "SAIDIT", _format_message(state, "SAIDIT"), command_id),
-            _message_event("room", "SPEAK2", _format_message(state, "SPEAK2", text), command_id, exclude_player=state.player.plyrid),
-        ],
-    )
+    # Legacy speakr(): SPEAK1 (actor context) and SPEAK2 (text) are sent together
+    # via sndoth() to the room, and SPEAK3 via sndnear() to adjacent rooms.
+    # See legacy/KYRCMDS.C:254-261.
+    speak1 = _format_message(state, "SPEAK1", state.player.altnam, verb) or ""
+    speak2 = _format_message(state, "SPEAK2", text)
+    room_text = f"{speak1}{speak2 if speak2 is not None else text}"
+    events: List[dict] = [
+        _message_event("player", "SAIDIT", _format_message(state, "SAIDIT"), command_id),
+        _message_event("room", "SPEAK2", room_text, command_id, exclude_player=state.player.plyrid),
+    ]
+    nearby_text = _format_message(state, "SPEAK3")
+    for room_id in _adjacent_room_ids(state):
+        events.append({
+            "scope": "nearby_room",
+            "room_id": room_id,
+            "event": "room_message",
+            "type": "room_message",
+            "text": nearby_text,
+            "message_id": "SPEAK3",
+            "command_id": command_id,
+        })
+    return CommandResult(state=state, events=events)
 
 
 def _handle_yell(state: GameState, args: dict) -> CommandResult:
@@ -2056,8 +2072,13 @@ def _handle_yell(state: GameState, args: dict) -> CommandResult:
     text = _unquote_text((args.get("text") or "").strip())
     verb = args.get("verb", "yell")
     if not text:
-        # Legacy yeller(): VOICE to player, then YELLER2 to nearby via sndnear().
-        events: List[dict] = [_message_event("player", "VOICE", _format_message(state, "VOICE"), command_id)]
+        # Legacy yeller(): VOICE to player, YELLER1 to room, YELLER2 to nearby via sndnear().
+        # See legacy/KYRCMDS.C:303-308.
+        yeller1_text = _format_message(state, "YELLER1", state.player.altnam, verb, _hisher(state.player))
+        events: List[dict] = [
+            _message_event("player", "VOICE", _format_message(state, "VOICE"), command_id),
+            _message_event("room", "YELLER1", yeller1_text, command_id, exclude_player=state.player.plyrid),
+        ]
         nearby_text = _format_message(state, "YELLER2", verb)
         for room_id in _adjacent_room_ids(state):
             events.append({
@@ -2070,10 +2091,15 @@ def _handle_yell(state: GameState, args: dict) -> CommandResult:
                 "command_id": command_id,
             })
         return CommandResult(state=state, events=events)
+    # Legacy yeller(): YELLER3 to player, YELLER4+YELLER5 to room, YELLER6 to nearby.
+    # See legacy/KYRCMDS.C:311-322.
     events = [_message_event("player", "YELLER3", _format_message(state, "YELLER3"), command_id)]
     if state.player.level < 3:
         up = text.upper()
-        events.append(_message_event("room", "YELLER5", _format_message(state, "YELLER5", up), command_id, exclude_player=state.player.plyrid))
+        yeller4 = _format_message(state, "YELLER4", state.player.altnam, verb) or ""
+        yeller5 = _format_message(state, "YELLER5", up)
+        room_text = f"{yeller4}{yeller5 if yeller5 is not None else up}"
+        events.append(_message_event("room", "YELLER5", room_text, command_id, exclude_player=state.player.plyrid))
         # Legacy yeller(): sndnear() broadcasts YELLER6 to adjacent rooms.
         nearby_text = _format_message(state, "YELLER6", up)
         for room_id in _adjacent_room_ids(state):

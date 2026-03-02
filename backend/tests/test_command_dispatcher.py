@@ -803,8 +803,11 @@ async def test_yell_without_text_broadcasts_yeller2_to_nearby_rooms(base_state):
 
 
 @pytest.mark.anyio
-async def test_say_does_not_broadcast_to_nearby_rooms(base_state):
-    """Non-yell speech should never emit nearby_room events."""
+async def test_say_broadcasts_speak3_to_nearby_rooms(base_state):
+    """Legacy speakr() calls sndnear() to send SPEAK3 to adjacent rooms.
+
+    See legacy/KYRCMDS.C:260-261 and legacy/KYRUTIL.C:193-208.
+    """
     vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
     registry = commands.build_default_registry(vocabulary)
     dispatcher = commands.CommandDispatcher(registry)
@@ -812,4 +815,72 @@ async def test_say_does_not_broadcast_to_nearby_rooms(base_state):
     parsed = vocabulary.parse_text("say hello")
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
-    assert not any(e.get("scope") == "nearby_room" for e in result.events)
+    nearby_events = [e for e in result.events if e.get("scope") == "nearby_room"]
+    loc = base_state.locations[base_state.player.gamloc]
+    expected_rooms = {r for r in (loc.gi_north, loc.gi_south, loc.gi_east, loc.gi_west) if r >= 0 and r != base_state.player.gamloc}
+    assert len(nearby_events) == len(expected_rooms)
+    for evt in nearby_events:
+        assert evt["message_id"] == "SPEAK3"
+        assert evt["room_id"] in expected_rooms
+
+
+@pytest.mark.anyio
+async def test_say_room_broadcast_includes_player_context(base_state):
+    """Legacy speakr() sends SPEAK1 (actor context) + SPEAK2 (text) via sndoth().
+
+    The room event text must include the player name so other players know who spoke.
+    See legacy/KYRCMDS.C:254-259.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("say hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    room_events = [e for e in result.events if e.get("scope") == "room"]
+    assert len(room_events) == 1
+    room_text = room_events[0].get("text") or ""
+    assert base_state.player.altnam in room_text
+    assert "hello world" in room_text
+
+
+@pytest.mark.anyio
+async def test_yell_room_broadcast_includes_player_context(base_state):
+    """Legacy yeller() sends YELLER4 (actor context) + YELLER5 (text) via sndoth().
+
+    The room event text must include the player name so other players know who yelled.
+    See legacy/KYRCMDS.C:314-319.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    room_events = [e for e in result.events if e.get("scope") == "room"]
+    assert len(room_events) == 1
+    room_text = room_events[0].get("text") or ""
+    assert base_state.player.altnam in room_text
+    assert "HELLO WORLD" in room_text
+
+
+@pytest.mark.anyio
+async def test_yell_without_text_room_broadcast_includes_player_context(base_state):
+    """Legacy yeller() sends YELLER1 (actor context) to room when no text given.
+
+    See legacy/KYRCMDS.C:305-306.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("yell")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    room_events = [e for e in result.events if e.get("scope") == "room"]
+    assert len(room_events) == 1
+    assert room_events[0]["message_id"] == "YELLER1"
+    room_text = room_events[0].get("text") or ""
+    assert base_state.player.altnam in room_text
