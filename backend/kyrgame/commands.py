@@ -2096,12 +2096,9 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
     if not target_name:
         return CommandResult(state=state, events=[_message_event("player", "GIVIT1", _format_message(state, "GIVIT1"), command_id)])
 
-    target_player = await _find_player_in_room(state, target_name)
-    if not target_player:
-        return CommandResult(state=state, events=[_message_event("player", "GIVCRD3", _format_message(state, "GIVCRD3"), command_id)])
-
     gold_amount = args.get("gold_amount")
     if gold_amount is not None:
+        # Validate gold amount before resolving target; mirrors legacy givcrd() (KYRCMDS.C:523-537).
         try:
             amount = int(gold_amount)
         except ValueError:
@@ -2110,6 +2107,9 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
             return CommandResult(state=state, events=[_message_event("player", "GIVCRD1", _format_message(state, "GIVCRD1"), command_id)])
         if amount > state.player.gold:
             return CommandResult(state=state, events=[_message_event("player", "GIVCRD2", _format_message(state, "GIVCRD2"), command_id)])
+        target_player = await _find_player_in_room(state, target_name)
+        if not target_player:
+            return CommandResult(state=state, events=[_message_event("player", "GIVCRD3", _format_message(state, "GIVCRD3"), command_id)])
         state.player.gold -= amount
         target_player.gold += amount
         # Legacy giveit()/givcrd() updates both players immediately (KYRCMDS.C:537-550).
@@ -2125,6 +2125,10 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                 },
             ],
         )
+
+    target_player = await _find_player_in_room(state, target_name)
+    if not target_player:
+        return CommandResult(state=state, events=[_message_event("player", "GIVCRD3", _format_message(state, "GIVCRD3"), command_id)])
 
     item_name = (args.get("target_item") or "").strip().lower()
     if not item_name:

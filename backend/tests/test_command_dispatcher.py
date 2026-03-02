@@ -533,6 +533,54 @@ async def test_give_gold_moves_currency_to_target(base_state):
 
 
 @pytest.mark.anyio
+async def test_give_negative_gold_to_missing_player_returns_givcrd1(base_state):
+    """Legacy givcrd() validates amount before target lookup; negative gold returns GIVCRD1 (KYRCMDS.C:523-527)."""
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.presence = StubPresence({base_state.player.plyrid})
+    base_state.player_lookup = {base_state.player.plyrid: base_state.player}.get
+    base_state.player.gold = 100
+
+    parsed = vocabulary.parse_text("give -1 gold to nosuch")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "GIVCRD1" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_give_excess_gold_to_missing_player_returns_givcrd2(base_state):
+    """Legacy givcrd() validates amount before target lookup; excess gold returns GIVCRD2 (KYRCMDS.C:528-532)."""
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.presence = StubPresence({base_state.player.plyrid})
+    base_state.player_lookup = {base_state.player.plyrid: base_state.player}.get
+    base_state.player.gold = 10
+
+    parsed = vocabulary.parse_text("give 999 gold to nosuch")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "GIVCRD2" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_give_gold_to_missing_player_returns_givcrd3(base_state):
+    """Valid gold amount with missing target returns GIVCRD3 (KYRCMDS.C:533-536)."""
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.presence = StubPresence({base_state.player.plyrid})
+    base_state.player_lookup = {base_state.player.plyrid: base_state.player}.get
+    base_state.player.gold = 100
+
+    parsed = vocabulary.parse_text("give 5 gold to nosuch")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "GIVCRD3" for evt in result.events)
+
+
+@pytest.mark.anyio
 async def test_give_gold_persists_both_players(tmp_path, base_state):
     engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
     init_db_schema(engine)
