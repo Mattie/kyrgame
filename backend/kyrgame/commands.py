@@ -372,28 +372,63 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
     )
 
 
+def _adjacent_room_ids(state: GameState) -> List[int]:
+    """Return room IDs reachable from the player's current location.
+
+    Mirrors sndnear() which sends to the four cardinal exits.
+    See legacy/KYRUTIL.C:193-208.
+    """
+    loc = state.locations.get(state.player.gamloc)
+    if not loc:
+        return []
+    current = state.player.gamloc
+    nearby = []
+    for room_id in (loc.gi_north, loc.gi_south, loc.gi_east, loc.gi_west):
+        if room_id >= 0 and room_id != current and room_id in state.locations:
+            nearby.append(room_id)
+    return nearby
+
+
 def _handle_chat(state: GameState, args: dict) -> CommandResult:
     text = args.get("text", "").strip()
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
     mode = args.get("mode", "say")
-    return CommandResult(
-        state=state,
-        events=[
-            {
-                "scope": "room",
-                "event": "chat",
-                "type": "chat",
-                "from": state.player.plyrid,
-                "text": text,
-                "args": {"text": text},
-                "mode": mode,
-                "location": state.player.gamloc,
+    events: List[dict] = [
+        {
+            "scope": "room",
+            "event": "chat",
+            "type": "chat",
+            "from": state.player.plyrid,
+            "text": text,
+            "args": {"text": text},
+            "mode": mode,
+            "location": state.player.gamloc,
+            "command_id": command_id,
+            "message_id": message_id,
+        }
+    ]
+    # Legacy yeller() calls sndnear() to broadcast to adjacent rooms.
+    # See legacy/KYRCMDS.C:298-326 and legacy/KYRUTIL.C:193-208.
+    if mode in _YELL_VERBS:
+        if text:
+            uppercased_text = text.upper()
+            nearby_text = _format_message(state, "YELLER6", uppercased_text)
+            nearby_msg_id = "YELLER6"
+        else:
+            nearby_text = _format_message(state, "YELLER2", mode)
+            nearby_msg_id = "YELLER2"
+        for room_id in _adjacent_room_ids(state):
+            events.append({
+                "scope": "nearby_room",
+                "room_id": room_id,
+                "event": "room_message",
+                "type": "room_message",
+                "text": nearby_text,
+                "message_id": nearby_msg_id,
                 "command_id": command_id,
-                "message_id": message_id,
-            }
-        ],
-    )
+            })
+    return CommandResult(state=state, events=events)
 
 
 def _handle_inventory(state: GameState, args: dict) -> CommandResult:  # noqa: ARG001
