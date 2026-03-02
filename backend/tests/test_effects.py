@@ -88,6 +88,97 @@ def test_object_effects_apply_cooldowns_and_require_targets():
         engine.use_object(player_id="hero", object_id=32, room_id=38)
 
 
+def test_object_gems_and_curios_are_message_only_effects():
+    objects = fixtures.load_objects()
+    messages = fixtures.load_messages()
+    engine = ObjectEffectEngine(objects=objects, messages=messages)
+
+    for object_id in (0, 6, 11, 13, 29, 39, 44):
+        result = engine.use_object(player_id="hero", object_id=object_id, room_id=1)
+        assert result.message_id == f"KID{object_id:03d}"
+
+
+def test_drinkable_object_consumes_inventory_item_and_has_drink_action():
+    objects = fixtures.load_objects()
+    messages = fixtures.load_messages()
+    engine = ObjectEffectEngine(objects=objects, messages=messages)
+    player = _build_target(gpobjs=[12, 31], obvals=[0, 0], npobjs=2, hitpts=10, level=10)
+
+    result = engine.use_object(
+        player_id="hero", object_id=31, room_id=7, player=player, action="drink"
+    )
+
+    assert result.message_id == "OBJM08"
+    assert player.gpobjs == [12]
+    assert player.npobjs == 1
+
+
+def test_drinkable_object_rejects_wrong_action():
+    objects = fixtures.load_objects()
+    messages = fixtures.load_messages()
+    engine = ObjectEffectEngine(objects=objects, messages=messages)
+    player = _build_target(gpobjs=[12], obvals=[0], npobjs=1)
+
+    with pytest.raises(TargetingError):
+        engine.use_object(
+            player_id="hero", object_id=12, room_id=7, player=player, action="read"
+        )
+
+
+def test_readable_object_requires_read_action_and_consumes_scroll():
+    objects = fixtures.load_objects()
+    messages = fixtures.load_messages()
+    engine = ObjectEffectEngine(objects=objects, messages=messages)
+    player = _build_target(gpobjs=[35], obvals=[0], npobjs=1)
+
+    result = engine.use_object(
+        player_id="hero", object_id=35, room_id=1, player=player, action="read"
+    )
+
+    assert result.message_id == "KID035"
+    assert player.gpobjs == []
+
+
+def test_dragonstaff_rub_requires_callback_and_reports_pending_when_missing():
+    objects = fixtures.load_objects()
+    messages = fixtures.load_messages()
+    player = _build_target(gpobjs=[30], obvals=[0], npobjs=1)
+
+    engine = ObjectEffectEngine(objects=objects, messages=messages)
+    pending = engine.use_object(
+        player_id="hero", object_id=30, room_id=42, player=player, action="rub"
+    )
+    assert pending.message_id == "ZMSG14"
+
+    calls: list[tuple[str, int]] = []
+
+    def dragonstaff_callback(*, player, room_id):
+        calls.append((player.plyrid, room_id))
+        return "ZMSG13"
+
+    engine = ObjectEffectEngine(
+        objects=objects, messages=messages, dragonstaff_callback=dragonstaff_callback
+    )
+    player = _build_target(gpobjs=[30], obvals=[0], npobjs=1)
+    summoned = engine.use_object(
+        player_id="hero", object_id=30, room_id=42, player=player, action="rub"
+    )
+    assert summoned.message_id == "ZMSG13"
+    assert calls == [(player.plyrid, 42)]
+
+
+def test_attack_items_require_target_and_non_props_enforce_room_context():
+    objects = fixtures.load_objects()
+    messages = fixtures.load_messages()
+    engine = ObjectEffectEngine(objects=objects, messages=messages)
+
+    with pytest.raises(TargetingError):
+        engine.use_object(player_id="hero", object_id=34, room_id=7, action="attack")
+
+    with pytest.raises(TargetingError):
+        engine.use_object(player_id="hero", object_id=45, room_id=7, action="get")
+
+
 def test_transformation_spells_toggle_player_flags(sample_player):
     messages = fixtures.load_messages()
     spells = fixtures.load_spells()
