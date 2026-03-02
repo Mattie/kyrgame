@@ -609,6 +609,27 @@ async def test_give_item_persists_both_players_inventory(tmp_path, base_state):
 
 
 @pytest.mark.anyio
+async def test_give_item_target_message_includes_giver_name(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+
+    parsed = vocabulary.parse_text("give ruby seer")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    target_event = next(evt for evt in result.events if evt.get("scope") == "target")
+    assert target_event["message_id"] == "GIVERU10"
+    assert base_state.player.altnam in target_event["text"]
+    assert "given you a ruby!" in target_event["text"]
+
+
+@pytest.mark.anyio
 async def test_whisper_emits_target_and_room_events(base_state):
     vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
     registry = commands.build_default_registry(vocabulary)
