@@ -647,3 +647,64 @@ async def test_whisper_emits_target_and_room_events(base_state):
 
     assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)
     assert any(evt.get("scope") == "room" and evt.get("message_id") == "WHISPR3" for evt in result.events)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "raw_command,expected_message_id",
+    [
+        ('whisper seer "keep quiet"', "NOSUCHP"),
+        ("give 5 gold to seer", "GIVCRD3"),
+        ("wink seer", "WINKER5"),
+    ],
+)
+async def test_targeted_commands_cannot_find_invisible_players_without_see_invis(base_state, raw_command, expected_message_id):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={
+            "plyrid": "seer",
+            "attnam": "seer",
+            "altnam": "Seer",
+            "gamloc": base_state.player.gamloc,
+            "flags": int(base_state.player.flags | constants.PlayerFlag.INVISF),
+        }
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+
+    parsed = vocabulary.parse_text(raw_command)
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert len(result.events) == 1
+    assert result.events[0]["scope"] == "player"
+    assert result.events[0]["message_id"] == expected_message_id
+
+
+@pytest.mark.anyio
+async def test_whisper_can_target_invisible_player_with_see_invis_charm(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={
+            "plyrid": "seer",
+            "attnam": "seer",
+            "altnam": "Seer",
+            "gamloc": base_state.player.gamloc,
+            "flags": int(base_state.player.flags | constants.PlayerFlag.INVISF),
+        }
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+    base_state.player.charms[constants.CharmSlot.INVISIBILITY] = 2
+
+    parsed = vocabulary.parse_text('whisper seer "keep quiet"')
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)

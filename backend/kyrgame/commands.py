@@ -787,7 +787,9 @@ async def _find_player_in_room(
     occupants = await state.presence.players_in_room(state.player.gamloc)
     for occupant_id in occupants:
         candidate = state.player_lookup(occupant_id)
-        if candidate and _matches_player_name(target_name, candidate):
+        # Legacy findgp() only returns attnam matches that pass ckinvs() visibility checks.
+        # (legacy/KYRUTIL.C:472-478)
+        if candidate and _matches_player_name(target_name, candidate) and _can_see_player(state.player, candidate):
             return candidate
     return None
 
