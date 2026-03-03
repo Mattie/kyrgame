@@ -152,7 +152,7 @@ def test_dragonstaff_rub_requires_callback_and_reports_pending_when_missing():
 
     calls: list[tuple[str, int]] = []
 
-    def dragonstaff_callback(*, player, room_id):
+    def dragonstaff_callback(player, room_id):
         calls.append((player.plyrid, room_id))
         return "ZMSG13"
 

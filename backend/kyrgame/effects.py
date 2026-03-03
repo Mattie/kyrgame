@@ -1030,7 +1030,7 @@ class ObjectEffectEngine:
         for object_id in (33, 34):
             if object_id in effects:
                 # Legacy aimer/point path requires explicit target resolution for weapon use (legacy/KYROBJR.C:120-157).
-                effects[object_id].message_id = "OBJM05"
+                # OBJM05 is the missing-target prompt and is only emitted by the command layer; the effect uses KID{id:03d}.
                 effects[object_id].requires_target = True
                 effects[object_id].requires_action = "aim"
                 effects[object_id].cooldown = 1.5
@@ -1044,7 +1044,7 @@ class ObjectEffectEngine:
         return effects
 
     def _default_prop_room(self, object_id: int) -> int:
-        return {45: 0, 46: 0, 47: 7, 48: 9, 49: 42, 50: 43, 51: 186, 52: 0, 53: 101}.get(object_id, 0)
+        return {45: 0, 46: 0, 47: 7, 48: 9, 49: 42, 50: 101, 51: 186, 52: 0, 53: 295}.get(object_id, 0)
 
     def _dragonstaff_handler(self):
         def _handler(
@@ -1065,7 +1065,7 @@ class ObjectEffectEngine:
                     animation=effect.animation,
                     context={"room": room_id, "zar_pending": True},
                 )
-            callback_result = self.dragonstaff_callback(player=player, room_id=room_id)
+            callback_result = self.dragonstaff_callback(player, room_id)
             if isinstance(callback_result, EffectResult):
                 return callback_result
             return EffectResult(
