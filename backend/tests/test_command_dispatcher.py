@@ -957,3 +957,24 @@ async def test_point_requires_target_player(base_state):
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
     assert any(evt.get("message_id") == "OBJM05" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_point_rejects_non_aimable_inventory_item_with_objm04(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    target = base_state.player.model_copy(
+        update={"plyrid": "bob", "attnam": "bob", "altnam": "Bob", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+    base_state.player = base_state.player.model_copy(update={"gpobjs": [13], "obvals": [0], "npobjs": 1})
+    players[base_state.player.plyrid] = base_state.player
+
+    parsed = vocabulary.parse_text("point staff at bob")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert any(evt.get("message_id") == "OBJM04" for evt in result.events)

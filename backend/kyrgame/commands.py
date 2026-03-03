@@ -1979,6 +1979,14 @@ async def _handle_aim(state: GameState, args: dict) -> CommandResult:
         )
 
     object_id = state.player.gpobjs[inventory_index]
+    obj = objects.get(object_id)
+    # Legacy aimer() only allows AIMABL objects through this branch (legacy/KYROBJR.C:147-153).
+    if obj is None or "AIMABL" not in obj.flags:
+        return CommandResult(
+            state=state,
+            events=[_message_event("player", "OBJM04", _format_message(state, "OBJM04"), command_id)],
+        )
+
     try:
         effect = _build_object_engine(state).use_object(
             player_id=state.player.plyrid,
