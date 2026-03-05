@@ -18,7 +18,7 @@
 - [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks.
 - [ ] Recreate world/object/spell services that reflect `KYRLOCS.C`, `KYROBJS.C`, `KYRSPEL.C`, and `KYRANIM.C`, including timers, room routines, and object/spell effects. *(In progress: added temple/fountain/spring room routines plus object/spell effect engines with cooldowns and costs; expanded RoomScriptEngine coverage for `KYRLOCS.C` vendors/obstacles and began wiring `KYRSPEL.C` timers into the spell service.)*
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
-- [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization.
+- [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization. *(Updated admin player payload handling so inventory slot count is derived from populated inventory slots instead of manually entered counts.)*
 - [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments.
 - [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures.
 - [ ] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling.

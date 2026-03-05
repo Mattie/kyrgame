@@ -118,6 +118,93 @@ class PlayerModel(BaseModel):
         return self
 
 
+class AdminPlayerModel(BaseModel):
+    """Admin/editor payload that derives inventory count from populated slots."""
+
+    uidnam: str = Field(max_length=constants.UIDSIZ)
+    plyrid: str = Field(max_length=constants.ALSSIZ)
+    altnam: str = Field(max_length=constants.APNSIZ)
+    attnam: str = Field(max_length=constants.APNSIZ)
+    gpobjs: List[Optional[int]] = Field(default_factory=list, max_length=constants.MXPOBS)
+    nmpdes: Optional[int] = None
+    modno: Optional[int] = None
+    level: int
+    gamloc: int
+    pgploc: int
+    flags: int
+    gold: int
+    npobjs: Optional[int] = None
+    obvals: List[Optional[int]] = Field(default_factory=list, max_length=constants.MXPOBS)
+    nspells: int
+    spts: int
+    hitpts: int
+    charms: List[int] = Field(default_factory=list, max_length=constants.NCHARM)
+    offspls: int
+    defspls: int
+    othspls: int
+    spells: List[int] = Field(default_factory=list, max_length=constants.MAXSPL)
+    gemidx: Optional[int] = None
+    stones: List[int] = Field(default_factory=list, max_length=constants.BIRTHSTONE_SLOTS)
+    macros: Optional[int] = None
+    stumpi: Optional[int] = None
+    spouse: str = Field(max_length=constants.ALSSIZ)
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    @model_validator(mode="after")
+    def validate_counts(self):
+        if len(self.gpobjs) != len(self.obvals):
+            raise ValueError("gpobjs and obvals must contain the same number of slots")
+        if self.nspells != len(self.spells):
+            raise ValueError("nspells must match the number of memorized spells")
+        if len(self.charms) != constants.NCHARM:
+            raise ValueError(f"charms must contain exactly {constants.NCHARM} timers")
+        if len(self.stones) != constants.BIRTHSTONE_SLOTS:
+            raise ValueError(
+                f"stones must contain exactly {constants.BIRTHSTONE_SLOTS} birthstones"
+            )
+        return self
+
+    def to_player_model(self) -> "PlayerModel":
+        inventory_pairs = [
+            (obj_id, obj_value)
+            for obj_id, obj_value in zip(self.gpobjs, self.obvals)
+            if obj_id is not None
+        ]
+        if any(obj_value is None for _, obj_value in inventory_pairs):
+            raise ValueError("Each populated inventory slot must include an object value")
+
+        return PlayerModel(
+            uidnam=self.uidnam,
+            plyrid=self.plyrid,
+            altnam=self.altnam,
+            attnam=self.attnam,
+            gpobjs=[obj_id for obj_id, _ in inventory_pairs],
+            nmpdes=self.nmpdes,
+            modno=self.modno,
+            level=self.level,
+            gamloc=self.gamloc,
+            pgploc=self.pgploc,
+            flags=self.flags,
+            gold=self.gold,
+            npobjs=len(inventory_pairs),
+            obvals=[obj_value for _, obj_value in inventory_pairs],
+            nspells=self.nspells,
+            spts=self.spts,
+            hitpts=self.hitpts,
+            charms=self.charms,
+            offspls=self.offspls,
+            defspls=self.defspls,
+            othspls=self.othspls,
+            spells=self.spells,
+            gemidx=self.gemidx,
+            stones=self.stones,
+            macros=self.macros,
+            stumpi=self.stumpi,
+            spouse=self.spouse,
+        )
+
+
 class CommandModel(BaseModel):
     id: int
     command: str = Field(max_length=32)

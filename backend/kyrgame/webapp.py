@@ -228,6 +228,13 @@ def _player_model_from_record(record: models.Player) -> models.PlayerModel:
     )
 
 
+def _coerce_admin_player_payload(payload: models.AdminPlayerModel) -> models.PlayerModel:
+    try:
+        return payload.to_player_model()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _replace_cached_model(collection, new_model, *, key_attr: str = "id"):
     replaced = False
     for idx, existing in enumerate(collection):
@@ -642,47 +649,49 @@ async def admin_get_player(
 
 @admin_router.post("/players", status_code=status.HTTP_201_CREATED)
 async def admin_create_player(
-    player: models.PlayerModel,
+    player: models.AdminPlayerModel,
     provider: Annotated[FixtureProvider, Depends(get_request_provider)],
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
-    existing = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
+    player_model = _coerce_admin_player_payload(player)
+    existing = db.scalar(select(models.Player).where(models.Player.plyrid == player_model.plyrid))
     if existing:
         raise HTTPException(status_code=409, detail="Player alias already exists")
 
-    db.add(models.Player(**player.model_dump()))
+    db.add(models.Player(**player_model.model_dump()))
     db.commit()
-    _set_player_in_cache(provider.scope.app, player)
-    return {"status": "created", "player": player.model_dump()}
+    _set_player_in_cache(provider.scope.app, player_model)
+    return {"status": "created", "player": player_model.model_dump()}
 
 
 @admin_router.put("/players/{player_id}")
 async def admin_update_player(
     player_id: str,
-    player: models.PlayerModel,
+    player: models.AdminPlayerModel,
     provider: Annotated[FixtureProvider, Depends(get_request_provider)],
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
+    player_model = _coerce_admin_player_payload(player)
     record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
     if record is None:
         raise HTTPException(status_code=404, detail="Player not found")
 
-    if player.plyrid != player_id and AdminFlag.ALLOW_RENAME.value not in admin.flags:
+    if player_model.plyrid != player_id and AdminFlag.ALLOW_RENAME.value not in admin.flags:
         raise HTTPException(status_code=403, detail="Rename not permitted for this admin token")
 
-    if player.plyrid != player_id:
-        conflict = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
+    if player_model.plyrid != player_id:
+        conflict = db.scalar(select(models.Player).where(models.Player.plyrid == player_model.plyrid))
         if conflict and conflict.id != record.id:
             raise HTTPException(status_code=409, detail="Player alias already exists")
 
-    for field, value in player.model_dump().items():
+    for field, value in player_model.model_dump().items():
         setattr(record, field, value)
 
     db.commit()
     updated = _player_model_from_record(record)
-    _set_player_in_cache(provider.scope.app, updated, original_alias=player_id if player.plyrid != player_id else None)
+    _set_player_in_cache(provider.scope.app, updated, original_alias=player_id if player_model.plyrid != player_id else None)
     return {"status": "updated", "player": updated.model_dump()}
 
 

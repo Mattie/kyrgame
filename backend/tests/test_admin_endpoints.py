@@ -78,11 +78,15 @@ async def test_player_admin_crud_validates_payloads(monkeypatch):
             assert updated_payload["gold"] == sample_player.gold
             assert updated_payload["hitpts"] == sample_player.hitpts
 
-            invalid_payload = sample_player.model_copy(update={"npobjs": 999}).model_dump()
-            bad_update = await client.put(
-                "/admin/players/hero", headers=_auth("player-token"), json=invalid_payload
+            stale_count_payload = sample_player.model_copy(update={"npobjs": 999}).model_dump()
+            stale_count_payload["gpobjs"] = [2, 3]
+            stale_count_payload["obvals"] = [11, 12]
+            stale_update = await client.put(
+                "/admin/players/hero", headers=_auth("player-token"), json=stale_count_payload
             )
-            assert bad_update.status_code == 422
+            assert stale_update.status_code == 200
+            stale_player = stale_update.json()["player"]
+            assert stale_player["npobjs"] == 2
 
             rename_resp = await client.put(
                 "/admin/players/hero", headers=_auth("player-token"), json=renamed_player.model_dump()
@@ -94,17 +98,20 @@ async def test_player_admin_crud_validates_payloads(monkeypatch):
                 update={
                     "plyrid": "builder",
                     "uidnam": "Builder",
-                    "gpobjs": [],
-                    "obvals": [],
+                    "gpobjs": [4, None],
+                    "obvals": [7, None],
                     "npobjs": 0,
                     "spells": [],
                     "nspells": 0,
                 }
             )
+            create_payload = new_player.model_dump()
+            create_payload.pop("npobjs")
             create_resp = await client.post(
-                "/admin/players", headers=_auth("player-token"), json=new_player.model_dump()
+                "/admin/players", headers=_auth("player-token"), json=create_payload
             )
             assert create_resp.status_code == 201
+            assert create_resp.json()["player"]["npobjs"] == 1
 
             fetch_resp = await client.get(
                 "/admin/players/builder", headers=_auth("player-token")
