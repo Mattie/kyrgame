@@ -913,6 +913,10 @@ async def test_drink_consumes_drinkable_inventory_item(base_state):
     assert any(evt.get("message_id") == "OBJM08" for evt in result.events)
     assert base_state.player.gpobjs == []
     assert base_state.player.npobjs == 0
+    room_events = [evt for evt in result.events if evt.get("scope") == "room"]
+    assert len(room_events) == 1
+    assert room_events[0]["text"] == "*** Hero Alt is drinking something quickly."
+    assert room_events[0]["exclude_player"] == base_state.player.plyrid
 
 
 @pytest.mark.anyio
@@ -978,3 +982,7 @@ async def test_point_rejects_non_aimable_inventory_item_with_objm04(base_state):
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
     assert any(evt.get("message_id") == "OBJM04" for evt in result.events)
+    room_events = [evt for evt in result.events if evt.get("scope") == "room"]
+    assert len(room_events) == 1
+    assert room_events[0]["text"] == "*** Hero Alt is waving obscenely!"
+    assert room_events[0]["exclude_player"] == base_state.player.plyrid
