@@ -50,15 +50,15 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 ## Object effects missing from ObjectEffectEngine
 `ObjectEffectEngine` only defines behaviors for object IDs 32 (pinecone) and 33 (dagger). Check off catalog entries from `gmobjs` as effect mappings, cooldowns, and target/resource rules are implemented:
 
-- [ ] IDs 0–11: gems (ruby, emerald, garnet, pearl, aquamarine, moonstone, sapphire, diamond, amethyst, onyx, opal, bloodstone)【F:legacy/KYROBJS.C†L63-L99】
-- [ ] ID 12: elixir (drinkable)【F:legacy/KYROBJS.C†L100-L103】
-- [ ] IDs 13–29: equipment/curios (staff, key, locket, amulet, pendant, charm, bracelet, coronet, tiara, necklace, broach, sceptre, rod, wand, trinket, soulstone, kyragem)【F:legacy/KYROBJS.C†L103-L154】
-- [ ] ID 30: dragonstaff (rub-to-summon Zar behavior via `zaritm`)【F:legacy/KYROBJS.C†L154-L157】【F:legacy/KYRANIM.C†L206-L237】
-- [ ] ID 31: potion (drinkable)【F:legacy/KYROBJS.C†L157-L160】
-- [ ] ID 34: sword (attack item)【F:legacy/KYROBJS.C†L165-L169】
+- [x] IDs 0–11: gems (ruby, emerald, garnet, pearl, aquamarine, moonstone, sapphire, diamond, amethyst, onyx, opal, bloodstone)【F:legacy/KYROBJS.C†L63-L99】
+- [x] ID 12: elixir (drinkable)【F:legacy/KYROBJS.C†L100-L103】
+- [x] IDs 13–29: equipment/curios (staff, key, locket, amulet, pendant, charm, bracelet, coronet, tiara, necklace, broach, sceptre, rod, wand, trinket, soulstone, kyragem)【F:legacy/KYROBJS.C†L103-L154】
+- [x] ID 30: dragonstaff (rub-to-summon Zar behavior via `zaritm`)【F:legacy/KYROBJS.C†L154-L157】【F:legacy/KYRANIM.C†L206-L237】
+- [x] ID 31: potion (drinkable)【F:legacy/KYROBJS.C†L157-L160】
+- [x] ID 34: sword (attack item)【F:legacy/KYROBJS.C†L165-L169】
 - [x] IDs 35–38: readables (scroll, codex, tome, parchment)【F:legacy/KYROBJS.C†L169-L178】
-- [ ] IDs 39–44: jewelry/flowers (ring, rose, lilac, orchid, shard, tulip)【F:legacy/KYROBJS.C†L181-L197】
-- [ ] IDs 45–53: scenery/NPC props (dryad, willow tree, temple altar, spell-shop sign, forest statue, hidden shrine, slot machine, Zar dragon, chamber-of-life altar)【F:legacy/KYROBJS.C†L199-L225】
+- [x] IDs 39–44: jewelry/flowers (ring, rose, lilac, orchid, shard, tulip)【F:legacy/KYROBJS.C†L181-L197】
+- [x] IDs 45–53: scenery/NPC props (dryad, willow tree, temple altar, spell-shop sign, forest statue, hidden shrine, slot machine, Zar dragon, chamber-of-life altar)【F:legacy/KYROBJS.C†L199-L225】
 
 ## Spell behaviors, timers, and animations still to model
 `SpellEffectEngine` currently applies generic costs/cooldowns and only specializes the `flyaway` (ID 16) and `weewillo` (ID 62) transformations. Check off each legacy `spells` entry once explicit effect handling (including timers/charms/animations) is implemented:

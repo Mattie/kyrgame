@@ -963,7 +963,16 @@ class ObjectEffect:
     message_id: str
     cooldown: float
     requires_target: bool = False
+    requires_action: Optional[str] = None
+    consume_on_use: bool = False
+    required_room_ids: Optional[set[int]] = None
     animation: Optional[str] = None
+    handler: Optional[
+        Callable[
+            [models.PlayerModel | None, int, Optional[str], str, "ObjectEffect"],
+            EffectResult,
+        ]
+    ] = None
 
 
 class ObjectEffectEngine:
@@ -972,35 +981,112 @@ class ObjectEffectEngine:
         objects: Iterable[models.GameObjectModel],
         messages: models.MessageBundleModel,
         clock: Callable[[], float] | None = None,
+        dragonstaff_callback: Optional[
+            Callable[[models.PlayerModel, int], str | EffectResult]
+        ] = None,
     ):
         self.objects = {obj.id: obj for obj in objects}
         self.messages = messages
         self.clock = clock or time.monotonic
+        self.dragonstaff_callback = dragonstaff_callback
         self.cooldowns: Dict[str, Dict[int, float]] = {}
         self.effects: Dict[int, ObjectEffect] = self._build_effects()
 
     def _build_effects(self) -> Dict[int, ObjectEffect]:
         effects: Dict[int, ObjectEffect] = {}
         for obj in self.objects.values():
-            if obj.id == 32:  # pinecone
-                effects[obj.id] = ObjectEffect(
-                    obj=obj,
-                    message_id="MAGF02",
-                    cooldown=1.0,
-                    animation=f"obj{obj.id}",
-                )
-            elif obj.id == 33:  # dagger
-                effects[obj.id] = ObjectEffect(
-                    obj=obj,
-                    message_id="OBJM05",
-                    cooldown=1.5,
-                    requires_target=True,
-                    animation=f"obj{obj.id}",
-                )
+            effects[obj.id] = ObjectEffect(
+                obj=obj,
+                message_id=f"KID{obj.id:03d}",
+                cooldown=1.0,
+                animation=f"obj{obj.id}",
+            )
+
+        for object_id in (12, 31):
+            if object_id in effects:
+                # Legacy drinkr consumes DRIABL inventory items before calling object routine (legacy/KYROBJR.C:159-180).
+                effects[object_id].message_id = "OBJM08"
+                effects[object_id].requires_action = "drink"
+                effects[object_id].consume_on_use = True
+
+        for object_id in (35, 36, 37, 38):
+            if object_id in effects:
+                # Legacy reader consumes readable scroll items and dispatches the scroll routine (legacy/KYRCMDS.C:1035-1087).
+                effects[object_id].requires_action = "read"
+                effects[object_id].consume_on_use = True
+                effects[object_id].cooldown = 1.5
+
+        if 30 in effects:
+            # Legacy rub flow for dragonstaff forwards to zaritm for Zar summon/attack sequencing (legacy/KYRANIM.C:176-198).
+            effects[30].message_id = "ZMSG14"
+            effects[30].requires_action = "rub"
+            effects[30].consume_on_use = True
+            effects[30].cooldown = 2.0
+            effects[30].handler = self._dragonstaff_handler()
+
+        if 32 in effects:
+            effects[32].message_id = "MAGF02"
+
+        for object_id in (33, 34):
+            if object_id in effects:
+                # Legacy aimer/point path requires explicit target resolution for weapon use (legacy/KYROBJR.C:120-157).
+                # OBJM05 is the missing-target prompt and is only emitted by the command layer; the effect uses KID{id:03d}.
+                effects[object_id].requires_target = True
+                effects[object_id].requires_action = "aim"
+                effects[object_id].cooldown = 1.5
+
+        for object_id in range(45, 54):
+            if object_id in effects:
+                # Legacy scenery/NPC props are anchored in room-local slots and cannot be collected (legacy/KYROBJS.C:199-225).
+                effects[object_id].message_id = f"AID{object_id:03d}"
+                effects[object_id].required_room_ids = {self._default_prop_room(object_id)}
+
         return effects
 
+    def _default_prop_room(self, object_id: int) -> int:
+        return {45: 0, 46: 0, 47: 7, 48: 9, 49: 42, 50: 101, 51: 186, 52: 0, 53: 295}.get(object_id, 0)
+
+    def _dragonstaff_handler(self):
+        def _handler(
+            player: models.PlayerModel | None,
+            room_id: int,
+            target: Optional[str],
+            action: str,
+            effect: ObjectEffect,
+        ) -> EffectResult:
+            if player is None:
+                raise TargetingError("Dragonstaff requires player state")
+            if self.dragonstaff_callback is None:
+                # Temporary bridge until Zar/animation services land; keep user-facing feedback aligned with zaritm follow-up (legacy/KYRANIM.C:181-194).
+                return EffectResult(
+                    success=True,
+                    message_id="ZMSG14",
+                    text=self.messages.messages.get("ZMSG14", effect.obj.name),
+                    animation=effect.animation,
+                    context={"room": room_id, "zar_pending": True},
+                )
+            callback_result = self.dragonstaff_callback(player, room_id)
+            if isinstance(callback_result, EffectResult):
+                return callback_result
+            return EffectResult(
+                success=True,
+                message_id=callback_result,
+                text=self.messages.messages.get(callback_result, effect.obj.name),
+                animation=effect.animation,
+                context={"room": room_id, "zar_pending": False},
+            )
+
+        return _handler
+
     def use_object(
-        self, player_id: str, object_id: int, room_id: int, target: Optional[str] = None
+        self,
+        player_id: str,
+        object_id: int,
+        room_id: int,
+        target: Optional[str] = None,
+        *,
+        action: str = "use",
+        player: models.PlayerModel | None = None,
     ) -> EffectResult:
         if object_id not in self.effects:
             raise EffectError(f"Unknown object {object_id}")
@@ -1014,12 +1100,33 @@ class ObjectEffectEngine:
                 f"Object {object_id} on cooldown for {effect.cooldown - (now - last_used):.2f}s"
             )
 
+        if effect.requires_action and action != effect.requires_action:
+            raise TargetingError(
+                f"Object {object_id} requires action '{effect.requires_action}'"
+            )
+
+        if effect.required_room_ids and room_id not in effect.required_room_ids:
+            raise TargetingError(f"Object {object_id} cannot be used in room {room_id}")
+
         if effect.requires_target and not target:
             raise TargetingError("This object requires a target")
 
+        if effect.consume_on_use:
+            if player is None:
+                raise TargetingError("Player inventory is required for consumable object use")
+            if not remove_inventory_item(player, object_id):
+                raise TargetingError(f"Object {object_id} is not in inventory")
+
         player_cooldowns[object_id] = now
+
+        if effect.handler is not None:
+            result = effect.handler(player, room_id, target, action, effect)
+            if target and "target" not in result.context:
+                result.context["target"] = target
+            return result
+
         text = self.messages.messages.get(effect.message_id, effect.obj.name)
-        context = {"room": room_id}
+        context = {"room": room_id, "action": action}
         if target:
             context["target"] = target
 
