@@ -320,8 +320,6 @@ export const AdminControls = () => {
       const filledSlots = normalizedSlots.filter((slot): slot is number => slot !== null)
       payload.gpobjs = normalizedSlots
       payload.npobjs = filledSlots.length
-    } else {
-      payload.npobjs = 0
     }
 
     const hasBirthstones = birthstones.some((stone) => stone.trim() !== '')
