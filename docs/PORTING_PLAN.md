@@ -17,6 +17,7 @@
 - [x] Validated gmplyr player field ranges (charm timers, gem/stump indices, macro cap, spell IDs) across models + fixtures.
 - [x] Persist player sessions and runtime state in a real database (PostgreSQL) with migrations, replacing the current in-memory SQLite bootstrap.
 - [x] Added runtime bootstrap seeding guards (`KYRGAME_RESET_ON_BOOT`, `KYRGAME_SEED_IF_EMPTY`) so fixture reloads only run for explicit resets or empty databases.
+- [x] Consolidated runtime env parsing and seed policy into `RuntimeConfig` (`from_env` + `should_seed_database`) so startup controls stay centralized and explicit.
 - [x] Flesh out the command dispatcher to mirror `KYRCMDS.C` (movement, speech variants, inventory, combat, system commands) with authoritative state changes and permission checks. *(Updated give-recipient messaging to include the legacy `gmsgutl` actor prefix before `GIVERU10` text so UI renders the giver identity.)*
 - [x] Persist both giver and recipient state for `give` gold/item transfers so DB-backed sessions cannot duplicate resources after reconnect.
 - [x] Port look/examine/see (looker) command handling with tests to mirror legacy room/object/player inspection.

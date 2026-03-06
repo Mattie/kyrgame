@@ -37,6 +37,7 @@ class RuntimeConfig:
     run_migrations: bool = True
     migration_revision: str = "head"
     reset_on_boot: bool = False
+    # Default to seed only when the database is empty so first boot is usable without forcing reloads.
     seed_if_empty: bool = True
 
     @classmethod
@@ -61,6 +62,13 @@ class RuntimeConfig:
             reset_on_boot=_env_flag("KYRGAME_RESET_ON_BOOT", default=False),
             seed_if_empty=_env_flag("KYRGAME_SEED_IF_EMPTY", default=True),
         )
+
+    def should_seed_database(self, session: Session) -> bool:
+        if self.reset_on_boot:
+            return True
+        if self.seed_if_empty:
+            return not _database_has_locations(session)
+        return False
 
     def primary_seed_path(self) -> Optional[Path]:
         for seed in self.seed_paths:
@@ -98,10 +106,8 @@ async def bootstrap_app(app: FastAPI):
     session_factory = database.create_session_factory(engine)
     seed_root = runtime_config.primary_seed_path()
     with session_factory() as session:
-        if runtime_config.reset_on_boot:
+        if runtime_config.should_seed_database(session):
             # Guard destructive fixture reloads so persistent demo/prod databases are not reset on each boot.
-            loader.load_all_from_fixtures(session, fixture_root=seed_root)
-        elif runtime_config.seed_if_empty and not _database_has_locations(session):
             loader.load_all_from_fixtures(session, fixture_root=seed_root)
 
     app.state.engine = engine
