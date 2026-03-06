@@ -869,6 +869,28 @@ def _sndutl_text(player: models.PlayerModel, template: str) -> str:
     return f"*** {player.altnam} is {template}"
 
 
+def _player_and_room_message_events(
+    state: GameState,
+    command_id: int | None,
+    message_id: str | None,
+    text: str | None,
+    *,
+    room_template: str | None = None,
+) -> list[dict]:
+    events = [_message_event("player", message_id, text, command_id)]
+    if room_template:
+        events.append(
+            _message_event(
+                "room",
+                None,
+                _sndutl_text(state.player, room_template),
+                command_id,
+                exclude_player=state.player.plyrid,
+            )
+        )
+    return events
+
+
 
 def _find_spell_by_name(raw_name: str, spells_catalog: list[models.SpellModel]) -> models.SpellModel | None:
     target = raw_name.strip().lower()
@@ -1863,7 +1885,13 @@ def _handle_drink(state: GameState, args: dict) -> CommandResult:
         # Legacy drinkr() with no args => OBJM07 (legacy/KYROBJR.C:162-165).
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM07", _format_message(state, "OBJM07"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM07",
+                _format_message(state, "OBJM07"),
+                room_template="having a drinking problem.",
+            ),
         )
 
     objects = state.objects or {}
@@ -1872,7 +1900,13 @@ def _handle_drink(state: GameState, args: dict) -> CommandResult:
         # Legacy nohutl() path for missing held item (legacy/KYROBJR.C:166-168,185-189).
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM09", _format_message(state, "OBJM09"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM09",
+                _format_message(state, "OBJM09"),
+                room_template="having wild dreams.",
+            ),
         )
 
     object_id = state.player.gpobjs[inventory_index]
@@ -1880,7 +1914,13 @@ def _handle_drink(state: GameState, args: dict) -> CommandResult:
     if obj is None or "DRIABL" not in obj.flags:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM07", _format_message(state, "OBJM07"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM07",
+                _format_message(state, "OBJM07"),
+                room_template="looking thirsty!",
+            ),
         )
 
     effect = _build_object_engine(state).use_object(
@@ -1893,7 +1933,13 @@ def _handle_drink(state: GameState, args: dict) -> CommandResult:
     _persist_player_state(state, state.player)
     return CommandResult(
         state=state,
-        events=[_message_event("player", effect.message_id, effect.text, command_id)],
+        events=_player_and_room_message_events(
+            state,
+            command_id,
+            effect.message_id,
+            effect.text,
+            room_template="drinking something quickly.",
+        ),
     )
 
 
@@ -1904,7 +1950,13 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
         # Legacy rubber() with no args => OBJM00 (legacy/KYROBJR.C:72-75).
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM00", _format_message(state, "OBJM00"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM00",
+                _format_message(state, "OBJM00"),
+                room_template="acting silly.",
+            ),
         )
 
     objects = state.objects or {}
@@ -1912,7 +1964,13 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
     if inventory_index is None:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM09", _format_message(state, "OBJM09"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM09",
+                _format_message(state, "OBJM09"),
+                room_template="having wild dreams.",
+            ),
         )
 
     object_id = state.player.gpobjs[inventory_index]
@@ -1920,7 +1978,13 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
     if obj is None or "RUBABL" not in obj.flags:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM01", _format_message(state, "OBJM01"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM01",
+                _format_message(state, "OBJM01"),
+                room_template="rubbing something.",
+            ),
         )
 
     effect = _build_object_engine(state).use_object(
@@ -1931,9 +1995,20 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
         player=state.player,
     )
     _persist_player_state(state, state.player)
+    room_template = None
+    if object_id == 30:
+        # Legacy zaritm() opens dragonstaff use with sndutl("rubbing %s dragonstaff!").
+        # (legacy/KYRANIM.C:177-180)
+        room_template = "rubbing %s dragonstaff!"
     return CommandResult(
         state=state,
-        events=[_message_event("player", effect.message_id, effect.text, command_id)],
+        events=_player_and_room_message_events(
+            state,
+            command_id,
+            effect.message_id,
+            effect.text,
+            room_template=room_template,
+        ),
     )
 
 
@@ -1944,7 +2019,13 @@ async def _handle_aim(state: GameState, args: dict) -> CommandResult:
         # Legacy aimer() no-arg path (legacy/KYROBJR.C:122-124).
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM03", _format_message(state, "OBJM03"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM03",
+                _format_message(state, "OBJM03"),
+                room_template="pointing wildly.",
+            ),
         )
 
     item_name = raw
@@ -1962,20 +2043,38 @@ async def _handle_aim(state: GameState, args: dict) -> CommandResult:
     if inventory_index is None:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM09", _format_message(state, "OBJM09"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM09",
+                _format_message(state, "OBJM09"),
+                room_template="having wild dreams.",
+            ),
         )
 
     if not target_name:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM05", _format_message(state, "OBJM05"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM05",
+                _format_message(state, "OBJM05"),
+                room_template="waving %s arms.",
+            ),
         )
 
     target_player = await _find_player_in_room(state, target_name)
     if target_player is None:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM06", _format_message(state, "OBJM06"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM06",
+                _format_message(state, "OBJM06"),
+                room_template="seeing ghosts!",
+            ),
         )
 
     object_id = state.player.gpobjs[inventory_index]
@@ -1984,7 +2083,13 @@ async def _handle_aim(state: GameState, args: dict) -> CommandResult:
     if obj is None or "AIMABL" not in obj.flags:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM04", _format_message(state, "OBJM04"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM04",
+                _format_message(state, "OBJM04"),
+                room_template="waving obscenely!",
+            ),
         )
 
     try:
@@ -1999,7 +2104,13 @@ async def _handle_aim(state: GameState, args: dict) -> CommandResult:
     except EffectError:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM04", _format_message(state, "OBJM04"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM04",
+                _format_message(state, "OBJM04"),
+                room_template="waving obscenely!",
+            ),
         )
 
     return CommandResult(
