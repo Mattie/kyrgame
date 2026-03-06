@@ -35,6 +35,23 @@ source backend/.env
 set +a
 ```
 
+
+## Runtime bootstrap seeding flags
+
+Use these environment variables to control startup fixture behavior:
+
+- `KYRGAME_RESET_ON_BOOT` (default: `0`)
+  - `0`: no forced reset/reload on startup.
+  - `1`: **destructive fixture reset + reload** at boot via `loader.load_all_from_fixtures(...)`; persisted content is replaced by fixture state.
+- `KYRGAME_SEED_IF_EMPTY` (default: `1`)
+  - Only applies when `KYRGAME_RESET_ON_BOOT=0`.
+  - `1`: seed fixtures when the database is empty (no locations present).
+  - `0`: do not auto-seed on startup, even if the database is empty.
+
+### Public demo / production recommendation
+
+Keep `KYRGAME_RESET_ON_BOOT=0` for public demo/prod deployments so restarts are non-destructive. Use explicit seed scripts and migrations when you intentionally need controlled data changes.
+
 ## HTTP endpoints
 
 | Endpoint | Role | Notes |
