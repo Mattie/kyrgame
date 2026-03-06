@@ -46,6 +46,22 @@ Kyrandia began as a MajorBBS/Worldgroup text adventure where apprentices chased 
 6. **Consult or build the legacy module**
    - The C sources live in `legacy/`. To build the Borland target, run `cd legacy && make -f ELWKYR`. Visual Studio users can open `legacy/elwkyr.vcxproj`.
 
+## Backend Bootstrap Seeding Controls
+
+The API runtime supports two environment flags that control fixture loading at startup:
+
+- `KYRGAME_RESET_ON_BOOT` (default: `0`)
+  - `0`: do not force fixture reset at startup.
+  - `1`: **destructive reset + reload**. The server re-imports fixture content into the database on boot using `loader.load_all_from_fixtures(...)`, overwriting persisted content with fixture state.
+- `KYRGAME_SEED_IF_EMPTY` (default: `1`)
+  - Only evaluated when `KYRGAME_RESET_ON_BOOT=0`.
+  - `1`: if the database has no locations yet, seed from fixtures once at startup.
+  - `0`: skip startup seeding, even for an empty database.
+
+### Public demo / production recommendation
+
+For public demos or production-like environments, keep `KYRGAME_RESET_ON_BOOT=0` so restarts do not wipe runtime data. Prefer explicit one-off seed scripts and schema migrations for controlled data updates.
+
 ## Legacy Backstory (for context)
 
 The adventure is set in the enchanted realm of Kyrandia under the eye of Tashanna, the "Lady of Legends." Players begin as young apprentices who explore, trade, duel, and solve puzzles to advance through spellcasting ranks. That spirit of cooperative multiplayer magic continues to guide the modernized experience even as we reimplement the systems behind it.
