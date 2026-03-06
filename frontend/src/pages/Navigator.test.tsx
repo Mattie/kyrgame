@@ -798,6 +798,107 @@ describe('Navigator flow', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
   })
 
+  it('sends explicit empty inventory when all slots are cleared', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [0, 1],
+      nmpdes: 1,
+      modno: 0,
+      level: 4,
+      gamloc: 7,
+      pgploc: 7,
+      flags: 0,
+      gold: 150,
+      npobjs: 2,
+      obvals: [0, 0],
+      nspells: 0,
+      spts: 10,
+      hitpts: 20,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: '',
+    }
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ player: adminPlayer }),
+        } as unknown as Response)
+      }
+      if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
+        const payload = JSON.parse(init?.body as string)
+        // All slots cleared: gpobjs must be all-null and npobjs must be 0
+        expect(payload.gpobjs).toEqual([null, null, null, null, null, null])
+        expect(payload.npobjs).toBe(0)
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'updated', player: { plyrid: 'hero' } }),
+        } as unknown as Response)
+      }
+
+      const next = responses.shift()
+      if (!next) {
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    await screen.findByText(/admin controls/i)
+    // Wait for the pre-populated slots to appear
+    expect(await screen.findByLabelText(/inventory slot 1/i)).toHaveValue('ruby')
+    expect(screen.getByLabelText(/inventory slot 2/i)).toHaveValue('emerald')
+
+    await act(async () => {
+      // Clear both pre-populated inventory slots
+      await user.clear(screen.getByLabelText(/inventory slot 1/i))
+      await user.clear(screen.getByLabelText(/inventory slot 2/i))
+      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+    })
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
+  })
+
   it('restores session form fields from browser storage', () => {
     localStorage.setItem('kyrgame.navigator.playerId', 'hero')
     localStorage.setItem('kyrgame.navigator.roomId', '12')

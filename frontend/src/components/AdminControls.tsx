@@ -103,6 +103,7 @@ export const AdminControls = () => {
   const [inventorySlots, setInventorySlots] = useState<string[]>(
     Array.from({ length: MAX_INVENTORY_SLOTS }, () => '')
   )
+  const [inventoryInitialized, setInventoryInitialized] = useState(false)
   const [gemIndex, setGemIndex] = useState('')
   const [birthstones, setBirthstones] = useState<string[]>(
     Array.from({ length: BIRTHSTONE_SLOTS }, () => '')
@@ -193,6 +194,7 @@ export const AdminControls = () => {
         player.gpobjs?.[index] !== undefined ? resolveObjectLabel(player.gpobjs[index]) : ''
       )
       setInventorySlots(nextInventorySlots)
+      setInventoryInitialized(false)
       setGemIndex(player.gemidx === null || player.gemidx === undefined ? '' : String(player.gemidx))
       const nextBirthstones = Array.from({ length: BIRTHSTONE_SLOTS }, (_, index) =>
         player.stones?.[index] !== undefined ? resolveObjectLabel(player.stones[index]) : ''
@@ -299,7 +301,7 @@ export const AdminControls = () => {
     }
 
     const hasInventorySlots = inventorySlots.some((slot) => slot.trim() !== '')
-    if (hasInventorySlots) {
+    if (inventoryInitialized || hasInventorySlots) {
       const resolvedSlots = inventorySlots.map((slot) =>
         resolveObjectReference(slot, objectCatalog.byId, objectCatalog.byName)
       )
@@ -647,13 +649,14 @@ export const AdminControls = () => {
                             name={`inventory-slot-${index}`}
                             list="inventory-object-options"
                             value={slot}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              setInventoryInitialized(true)
                               setInventorySlots((prev) => {
                                 const next = [...prev]
                                 next[index] = event.target.value
                                 return next
                               })
-                            }
+                            }}
                           />
                         </div>
                       ))}
