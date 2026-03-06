@@ -932,6 +932,10 @@ async def test_rub_non_rubbable_item_returns_objm01(base_state):
 
     assert any(evt.get("message_id") == "OBJM01" for evt in result.events)
     assert base_state.player.gpobjs == [13]
+    room_events = [evt for evt in result.events if evt.get("scope") == "room"]
+    assert len(room_events) == 1
+    assert room_events[0]["text"] == "*** Hero Alt is rubbing something."
+    assert room_events[0]["exclude_player"] == base_state.player.plyrid
 
 
 @pytest.mark.anyio
@@ -947,6 +951,10 @@ async def test_rub_dragonstaff_uses_legacy_rub_path(base_state):
 
     assert any(evt.get("message_id") == "ZMSG14" for evt in result.events)
     assert base_state.player.gpobjs == []
+    room_events = [evt for evt in result.events if evt.get("scope") == "room"]
+    assert len(room_events) == 1
+    assert room_events[0]["text"] == "*** Hero Alt is rubbing her dragonstaff!"
+    assert room_events[0]["exclude_player"] == base_state.player.plyrid
 
 
 @pytest.mark.anyio

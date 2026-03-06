@@ -1950,7 +1950,13 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
         # Legacy rubber() with no args => OBJM00 (legacy/KYROBJR.C:72-75).
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM00", _format_message(state, "OBJM00"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM00",
+                _format_message(state, "OBJM00"),
+                room_template="acting silly.",
+            ),
         )
 
     objects = state.objects or {}
@@ -1958,7 +1964,13 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
     if inventory_index is None:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM09", _format_message(state, "OBJM09"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM09",
+                _format_message(state, "OBJM09"),
+                room_template="having wild dreams.",
+            ),
         )
 
     object_id = state.player.gpobjs[inventory_index]
@@ -1966,7 +1978,13 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
     if obj is None or "RUBABL" not in obj.flags:
         return CommandResult(
             state=state,
-            events=[_message_event("player", "OBJM01", _format_message(state, "OBJM01"), command_id)],
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM01",
+                _format_message(state, "OBJM01"),
+                room_template="rubbing something.",
+            ),
         )
 
     effect = _build_object_engine(state).use_object(
@@ -1977,9 +1995,20 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
         player=state.player,
     )
     _persist_player_state(state, state.player)
+    room_template = None
+    if object_id == 30:
+        # Legacy zaritm() opens dragonstaff use with sndutl("rubbing %s dragonstaff!").
+        # (legacy/KYRANIM.C:177-180)
+        room_template = "rubbing %s dragonstaff!"
     return CommandResult(
         state=state,
-        events=[_message_event("player", effect.message_id, effect.text, command_id)],
+        events=_player_and_room_message_events(
+            state,
+            command_id,
+            effect.message_id,
+            effect.text,
+            room_template=room_template,
+        ),
     )
 
 
