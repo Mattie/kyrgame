@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from sqlalchemy.orm import Session
+
 from fastapi import FastAPI
 
 from . import commands, database, fixtures, loader, models, rooms
@@ -34,6 +36,8 @@ class RuntimeConfig:
     seed_paths: List[Path] = field(default_factory=list)
     run_migrations: bool = True
     migration_revision: str = "head"
+    reset_on_boot: bool = False
+    seed_if_empty: bool = True
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -52,9 +56,10 @@ class RuntimeConfig:
             database_url=os.getenv("DATABASE_URL", "sqlite+pysqlite:///:memory:"),
             migration_runner=os.getenv("KYRGAME_MIGRATION_RUNNER", "alembic"),
             seed_paths=seed_paths,
-            run_migrations=os.getenv("KYRGAME_RUN_MIGRATIONS", "1").lower()
-            not in {"0", "false", "no"},
+            run_migrations=_env_flag("KYRGAME_RUN_MIGRATIONS", default=True),
             migration_revision=os.getenv("KYRGAME_MIGRATION_REVISION", "head"),
+            reset_on_boot=_env_flag("KYRGAME_RESET_ON_BOOT", default=False),
+            seed_if_empty=_env_flag("KYRGAME_SEED_IF_EMPTY", default=True),
         )
 
     def primary_seed_path(self) -> Optional[Path]:
@@ -62,6 +67,17 @@ class RuntimeConfig:
             if seed.exists():
                 return seed
         return None
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() not in {"0", "false", "no"}
+
+
+def _database_has_locations(session: Session) -> bool:
+    return session.query(models.Location.id).first() is not None
 
 
 async def bootstrap_app(app: FastAPI):
@@ -82,7 +98,11 @@ async def bootstrap_app(app: FastAPI):
     session_factory = database.create_session_factory(engine)
     seed_root = runtime_config.primary_seed_path()
     with session_factory() as session:
-        loader.load_all_from_fixtures(session, fixture_root=seed_root)
+        if runtime_config.reset_on_boot:
+            # Guard destructive fixture reloads so persistent demo/prod databases are not reset on each boot.
+            loader.load_all_from_fixtures(session, fixture_root=seed_root)
+        elif runtime_config.seed_if_empty and not _database_has_locations(session):
+            loader.load_all_from_fixtures(session, fixture_root=seed_root)
 
     app.state.engine = engine
     app.state.session_factory = session_factory
