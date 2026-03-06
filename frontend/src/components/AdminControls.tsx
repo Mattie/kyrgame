@@ -100,10 +100,10 @@ export const AdminControls = () => {
     Array.from({ length: CHARM_SLOTS.length }, () => '')
   )
   const [charmsInitialized, setCharmsInitialized] = useState(false)
-  const [inventoryCount, setInventoryCount] = useState('')
   const [inventorySlots, setInventorySlots] = useState<string[]>(
     Array.from({ length: MAX_INVENTORY_SLOTS }, () => '')
   )
+  const [inventoryInitialized, setInventoryInitialized] = useState(false)
   const [gemIndex, setGemIndex] = useState('')
   const [birthstones, setBirthstones] = useState<string[]>(
     Array.from({ length: BIRTHSTONE_SLOTS }, () => '')
@@ -190,11 +190,11 @@ export const AdminControls = () => {
       )
       setCharmSlots(nextCharms)
       setCharmsInitialized(false)
-      setInventoryCount(String(player.npobjs ?? ''))
       const nextInventorySlots = Array.from({ length: MAX_INVENTORY_SLOTS }, (_, index) =>
         player.gpobjs?.[index] !== undefined ? resolveObjectLabel(player.gpobjs[index]) : ''
       )
       setInventorySlots(nextInventorySlots)
+      setInventoryInitialized(false)
       setGemIndex(player.gemidx === null || player.gemidx === undefined ? '' : String(player.gemidx))
       const nextBirthstones = Array.from({ length: BIRTHSTONE_SLOTS }, (_, index) =>
         player.stones?.[index] !== undefined ? resolveObjectLabel(player.stones[index]) : ''
@@ -300,16 +300,8 @@ export const AdminControls = () => {
       payload.charms = resolvedCharms as number[]
     }
 
-    const parsedInventoryCount = parseNumber(inventoryCount)
-    if (parsedInventoryCount !== undefined) {
-      if (parsedInventoryCount < 0 || parsedInventoryCount > MAX_INVENTORY_SLOTS) {
-        setError(`Inventory count must be between 0 and ${MAX_INVENTORY_SLOTS}`)
-        return
-      }
-    }
-
     const hasInventorySlots = inventorySlots.some((slot) => slot.trim() !== '')
-    if (hasInventorySlots) {
+    if (inventoryInitialized || hasInventorySlots) {
       const resolvedSlots = inventorySlots.map((slot) =>
         resolveObjectReference(slot, objectCatalog.byId, objectCatalog.byName)
       )
@@ -328,14 +320,8 @@ export const AdminControls = () => {
         }
       }
       const filledSlots = normalizedSlots.filter((slot): slot is number => slot !== null)
-      if (parsedInventoryCount !== undefined && parsedInventoryCount !== filledSlots.length) {
-        setError('Inventory count must match the number of filled slots.')
-        return
-      }
       payload.gpobjs = normalizedSlots
-      payload.npobjs = parsedInventoryCount ?? filledSlots.length
-    } else if (parsedInventoryCount !== undefined) {
-      payload.npobjs = parsedInventoryCount
+      payload.npobjs = filledSlots.length
     }
 
     const hasBirthstones = birthstones.some((stone) => stone.trim() !== '')
@@ -654,21 +640,6 @@ export const AdminControls = () => {
                 </legend>
                 {!sectionCollapsed.inventory && (
                   <div className="admin-section-body" data-testid="admin-section-body-inventory">
-                    <div className="admin-fields">
-                      <div className="field">
-                        <label htmlFor="inventory-count">Inventory count</label>
-                        <input
-                          id="inventory-count"
-                          name="inventory-count"
-                          type="number"
-                          min={0}
-                          max={MAX_INVENTORY_SLOTS}
-                          value={inventoryCount}
-                          onChange={(event) => setInventoryCount(event.target.value)}
-                        />
-                        <p className="field-hint">Max {MAX_INVENTORY_SLOTS} items (matches MXPOBS).</p>
-                      </div>
-                    </div>
                     <div className="admin-slot-grid">
                       {inventorySlots.map((slot, index) => (
                         <div className="field" key={`inventory-slot-${index}`}>
@@ -678,13 +649,14 @@ export const AdminControls = () => {
                             name={`inventory-slot-${index}`}
                             list="inventory-object-options"
                             value={slot}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              setInventoryInitialized(true)
                               setInventorySlots((prev) => {
                                 const next = [...prev]
                                 next[index] = event.target.value
                                 return next
                               })
-                            }
+                            }}
                           />
                         </div>
                       ))}
