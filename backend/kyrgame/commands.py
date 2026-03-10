@@ -781,10 +781,25 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
     )
 
 
-def _matches_player_name(target: str, player: models.PlayerModel) -> bool:
+def _matches_player_name(
+    target: str,
+    player: models.PlayerModel,
+    *,
+    viewer: models.PlayerModel | None = None,
+) -> bool:
     target_lower = target.lower()
     # Legacy: findgp matches against attnam only (KYRUTIL.C 472-484).
-    return target_lower == player.attnam.lower()
+    if target_lower == player.attnam.lower():
+        return True
+    # Legacy whoub (spl065) reveals true plyrid while FIRPRO is active on the viewer
+    # for ALTNAM-masked targets (legacy/KYRSPEL.C:1208-1223).
+    if (
+        viewer
+        and viewer.charms[constants.CharmSlot.FIRE_PROTECTION] > 0
+        and player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0
+    ):
+        return target_lower == player.plyrid.lower()
+    return False
 
 
 def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> bool:
@@ -807,7 +822,7 @@ async def _find_player_by_name(
             continue
         if not include_self and candidate.plyrid == state.player.plyrid:
             continue
-        if _matches_player_name(target_name, candidate) and _can_see_player(
+        if _matches_player_name(target_name, candidate, viewer=state.player) and _can_see_player(
             state.player, candidate
         ):
             return candidate
@@ -824,7 +839,7 @@ async def _find_player_in_room(
         candidate = state.player_lookup(occupant_id)
         # Legacy findgp() only returns attnam matches that pass ckinvs() visibility checks.
         # (legacy/KYRUTIL.C:472-478)
-        if candidate and _matches_player_name(target_name, candidate) and _can_see_player(state.player, candidate):
+        if candidate and _matches_player_name(target_name, candidate, viewer=state.player) and _can_see_player(state.player, candidate):
             return candidate
     return None
 
@@ -1467,7 +1482,7 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
             return CommandResult(state=state, events=events)
 
         target_player = None
-        if _matches_player_name(raw, state.player):
+        if _matches_player_name(raw, state.player, viewer=state.player):
             target_player = state.player
         elif state.presence and state.player_lookup:
             occupants = await state.presence.players_in_room(state.player.gamloc)
@@ -1477,24 +1492,30 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
                 if target_player:
                     break
                 other = state.player_lookup(occupant_id)
-                if other and _matches_player_name(raw, other):
+                if other and _matches_player_name(raw, other, viewer=state.player):
                     if _can_see_player(state.player, other):
                         target_player = other
 
         if target_player:
+            reveal_true_identity = (
+                state.player.charms[constants.CharmSlot.FIRE_PROTECTION] > 0
+                and target_player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0
+            )
             if target_player.flags & constants.PlayerFlag.INVISF:
                 desc_id = "INVDES"
                 desc_text = _format_message(state, desc_id)
-            elif target_player.flags & constants.PlayerFlag.WILLOW:
+            elif not reveal_true_identity and target_player.flags & constants.PlayerFlag.WILLOW:
                 desc_id = "WILDES"
                 desc_text = _format_message(state, desc_id)
-            elif target_player.flags & constants.PlayerFlag.PEGASU:
+            elif not reveal_true_identity and target_player.flags & constants.PlayerFlag.PEGASU:
                 desc_id = "PEGDES"
                 desc_text = _format_message(state, desc_id)
-            elif target_player.flags & constants.PlayerFlag.PDRAGN:
+            elif not reveal_true_identity and target_player.flags & constants.PlayerFlag.PDRAGN:
                 desc_id = "PDRDES"
                 desc_text = _format_message(state, desc_id)
             else:
+                # Legacy spl065 reveals true identity while findgp/ckinvs targeting still applies.
+                # See legacy/KYRSPEL.C:1208-1223 and legacy/KYRCMDS.C:748-775.
                 desc_id = _player_description_message_id(target_player)
                 base_text = _format_message(state, desc_id, target_player.plyrid)
                 inventory_text = _inventory_summary_text(state, target_player, objects)

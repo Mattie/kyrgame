@@ -648,6 +648,30 @@ def test_howru_uses_target_hp_in_message(sample_player):
     assert result.context["broadcast_message_id"] == "S34M02"
 
 
+def test_whoub_reports_true_identity_without_changing_target_aliases(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(plyrid="truth", attnam="Mirror Mask", altnam="A Willowisp")
+    target.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=64,
+        target="Mirror Mask",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S65M00"
+    assert result.text == messages.messages["S65M00"] % target.plyrid
+    assert result.context["target_message_id"] == "S65M01"
+    assert result.context["broadcast_message_id"] == "S65M02"
+    assert target.altnam == "A Willowisp"
+    assert target.attnam == "Mirror Mask"
+    assert target.charms[constants.CharmSlot.ALTERNATE_NAME] == 6
+
+
 def _message_id_with_offset(base_id: str, offset: int) -> str:
     prefix, value = base_id[:-2], int(base_id[-2:])
     return f"{prefix}{value + offset:02d}"

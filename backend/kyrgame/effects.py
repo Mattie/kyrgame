@@ -166,6 +166,13 @@ class SpellEffectEngine:
                 broadcast_key="S62M01",
             )
 
+
+        if 64 in effects:
+            # Legacy spell: whoub reveals a target's true plyrid and grants short detect-identity charm (legacy/KYRSPEL.C:1208-1223).
+            effects[64].message_id = "S65M00"
+            effects[64].requires_target = True
+            effects[64].handler = self._whoub_handler()
+
         protection_spells: dict[int, tuple[dict[int, int], bool, str, str]] = {
             1: ({constants.OBJPRO: 2 * 4}, True, "SPM000", "SPM001"),  # Legacy: abbracada (legacy/KYRSPEL.C:437-441).
             8: (
@@ -608,6 +615,50 @@ class SpellEffectEngine:
                 target=target,
                 success=True,
                 effect=effect,
+            )
+
+        return _handler
+
+
+    def _whoub_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        # Legacy spl065: set FIRPRO timer and reveal true plyrid in caster message
+        # while target/room messages still use visible alternate names (legacy/KYRSPEL.C:1208-1223).
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+
+            player.charms[constants.FIRPRO] = 2 * 10
+
+            caster_text = self._format_message("S65M00", target_player.plyrid)
+            target_text = self._format_message("S65M01", player.altnam)
+            broadcast_text = self._format_message(
+                "S65M02", player.altnam, target_player.altnam
+            )
+            context = {
+                "target_message_id": "S65M01",
+                "target_text": target_text,
+                "broadcast": broadcast_text,
+                "broadcast_message_id": "S65M02",
+                "broadcast_exclude_player": target_player.plyrid,
+            }
+            if target:
+                context["target"] = target
+            return EffectResult(
+                success=True,
+                message_id="S65M00",
+                text=caster_text,
+                animation=effect.animation,
+                context=context,
             )
 
         return _handler
