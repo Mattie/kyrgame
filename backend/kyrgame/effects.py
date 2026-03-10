@@ -395,16 +395,9 @@ class SpellEffectEngine:
             target_player: Optional[models.PlayerModel],
             effect: SpellEffect,
         ) -> EffectResult:  # noqa: ARG001
-            room_text = (target or "").strip()
-            if not room_text:
-                raise TargetingError("Target room is required for goto")
-
-            try:
-                room_id = int(room_text)
-            except ValueError as exc:
-                raise TargetingError("Target room must be numeric") from exc
-
-            if room_id < 0 or room_id > 218 or room_id not in self.locations:
+            # Legacy parity: KYRSPEL.C:spl023() routes malformed/unreachable rooms
+            # through the same S23M00/S23M01 failure messaging path.
+            def _legacy_fail_result() -> EffectResult:
                 caster_text = self._format_message("S23M00")
                 broadcast_text = self._format_message("S23M01", player.altnam, self._kheshe(player))
                 return EffectResult(
@@ -418,6 +411,18 @@ class SpellEffectEngine:
                         "target": target,
                     },
                 )
+
+            room_text = (target or "").strip()
+            if not room_text:
+                raise TargetingError("Target room is required for goto")
+
+            try:
+                room_id = int(room_text)
+            except ValueError:
+                return _legacy_fail_result()
+
+            if room_id < 0 or room_id > 218 or room_id not in self.locations:
+                return _legacy_fail_result()
 
             previous_room = player.gamloc
             player.pgploc = previous_room

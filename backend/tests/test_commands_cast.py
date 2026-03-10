@@ -447,3 +447,22 @@ async def test_cast_goto_invalid_target_uses_legacy_failure_messages():
 
     assert state.player.gamloc == player.gamloc
     assert [event["message_id"] for event in result.events] == ["S23M00", "S23M01"]
+
+
+@pytest.mark.anyio
+async def test_cast_goto_non_numeric_target_uses_legacy_failure_messages():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto abc"}, state)
+
+    assert state.player.gamloc == player.gamloc
+    assert [event["message_id"] for event in result.events] == ["S23M00", "S23M01"]
