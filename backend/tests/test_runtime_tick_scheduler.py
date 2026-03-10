@@ -101,6 +101,7 @@ async def test_animation_tick_gemakr_updates_room_objects_and_broadcasts_spawn(m
     assert 44 <= spawned_room <= 168
     assert payload["spawn_source"] == "gemakr"
     assert payload["spawned_object_id"] == 2
+    assert payload["event"] == "room_objects"
     assert payload["type"] == "room_objects"
 
     with app.state.session_factory() as session:

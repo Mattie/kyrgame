@@ -250,15 +250,20 @@ async def bootstrap_app(app: FastAPI):
         text = app.state.animation_tick_callback.resolve_event_text(event)
         if not text and not event.payload:
             return
+        event_payload = dict(event.payload)
+        payload_event = event_payload.get(
+            "event",
+            event_payload.get("type", "room_message"),
+        )
         payload = {
-            "event": "room_message",
+            "event": payload_event,
             "scope": "room",
-            "type": "room_message",
+            "type": event_payload.get("type", "room_message"),
             "message_id": event.message_id,
             "text": text,
             "animation_flag": event.flag,
         }
-        payload.update(dict(event.payload))
+        payload.update(event_payload)
         await app.state.gateway.broadcast(
             event.room_id,
             app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),
