@@ -110,7 +110,7 @@ async def test_cast_consumes_memorized_spell_and_triggers_effects(monkeypatch):
     class StubEffectEngine:
         last_call = None
 
-        def __init__(self, spells, messages, clock=None, rng=None, objects=None):  # noqa: D401, ARG002
+        def __init__(self, spells, messages, clock=None, rng=None, objects=None, locations=None):  # noqa: D401, ARG002
             self.spells = {spell.id: spell for spell in spells}
             self.messages = messages
             self.effects = {}
@@ -162,7 +162,7 @@ async def test_cast_targeted_spell_resolves_player_and_calls_effect_engine(monke
     class StubEffectEngine:
         last_call = None
 
-        def __init__(self, spells, messages, clock=None, rng=None, objects=None):  # noqa: D401, ARG002
+        def __init__(self, spells, messages, clock=None, rng=None, objects=None, locations=None):  # noqa: D401, ARG002
             self.spells = {spell.id: spell for spell in spells}
             self.messages = messages
             saywhat = self.spells[50]
@@ -375,3 +375,75 @@ async def test_cast_area_damage_spells_apply_damage_and_protection():
     assert "S06M04" in message_ids
     assert target.hitpts == 20
     assert protected.hitpts == 30
+
+
+@pytest.mark.anyio
+async def test_cast_goto_moves_caster_with_standard_room_transition_events():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 1"}, state)
+
+    assert state.player.gamloc == 1
+    assert state.player.pgploc == 0
+    assert result.events[0]["message_id"] == "S23M02"
+    assert any(
+        event.get("event") == "player_enter"
+        and event.get("from") == 0
+        and event.get("to") == 1
+        for event in result.events
+    )
+    assert any(
+        event.get("event") == "location_update" and event.get("location") == 1
+        for event in result.events
+    )
+
+
+@pytest.mark.anyio
+async def test_cast_goto_emits_room_broadcast_message_payload_for_occupants():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 1"}, state)
+
+    room_messages = [event for event in result.events if event.get("message_id") == "S23M03"]
+    assert room_messages
+    assert room_messages[0]["scope"] == "nearby_room"
+    assert room_messages[0]["room_id"] == 0
+
+
+@pytest.mark.anyio
+async def test_cast_goto_invalid_target_uses_legacy_failure_messages():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 999"}, state)
+
+    assert state.player.gamloc == player.gamloc
+    assert [event["message_id"] for event in result.events] == ["S23M00", "S23M01"]
