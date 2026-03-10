@@ -71,6 +71,22 @@ def test_spell_effects_require_targets_and_resources(sample_player):
         )
 
 
+def test_see_invisibility_spells_apply_legacy_charm_timers(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+
+    sample_player.charms[constants.CharmSlot.INVISIBILITY] = 0
+    tier_two = engine.cast_spell(player=sample_player, spell_id=38, target=None, target_player=None)
+    assert sample_player.charms[constants.CharmSlot.INVISIBILITY] == 2 * 4
+    assert tier_two.message_id == "S39M00"
+
+    sample_player.charms[constants.CharmSlot.INVISIBILITY] = 0
+    tier_three = engine.cast_spell(player=sample_player, spell_id=37, target=None, target_player=None)
+    assert sample_player.charms[constants.CharmSlot.INVISIBILITY] == 2 * 8
+    assert tier_three.message_id == "S38M00"
+
+
 def test_object_effects_apply_cooldowns_and_require_targets():
     objects = fixtures.load_objects()
     messages = fixtures.load_messages()
