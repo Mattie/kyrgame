@@ -792,6 +792,9 @@ def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> b
         return True
     if not (target.flags & constants.PlayerFlag.INVISF):
         return True
+    # Legacy ckinvs() gate: invisible targets are only targetable while CINVIS is active.
+    # CINVIS is set by see-invisibility spells cadabra/iseeyou/icutwo in KYRSPEL.C.
+    # Source trace: legacy/KYRUTIL.C:90-98, legacy/KYRSPEL.C:862-873.
     return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
 
 

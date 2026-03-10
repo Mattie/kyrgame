@@ -100,8 +100,8 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 34 `hydrant` (fire protection II)【F:legacy/KYRSPEL.C†L172-L179】
 - [x] ID 35 `ibebad` (ultimate protection II)【F:legacy/KYRSPEL.C†L173-L180】
 - [x] ID 36 `icedtea` (ice storm I)【F:legacy/KYRSPEL.C†L174-L181】
-- [ ] ID 37 `icutwo` (see invisibility III)【F:legacy/KYRSPEL.C†L175-L182】
-- [ ] ID 38 `iseeyou` (see invisibility II)【F:legacy/KYRSPEL.C†L176-L183】
+- [x] ID 37 `icutwo` (see invisibility III)【F:legacy/KYRSPEL.C†L175-L182】
+- [x] ID 38 `iseeyou` (see invisibility II)【F:legacy/KYRSPEL.C†L176-L183】
 - [x] ID 39 `koolit` (cone of cold I)【F:legacy/KYRSPEL.C†L177-L184】
 - [x] ID 40 `makemyd` (object protection II)【F:legacy/KYRSPEL.C†L178-L185】
 - [ ] ID 41 `mower` (destroy ground items)【F:legacy/KYRSPEL.C†L179-L186】
