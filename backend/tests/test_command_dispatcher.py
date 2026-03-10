@@ -717,6 +717,7 @@ async def test_whisper_emits_target_and_room_events(base_state):
         ('whisper seer "keep quiet"', "NOSUCHP"),
         ("give 5 gold to seer", "GIVCRD3"),
         ("wink seer", "WINKER5"),
+        ("get ruby from seer", "GETGP1"),
     ],
 )
 async def test_targeted_commands_cannot_find_invisible_players_without_see_invis(base_state, raw_command, expected_message_id):
@@ -746,7 +747,7 @@ async def test_targeted_commands_cannot_find_invisible_players_without_see_invis
 
 
 @pytest.mark.anyio
-async def test_whisper_can_target_invisible_player_with_see_invis_charm(base_state):
+async def test_whisper_can_target_invisible_player_with_iseeyou_tier_two_charm(base_state):
     vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
     registry = commands.build_default_registry(vocabulary)
     dispatcher = commands.CommandDispatcher(registry)
@@ -763,12 +764,44 @@ async def test_whisper_can_target_invisible_player_with_see_invis_charm(base_sta
 
     base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
     base_state.player_lookup = players.get
-    base_state.player.charms[constants.CharmSlot.INVISIBILITY] = 2
+    # Legacy iseeyou (spl039) maps to CINVIS timer 2*4.
+    base_state.player.charms[constants.CharmSlot.INVISIBILITY] = 2 * 4
 
     parsed = vocabulary.parse_text('whisper seer "keep quiet"')
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
     assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)
+
+
+@pytest.mark.anyio
+async def test_icutwo_tier_three_visibility_expires_and_blocks_targeting(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={
+            "plyrid": "seer",
+            "attnam": "seer",
+            "altnam": "Seer",
+            "gamloc": base_state.player.gamloc,
+            "flags": int(base_state.player.flags | constants.PlayerFlag.INVISF),
+        }
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+    # Legacy icutwo (spl038) maps to CINVIS timer 2*8.
+    base_state.player.charms[constants.CharmSlot.INVISIBILITY] = 2 * 8
+
+    parsed = vocabulary.parse_text('whisper seer "keep quiet"')
+    visible_result = await dispatcher.dispatch_parsed(parsed, base_state)
+    assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in visible_result.events)
+
+    # Once the timer expires, ckinvs-style gating blocks all invisible targeting again.
+    base_state.player.charms[constants.CharmSlot.INVISIBILITY] = 0
+    expired_result = await dispatcher.dispatch_parsed(parsed, base_state)
+    assert expired_result.events[0]["message_id"] == "NOSUCHP"
 
 
 @pytest.mark.anyio
