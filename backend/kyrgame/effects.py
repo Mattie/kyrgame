@@ -166,6 +166,29 @@ class SpellEffectEngine:
                 broadcast_key="S62M01",
             )
 
+        if 37 in effects:
+            # Legacy spell: icutwo (see invisibility III) sets CINVIS to 2*8 ticks.
+            # Source trace: legacy/KYRSPEL.C spl038, lines 862-866.
+            effects[37].message_id = "S38M00"
+            effects[37].requires_target = False
+            effects[37].handler = self._protection_handler(
+                updates={constants.CINVIS: 2 * 8},
+                additive=False,
+                caster_key="S38M00",
+                broadcast_key="S38M01",
+            )
+
+        if 38 in effects:
+            # Legacy spell: iseeyou (see invisibility II) sets CINVIS to 2*4 ticks.
+            # Source trace: legacy/KYRSPEL.C spl039, lines 869-873.
+            effects[38].message_id = "S39M00"
+            effects[38].requires_target = False
+            effects[38].handler = self._protection_handler(
+                updates={constants.CINVIS: 2 * 4},
+                additive=False,
+                caster_key="S39M00",
+                broadcast_key="S39M01",
+            )
 
         if 64 in effects:
             # Legacy spell: whoub reveals a target's true plyrid and grants short detect-identity charm (legacy/KYRSPEL.C:1208-1223).
