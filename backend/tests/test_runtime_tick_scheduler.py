@@ -103,6 +103,8 @@ async def test_animation_tick_gemakr_updates_room_objects_and_broadcasts_spawn(m
     assert payload["spawned_object_id"] == 2
     assert payload["event"] == "room_objects"
     assert payload["type"] == "room_objects"
+    assert payload["location"] == spawned_room
+    assert payload["objects"][-1] == {"id": 2}
 
     with app.state.session_factory() as session:
         refreshed = session.query(models.Location).filter(models.Location.id == spawned_room).one()

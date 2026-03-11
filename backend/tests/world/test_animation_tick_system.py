@@ -123,6 +123,8 @@ def test_gemakr_uses_legacy_cadence_capacity_and_random_gem_every_11th_spawn():
 
     assert [event.payload["spawned_object_id"] for event in events] == [2] * 10 + [9]
     assert state.gem_counter == 0
+    assert events[0].payload["location"] == 50
+    assert events[0].payload["objects"] == [{"id": 2}]
 
     room_objects[51] = [0, 1, 2, 3]
     blocked_event = GemSpawnRoutine(

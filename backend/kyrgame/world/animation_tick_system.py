@@ -128,7 +128,8 @@ class GemSpawnRoutine:
                 message_text=self._message_formatter(self._gem_name_lookup(gem_id)),
                 payload={
                     "type": "room_objects",
-                    "objects": updated_objects,
+                    "location": room_id,
+                    "objects": [{"id": object_id} for object_id in updated_objects],
                     "spawned_object_id": gem_id,
                     "spawn_source": "gemakr",
                 },
