@@ -466,3 +466,37 @@ async def test_cast_goto_non_numeric_target_uses_legacy_failure_messages():
 
     assert state.player.gamloc == player.gamloc
     assert [event["message_id"] for event in result.events] == ["S23M00", "S23M01"]
+
+
+@pytest.mark.anyio
+async def test_cast_goto_no_room_arg_emits_objm07_and_sndutl_room_broadcast():
+    """Legacy spl023(): margc==2 (no room arg) → OBJM07 to caster + sndutl room emote.
+
+    Parity: legacy/KYRSPEL.C:696-699.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto"}, state)
+
+    # Caster location must not change.
+    assert state.player.gamloc == player.gamloc
+
+    # Caster receives OBJM07; room receives sndutl broadcast (no message_id).
+    message_ids = [event["message_id"] for event in result.events]
+    assert message_ids[0] == "OBJM07"
+    assert message_ids[1] is None
+
+    # Room event must be scoped to "room" and exclude the caster.
+    room_event = result.events[1]
+    assert room_event["scope"] == "room"
+    assert room_event.get("exclude_player") == player.plyrid
+    assert "failing at spellcasting" in room_event["text"]

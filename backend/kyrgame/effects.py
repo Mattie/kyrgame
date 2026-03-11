@@ -124,8 +124,10 @@ class SpellEffectEngine:
 
         if 22 in effects:
             # Legacy spell: goto teleports to a specific room (legacy/KYRSPEL.C:694-712).
+            # requires_target is intentionally left False so that cast-with-no-argument
+            # reaches _goto_handler, which emits the legacy OBJM07+sndutl failure path
+            # (KYRSPEL.C:696-699) instead of the generic "Something is missing" branch.
             effects[22].message_id = "S23M02"
-            effects[22].requires_target = True
             effects[22].requires_target_player = False
             effects[22].handler = self._goto_handler()
         if 33 in effects:
@@ -414,7 +416,21 @@ class SpellEffectEngine:
 
             room_text = (target or "").strip()
             if not room_text:
-                raise TargetingError("Target room is required for goto")
+                # Legacy spl023(): margc==2 (no room arg) sends OBJM07 to caster
+                # and sndutl("failing at spellcasting.") to the room
+                # (legacy/KYRSPEL.C:696-699).
+                objm07_text = self._format_message("OBJM07")
+                sndutl_text = f"*** {player.altnam} is failing at spellcasting."
+                return EffectResult(
+                    success=False,
+                    message_id="OBJM07",
+                    text=objm07_text,
+                    animation=effect.animation,
+                    context={
+                        "broadcast": sndutl_text,
+                        "broadcast_message_id": None,
+                    },
+                )
 
             try:
                 room_id = int(room_text)
