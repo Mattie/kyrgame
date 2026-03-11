@@ -291,6 +291,71 @@ describe('Navigator flow', () => {
     )
   })
 
+  it('updates world room objects when room_broadcast delivers room_objects event (gem spawn)', async () => {
+    // Location 7 starts with object id=0 (ruby). After gem spawn broadcast it should have id=1 (emerald) too.
+    const localLocations = [
+      { id: 7, brfdes: 'Edge of the forest', objlds: 'on the ground', objects: [0], gi_north: -1, gi_south: -1, gi_east: -1, gi_west: -1 },
+    ]
+
+    let responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => localLocations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    // Trigger a gem-spawn room_objects broadcast (as emitted by KYRANIM.C gem spawner)
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_objects',
+          location: 7,
+          objects: [
+            { id: 0, name: 'ruby' },
+            { id: 1, name: 'emerald' },
+          ],
+        },
+      })
+    })
+
+    // room_objects broadcast must not appear as activity text
+    await waitFor(() =>
+      expect(screen.queryByText(/^room_objects$/i)).toBeNull()
+    )
+
+    // Emerald should now be visible in the room (world state updated by broadcast)
+    await waitFor(() =>
+      expect(screen.getAllByText(/emerald/i).length).toBeGreaterThan(0)
+    )
+  })
+
   it('renders spoiler command responses with a whisper prompt', async () => {
     let responses = [
       {
