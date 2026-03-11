@@ -1500,25 +1500,25 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
                         target_player = other
 
         if target_player:
-            reveal_true_identity = (
-                state.player.charms[constants.CharmSlot.FIRE_PROTECTION] > 0
-                and target_player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0
-            )
             if target_player.flags & constants.PlayerFlag.INVISF:
                 desc_id = "INVDES"
                 desc_text = _format_message(state, desc_id)
-            elif not reveal_true_identity and target_player.flags & constants.PlayerFlag.WILLOW:
+            elif target_player.flags & constants.PlayerFlag.WILLOW:
+                # Legacy looker picks transform descriptions by target flags only.
+                # See legacy/KYRCMDS.C:755-767.
                 desc_id = "WILDES"
                 desc_text = _format_message(state, desc_id)
-            elif not reveal_true_identity and target_player.flags & constants.PlayerFlag.PEGASU:
+            elif target_player.flags & constants.PlayerFlag.PEGASU:
+                # Legacy looker picks transform descriptions by target flags only.
+                # See legacy/KYRCMDS.C:755-767.
                 desc_id = "PEGDES"
                 desc_text = _format_message(state, desc_id)
-            elif not reveal_true_identity and target_player.flags & constants.PlayerFlag.PDRAGN:
+            elif target_player.flags & constants.PlayerFlag.PDRAGN:
+                # Legacy looker picks transform descriptions by target flags only.
+                # See legacy/KYRCMDS.C:755-767.
                 desc_id = "PDRDES"
                 desc_text = _format_message(state, desc_id)
             else:
-                # Legacy spl065 reveals true identity while findgp/ckinvs targeting still applies.
-                # See legacy/KYRSPEL.C:1208-1223 and legacy/KYRCMDS.C:748-775.
                 desc_id = _player_description_message_id(target_player)
                 base_text = _format_message(state, desc_id, target_player.plyrid)
                 inventory_text = _inventory_summary_text(state, target_player, objects)
