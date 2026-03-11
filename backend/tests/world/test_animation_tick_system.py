@@ -3,6 +3,7 @@ import pytest
 from kyrgame.world.animation_tick_system import (
     AnimationTickEvent,
     AnimationTickSystem,
+    GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
 )
 
@@ -98,3 +99,41 @@ def test_animation_tick_uses_initial_state_from_persistence_for_multiplayer_boot
     assert system.state.routine_index == 4
     assert system.state.zar_counter == 11
     assert system.state.timed_flags["sesame"] == 1
+
+
+def test_gemakr_uses_legacy_cadence_capacity_and_random_gem_every_11th_spawn():
+    room_objects = {50: [], 51: []}
+    room_rolls = iter([50] * 11)
+    gem_rolls = iter([9])
+
+    routine = GemSpawnRoutine(
+        room_picker=lambda low, high: next(room_rolls),
+        gem_picker=lambda low, high: next(gem_rolls),
+        room_objects_getter=lambda room_id: room_objects.get(room_id, []),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(room_id, list(objects)),
+        gem_name_lookup=lambda gem_id: {2: "garnet", 9: "onyx"}[gem_id],
+        message_formatter=lambda gem_name: f"spawned {gem_name}",
+    )
+
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    events: list[AnimationTickEvent] = []
+    for _ in range(11):
+        room_objects[50] = []
+        events.extend(routine(state))
+
+    assert [event.payload["spawned_object_id"] for event in events] == [2] * 10 + [9]
+    assert state.gem_counter == 0
+    assert events[0].payload["location"] == 50
+    assert events[0].payload["objects"] == [{"id": 2}]
+
+    room_objects[51] = [0, 1, 2, 3]
+    blocked_event = GemSpawnRoutine(
+        room_picker=lambda low, high: 51,
+        gem_picker=lambda low, high: 5,
+        room_objects_getter=lambda room_id: room_objects.get(room_id, []),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(room_id, list(objects)),
+        gem_name_lookup=lambda gem_id: "ignored",
+        message_formatter=lambda gem_name: gem_name,
+    )(state)
+    assert blocked_event == []
+    assert room_objects[51] == [0, 1, 2, 3]

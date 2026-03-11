@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import asyncio
-from typing import Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol
+from typing import Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol, Sequence
 
 
 @dataclass(eq=True, frozen=True)
@@ -13,6 +13,7 @@ class AnimationTickEvent:
     room_id: int
     message_id: str | None = None
     message_text: str | None = None
+    payload: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -20,6 +21,7 @@ class AnimationTickResult:
     """Outputs produced by one animation-timer run."""
 
     routine_name: str
+    routine_events: list[AnimationTickEvent] = field(default_factory=list)
     timed_events: list[AnimationTickEvent] = field(default_factory=list)
 
 
@@ -36,6 +38,7 @@ class AnimationTickState:
     timed_flags: MutableMapping[str, int] = field(
         default_factory=lambda: {"sesame": 0, "chantd": 0, "rockpr": 0}
     )
+    gem_counter: int = 0
 
 
 class AnimationTickStateStore(Protocol):
@@ -64,7 +67,7 @@ class InMemoryAnimationTickPersistence:
         self._payload = dict(payload)
 
 
-RoutineHandler = Callable[[AnimationTickState], None]
+RoutineHandler = Callable[[AnimationTickState], Sequence[AnimationTickEvent] | None]
 MobUpdateHandler = Callable[[AnimationTickState], None]
 TimedFlagHandler = Callable[[AnimationTickState], AnimationTickEvent]
 MessageLookup = Callable[[str], str | None]
@@ -73,8 +76,65 @@ RoomFlagSetter = Callable[[int, str, int], None]
 EventDispatcher = Callable[[AnimationTickEvent], Awaitable[None] | None]
 
 
-def _noop_handler(_: AnimationTickState) -> None:
+def _noop_handler(_: AnimationTickState) -> Sequence[AnimationTickEvent] | None:
     return None
+
+
+class GemSpawnRoutine:
+    """Port KYRANIM.C `gemakr()` gem placement into runtime-owned world state.
+
+    Legacy reference: `gemakr()` in `legacy/KYRANIM.C` lines 429-449.
+    """
+
+    def __init__(
+        self,
+        *,
+        room_picker: Callable[[int, int], int],
+        gem_picker: Callable[[int, int], int],
+        room_objects_getter: Callable[[int], Sequence[int]],
+        room_objects_setter: Callable[[int, Sequence[int]], None],
+        gem_name_lookup: Callable[[int], str],
+        message_formatter: Callable[[str], str],
+    ) -> None:
+        self._room_picker = room_picker
+        self._gem_picker = gem_picker
+        self._room_objects_getter = room_objects_getter
+        self._room_objects_setter = room_objects_setter
+        self._gem_name_lookup = gem_name_lookup
+        self._message_formatter = message_formatter
+
+    def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
+        room_id = self._room_picker(44, 168)
+        room_objects = list(self._room_objects_getter(room_id))
+
+        if len(room_objects) >= 4:
+            return []
+
+        if state.gem_counter == 10:
+            gem_id = self._gem_picker(0, 12)
+            state.gem_counter = 0
+        else:
+            state.gem_counter += 1
+            gem_id = 2
+
+        updated_objects = [*room_objects, gem_id]
+        self._room_objects_setter(room_id, updated_objects)
+
+        return [
+            AnimationTickEvent(
+                flag="gemakr",
+                room_id=room_id,
+                message_id="GEMAPP",
+                message_text=self._message_formatter(self._gem_name_lookup(gem_id)),
+                payload={
+                    "type": "room_objects",
+                    "location": room_id,
+                    "objects": [{"id": object_id} for object_id in updated_objects],
+                    "spawned_object_id": gem_id,
+                    "spawn_source": "gemakr",
+                },
+            )
+        ]
 
 
 def _sesame_event(_: AnimationTickState) -> AnimationTickEvent:
@@ -155,7 +215,7 @@ class AnimationTickSystem:
             self.state.routine_index % len(self._ROUTINE_SEQUENCE)
         ]
         handler = self._routine_handlers[routine_name]
-        handler(self.state)
+        routine_events = list(handler(self.state) or [])
 
         timed_events = self._consume_timed_flags()
 
@@ -163,7 +223,11 @@ class AnimationTickSystem:
             self._ROUTINE_SEQUENCE
         )
         self._persist()
-        return AnimationTickResult(routine_name=routine_name, timed_events=timed_events)
+        return AnimationTickResult(
+            routine_name=routine_name,
+            routine_events=routine_events,
+            timed_events=timed_events,
+        )
 
     def _consume_timed_flags(self) -> list[AnimationTickEvent]:
         events: list[AnimationTickEvent] = []
@@ -179,6 +243,7 @@ class AnimationTickSystem:
                 "routine_index": self.state.routine_index,
                 "zar_counter": self.state.zar_counter,
                 "timed_flags": dict(self.state.timed_flags),
+                "gem_counter": self.state.gem_counter,
             }
         )
 
@@ -199,6 +264,7 @@ class AnimationTickSystem:
             routine_index=int(payload.get("routine_index", 0)),
             zar_counter=int(payload.get("zar_counter", 0)),
             timed_flags=normalized_flags,
+            gem_counter=int(payload.get("gem_counter", 0)),
         )
 
 
@@ -235,6 +301,10 @@ class AnimationTickRuntimeBridge:
     async def __call__(self) -> None:
         self._sync_flags_from_rooms()
         result = self._system.tick()
+        for event in result.routine_events:
+            maybe_awaitable = self._event_dispatcher(event)
+            if asyncio.iscoroutine(maybe_awaitable):
+                await maybe_awaitable
         for event in result.timed_events:
             self._room_flag_setter(event.room_id, event.flag, 0)
             maybe_awaitable = self._event_dispatcher(event)

@@ -1,6 +1,7 @@
 import pytest
 from fastapi import FastAPI
 
+from kyrgame import models
 from kyrgame.runtime import bootstrap_app, shutdown_app
 
 
@@ -62,5 +63,52 @@ async def test_animation_tick_callback_syncs_room_flags_and_clears_one_shots(mon
     await app.state.animation_tick_callback()
 
     assert app.state.room_scripts.yaml_engine.get_room_state(185)["sesame"] == 0
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_tick_gemakr_updates_room_objects_and_broadcasts_spawn(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+
+    app.state.animation_rng.seed(7)
+    app.state.animation_tick_system.state.routine_index = 2
+
+    with app.state.session_factory() as session:
+        location = session.query(models.Location).filter(models.Location.id == 44).one()
+        location.objects = []
+        location.nlobjs = 0
+        session.commit()
+    app.state.location_index[44] = app.state.location_index[44].model_copy(
+        update={"objects": [], "nlobjs": 0}
+    )
+
+    broadcasts: list[tuple[int, dict]] = []
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):
+        broadcasts.append((room_id, message))
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.animation_tick_callback()
+
+    spawned_room = broadcasts[0][0]
+    payload = broadcasts[0][1]["payload"]
+    assert 44 <= spawned_room <= 168
+    assert payload["spawn_source"] == "gemakr"
+    assert payload["spawned_object_id"] == 2
+    assert payload["event"] == "room_objects"
+    assert payload["type"] == "room_objects"
+    assert payload["location"] == spawned_room
+    assert payload["objects"][-1] == {"id": 2}
+
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Location).filter(models.Location.id == spawned_room).one()
+        assert refreshed.objects[-1] == 2
+        assert refreshed.nlobjs == len(refreshed.objects)
 
     await shutdown_app(app)

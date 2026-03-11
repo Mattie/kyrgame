@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import os
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from fastapi import FastAPI
 
-from . import commands, database, fixtures, loader, models, rooms
+from . import commands, database, fixtures, loader, models, repositories, rooms
 from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
@@ -25,6 +26,7 @@ from .timing.scheduler import TickScheduler
 from .world.animation_tick_system import (
     AnimationTickRuntimeBridge,
     AnimationTickSystem,
+    GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
 )
 
@@ -129,11 +131,6 @@ async def bootstrap_app(app: FastAPI):
         constants=SpellTickConstants(),
         message_lookup=lambda key: messages_catalog.get(key, ""),
     )
-    app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
-    app.state.animation_tick_system = AnimationTickSystem(
-        persistence=app.state.animation_tick_persistence
-    )
-
     default_messages = message_bundles[fixtures.DEFAULT_LOCALE]
     content_mappings = fixtures.load_content_mappings(seed_root)
 
@@ -174,6 +171,52 @@ async def bootstrap_app(app: FastAPI):
             # No database records yet, use fixtures
             app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
 
+    object_names_by_id = {obj.id: obj.name for obj in app.state.fixture_cache["objects"]}
+    app.state.animation_rng = random.Random()
+
+    def _gemakr_room_picker(low: int, high: int) -> int:
+        return app.state.animation_rng.randint(low, high)
+
+    def _gemakr_pick_gem(low: int, high: int) -> int:
+        return app.state.animation_rng.randint(low, high)
+
+    def _gemakr_get_room_objects(room_id: int) -> list[int]:
+        location = app.state.location_index.get(room_id)
+        return list(location.objects) if location else []
+
+    def _gemakr_set_room_objects(room_id: int, object_ids: list[int]) -> None:
+        location = app.state.location_index.get(room_id)
+        if location:
+            app.state.location_index[room_id] = location.model_copy(
+                update={"objects": list(object_ids), "nlobjs": len(object_ids)}
+            )
+        with session_factory() as db:
+            location_repo = repositories.LocationRepository(db)
+            location_repo.update_objects(room_id, list(object_ids))
+            db.commit()
+
+    def _gemakr_name_lookup(gem_id: int) -> str:
+        return object_names_by_id.get(gem_id, "gem")
+
+    def _gemakr_message_formatter(gem_name: str) -> str:
+        template = messages_catalog.get("GEMAPP", "")
+        return template % gem_name if "%s" in template else template
+
+    app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
+    app.state.animation_tick_system = AnimationTickSystem(
+        persistence=app.state.animation_tick_persistence,
+        routine_handlers={
+            "gemakr": GemSpawnRoutine(
+                room_picker=_gemakr_room_picker,
+                gem_picker=_gemakr_pick_gem,
+                room_objects_getter=_gemakr_get_room_objects,
+                room_objects_setter=_gemakr_set_room_objects,
+                gem_name_lookup=_gemakr_name_lookup,
+                message_formatter=_gemakr_message_formatter,
+            )
+        },
+    )
+
     command_vocabulary = commands.CommandVocabulary(
         app.state.fixture_cache["commands"], default_messages
     )
@@ -205,16 +248,22 @@ async def bootstrap_app(app: FastAPI):
 
     async def _dispatch_animation_event(event):
         text = app.state.animation_tick_callback.resolve_event_text(event)
-        if not text:
+        if not text and not event.payload:
             return
+        event_payload = dict(event.payload)
+        payload_event = event_payload.get(
+            "event",
+            event_payload.get("type", "room_message"),
+        )
         payload = {
-            "event": "room_message",
+            "event": payload_event,
             "scope": "room",
-            "type": "room_message",
+            "type": event_payload.get("type", "room_message"),
             "message_id": event.message_id,
             "text": text,
             "animation_flag": event.flag,
         }
+        payload.update(event_payload)
         await app.state.gateway.broadcast(
             event.room_id,
             app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),
@@ -284,4 +333,3 @@ def _tick_seconds_from_env() -> float:
     if tick_seconds <= 0:
         return 1.0
     return tick_seconds
-
