@@ -205,6 +205,13 @@ const formatOccupantsLine = (players: string[], currentPlayerId?: string | null)
   return `${rest.reverse().join(', ')}, and ${last} are here.`
 }
 
+const extractObjectIds = (objects: unknown): number[] => {
+  if (!Array.isArray(objects)) return []
+  return (objects as Array<{ id?: number; name?: string }>)
+    .map(obj => (typeof obj === 'object' && obj?.id !== undefined ? obj.id : null))
+    .filter((id): id is number => id !== null)
+}
+
 export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), [])
   const wsBaseUrl = useMemo(() => getWebSocketUrl(), [])
@@ -319,7 +326,27 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             }
             break // Don't display this event - the message text comes separately
           }
-          
+
+          // Handle room_objects events - update world state when gems spawn or objects change
+          // Legacy: gem spawns broadcast room_objects via room_broadcast_envelope (KYRANIM.C)
+          if (normalizedPayload.event === 'room_objects') {
+            const locationId = normalizedPayload.location
+            const newObjects = extractObjectIds(normalizedPayload.objects)
+
+            if (locationId !== undefined && worldRef.current) {
+              const targetLocationId = typeof locationId === 'number' ? locationId : parseInt(String(locationId), 10)
+              if (!isNaN(targetLocationId)) {
+                const updatedLocations = worldRef.current.locations.map(loc =>
+                  loc.id === targetLocationId ? { ...loc, objects: newObjects } : loc
+                )
+                const updatedWorld = { ...worldRef.current, locations: updatedLocations }
+                worldRef.current = updatedWorld
+                setWorld(updatedWorld)
+              }
+            }
+            break // Don't display these events in the console
+          }
+
           const summary =
             normalizedPayload.event === 'room_message' && normalizedPayload.text
               ? normalizedPayload.text
@@ -434,11 +461,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           } else if (message.payload?.event === 'room_objects') {
             // Update world state with new room objects list
             const locationId = message.payload?.location
-            const newObjects = Array.isArray(message.payload?.objects) 
-              ? (message.payload.objects as Array<{ id?: number; name?: string }>)
-                  .map(obj => typeof obj === 'object' && obj?.id !== undefined ? obj.id : null)
-                  .filter((id): id is number => id !== null)
-              : []
+            const newObjects = extractObjectIds(message.payload?.objects)
             
             if (locationId !== undefined && worldRef.current) {
               // Ensure locationId is a number for comparison (message payload may contain string or number)
