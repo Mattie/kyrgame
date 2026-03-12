@@ -127,7 +127,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 61 `weewillo` (willowisp transformation; needs timer/animation)【F:legacy/KYRSPEL.C†L199-L205】
 - [ ] ID 62 `whereami` (location finder)【F:legacy/KYRSPEL.C†L200-L204】
 - [x] ID 63 `whopper` (fire protection III)【F:legacy/KYRSPEL.C†L201-L205】
-- [ ] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
+- [x] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
 - [x] ID 65 `zapher` (lightning bolt I)【F:legacy/KYRSPEL.C†L203-L206】
 - [ ] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
 
