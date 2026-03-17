@@ -1199,6 +1199,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     move_from_room = context.pop("move_from_room", None)
     departure_broadcast = context.pop("departure_broadcast", None)
     departure_broadcast_message_id = context.pop("departure_broadcast_message_id", None)
+    departure_emote = context.pop("departure_emote", None)
 
     event = _message_event(
         "player",
@@ -1256,6 +1257,26 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                     "text": departure_broadcast,
                     "message_id": departure_broadcast_message_id,
                     "command_id": command_id,
+                }
+            )
+        if departure_emote:
+            # Mirror remvgp(gmpptr, "vanished in a red cloud") which announces
+            # departure to origin-room occupants (legacy/KYRSPEL.C:712).
+            # message_id is None: emote text is hardcoded (not a message-bank ID).
+            events.append(
+                {
+                    "scope": "nearby_room",
+                    "room_id": move_from_room,
+                    "event": "room_message",
+                    "type": "room_message",
+                    "player": state.player.plyrid,
+                    "from": move_from_room,
+                    "to": move_to_room,
+                    "direction": None,
+                    "text": departure_emote,
+                    "message_id": None,
+                    "command_id": command_id,
+                    "exclude_player": state.player.plyrid,
                 }
             )
         transition_events = _build_room_transition_events(

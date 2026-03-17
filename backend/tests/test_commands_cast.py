@@ -463,6 +463,37 @@ async def test_cast_goto_emits_room_broadcast_message_payload_for_occupants():
 
 
 @pytest.mark.anyio
+async def test_cast_goto_emits_remvgp_vanished_departure_emote_to_origin_room():
+    """On successful goto, a 'vanished in a red cloud' emote must be sent to the
+    origin room, mirroring remvgp(gmpptr, "vanished in a red cloud") from legacy.
+
+    Parity: legacy/KYRSPEL.C:712.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 1"}, state)
+
+    vanished_events = [
+        e for e in result.events
+        if e.get("scope") == "nearby_room"
+        and e.get("room_id") == 0
+        and e.get("text") == f"*** {player.altnam} has just vanished in a red cloud!"
+    ]
+    assert vanished_events, "Expected a 'vanished in a red cloud' departure emote to origin room"
+    assert vanished_events[0].get("exclude_player") == player.plyrid
+
+
+@pytest.mark.anyio
 async def test_cast_goto_invalid_target_uses_legacy_failure_messages():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
@@ -482,11 +513,17 @@ async def test_cast_goto_invalid_target_uses_legacy_failure_messages():
 
 
 @pytest.mark.anyio
-async def test_cast_goto_non_numeric_target_uses_legacy_failure_messages():
+async def test_cast_goto_non_numeric_target_uses_atoi_zero_teleports_to_room_0():
+    """Legacy spl023() uses atoi() for parsing: pure-alpha input (no numeric prefix)
+    yields 0, which is a valid room, so the caster is teleported to room 0.
+
+    Parity: legacy/KYRSPEL.C:701 — atoi("abc") == 0, 0 <= 218, goto succeeds.
+    """
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
         level=25,
         spts=25,
+        gamloc=1,
         spells=[22],
         nspells=1,
     )
@@ -496,8 +533,33 @@ async def test_cast_goto_non_numeric_target_uses_legacy_failure_messages():
 
     result = await dispatcher.dispatch("cast", {"raw": "goto abc"}, state)
 
-    assert state.player.gamloc == player.gamloc
-    assert [event["message_id"] for event in result.events] == ["S23M00", "S23M01"]
+    # atoi("abc") == 0 → teleport to room 0 succeeds
+    assert state.player.gamloc == 0
+    assert result.events[0]["message_id"] == "S23M02"
+
+
+@pytest.mark.anyio
+async def test_cast_goto_numeric_prefix_target_uses_atoi_prefix_room():
+    """Legacy atoi parsing: a numeric-prefix string like '12foo' is parsed as 12.
+
+    Parity: legacy/KYRSPEL.C:701 — atoi("12foo") == 12, teleport to room 12.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 12foo"}, state)
+
+    assert state.player.gamloc == 12
+    assert result.events[0]["message_id"] == "S23M02"
 
 
 @pytest.mark.anyio
