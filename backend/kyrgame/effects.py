@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import random
 import time
 from dataclasses import dataclass, field
@@ -462,10 +463,11 @@ class SpellEffectEngine:
                     },
                 )
 
-            try:
-                room_id = int(room_text)
-            except ValueError:
-                return _legacy_fail_result()
+            # Legacy spl023() uses atoi(margv[2]) (legacy/KYRSPEL.C:701):
+            # consume leading whitespace, then an optional sign, then digits;
+            # yield 0 if no numeric prefix exists (e.g. "abc" → 0).
+            m = re.match(r"\s*([+-]?\d+)", room_text)
+            room_id = int(m.group(1)) if m else 0
 
             if room_id < 0 or room_id > 218 or room_id not in self.locations:
                 return _legacy_fail_result()
@@ -484,6 +486,9 @@ class SpellEffectEngine:
                     "move_from_room": previous_room,
                     "departure_broadcast": self._format_message("S23M03", player.altnam),
                     "departure_broadcast_message_id": "S23M03",
+                    # Legacy remvgp(gmpptr, "vanished in a red cloud") sends this
+                    # departure emote to the origin room (legacy/KYRSPEL.C:712).
+                    "departure_emote": f"*** {player.altnam} has just vanished in a red cloud!",
                 },
             )
 
