@@ -1284,7 +1284,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
             from_room=move_from_room,
             to_room=move_to_room,
             command_id=command_id,
-            message_id=departure_broadcast_message_id,
+            message_id=_command_message_id(command_id),
             direction=None,
             arrival_text=f"*** {state.player.plyrid} has just appeared in a red cloud!",
         )

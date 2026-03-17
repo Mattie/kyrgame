@@ -594,3 +594,37 @@ async def test_cast_goto_no_room_arg_emits_objm07_and_sndutl_room_broadcast():
     assert room_event["scope"] == "room"
     assert room_event.get("exclude_player") == player.plyrid
     assert "failing at spellcasting" in room_event["text"]
+
+
+@pytest.mark.anyio
+async def test_cast_goto_transition_events_keep_cast_command_message_id():
+    """Teleport transition metadata should stay tied to the cast command.
+
+    Legacy spl023() emits S23M03 only for the departure broadcast in the origin
+    room; destination movement/update events remain part of the cast command flow.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("cast goto 1")
+    result = await dispatcher.dispatch_parsed(parsed, state)
+
+    location_update = next(
+        event for event in result.events if event.get("event") == "location_update"
+    )
+    player_enter = next(event for event in result.events if event.get("event") == "player_enter")
+    departure = next(event for event in result.events if event.get("message_id") == "S23M03")
+
+    assert location_update["message_id"] == "CMD003"
+    assert player_enter["message_id"] == "CMD003"
+    assert departure["message_id"] == "S23M03"
