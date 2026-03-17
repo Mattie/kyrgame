@@ -234,3 +234,98 @@ async def test_look_default_respects_brief_flag_and_emits_room_state():
     assert description_event["text"] == state.locations[player.gamloc].brfdes
     assert any(event.get("type") == "room_objects" for event in result.events)
     assert any(event.get("type") == "room_occupants" for event in result.events)
+
+
+@pytest.mark.anyio
+async def test_look_keeps_transform_description_when_viewer_has_whoub_charm():
+    other = _build_player(
+        plyrid="truth",
+        attnam="Mirror Mask",
+        altnam="A Willowisp",
+        nmpdes=1,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    other.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    player = _build_player(flags=0)
+    player.charms[constants.CharmSlot.FIRE_PROTECTION] = 3
+    state = _build_state(player, [other])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "Mirror Mask"}, state)
+
+    description_event = next(event for event in result.events if event.get("scope") == "player")
+    assert description_event["message_id"] == "WILDES"
+
+
+@pytest.mark.anyio
+async def test_look_whoub_charm_allows_plyrid_targeting_without_changing_description_path():
+    other = _build_player(
+        plyrid="truth",
+        attnam="Mirror Mask",
+        altnam="A Willowisp",
+        nmpdes=1,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    other.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    player = _build_player(flags=0)
+    player.charms[constants.CharmSlot.FIRE_PROTECTION] = 3
+    state = _build_state(player, [other])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "truth"}, state)
+
+    description_event = next(event for event in result.events if event.get("scope") == "player")
+    assert description_event["message_id"] == "WILDES"
+
+
+@pytest.mark.anyio
+async def test_look_whoub_reveal_still_requires_invisibility_visibility():
+    other = _build_player(
+        plyrid="ghost",
+        attnam="Ghost",
+        altnam="Ghost Alt",
+        flags=int(constants.PlayerFlag.INVISF),
+        nmpdes=1,
+    )
+    player = _build_player(flags=0)
+    player.charms[constants.CharmSlot.FIRE_PROTECTION] = 3
+    state = _build_state(player, [other])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "Ghost"}, state)
+
+    description_event = next(
+        event for event in result.events if event.get("type") == "location_description"
+    )
+    assert description_event["message_id"] == "KRD000"
+
+
+@pytest.mark.anyio
+async def test_look_whoub_reveal_expires_when_fire_protection_timer_ends():
+    other = _build_player(
+        plyrid="truth",
+        attnam="Mirror Mask",
+        altnam="A Willowisp",
+        nmpdes=1,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    other.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    player = _build_player(flags=0)
+    state = _build_state(player, [other])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    state.player.charms[constants.CharmSlot.FIRE_PROTECTION] = 1
+    reveal_result = await dispatcher.dispatch("look", {"raw": "truth"}, state)
+    reveal_message_ids = {event.get("message_id") for event in reveal_result.events}
+    assert "WILDES" in reveal_message_ids
+
+    state.player.charms[constants.CharmSlot.FIRE_PROTECTION] = 0
+    masked_result = await dispatcher.dispatch("look", {"raw": "truth"}, state)
+    description_event = next(
+        event for event in masked_result.events if event.get("type") == "location_description"
+    )
+    assert description_event["message_id"] == "KRD000"

@@ -100,8 +100,8 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 34 `hydrant` (fire protection II)【F:legacy/KYRSPEL.C†L172-L179】
 - [x] ID 35 `ibebad` (ultimate protection II)【F:legacy/KYRSPEL.C†L173-L180】
 - [x] ID 36 `icedtea` (ice storm I)【F:legacy/KYRSPEL.C†L174-L181】
-- [ ] ID 37 `icutwo` (see invisibility III)【F:legacy/KYRSPEL.C†L175-L182】
-- [ ] ID 38 `iseeyou` (see invisibility II)【F:legacy/KYRSPEL.C†L176-L183】
+- [x] ID 37 `icutwo` (see invisibility III)【F:legacy/KYRSPEL.C†L175-L182】
+- [x] ID 38 `iseeyou` (see invisibility II)【F:legacy/KYRSPEL.C†L176-L183】
 - [x] ID 39 `koolit` (cone of cold I)【F:legacy/KYRSPEL.C†L177-L184】
 - [x] ID 40 `makemyd` (object protection II)【F:legacy/KYRSPEL.C†L178-L185】
 - [ ] ID 41 `mower` (destroy ground items)【F:legacy/KYRSPEL.C†L179-L186】
@@ -127,7 +127,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [ ] ID 61 `weewillo` (willowisp transformation; needs timer/animation)【F:legacy/KYRSPEL.C†L199-L205】
 - [ ] ID 62 `whereami` (location finder)【F:legacy/KYRSPEL.C†L200-L204】
 - [x] ID 63 `whopper` (fire protection III)【F:legacy/KYRSPEL.C†L201-L205】
-- [ ] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
+- [x] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
 - [x] ID 65 `zapher` (lightning bolt I)【F:legacy/KYRSPEL.C†L203-L206】
 - [ ] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
 

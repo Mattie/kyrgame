@@ -71,6 +71,22 @@ def test_spell_effects_require_targets_and_resources(sample_player):
         )
 
 
+def test_see_invisibility_spells_apply_legacy_charm_timers(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+
+    sample_player.charms[constants.CharmSlot.INVISIBILITY] = 0
+    tier_two = engine.cast_spell(player=sample_player, spell_id=38, target=None, target_player=None)
+    assert sample_player.charms[constants.CharmSlot.INVISIBILITY] == 2 * 4
+    assert tier_two.message_id == "S39M00"
+
+    sample_player.charms[constants.CharmSlot.INVISIBILITY] = 0
+    tier_three = engine.cast_spell(player=sample_player, spell_id=37, target=None, target_player=None)
+    assert sample_player.charms[constants.CharmSlot.INVISIBILITY] == 2 * 8
+    assert tier_three.message_id == "S38M00"
+
+
 def test_object_effects_apply_cooldowns_and_require_targets():
     objects = fixtures.load_objects()
     messages = fixtures.load_messages()
@@ -679,6 +695,30 @@ def test_howru_uses_target_hp_in_message(sample_player):
     assert result.text == expected_text
     assert result.context["target_message_id"] == "S34M01"
     assert result.context["broadcast_message_id"] == "S34M02"
+
+
+def test_whoub_reports_true_identity_without_changing_target_aliases(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(plyrid="truth", attnam="Mirror Mask", altnam="A Willowisp")
+    target.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=64,
+        target="Mirror Mask",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S65M00"
+    assert result.text == messages.messages["S65M00"] % target.plyrid
+    assert result.context["target_message_id"] == "S65M01"
+    assert result.context["broadcast_message_id"] == "S65M02"
+    assert target.altnam == "A Willowisp"
+    assert target.attnam == "Mirror Mask"
+    assert target.charms[constants.CharmSlot.ALTERNATE_NAME] == 6
 
 
 def _message_id_with_offset(base_id: str, offset: int) -> str:

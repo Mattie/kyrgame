@@ -409,6 +409,38 @@ async def test_cast_goto_moves_caster_with_standard_room_transition_events():
 
 
 @pytest.mark.anyio
+async def test_cast_whoub_reveals_target_true_identity():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[64],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="truth",
+        attnam="Mirror Mask",
+        altnam="A Willowisp",
+        gamloc=player.gamloc,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    target.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    state = _build_state(player)
+    state.presence = TrackingPresence({player.plyrid, target.plyrid})
+    state.player_lookup = lambda pid: target if pid == target.plyrid else player
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "whoub Mirror Mask"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["S65M00", "S65M01", "S65M02"]
+    assert "truth" in result.events[0]["text"]
+    assert result.events[1]["player"] == target.plyrid
+    assert result.events[2]["exclude_player"] == target.plyrid
+
+
+@pytest.mark.anyio
 async def test_cast_goto_emits_room_broadcast_message_payload_for_occupants():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
