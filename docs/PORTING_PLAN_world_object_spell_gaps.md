@@ -85,7 +85,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 19 `frozenu` (ice ball I)【F:legacy/KYRSPEL.C†L157-L164】
 - [x] ID 20 `frythes` (firebolt III)【F:legacy/KYRSPEL.C†L158-L165】
 - [x] ID 21 `gotcha` (lightning bolt II)【F:legacy/KYRSPEL.C†L159-L166】
-- [ ] ID 22 `goto` (teleport specific)【F:legacy/KYRSPEL.C†L160-L167】
+- [x] ID 22 `goto` (teleport specific)【F:legacy/KYRSPEL.C†L160-L167】
 - [ ] ID 23 `gringri` (pseudo-dragon form)【F:legacy/KYRSPEL.C†L161-L168】
 - [x] ID 24 `handsof` (object protection I)【F:legacy/KYRSPEL.C†L162-L169】
 - [x] ID 25 `heater` (ice protection II)【F:legacy/KYRSPEL.C†L163-L170】

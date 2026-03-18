@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import random
 import time
 from dataclasses import dataclass, field
@@ -45,6 +46,7 @@ class SpellEffect:
     cost: int
     cooldown: float
     requires_target: bool
+    requires_target_player: bool | None = None
     animation: Optional[str] = None
     message_id: Optional[str] = None
     handler: Optional[
@@ -63,12 +65,14 @@ class SpellEffectEngine:
         clock: Callable[[], float] | None = None,
         rng: random.Random | None = None,
         objects: Iterable[models.GameObjectModel] | None = None,
+        locations: Iterable[models.LocationModel] | None = None,
     ):
         self.spells = {spell.id: spell for spell in spells}
         self.messages = messages
         self.clock = clock or time.monotonic
         self.rng = rng or random.Random()
         self.objects = {obj.id: obj for obj in objects} if objects else {}
+        self.locations = {location.id: location for location in locations} if locations else {}
         self.cooldowns: Dict[str, Dict[int, float]] = {}
         self.effects: Dict[int, SpellEffect] = self._build_effects()
 
@@ -117,6 +121,16 @@ class SpellEffectEngine:
                 success_broadcast_key="S13M05",
             )
 
+
+
+        if 22 in effects:
+            # Legacy spell: goto teleports to a specific room (legacy/KYRSPEL.C:694-712).
+            # requires_target is intentionally left False so that cast-with-no-argument
+            # reaches _goto_handler, which emits the legacy OBJM07+sndutl failure path
+            # (KYRSPEL.C:696-699) instead of the generic "Something is missing" branch.
+            effects[22].message_id = "S23M02"
+            effects[22].requires_target_player = False
+            effects[22].handler = self._goto_handler()
         if 33 in effects:
             # Legacy spell: howru reports target HP (legacy/KYRSPEL.C:815-824).
             effects[33].message_id = "S34M00"
@@ -340,7 +354,8 @@ class SpellEffectEngine:
 
         if effect.requires_target and not target:
             raise TargetingError("This spell requires a target")
-        if effect.handler and effect.requires_target and target_player is None:
+        needs_target_player = effect.requires_target if effect.requires_target_player is None else effect.requires_target_player
+        if effect.handler and needs_target_player and target_player is None:
             raise TargetingError("Target player is required for this spell")
 
         if apply_cost and player.spts < effect.cost:
@@ -394,6 +409,86 @@ class SpellEffectEngine:
                     if "%s" in broadcast_text
                     else broadcast_text,
                     "target": target,
+                },
+            )
+
+        return _handler
+
+
+
+    def _goto_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            # Legacy parity: KYRSPEL.C:spl023() routes malformed/unreachable rooms
+            # through the same S23M00/S23M01 failure messaging path.
+            def _legacy_fail_result() -> EffectResult:
+                caster_text = self._format_message("S23M00")
+                broadcast_text = self._format_message("S23M01", player.altnam, self._kheshe(player))
+                return EffectResult(
+                    success=False,
+                    message_id="S23M00",
+                    text=caster_text,
+                    animation=effect.animation,
+                    context={
+                        "broadcast": broadcast_text,
+                        "broadcast_message_id": "S23M01",
+                        "target": target,
+                    },
+                )
+
+            room_text = (target or "").strip()
+            if not room_text:
+                # Legacy spl023(): margc==2 (no room arg) sends OBJM07 to caster
+                # and sndutl("failing at spellcasting.") to the room
+                # (legacy/KYRSPEL.C:696-699).
+                objm07_text = self._format_message("OBJM07")
+                sndutl_text = f"*** {player.altnam} is failing at spellcasting."
+                return EffectResult(
+                    success=False,
+                    message_id="OBJM07",
+                    text=objm07_text,
+                    animation=effect.animation,
+                    context={
+                        "broadcast": sndutl_text,
+                        "broadcast_message_id": None,
+                    },
+                )
+
+            # Legacy spl023() uses atoi(margv[2]) (legacy/KYRSPEL.C:701):
+            # consume leading whitespace, then an optional sign, then digits;
+            # yield 0 if no numeric prefix exists (e.g. "abc" → 0).
+            m = re.match(r"\s*([+-]?\d+)", room_text)
+            room_id = int(m.group(1)) if m else 0
+
+            if room_id < 0 or room_id > 218 or room_id not in self.locations:
+                return _legacy_fail_result()
+
+            previous_room = player.gamloc
+            player.pgploc = previous_room
+            player.gamloc = room_id
+            return EffectResult(
+                success=True,
+                message_id="S23M02",
+                text=self._format_message("S23M02"),
+                animation=effect.animation,
+                context={
+                    "target": target,
+                    "move_to_room": room_id,
+                    "move_from_room": previous_room,
+                    "departure_broadcast": self._format_message("S23M03", player.altnam),
+                    "departure_broadcast_message_id": "S23M03",
+                    # Legacy remvgp(gmpptr, "vanished in a red cloud") sends this
+                    # departure emote to the origin room (legacy/KYRSPEL.C:712).
+                    "departure_emote": f"*** {player.altnam} has just vanished in a red cloud!",
                 },
             )
 

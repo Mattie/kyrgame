@@ -110,7 +110,7 @@ async def test_cast_consumes_memorized_spell_and_triggers_effects(monkeypatch):
     class StubEffectEngine:
         last_call = None
 
-        def __init__(self, spells, messages, clock=None, rng=None, objects=None):  # noqa: D401, ARG002
+        def __init__(self, spells, messages, clock=None, rng=None, objects=None, locations=None):  # noqa: D401, ARG002
             self.spells = {spell.id: spell for spell in spells}
             self.messages = messages
             self.effects = {}
@@ -162,7 +162,7 @@ async def test_cast_targeted_spell_resolves_player_and_calls_effect_engine(monke
     class StubEffectEngine:
         last_call = None
 
-        def __init__(self, spells, messages, clock=None, rng=None, objects=None):  # noqa: D401, ARG002
+        def __init__(self, spells, messages, clock=None, rng=None, objects=None, locations=None):  # noqa: D401, ARG002
             self.spells = {spell.id: spell for spell in spells}
             self.messages = messages
             saywhat = self.spells[50]
@@ -378,6 +378,37 @@ async def test_cast_area_damage_spells_apply_damage_and_protection():
 
 
 @pytest.mark.anyio
+async def test_cast_goto_moves_caster_with_standard_room_transition_events():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 1"}, state)
+
+    assert state.player.gamloc == 1
+    assert state.player.pgploc == 0
+    assert result.events[0]["message_id"] == "S23M02"
+    assert any(
+        event.get("event") == "player_enter"
+        and event.get("from") == 0
+        and event.get("to") == 1
+        for event in result.events
+    )
+    assert any(
+        event.get("event") == "location_update" and event.get("location") == 1
+        for event in result.events
+    )
+
+
+@pytest.mark.anyio
 async def test_cast_whoub_reveals_target_true_identity():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
@@ -407,3 +438,193 @@ async def test_cast_whoub_reveals_target_true_identity():
     assert "truth" in result.events[0]["text"]
     assert result.events[1]["player"] == target.plyrid
     assert result.events[2]["exclude_player"] == target.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_goto_emits_room_broadcast_message_payload_for_occupants():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 1"}, state)
+
+    room_messages = [event for event in result.events if event.get("message_id") == "S23M03"]
+    assert room_messages
+    assert room_messages[0]["scope"] == "nearby_room"
+    assert room_messages[0]["room_id"] == 0
+
+
+@pytest.mark.anyio
+async def test_cast_goto_emits_remvgp_vanished_departure_emote_to_origin_room():
+    """On successful goto, a 'vanished in a red cloud' emote must be sent to the
+    origin room, mirroring remvgp(gmpptr, "vanished in a red cloud") from legacy.
+
+    Parity: legacy/KYRSPEL.C:712.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 1"}, state)
+
+    vanished_events = [
+        e for e in result.events
+        if e.get("scope") == "nearby_room"
+        and e.get("room_id") == 0
+        and e.get("text") == f"*** {player.altnam} has just vanished in a red cloud!"
+    ]
+    assert vanished_events, "Expected a 'vanished in a red cloud' departure emote to origin room"
+    assert vanished_events[0].get("exclude_player") == player.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_goto_invalid_target_uses_legacy_failure_messages():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 999"}, state)
+
+    assert state.player.gamloc == player.gamloc
+    assert [event["message_id"] for event in result.events] == ["S23M00", "S23M01"]
+
+
+@pytest.mark.anyio
+async def test_cast_goto_non_numeric_target_uses_atoi_zero_teleports_to_room_0():
+    """Legacy spl023() uses atoi() for parsing: pure-alpha input (no numeric prefix)
+    yields 0, which is a valid room, so the caster is teleported to room 0.
+
+    Parity: legacy/KYRSPEL.C:701 — atoi("abc") == 0, 0 <= 218, goto succeeds.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=1,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto abc"}, state)
+
+    # atoi("abc") == 0 → teleport to room 0 succeeds
+    assert state.player.gamloc == 0
+    assert result.events[0]["message_id"] == "S23M02"
+
+
+@pytest.mark.anyio
+async def test_cast_goto_numeric_prefix_target_uses_atoi_prefix_room():
+    """Legacy atoi parsing: a numeric-prefix string like '12foo' is parsed as 12.
+
+    Parity: legacy/KYRSPEL.C:701 — atoi("12foo") == 12, teleport to room 12.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto 12foo"}, state)
+
+    assert state.player.gamloc == 12
+    assert result.events[0]["message_id"] == "S23M02"
+
+
+@pytest.mark.anyio
+async def test_cast_goto_no_room_arg_emits_objm07_and_sndutl_room_broadcast():
+    """Legacy spl023(): margc==2 (no room arg) → OBJM07 to caster + sndutl room emote.
+
+    Parity: legacy/KYRSPEL.C:696-699.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "goto"}, state)
+
+    # Caster location must not change.
+    assert state.player.gamloc == player.gamloc
+
+    # Caster receives OBJM07; room receives sndutl broadcast (no message_id).
+    message_ids = [event["message_id"] for event in result.events]
+    assert message_ids[0] == "OBJM07"
+    assert message_ids[1] is None
+
+    # Room event must be scoped to "room" and exclude the caster.
+    room_event = result.events[1]
+    assert room_event["scope"] == "room"
+    assert room_event.get("exclude_player") == player.plyrid
+    assert "failing at spellcasting" in room_event["text"]
+
+
+@pytest.mark.anyio
+async def test_cast_goto_transition_events_keep_cast_command_message_id():
+    """Teleport transition metadata should stay tied to the cast command.
+
+    Legacy spl023() emits S23M03 only for the departure broadcast in the origin
+    room; destination movement/update events remain part of the cast command flow.
+    """
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=0,
+        spells=[22],
+        nspells=1,
+    )
+    state = _build_state(player)
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    parsed = vocabulary.parse_text("cast goto 1")
+    result = await dispatcher.dispatch_parsed(parsed, state)
+
+    location_update = next(
+        event for event in result.events if event.get("event") == "location_update"
+    )
+    player_enter = next(event for event in result.events if event.get("event") == "player_enter")
+    departure = next(event for event in result.events if event.get("message_id") == "S23M03")
+
+    assert location_update["message_id"] == "CMD003"
+    assert player_enter["message_id"] == "CMD003"
+    assert departure["message_id"] == "S23M03"

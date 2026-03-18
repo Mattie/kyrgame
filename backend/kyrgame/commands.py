@@ -292,6 +292,72 @@ def _arrival_text(direction: str) -> str:
     return "arrived"
 
 
+def _build_room_transition_events(
+    state: GameState,
+    *,
+    from_room: int,
+    to_room: int,
+    command_id: int | None,
+    message_id: str | None,
+    direction: str | None,
+    arrival_text: str,
+) -> list[dict]:
+    destination = state.locations[to_room]
+    description_id, long_description = _location_description(state, destination)
+
+    return [
+        {
+            "scope": "room",
+            "event": "player_enter",
+            "type": "player_moved",
+            "player": state.player.plyrid,
+            "from": from_room,
+            "to": destination.id,
+            "description": destination.brfdes,
+            "command_id": command_id,
+            "message_id": message_id,
+        },
+        {
+            "scope": "room",
+            "event": "room_message",
+            "type": "room_message",
+            "player": state.player.plyrid,
+            "from": from_room,
+            "to": destination.id,
+            "direction": direction,
+            "text": arrival_text,
+            "message_id": None,
+            "command_id": command_id,
+        },
+        {
+            "scope": "player",
+            "event": "location_update",
+            "type": "location_update",
+            "location": destination.id,
+            "description": destination.brfdes,
+            "description_id": description_id,
+            "long_description": long_description,
+            "command_id": command_id,
+            "message_id": message_id,
+        },
+        {
+            "scope": "player",
+            "event": "location_description",
+            "type": "location_description",
+            "location": destination.id,
+            "message_id": description_id,
+            "text": long_description or destination.brfdes,
+        },
+        # Mirror locobjs call in legacy entrgp to describe visible room objects on entry.【F:legacy/KYRUTIL.C†L248-L266】
+        _room_objects_event(
+            destination,
+            state.objects or {},
+            command_id,
+            message_id,
+        ),
+    ]
+
+
 def _handle_move(state: GameState, args: dict) -> CommandResult:
     direction = args.get("direction")
     if direction not in _DIRECTION_FIELDS:
@@ -299,7 +365,6 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     command_id = args.get("command_id")
     message_id = args.get("message_id") or _command_message_id(command_id)
-    objects = state.objects or {}
     current = state.locations[state.player.gamloc]
     target_id = getattr(current, _DIRECTION_FIELDS[direction])
     if target_id == -1 or target_id not in state.locations:
@@ -309,66 +374,22 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     state.player.pgploc = state.player.gamloc
     state.player.gamloc = target_id
-    destination = state.locations[target_id]
 
     # Mirrors movutl/entrgp in legacy/KYRCMDS.C and KYRUTIL.C for movement flow.【F:legacy/KYRCMDS.C†L328-L366】【F:legacy/KYRUTIL.C†L236-L255】
-    description_id, long_description = _location_description(state, destination)
     arrival_phrase = _arrival_text(direction)
     arrival_text = f"*** {state.player.plyrid} has just {arrival_phrase}!"
 
     return CommandResult(
         state=state,
-        events=[
-            {
-                "scope": "room",
-                "event": "player_enter",
-                "type": "player_moved",
-                "player": state.player.plyrid,
-                "from": current.id,
-                "to": destination.id,
-                "description": destination.brfdes,
-                "command_id": command_id,
-                "message_id": message_id,
-            },
-            {
-                "scope": "room",
-                "event": "room_message",
-                "type": "room_message",
-                "player": state.player.plyrid,
-                "from": current.id,
-                "to": destination.id,
-                "direction": direction,
-                "text": arrival_text,
-                "message_id": None,
-                "command_id": command_id,
-            },
-            {
-                "scope": "player",
-                "event": "location_update",
-                "type": "location_update",
-                "location": destination.id,
-                "description": destination.brfdes,
-                "description_id": description_id,
-                "long_description": long_description,
-                "command_id": command_id,
-                "message_id": message_id,
-            },
-            {
-                "scope": "player",
-                "event": "location_description",
-                "type": "location_description",
-                "location": destination.id,
-                "message_id": description_id,
-                "text": long_description or destination.brfdes,
-            },
-            # Mirror locobjs call in legacy entrgp to describe visible room objects on entry.【F:legacy/KYRUTIL.C†L248-L266】
-            _room_objects_event(
-                destination,
-                objects,
-                command_id,
-                message_id,
-            ),
-        ],
+        events=_build_room_transition_events(
+            state,
+            from_room=current.id,
+            to_room=target_id,
+            command_id=command_id,
+            message_id=message_id,
+            direction=direction,
+            arrival_text=arrival_text,
+        ),
     )
 
 
@@ -1121,6 +1142,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
         messages=messages,
         rng=state.rng,
         objects=state.objects.values() if state.objects else None,
+        locations=state.locations.values(),
     )
     effect = effect_engine.effects.get(spell.id)
 
@@ -1147,7 +1169,14 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
         )
 
     target_player = None
-    if effect and effect.requires_target and target:
+    requires_target_player = False
+    if effect:
+        requires_target_player = (
+            effect.requires_target
+            if effect.requires_target_player is None
+            else effect.requires_target_player
+        )
+    if effect and requires_target_player and target:
         target_player = await _find_player_by_name(state, target)
         if not target_player:
             return CommandResult(
@@ -1166,6 +1195,11 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     target_text = context.pop("target_text", None)
     target_message_id = context.pop("target_message_id", None)
     area_damage = context.pop("area_damage", None)
+    move_to_room = context.pop("move_to_room", None)
+    move_from_room = context.pop("move_from_room", None)
+    departure_broadcast = context.pop("departure_broadcast", None)
+    departure_broadcast_message_id = context.pop("departure_broadcast_message_id", None)
+    departure_emote = context.pop("departure_emote", None)
 
     event = _message_event(
         "player",
@@ -1205,6 +1239,56 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
         )
     if area_damage:
         await _apply_area_damage(state, command_id, area_damage, events)
+
+    if move_to_room is not None and move_from_room is not None:
+        # Legacy goto teleports through remvgp/entrgp so movement side effects
+        # follow the standard room transition pipeline (legacy/KYRSPEL.C:709-711).
+        if departure_broadcast:
+            events.append(
+                {
+                    "scope": "nearby_room",
+                    "room_id": move_from_room,
+                    "event": "room_message",
+                    "type": "room_message",
+                    "player": state.player.plyrid,
+                    "from": move_from_room,
+                    "to": move_to_room,
+                    "direction": None,
+                    "text": departure_broadcast,
+                    "message_id": departure_broadcast_message_id,
+                    "command_id": command_id,
+                }
+            )
+        if departure_emote:
+            # Mirror remvgp(gmpptr, "vanished in a red cloud") which announces
+            # departure to origin-room occupants (legacy/KYRSPEL.C:712).
+            # message_id is None: emote text is hardcoded (not a message-bank ID).
+            events.append(
+                {
+                    "scope": "nearby_room",
+                    "room_id": move_from_room,
+                    "event": "room_message",
+                    "type": "room_message",
+                    "player": state.player.plyrid,
+                    "from": move_from_room,
+                    "to": move_to_room,
+                    "direction": None,
+                    "text": departure_emote,
+                    "message_id": None,
+                    "command_id": command_id,
+                    "exclude_player": state.player.plyrid,
+                }
+            )
+        transition_events = _build_room_transition_events(
+            state,
+            from_room=move_from_room,
+            to_room=move_to_room,
+            command_id=command_id,
+            message_id=_command_message_id(command_id),
+            direction=None,
+            arrival_text=f"*** {state.player.plyrid} has just appeared in a red cloud!",
+        )
+        events.extend(transition_events)
 
     _persist_player_state(state, state.player)
     if target_player and target_player is not state.player:

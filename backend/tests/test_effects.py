@@ -213,6 +213,39 @@ def test_transformation_spells_toggle_player_flags(sample_player):
     assert constants.PlayerFlag.WILLOW & sample_player.flags
 
 
+
+
+def test_goto_spell_moves_player_and_applies_legacy_room_validation(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    engine = SpellEffectEngine(spells=spells, messages=messages, locations=locations)
+
+    sample_player.gamloc = 0
+    sample_player.pgploc = 0
+
+    success = engine.cast_spell(
+        player=sample_player,
+        spell_id=22,
+        target="1",
+        target_player=None,
+    )
+    assert success.message_id == "S23M02"
+    assert sample_player.pgploc == 0
+    assert sample_player.gamloc == 1
+    assert success.context["move_from_room"] == 0
+    assert success.context["move_to_room"] == 1
+
+    fresh_engine = SpellEffectEngine(spells=spells, messages=messages, locations=locations)
+    fail = fresh_engine.cast_spell(
+        player=sample_player,
+        spell_id=22,
+        target="999",
+        target_player=None,
+    )
+    assert fail.success is False
+    assert fail.message_id == "S23M00"
+
 def test_forget_spells_apply_spellbook_effects(sample_player):
     messages = fixtures.load_messages()
     spells = fixtures.load_spells()
