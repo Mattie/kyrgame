@@ -574,9 +574,11 @@ export const AdminControls = () => {
                         checked={grantAllSpells}
                         onChange={(event) => setGrantAllSpells(event.target.checked)}
                       />
-                      Grant all spells
+                      Grant all spells + max SP
                     </label>
-                    <p className="field-hint">Adds every spell to the target spellbook for testing.</p>
+                    <p className="field-hint">
+                      Adds every spell and bumps the player to max level with max spell points for testing.
+                    </p>
                   </div>
                 )}
               </fieldset>

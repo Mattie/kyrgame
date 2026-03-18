@@ -344,8 +344,12 @@ def _apply_player_admin_update(
         data["pgploc"] = updates.pgploc
 
     level = updates.level if updates.level is not None else data["level"]
+    if updates.grant_all_spells:
+        # Legacy: kyraedit level edits clamp to 25 and reset HP/SP to level maxima
+        # (KYRSYSP.C EDT002 @ 129-146). Admin grant-all uses the same test-friendly ceiling.
+        level = constants.MAX_PLAYER_LEVEL
     data["level"] = level
-    if updates.level is not None:
+    if updates.level is not None or updates.grant_all_spells:
         # Legacy: kyraedit EDT002 sets nmpdes from level when editing players (KYRSYSP.C 129-146).
         data["nmpdes"] = constants.level_to_nmpdes(level)
     max_hitpoints, max_spellpoints = _player_level_caps(level)
@@ -359,6 +363,12 @@ def _apply_player_admin_update(
         data["spts"] = updates.spts
     spts_cap = max_spellpoints if updates.cap_spts is None else min(max_spellpoints, updates.cap_spts)
     data["spts"] = max(0, min(data["spts"], spts_cap))
+
+    if updates.grant_all_spells:
+        # Legacy: level editing in kyraedit gives full HP/SP for the new level
+        # (KYRSYSP.C EDT002 @ 145-146).
+        data["hitpts"] = max_hitpoints
+        data["spts"] = max_spellpoints
 
     if updates.gold is not None:
         data["gold"] = updates.gold

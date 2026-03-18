@@ -33,7 +33,7 @@
 - [x] Ported `gemakr()` parity into animation services with legacy forest-room targeting (`44..168`), `<4` room-object capacity gating, deterministic/random gem cadence (`garnet` default with every 11th spawn randomized), persisted gem cadence state, and room broadcast payload updates for multiplayer clients (including `room_objects` event/type envelope parity plus `location` + object `{id}` entries for navigator refresh handling).
 - [x] Bridged animation one-shot flags from room runtime state into scheduled animation broadcasts so legacy fade/reset messages (e.g., WALM05) trigger and clear like `KYRANIM.C` globals.
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
-- [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization. *(Admin panel now includes a grant-all-spells toggle for testing spellbook ownership updates.)*
+- [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization. *(Admin panel now includes a grant-all-spells admin toggle that also sets max level and max spell points for spell-testing workflows.)*
 - [x] Preserve non-editable player flags when applying admin editor updates to mirror `KYRSYSP.C` flag handling.
 - [x] Ensure LOOKER4 room broadcasts exclude the target player, mirroring legacy `sndbt2` behavior.
 - [x] Updated msgutl2 room scripts (rooms 34/35/36/182) to broadcast to other occupants only, matching legacy exclusion behavior.

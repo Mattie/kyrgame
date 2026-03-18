@@ -448,3 +448,5 @@ async def test_admin_player_patch_grants_all_spells(monkeypatch):
             assert updated["offspls"] == expected_off
             assert updated["defspls"] == expected_def
             assert updated["othspls"] == expected_oth
+            assert updated["level"] == 25
+            assert updated["spts"] == 50

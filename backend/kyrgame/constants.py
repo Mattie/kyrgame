@@ -10,6 +10,7 @@ ALSSIZ = 10  # alias length
 UIDSIZ = 25  # user id length (host constant, sized to legacy buffer)
 MXPOBS = 6   # maximum objects a player can hold
 MAXSPL = 10  # maximum memorized spells per player
+MAX_PLAYER_LEVEL = 25  # Legacy kyraedit level editor bounds (KYRSYSP.C EDT002 @ 129-146)
 NCHARM = 6   # charm timer slots
 BIRTHSTONE_SLOTS = 4  # birthstones tracked per player
 NGSPLS = 67  # number of spells defined
