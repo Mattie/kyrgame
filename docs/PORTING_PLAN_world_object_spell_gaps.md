@@ -106,7 +106,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 40 `makemyd` (object protection II)【F:legacy/KYRSPEL.C†L178-L185】
 - [ ] ID 41 `mower` (destroy ground items)【F:legacy/KYRSPEL.C†L179-L186】
 - [ ] ID 42 `noouch` (heal I)【F:legacy/KYRSPEL.C†L180-L187】
-- [ ] ID 43 `nosey` (read memorized spells)【F:legacy/KYRSPEL.C†L181-L188】
+- [x] ID 43 `nosey` (read memorized spells)【F:legacy/KYRSPEL.C†L181-L188】
 - [ ] ID 44 `peekabo` (invisibility II)【F:legacy/KYRSPEL.C†L182-L189】
 - [ ] ID 45 `peepint` (scry someone)【F:legacy/KYRSPEL.C†L183-L190】
 - [ ] ID 46 `pickpoc` (steal item)【F:legacy/KYRSPEL.C†L184-L191】
@@ -125,7 +125,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 59 `tinting` (lightning protection II)【F:legacy/KYRSPEL.C†L197-L204】
 - [x] ID 60 `toastem` (fireball III)【F:legacy/KYRSPEL.C†L198-L205】
 - [ ] ID 61 `weewillo` (willowisp transformation; needs timer/animation)【F:legacy/KYRSPEL.C†L199-L205】
-- [ ] ID 62 `whereami` (location finder)【F:legacy/KYRSPEL.C†L200-L204】
+- [x] ID 62 `whereami` (location finder)【F:legacy/KYRSPEL.C†L200-L204】
 - [x] ID 63 `whopper` (fire protection III)【F:legacy/KYRSPEL.C†L201-L205】
 - [x] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
 - [x] ID 65 `zapher` (lightning bolt I)【F:legacy/KYRSPEL.C†L203-L206】

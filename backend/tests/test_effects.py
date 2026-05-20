@@ -721,6 +721,46 @@ def test_whoub_reports_true_identity_without_changing_target_aliases(sample_play
     assert target.charms[constants.CharmSlot.ALTERNATE_NAME] == 6
 
 
+def test_nosey_reports_targets_memorized_spells_with_legacy_list_format(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(altnam="Target", spells=[16, 39, 65], nspells=3)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=43,
+        target="Target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S44M00"
+    assert '"fpandl", "koolit", and "zapher" memorized.' in result.text
+    assert result.context["target_message_id"] == "S44M01"
+    assert result.context["broadcast_message_id"] == "S44M02"
+    assert result.context["broadcast_exclude_player"] == target.plyrid
+
+
+def test_whereami_reports_coordinate_and_broadcasts_to_room(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    sample_player.gamloc = 123
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=62,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S63M00"
+    assert result.text == messages.messages["S63M00"] % 123
+    assert result.context["broadcast_message_id"] == "S63M01"
+
+
 def _message_id_with_offset(base_id: str, offset: int) -> str:
     prefix, value = base_id[:-2], int(base_id[-2:])
     return f"{prefix}{value + offset:02d}"
