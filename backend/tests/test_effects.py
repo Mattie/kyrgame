@@ -756,9 +756,15 @@ def test_whereami_reports_coordinate_and_broadcasts_to_room(sample_player):
         apply_cost=False,
     )
 
+    expected_broadcast = messages.messages["S63M01"] % (
+        sample_player.altnam,
+        models.possessive_pronoun(sample_player),
+    )
+
     assert result.message_id == "S63M00"
     assert result.text == messages.messages["S63M00"] % 123
     assert result.context["broadcast_message_id"] == "S63M01"
+    assert result.context["broadcast"] == expected_broadcast
 
 
 def _message_id_with_offset(base_id: str, offset: int) -> str:
