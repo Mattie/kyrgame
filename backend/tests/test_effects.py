@@ -742,6 +742,24 @@ def test_nosey_reports_targets_memorized_spells_with_legacy_list_format(sample_p
     assert result.context["broadcast_exclude_player"] == target.plyrid
 
 
+def test_nosey_uses_shared_memorized_spell_lookup_even_if_nspells_is_stale(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(altnam="Target", spells=[16], nspells=0)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=43,
+        target="Target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S44M00"
+    assert '"fpandl" memorized.' in result.text
+
+
 def test_whereami_reports_coordinate_and_broadcasts_to_room(sample_player):
     messages = fixtures.load_messages()
     spells = fixtures.load_spells()

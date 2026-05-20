@@ -11,6 +11,7 @@ from .inventory import remove_inventory_item
 from .spellbook import (
     forget_all_memorized,
     forget_one_random_memorized,
+    list_memorized_spells,
     wipe_spellbook_bits,
 )
 
@@ -806,7 +807,12 @@ class SpellEffectEngine:
             if not target_player:
                 raise TargetingError("Target player is required for nosey")
 
-            names = [self.spells[spell_id].name for spell_id in target_player.spells[: target_player.nspells] if spell_id in self.spells]
+            names = [
+                spell.name
+                for spell in list_memorized_spells(
+                    target_player, self.spells.values()
+                )
+            ]
             if not names:
                 list_text = "no spells"
             elif len(names) == 1:
