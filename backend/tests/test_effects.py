@@ -760,6 +760,34 @@ def test_nosey_uses_shared_memorized_spell_lookup_even_if_nspells_is_stale(sampl
     assert '"fpandl" memorized.' in result.text
 
 
+@pytest.mark.parametrize(
+    ("target_spells", "target_nspells", "expected_suffix"),
+    [
+        ([], 0, "no spells memorized."),
+        ([16], 1, '"fpandl" memorized.'),
+        ([16, 39], 2, '"fpandl" and "koolit" memorized.'),
+    ],
+)
+def test_nosey_formats_empty_one_and_two_spell_lists(
+    sample_player, target_spells, target_nspells, expected_suffix
+):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(altnam="Target", spells=target_spells, nspells=target_nspells)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=43,
+        target="Target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S44M00"
+    assert result.text.endswith(expected_suffix)
+
+
 def test_whereami_reports_coordinate_and_broadcasts_to_room(sample_player):
     messages = fixtures.load_messages()
     spells = fixtures.load_spells()
