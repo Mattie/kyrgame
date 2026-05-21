@@ -441,6 +441,89 @@ async def test_room_script_self_target_event_reaches_all_player_sessions():
 
 
 @pytest.mark.anyio
+async def test_silent_room_script_self_target_event_uses_command_response_envelope():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        first_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 181})
+        first_token = first_session.json()["session"]["token"]
+        room_id = first_session.json()["session"]["room_id"]
+        second_token = "hero-second-silent-session"
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            repositories.PlayerSessionRepository(db).create_session(
+                player_id=player.id,
+                session_token=second_token,
+                room_id=room_id,
+            )
+            db.commit()
+
+        first_uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={first_token}"
+        second_uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={second_token}"
+        meta = {"silent": True, "status_card": "room_script"}
+
+        async with websockets.connect(first_uri) as first_ws:
+            await _recv_matching(
+                first_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            async with websockets.connect(second_uri) as second_ws:
+                await _recv_matching(
+                    second_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+
+                await first_ws.send(
+                    json.dumps(
+                        {
+                            "type": "command",
+                            "command": "imagine dagger",
+                            "meta": meta,
+                        }
+                    )
+                )
+
+                first_effect = await _recv_matching(
+                    first_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("meta") == meta
+                    and msg.get("payload", {}).get("message_id") == "DAGM00",
+                )
+                second_effect = await _recv_matching(
+                    second_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("meta") == meta
+                    and msg.get("payload", {}).get("message_id") == "DAGM00",
+                )
+
+                assert first_effect["payload"]["player"] == "hero"
+                assert second_effect["payload"]["player"] == "hero"
+                await _assert_no_matching(
+                    first_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("message_id") == "DAGM00",
+                )
+                await _assert_no_matching(
+                    second_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("message_id") == "DAGM00",
+                )
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_room_command_overrides_stubbed_drink():
     app = create_app()
     host = "127.0.0.1"

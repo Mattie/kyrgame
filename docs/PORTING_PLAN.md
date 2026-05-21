@@ -39,7 +39,7 @@
 - [x] Updated msgutl2 room scripts (rooms 34/35/36/182) to broadcast to other occupants only, matching legacy exclusion behavior.
 - [x] Infer YAML message scope from `message_id`/`broadcast_message_id` to reduce duplication in room scripts.
 - [x] Centralized direct-and-others room messaging in `kyrgame.messaging` and applied it to Python + YAML room handlers so actor-excluding broadcasts stay consistent.
-- [x] Preserved `msgutl2`-style actor-visible room-script effects across all active WebSocket sessions for the player, covering multi-session fan-out for self-target YAML events.
+- [x] Preserved `msgutl2`-style actor-visible room-script effects across all active WebSocket sessions for the player, covering multi-session fan-out for self-target YAML events while honoring silent command metadata.
 - [x] Persist YAML room script player mutations (levels, flags, inventory, gold, location) to the database for session continuity.
 - [x] Captured spell bitflags from `legacy/KYRSPLS.H` in `backend/kyrgame/constants.py` for reuse in room routines.
 - [x] Centralized spellbook ownership/memorization invariants in `backend/kyrgame/spellbook.py` and routed room-script spell grants/purchases through the shared service (ownership bits in `offspls/defspls/othspls`, memorized IDs in `spells`).

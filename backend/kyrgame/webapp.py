@@ -1649,12 +1649,12 @@ def create_app() -> FastAPI:
                                     continue
                                 # Legacy msgutl2 actor messages render to usrnum before room fan-out
                                 # (legacy/KYRSPEL.C:389-396; room calls such as legacy/KYRROUS.C:847).
-                                # The web port mirrors that actor view across every active player session.
-                                envelope_type = (
-                                    "room_broadcast"
-                                    if target_id == player_id
-                                    else "command_response"
-                                )
+                                # The web port mirrors that actor view across every active player session,
+                                # while silent command metadata keeps actor effects in the suppressible stream.
+                                silent = bool(meta and meta.get("silent"))
+                                envelope_type = "command_response"
+                                if target_id == player_id and not silent:
+                                    envelope_type = "room_broadcast"
                                 envelope = {"type": envelope_type, "room": current_room, "payload": event}
                                 if meta:
                                     envelope["meta"] = meta
