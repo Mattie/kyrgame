@@ -1647,17 +1647,15 @@ def create_app() -> FastAPI:
                                 target_id = event.get("player")
                                 if not target_id:
                                     continue
-                                if target_id == player_id:
-                                    envelope = {
-                                        "type": "room_broadcast",
-                                        "room": current_room,
-                                        "payload": event,
-                                    }
-                                    if meta:
-                                        envelope["meta"] = meta
-                                    await websocket.send_json(envelope)
-                                    continue
-                                envelope = {"type": "command_response", "room": current_room, "payload": event}
+                                # Legacy msgutl2 actor messages render to usrnum before room fan-out
+                                # (legacy/KYRSPEL.C:389-396; room calls such as legacy/KYRROUS.C:847).
+                                # The web port mirrors that actor view across every active player session.
+                                envelope_type = (
+                                    "room_broadcast"
+                                    if target_id == player_id
+                                    else "command_response"
+                                )
+                                envelope = {"type": envelope_type, "room": current_room, "payload": event}
                                 if meta:
                                     envelope["meta"] = meta
                                 for token in await provider.presence.sessions_for_player(target_id):
