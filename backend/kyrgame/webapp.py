@@ -1337,6 +1337,9 @@ def create_app() -> FastAPI:
             async with provider.scope.app.state.kyraedit_lock:
                 provider.scope.app.state.kyraedit_session = None
 
+            if websocket.application_state == WebSocketState.CONNECTED:
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+
     @app.websocket("/ws/rooms/{room_id}")
     async def room_socket(
         websocket: WebSocket,
@@ -1479,6 +1482,10 @@ def create_app() -> FastAPI:
                     },
                 }
             )
+        occupants_event = await _room_occupants_event(
+            provider.presence, player_id, current_room, state.messages
+        )
+        if location is not None and occupants_event:
             await websocket.send_json(
                 {
                     "type": "command_response",
@@ -1488,10 +1495,6 @@ def create_app() -> FastAPI:
                     ),
                 }
             )
-
-        occupants_event = await _room_occupants_event(
-            provider.presence, player_id, current_room, state.messages
-        )
         if occupants_event:
             await websocket.send_json(
                 {
@@ -1643,6 +1646,16 @@ def create_app() -> FastAPI:
                             elif scope == "target":
                                 target_id = event.get("player")
                                 if not target_id:
+                                    continue
+                                if target_id == player_id:
+                                    envelope = {
+                                        "type": "room_broadcast",
+                                        "room": current_room,
+                                        "payload": event,
+                                    }
+                                    if meta:
+                                        envelope["meta"] = meta
+                                    await websocket.send_json(envelope)
                                     continue
                                 envelope = {"type": "command_response", "room": current_room, "payload": event}
                                 if meta:
