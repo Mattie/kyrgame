@@ -89,7 +89,10 @@ describe('MudConsole', () => {
     const { container } = render(<MudConsole />)
 
     const line = screen.getByText((_, element) => {
-      return element?.classList.contains('crt-line') && element.textContent === 'Welcome adventurer'
+      return Boolean(
+        element?.classList.contains('crt-line') &&
+          element.textContent === 'Welcome adventurer',
+      )
     }) as HTMLElement
     expect(line).toBeInTheDocument()
     expect(line.textContent).not.toContain('\u001b[')

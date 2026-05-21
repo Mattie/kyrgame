@@ -155,6 +155,34 @@ class PlayerModel(BaseModel):
         return self
 
 
+def _uses_alternate_name_pronoun(player: PlayerModel) -> bool:
+    return bool(player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0)
+
+
+def subject_pronoun(player: PlayerModel) -> str:
+    """Legacy kheshe(): return he/she/its for player message formatting."""
+
+    if _uses_alternate_name_pronoun(player):
+        return "its"
+    return "she" if player.flags & constants.PlayerFlag.FEMALE else "he"
+
+
+def object_pronoun(player: PlayerModel) -> str:
+    """Legacy himher(): return him/her/its for player message formatting."""
+
+    if _uses_alternate_name_pronoun(player):
+        return "its"
+    return "her" if player.flags & constants.PlayerFlag.FEMALE else "him"
+
+
+def possessive_pronoun(player: PlayerModel) -> str:
+    """Legacy hisher(): return his/her/its for player message formatting."""
+
+    if _uses_alternate_name_pronoun(player):
+        return "its"
+    return "her" if player.flags & constants.PlayerFlag.FEMALE else "his"
+
+
 class CommandModel(BaseModel):
     id: int
     command: str = Field(max_length=32)

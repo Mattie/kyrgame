@@ -332,13 +332,6 @@ export const MudConsole = () => {
         candidateCards.push('effects')
       }
 
-      const messageId =
-        typeof payloadRecord.message_id === 'string'
-          ? payloadRecord.message_id
-          : typeof payloadRecord.messageId === 'string'
-            ? payloadRecord.messageId
-            : null
-
       if (candidateCards.length > 0) {
         setStatusCards((prev) => {
           const next = { ...prev }

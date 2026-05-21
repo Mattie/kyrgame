@@ -1610,7 +1610,9 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
 
             events.append(_message_event("player", desc_id, desc_text, command_id))
 
-            looker3_text = _format_message(state, "LOOKER3", state.player.altnam)
+            looker3_text = _compact_system_prefix(
+                _format_message(state, "LOOKER3", state.player.altnam)
+            )
             events.append(
                 {
                     **_message_event("target", "LOOKER3", looker3_text, command_id),
@@ -1868,9 +1870,13 @@ async def _room_occupants_event(state: GameState, room_id: int) -> dict | None:
 
 
 def _hisher(player: models.PlayerModel) -> str:
-    if player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0:
-        return "its"
-    return "her" if player.flags & constants.PlayerFlag.FEMALE else "his"
+    return models.possessive_pronoun(player)
+
+
+def _compact_system_prefix(text: str | None) -> str | None:
+    if text and text.startswith("***\r\n"):
+        return text.replace("***\r\n", "*** ", 1)
+    return text
 
 
 def _format_message(
@@ -2422,7 +2428,13 @@ def _handle_say(state: GameState, args: dict) -> CommandResult:
     room_text = f"{speak1}{speak2 if speak2 is not None else text}"
     events: List[dict] = [
         _message_event("player", "SAIDIT", _format_message(state, "SAIDIT"), command_id),
-        _message_event("room", "SPEAK2", room_text, command_id, exclude_player=state.player.plyrid),
+        _message_event(
+            "room",
+            _command_message_id(command_id) or "SPEAK2",
+            room_text,
+            command_id,
+            exclude_player=state.player.plyrid,
+        ),
     ]
     nearby_text = _format_message(state, "SPEAK3")
     for room_id in _adjacent_room_ids(state):
