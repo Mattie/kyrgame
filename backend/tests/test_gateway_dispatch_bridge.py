@@ -279,26 +279,44 @@ async def test_websocket_bridge_echoes_silent_metadata_on_responses():
         uri = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={hero_token}"
 
         async with websockets.connect(uri) as hero_ws:
-            # Drain initial location + occupants payloads
-            await asyncio.wait_for(hero_ws.recv(), timeout=1)
-            await asyncio.wait_for(hero_ws.recv(), timeout=1)
-            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_description",
+            )
+            room_objects_event = await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "room_objects",
+            )
+            assert room_objects_event["payload"]["location"] == room_zero
 
+            meta = {"silent": True, "status_card": "inventory"}
             await hero_ws.send(
                 json.dumps(
                     {
                         "type": "command",
                         "command": "inventory",
-                        "meta": {"silent": True, "status_card": "inventory"},
+                        "meta": meta,
                     }
                 )
             )
 
-            ack = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
-            assert ack["meta"] == {"silent": True, "status_card": "inventory"}
+            ack = await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("meta") == meta
+                and msg.get("payload", {}).get("verb") == "inventory",
+            )
+            assert ack["meta"] == meta
 
-            inventory_event = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1))
-            assert inventory_event["meta"] == {"silent": True, "status_card": "inventory"}
+            inventory_event = await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("meta") == meta
+                and msg.get("payload", {}).get("event") == "inventory",
+            )
+            assert inventory_event["meta"] == meta
 
     server.should_exit = True
     await server_task

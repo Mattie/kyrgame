@@ -1485,7 +1485,7 @@ def create_app() -> FastAPI:
         occupants_event = await _room_occupants_event(
             provider.presence, player_id, current_room, state.messages
         )
-        if location is not None and occupants_event:
+        if location is not None:
             await websocket.send_json(
                 {
                     "type": "command_response",
