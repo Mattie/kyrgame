@@ -310,6 +310,37 @@ def test_pickpoc_steals_first_target_item_when_caster_has_space(sample_player):
     assert target.npobjs == 1
 
 
+def test_pickpoc_failure_uses_room_failure_message_with_target_context(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    sample_player = _build_caster(gpobjs=[2], obvals=[30], npobjs=1)
+    target = _build_target(
+        altnam="Target",
+        attnam="target",
+        charms=[0] * constants.NCHARM,
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=46,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.success is False
+    assert result.message_id == "S47M00"
+    assert result.context["target_message_id"] == "S47M01"
+    assert result.context["broadcast_message_id"] == "S47M02"
+    assert result.context["broadcast"] == (
+        "***\r\nHero Alt casts a spell at Target but some magical resistance prevents it from working."
+    )
+
+
 def test_object_effects_apply_cooldowns_and_require_targets():
     objects = fixtures.load_objects()
     messages = fixtures.load_messages()

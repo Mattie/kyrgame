@@ -863,7 +863,9 @@ class SpellEffectEngine:
                     target_player,
                     caster_key="S47M00",
                     target_key="S47M01",
-                    broadcast_key="S47M00",
+                    # Legacy catalog provides S47M02 as the room-facing pickpoc
+                    # failure text with caster + target names (legacy/Dist/ELWKYRM.MSG).
+                    broadcast_key="S47M02",
                     target=target,
                     success=False,
                     effect=effect,
