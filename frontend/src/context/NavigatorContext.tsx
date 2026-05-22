@@ -156,9 +156,25 @@ const articleizedName = (object: GameObject | undefined): string => {
   return `${article} ${object.name}`
 }
 
-const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+const LEGACY_ROOM_PRESENCE_LINES = [
+  {
+    objectId: 45,
+    objectName: 'dryad',
+    messageId: 'KUTM05',
+    fallback: 'There is a dryad standing here.',
+  },
+  {
+    objectId: 52,
+    objectName: 'dragon',
+    messageId: 'KUTM06',
+    fallback: 'By the way, there is a very large and angry dragon here too!',
+  },
+] as const
 
-const formatRoomObjectsLine = (
+const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+const normalizeObjectName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+
+const formatVisibleRoomObjectsLine = (
   location: LocationRecord | null,
   objects: GameObject[] | null
 ): string | null => {
@@ -184,6 +200,35 @@ const formatRoomObjectsLine = (
       return `There is ${rest.reverse().join(', ')}, and ${last} lying ${landing}.`
     }
   }
+}
+
+export const formatLegacyRoomObjectLines = (
+  location: LocationRecord | null,
+  objects: GameObject[] | null,
+  messages?: Record<string, string> | null
+): string[] => {
+  if (!location) return []
+
+  const lines = [
+    formatVisibleRoomObjectsLine(location, objects),
+  ].filter(Boolean) as string[]
+  const objectsById = new Map(objects?.map((obj) => [obj.id, obj]) ?? [])
+
+  // Mirrors the hidden NPC presence append in legacy/KYRUTIL.C locobjs() lines 261-306.
+  LEGACY_ROOM_PRESENCE_LINES.forEach((presence) => {
+    const hasPresenceObject = (location.objects ?? []).some((id) => {
+      const object = objectsById.get(id)
+      return (
+        id === presence.objectId ||
+        normalizeObjectName(object?.name) === presence.objectName
+      )
+    })
+    if (hasPresenceObject) {
+      lines.push(messages?.[presence.messageId] ?? presence.fallback)
+    }
+  })
+
+  return lines
 }
 
 const formatOccupantsLine = (players: string[], currentPlayerId?: string | null): string | null => {
@@ -430,12 +475,16 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               locationId !== null
                 ? worldRef.current?.locations.find((loc) => loc.id === locationId) ?? null
                 : null
-            const objectLine = formatRoomObjectsLine(locationRecord, worldRef.current?.objects ?? null)
+            const objectLines = formatLegacyRoomObjectLines(
+              locationRecord,
+              worldRef.current?.objects ?? null,
+              worldRef.current?.messages ?? null
+            )
             const occupantsLine = formatOccupantsLine(
               occupantsRef.current,
               session?.playerId ?? null
             )
-            extraLines = [objectLine, occupantsLine].filter(Boolean) as string[]
+            extraLines = [...objectLines, occupantsLine].filter(Boolean) as string[]
           } else if (message.payload?.event === 'location_update') {
             // Don't show location_update event separately - it will be followed by location_description
             handleRoomChange(message.payload.location ?? null, 'location_update')

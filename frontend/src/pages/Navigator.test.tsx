@@ -84,6 +84,7 @@ describe('Navigator flow', () => {
     KRD007: 'A long description of the temple.',
     KRD008: 'A long description of the clearing.',
     SAPRAY: '*** hero is praying to the Goddess Tashanna.',
+    KUTM05: 'There is a dryad standing here.',
   }
 
   beforeEach(() => {
@@ -435,6 +436,142 @@ describe('Navigator flow', () => {
     await waitFor(() =>
       expect(screen.getAllByText(/emerald/i).length).toBeGreaterThan(0)
     )
+  })
+
+  it('shows the legacy dryad presence line after animation room_objects moves her into the room', async () => {
+    const localLocations = [
+      {
+        id: 7,
+        brfdes: 'Edge of the forest',
+        objlds: 'among the roots',
+        objects: [],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
+    ]
+    const localObjects = [...objects, { id: 45, name: 'dryad', flags: [] }]
+
+    let responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => localLocations },
+      { ok: true, json: async () => localObjects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    expect(screen.queryByText('There is a dryad standing here.')).toBeNull()
+
+    act(() => {
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_objects',
+          location: 7,
+          objects: [{ id: 45, name: 'dryad' }],
+          animation_flag: 'dryads',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
+    )
+  })
+
+  it('keeps the dryad presence line on explicit look responses', async () => {
+    const localLocations = [
+      {
+        id: 7,
+        brfdes: 'Edge of the forest',
+        objlds: 'among the roots',
+        objects: [45],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
+    ]
+    const localObjects = [...objects, { id: 45, name: 'dryad', flags: [] }]
+
+    let responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => localLocations },
+      { ok: true, json: async () => localObjects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'location_description',
+          location: 7,
+          text: 'You look around the forest edge.',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(screen.getAllByText('You look around the forest edge.').length).toBeGreaterThan(0)
+    )
+    expect(screen.getByText('There is nothing lying among the roots.')).toBeInTheDocument()
+    expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
   })
 
   it('renders spoiler command responses with a whisper prompt', async () => {
