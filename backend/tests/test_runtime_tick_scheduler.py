@@ -1,8 +1,10 @@
 import pytest
 from fastapi import FastAPI
+from starlette.websockets import WebSocketState
 
 from kyrgame import models
 from kyrgame.runtime import bootstrap_app, shutdown_app
+from kyrgame.world.animation_tick_system import AnimationTickEvent
 
 
 class _FixedAnimationRng:
@@ -11,6 +13,16 @@ class _FixedAnimationRng:
 
     def randint(self, low: int, high: int) -> int:  # noqa: ARG002
         return self._values.pop(0)
+
+
+class _FakeSocket:
+    application_state = WebSocketState.CONNECTED
+
+    def __init__(self) -> None:
+        self.sent: list[dict] = []
+
+    async def send_json(self, message: dict) -> None:
+        self.sent.append(message)
 
 
 @pytest.mark.anyio
@@ -109,6 +121,74 @@ async def test_animation_npcs_only_affect_active_players(monkeypatch):
     with app.state.session_factory() as session:
         refreshed = session.query(models.Player).filter(models.Player.id == player_id).one()
         assert refreshed.gold == 5
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_dispatch_keeps_target_only_payload_out_of_room_broadcast(
+    monkeypatch,
+):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    target_socket = _FakeSocket()
+    app.state.session_connections = {}
+    app.state.session_connections["hero-token"] = target_socket
+    await app.state.presence.set_location("hero", 7, "hero-token")
+    broadcasts: list[tuple[int, dict, set | None]] = []
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+        broadcasts.append((room_id, message, exclude))
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.dispatch_animation_event(
+        AnimationTickEvent(
+            flag="browns",
+            room_id=7,
+            message_id="BMSG02",
+            message_text="The brownie picks Hero's pocket.",
+            payload={
+                "target_player": "hero",
+                "target_message_id": "BMSG01",
+                "target_text": "The brownie steals all your gold!",
+            },
+        )
+    )
+
+    assert target_socket.sent == [
+        {
+            "type": "command_response",
+            "room": 7,
+            "payload": {
+                "event": "room_message",
+                "scope": "target",
+                "type": "room_message",
+                "message_id": "BMSG01",
+                "text": "The brownie steals all your gold!",
+                "animation_flag": "browns",
+                "player": "hero",
+            },
+        }
+    ]
+
+    assert len(broadcasts) == 1
+    room_id, room_message, excluded_sockets = broadcasts[0]
+    assert room_id == 7
+    assert target_socket in excluded_sockets
+    room_payload = room_message["payload"]
+    assert room_payload["message_id"] == "BMSG02"
+    assert room_payload["text"] == "The brownie picks Hero's pocket."
+    assert room_payload["animation_flag"] == "browns"
+    assert "target_player" not in room_payload
+    assert "target_message_id" not in room_payload
+    assert "target_text" not in room_payload
 
     await shutdown_app(app)
 

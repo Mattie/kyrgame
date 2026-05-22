@@ -316,6 +316,11 @@ async def bootstrap_app(app: FastAPI):
         if not text and not event.payload:
             return
         event_payload = dict(event.payload)
+        room_event_payload = {
+            key: value
+            for key, value in event_payload.items()
+            if not key.startswith("target_")
+        }
         excluded_sockets = set()
         target_player = event_payload.get("target_player")
         target_text = event_payload.get("target_text")
@@ -346,19 +351,19 @@ async def bootstrap_app(app: FastAPI):
                 excluded_sockets.add(target_socket)
                 await target_socket.send_json(target_envelope)
 
-        payload_event = event_payload.get(
+        payload_event = room_event_payload.get(
             "event",
-            event_payload.get("type", "room_message"),
+            room_event_payload.get("type", "room_message"),
         )
         payload = {
             "event": payload_event,
             "scope": "room",
-            "type": event_payload.get("type", "room_message"),
+            "type": room_event_payload.get("type", "room_message"),
             "message_id": event.message_id,
             "text": text,
             "animation_flag": event.flag,
         }
-        payload.update(event_payload)
+        payload.update(room_event_payload)
         await app.state.gateway.broadcast(
             event.room_id,
             app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),

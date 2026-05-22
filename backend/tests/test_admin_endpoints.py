@@ -656,14 +656,18 @@ async def test_admin_elf_trigger_reuses_legacy_hint_gold_flow(monkeypatch):
         ]
 
         hint_payload = broadcasts[1][1]["payload"]
-        assert hint_payload["target_player"] == "hero"
-        assert hint_payload["target_message_id"] == "EHINT0"
-        assert "The elf whispers to you" in hint_payload["target_text"]
+        assert hint_payload["message_id"] == "EMSG03"
+        assert "secretly" in hint_payload["text"]
+        assert "target_player" not in hint_payload
+        assert "target_message_id" not in hint_payload
+        assert "target_text" not in hint_payload
         assert target_socket in broadcasts[1][2]
 
         gold_payload = broadcasts[4][1]["payload"]
-        assert gold_payload["target_player"] == "hero"
-        assert gold_payload["target_message_id"] == "EMSG01"
+        assert gold_payload["message_id"] == "EMSG02"
+        assert "target_player" not in gold_payload
+        assert "target_message_id" not in gold_payload
+        assert "target_text" not in gold_payload
         assert target_socket in broadcasts[4][2]
 
         target_messages = [
