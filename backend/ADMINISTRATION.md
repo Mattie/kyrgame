@@ -57,6 +57,7 @@ Keep `KYRGAME_RESET_ON_BOOT=0` for public demo/prod deployments so restarts are 
 | Endpoint | Role | Notes |
 | --- | --- | --- |
 | `GET /admin/fixtures` | player_admin or content_admin | Returns current cache counts. |
+| `GET /admin/mobs` | player_admin or content_admin | Returns the admin-only animation/mob tracker snapshot, including dryad room, brownie path state, elf last sighting, and Zar object presence. |
 | `POST /admin/reload-scripts` | content_admin | Hot-reloads room scripts. |
 | `GET /admin/players` | player_admin | Lists cached player models. |
 | `GET /admin/players/{alias}` | player_admin | Fetches a single player. |

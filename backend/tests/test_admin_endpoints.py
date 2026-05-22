@@ -450,3 +450,66 @@ async def test_admin_player_patch_grants_all_spells(monkeypatch):
             assert updated["othspls"] == expected_oth
             assert updated["level"] == 25
             assert updated["spts"] == 50
+
+
+@pytest.mark.anyio
+async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1.0")
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.routine_index = 5
+        state.dryad_location = 18
+        state.brownie_location = 0
+        state.brownie_path_index = 19
+        state.elf_last_room = 52
+        state.elf_reward_next = 1
+        state.elf_hint_index = 4
+        app.state.location_index[0] = app.state.location_index[0].model_copy(
+            update={
+                "objects": [obj for obj in app.state.location_index[0].objects if obj != 45],
+                "nlobjs": len([obj for obj in app.state.location_index[0].objects if obj != 45]),
+            }
+        )
+        room_18_objects = [*app.state.location_index[18].objects, 45]
+        app.state.location_index[18] = app.state.location_index[18].model_copy(
+            update={"objects": room_18_objects, "nlobjs": len(room_18_objects)}
+        )
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_auth = await client.get("/admin/mobs")
+            assert missing_auth.status_code == 401
+
+            resp = await client.get("/admin/mobs", headers=_auth("content-token"))
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["animation"]["next_routine"] == "browns"
+        assert payload["animation"]["animation_tick_interval_seconds"] == 15.0
+        assert payload["animation"]["brownie_routine_interval_seconds"] == 90.0
+        assert payload["animation"]["brownie_full_path_interval_seconds"] == 3600.0
+
+        mobs = {mob["id"]: mob for mob in payload["mobs"]}
+        assert mobs["dryad"]["room_id"] == 18
+        assert mobs["dryad"]["room"]["brief"] == app.state.location_index[18].brfdes
+        assert mobs["brownie"]["room_id"] == 0
+        assert mobs["brownie"]["room"]["brief"] == "near a mystical willow tree"
+        assert mobs["brownie"]["path_index"] == 19
+        assert mobs["brownie"]["next_room_id"] == 129
+        assert mobs["brownie"]["path_length"] == 40
+        assert mobs["elf"]["room_id"] == 52
+        assert mobs["elf"]["status"] == "last_seen"

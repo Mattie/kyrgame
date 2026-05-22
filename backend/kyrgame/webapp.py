@@ -24,6 +24,7 @@ from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
+from .world.animation_tick_system import AnimationTickSystem, BrownieRoutine
 
 logger = logging.getLogger(__name__)
 
@@ -590,6 +591,113 @@ def get_websocket_provider(websocket: WebSocket) -> FixtureProvider:
     return FixtureProvider(websocket)
 
 
+def _admin_room_summary(provider: FixtureProvider, room_id: int | None):
+    if room_id is None:
+        return None
+    location = provider.location_index.get(room_id)
+    if location is None:
+        return {"id": room_id, "brief": None, "object_landing": None}
+    return {
+        "id": location.id,
+        "brief": location.brfdes,
+        "object_landing": location.objlds,
+    }
+
+
+def _find_room_containing_object(provider: FixtureProvider, object_id: int) -> int | None:
+    for location in sorted(provider.location_index.values(), key=lambda loc: loc.id):
+        if object_id in location.objects:
+            return location.id
+    return None
+
+
+def _admin_mob_snapshot(provider: FixtureProvider):
+    animation_system: AnimationTickSystem | None = getattr(
+        provider.scope.app.state, "animation_tick_system", None
+    )
+    if animation_system is None:
+        raise HTTPException(status_code=503, detail="Animation system is not initialized")
+
+    state = animation_system.state
+    tick_scheduler = getattr(provider.scope.app.state, "tick_scheduler", None)
+    tick_seconds = float(getattr(tick_scheduler, "tick_seconds", 1.0))
+    routine_interval_seconds = 15.0 * tick_seconds
+    brownie_interval_seconds = (
+        routine_interval_seconds * len(AnimationTickSystem.routine_sequence())
+    )
+    brownie_path = BrownieRoutine.path()
+    next_brownie_room_id = BrownieRoutine.path_room(state.brownie_path_index)
+
+    dryad_object_room_id = _find_room_containing_object(provider, 45)
+    dryad_room_id = dryad_object_room_id if dryad_object_room_id is not None else state.dryad_location
+    dragon_room_id = _find_room_containing_object(provider, 52)
+
+    # Legacy mob state comes from KYRANIM.C globals and routines:
+    # dloc/dryads lines 67,326-348; bpath/bpidx/bloc/browns lines 69-80,393-426.
+    return {
+        "animation": {
+            "routine_index": state.routine_index,
+            "next_routine": animation_system.next_routine_name(),
+            "routine_sequence": list(AnimationTickSystem.routine_sequence()),
+            "tick_seconds": tick_seconds,
+            "animation_tick_interval_seconds": routine_interval_seconds,
+            "brownie_routine_interval_seconds": brownie_interval_seconds,
+            "brownie_full_path_interval_seconds": brownie_interval_seconds * len(brownie_path),
+            "legacy_source": "legacy/KYRANIM.C:116-133",
+        },
+        "mobs": [
+            {
+                "id": "dryad",
+                "name": "Dryad",
+                "kind": "persistent_room_object",
+                "status": "present" if dryad_room_id is not None else "unknown",
+                "object_id": 45,
+                "room_id": dryad_room_id,
+                "state_room_id": state.dryad_location,
+                "object_room_id": dryad_object_room_id,
+                "room": _admin_room_summary(provider, dryad_room_id),
+                "legacy_source": "legacy/KYRANIM.C:326-348",
+            },
+            {
+                "id": "brownie",
+                "name": "Brownie",
+                "kind": "path_encounter",
+                "status": "last_checked",
+                "room_id": state.brownie_location,
+                "room": _admin_room_summary(provider, state.brownie_location),
+                "path_index": state.brownie_path_index % len(brownie_path),
+                "path_length": len(brownie_path),
+                "next_room_id": next_brownie_room_id,
+                "next_room": _admin_room_summary(provider, next_brownie_room_id),
+                "routine_interval_seconds": brownie_interval_seconds,
+                "full_path_interval_seconds": brownie_interval_seconds * len(brownie_path),
+                "legacy_source": "legacy/KYRANIM.C:69-80,393-426",
+            },
+            {
+                "id": "elf",
+                "name": "Elf",
+                "kind": "transient_encounter",
+                "status": "last_seen" if state.elf_last_room is not None else "between_encounters",
+                "room_id": state.elf_last_room,
+                "room": _admin_room_summary(provider, state.elf_last_room),
+                "next_outcome": "gold" if state.elf_reward_next else "hint",
+                "hint_index": state.elf_hint_index,
+                "legacy_source": "legacy/KYRANIM.C:352-389",
+            },
+            {
+                "id": "dragon",
+                "name": "Zar",
+                "kind": "persistent_room_object",
+                "status": "present" if dragon_room_id is not None else "unported",
+                "object_id": 52,
+                "room_id": dragon_room_id,
+                "room": _admin_room_summary(provider, dragon_room_id),
+                "legacy_source": "legacy/KYRANIM.C:155-263,453-466",
+            },
+        ],
+    }
+
+
 def _persist_player_from_template(
     db: OrmSession, alias: str, template: models.PlayerModel, room_id: int | None
 ) -> models.Player:
@@ -886,6 +994,14 @@ async def reload_room_scripts(
     scripts = provider.room_scripts
     scripts.reload_scripts()
     return {"status": "ok", "reloads": scripts.reloads}
+
+
+@admin_router.get("/mobs")
+async def admin_list_mobs(
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+):
+    return _admin_mob_snapshot(provider)
 
 
 @admin_router.get("/players")

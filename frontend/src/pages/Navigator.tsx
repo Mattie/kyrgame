@@ -1,5 +1,6 @@
 import { ActivityLog } from '../components/ActivityLog'
 import { AdminControls } from '../components/AdminControls'
+import { AdminMobPanel } from '../components/AdminMobPanel'
 import { MudConsole } from '../components/MudConsole'
 // import { RoomPanel } from '../components/RoomPanel' // Deprecated - not needed anymore
 import { SessionForm } from '../components/SessionForm'
@@ -24,6 +25,7 @@ export const Navigator = () => {
           </div>
           <div className="secondary">
             <SessionForm />
+            <AdminMobPanel />
             <AdminControls />
             {/* <RoomPanel /> */}
             <ActivityLog />

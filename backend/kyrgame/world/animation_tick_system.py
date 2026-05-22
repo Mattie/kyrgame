@@ -40,7 +40,9 @@ class AnimationTickState:
     )
     gem_counter: int = 0
     dryad_location: int = 0
+    brownie_location: int = 0
     brownie_path_index: int = 0
+    elf_last_room: int | None = None
     elf_reward_next: int = 0
     elf_hint_index: int = 0
 
@@ -91,6 +93,15 @@ def _room_objects_payload(room_id: int, object_ids: Sequence[int]) -> dict[str, 
         "location": room_id,
         "objects": [{"id": object_id} for object_id in object_ids],
     }
+
+
+# Legacy reference: KYRANIM.C bpath/bpidx/bloc globals at lines 69-80.
+BROWNIE_PATH = (
+    71, 144, 66, 29, 82, 96, 136, 31, 114, 134,
+    67, 52, 103, 53, 43, 150, 137, 18, 0, 129,
+    168, 77, 133, 92, 61, 101, 73, 99, 69, 111,
+    45, 132, 3, 2, 55, 60, 160, 48, 70, 112,
+)
 
 
 class GemSpawnRoutine:
@@ -257,6 +268,7 @@ class ElfEncounterRoutine:
         player = self._player_getter(room_id)
         if player is None:
             return []
+        state.elf_last_room = room_id
 
         events = [
             AnimationTickEvent(flag="elves", room_id=room_id, message_id="EMSG00")
@@ -305,12 +317,7 @@ class BrownieRoutine:
     Legacy reference: `browns()` in `legacy/KYRANIM.C` lines 393-426.
     """
 
-    _PATH = (
-        71, 144, 66, 29, 82, 96, 136, 31, 114, 134,
-        67, 52, 103, 53, 43, 150, 137, 18, 0, 129,
-        168, 77, 133, 92, 61, 101, 73, 99, 69, 111,
-        45, 132, 3, 2, 55, 60, 160, 48, 70, 112,
-    )
+    _PATH = BROWNIE_PATH
 
     def __init__(
         self,
@@ -325,10 +332,19 @@ class BrownieRoutine:
         self._message_formatter = message_formatter
         self._pronoun_lookup = pronoun_lookup
 
+    @classmethod
+    def path(cls) -> tuple[int, ...]:
+        return cls._PATH
+
+    @classmethod
+    def path_room(cls, index: int) -> int:
+        return cls._PATH[index % len(cls._PATH)]
+
     def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
         if state.brownie_path_index >= len(self._PATH):
             state.brownie_path_index = 0
         room_id = self._PATH[state.brownie_path_index]
+        state.brownie_location = room_id
         state.brownie_path_index += 1
 
         player = self._player_getter(room_id)
@@ -446,6 +462,15 @@ class AnimationTickSystem:
         if timed_flag_handlers:
             self._timed_flag_handlers.update(timed_flag_handlers)
 
+    @classmethod
+    def routine_sequence(cls) -> tuple[str, ...]:
+        return cls._ROUTINE_SEQUENCE
+
+    def next_routine_name(self) -> str:
+        return self._ROUTINE_SEQUENCE[
+            self.state.routine_index % len(self._ROUTINE_SEQUENCE)
+        ]
+
     def set_timed_flag(self, name: str, value: int = 1) -> None:
         self.state.timed_flags[name] = value
         self._persist()
@@ -455,9 +480,7 @@ class AnimationTickSystem:
         # See legacy/KYRANIM.C lines 116-133.
         self._mob_updater(self.state)
 
-        routine_name = self._ROUTINE_SEQUENCE[
-            self.state.routine_index % len(self._ROUTINE_SEQUENCE)
-        ]
+        routine_name = self.next_routine_name()
         handler = self._routine_handlers[routine_name]
         routine_events = list(handler(self.state) or [])
 
@@ -489,7 +512,9 @@ class AnimationTickSystem:
                 "timed_flags": dict(self.state.timed_flags),
                 "gem_counter": self.state.gem_counter,
                 "dryad_location": self.state.dryad_location,
+                "brownie_location": self.state.brownie_location,
                 "brownie_path_index": self.state.brownie_path_index,
+                "elf_last_room": self.state.elf_last_room,
                 "elf_reward_next": self.state.elf_reward_next,
                 "elf_hint_index": self.state.elf_hint_index,
             }
@@ -514,7 +539,11 @@ class AnimationTickSystem:
             timed_flags=normalized_flags,
             gem_counter=int(payload.get("gem_counter", 0)),
             dryad_location=int(payload.get("dryad_location", 0)),
+            brownie_location=int(payload.get("brownie_location", 0)),
             brownie_path_index=int(payload.get("brownie_path_index", 0)),
+            elf_last_room=(
+                int(payload["elf_last_room"]) if payload.get("elf_last_room") is not None else None
+            ),
             elf_reward_next=int(payload.get("elf_reward_next", 0)),
             elf_hint_index=int(payload.get("elf_hint_index", 0)),
         )

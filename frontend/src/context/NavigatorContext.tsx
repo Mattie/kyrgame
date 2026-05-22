@@ -115,6 +115,44 @@ export type AdminPlayerRecord = {
   spouse: string
 }
 
+export type AdminMobRoom = {
+  id: number
+  brief?: string | null
+  object_landing?: string | null
+}
+
+export type AdminMobRecord = {
+  id: string
+  name: string
+  kind: string
+  status: string
+  room_id?: number | null
+  room?: AdminMobRoom | null
+  next_room_id?: number | null
+  next_room?: AdminMobRoom | null
+  path_index?: number
+  path_length?: number
+  next_outcome?: string
+  hint_index?: number
+  routine_interval_seconds?: number
+  full_path_interval_seconds?: number
+  legacy_source?: string
+}
+
+export type AdminMobSnapshot = {
+  animation: {
+    routine_index: number
+    next_routine: string
+    routine_sequence?: string[]
+    tick_seconds: number
+    animation_tick_interval_seconds: number
+    brownie_routine_interval_seconds?: number
+    brownie_full_path_interval_seconds?: number
+    legacy_source?: string
+  }
+  mobs: AdminMobRecord[]
+}
+
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
 type NavigatorContextValue = {
@@ -130,6 +168,7 @@ type NavigatorContextValue = {
   adminToken: string | null
   setAdminToken: (token: string | null) => void
   fetchAdminPlayer: (playerId: string) => Promise<AdminPlayerRecord>
+  fetchAdminMobs: () => Promise<AdminMobSnapshot>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (
@@ -691,6 +730,28 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     [adminToken, apiBaseUrl]
   )
 
+  const fetchAdminMobs = useCallback(
+    async () => {
+      if (!adminToken) {
+        throw new Error('Admin token required to fetch mob data')
+      }
+
+      const response = await fetch(`${apiBaseUrl}/admin/mobs`, {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin mob fetch failed')
+      }
+
+      return (await response.json()) as AdminMobSnapshot
+    },
+    [adminToken, apiBaseUrl]
+  )
+
   const startSession = useCallback(
     async (playerId: string, roomId?: number | null) => {
       setConnectionStatus('connecting')
@@ -806,6 +867,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       adminToken,
       setAdminToken,
       fetchAdminPlayer,
+      fetchAdminMobs,
       applyAdminUpdate,
       sendMove,
       sendCommand,
@@ -818,6 +880,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       connectionStatus,
       currentRoom,
       error,
+      fetchAdminMobs,
       fetchAdminPlayer,
       occupants,
       setAdminToken,

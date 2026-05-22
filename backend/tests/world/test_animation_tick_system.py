@@ -240,6 +240,7 @@ def test_brownie_routine_follows_path_and_steals_gold_then_inventory():
     assert player.gpobjs == []
     assert player.obvals == []
     assert player.npobjs == 0
+    assert state.brownie_location == 71
     assert gold_events[1].message_id == "BMSG02"
     assert gold_events[1].payload["target_message_id"] == "BMSG01"
     assert inventory_events[1].message_id == "BMSG04"
