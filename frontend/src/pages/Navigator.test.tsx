@@ -912,6 +912,24 @@ describe('Navigator flow', () => {
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/admin/mobs/elf/trigger')) {
+        expect(init?.method).toBe('POST')
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer dev-admin',
+          'Content-Type': 'application/json',
+        })
+        expect(JSON.parse(String(init?.body))).toEqual({ player_id: 'hero', room_id: 7 })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'triggered',
+            room_id: 7,
+            player_id: 'hero',
+            outcome: 'hint',
+            snapshot: adminMobSnapshot,
+          }),
+        } as unknown as Response)
+      }
       if (url.includes('/admin/mobs')) {
         expect(init?.headers).toMatchObject({ Authorization: 'Bearer dev-admin' })
         return Promise.resolve({
@@ -953,10 +971,21 @@ describe('Navigator flow', () => {
     expect(screen.getByText(/Dryad/i)).toBeInTheDocument()
     expect(screen.getAllByText(/near a mystical willow tree/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/next 129/i)).toBeInTheDocument()
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /trigger elf/i }))
+    })
+    expect(await screen.findByText(/Elf triggered: hint/i)).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
       'http://api.local/admin/mobs',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer dev-admin' }),
+      })
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/admin/mobs/elf/trigger',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ player_id: 'hero', room_id: 7 }),
       })
     )
   })

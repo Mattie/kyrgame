@@ -33,10 +33,12 @@ const formatMobDetail = (mob: AdminMobRecord) => {
 }
 
 export const AdminMobPanel = () => {
-  const { adminToken, fetchAdminMobs } = useNavigator()
+  const { adminToken, currentRoom, fetchAdminMobs, session, triggerElf } = useNavigator()
   const [snapshot, setSnapshot] = useState<AdminMobSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
+  const [triggeringElf, setTriggeringElf] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [triggerStatus, setTriggerStatus] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
 
   const loadMobs = useCallback(async () => {
@@ -53,6 +55,31 @@ export const AdminMobPanel = () => {
       setLoading(false)
     }
   }, [adminToken, fetchAdminMobs])
+
+  const handleTriggerElf = useCallback(async () => {
+    if (!session) {
+      setError('Start a session before triggering the elf')
+      return
+    }
+    const roomId = currentRoom ?? session.roomId
+    setTriggeringElf(true)
+    setError(null)
+    setTriggerStatus(null)
+    try {
+      const result = await triggerElf(session.playerId, roomId)
+      setSnapshot(result.snapshot)
+      setLastUpdated(new Date().toLocaleTimeString())
+      setTriggerStatus(
+        result.status === 'triggered'
+          ? `Elf triggered: ${result.outcome}`
+          : 'Elf trigger found no active player'
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to trigger elf')
+    } finally {
+      setTriggeringElf(false)
+    }
+  }, [currentRoom, session, triggerElf])
 
   useEffect(() => {
     if (!adminToken) {
@@ -85,13 +112,19 @@ export const AdminMobPanel = () => {
             </p>
           )}
         </div>
-        <button type="button" onClick={loadMobs} disabled={loading}>
-          {loading ? 'Refreshing...' : 'Refresh'}
-        </button>
+        <div className="mob-panel-actions">
+          <button type="button" onClick={handleTriggerElf} disabled={triggeringElf || !session}>
+            {triggeringElf ? 'Triggering...' : 'Trigger Elf'}
+          </button>
+          <button type="button" onClick={loadMobs} disabled={loading}>
+            {loading ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
       </header>
 
       <div className="mob-panel-body">
         {error && <p className="status error">{error}</p>}
+        {triggerStatus && <p className="field-hint">{triggerStatus}</p>}
         {lastUpdated && <p className="field-hint">Updated {lastUpdated}</p>}
         {snapshot && (
           <div className="mob-timing">

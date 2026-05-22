@@ -513,3 +513,145 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         assert mobs["brownie"]["path_length"] == 40
         assert mobs["elf"]["room_id"] == 52
         assert mobs["elf"]["status"] == "last_seen"
+
+
+@pytest.mark.anyio
+async def test_admin_elf_trigger_requires_admin_and_active_player(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        original_state = app.state.animation_tick_system.state
+        original_state.elf_last_room = None
+        original_state.elf_reward_next = 0
+        original_state.elf_hint_index = 0
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_auth = await client.post(
+                "/admin/mobs/elf/trigger",
+                json={"player_id": "hero", "room_id": 7},
+            )
+            assert missing_auth.status_code == 401
+
+            no_player = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+
+        assert no_player.status_code == 200
+        assert no_player.json()["status"] == "no_active_player"
+        assert original_state.elf_last_room is None
+        assert original_state.elf_reward_next == 0
+        assert original_state.elf_hint_index == 0
+
+
+@pytest.mark.anyio
+async def test_admin_elf_trigger_reuses_legacy_hint_gold_flow(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.elf_last_room = None
+        state.elf_reward_next = 0
+        state.elf_hint_index = 0
+
+        with app.state.session_factory() as db:
+            record = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert record is not None
+            record.gamloc = 7
+            record.pgploc = 7
+            record.gold = 10
+            db.commit()
+            active_player = fixtures.build_player().model_copy(
+                update={"gamloc": 7, "pgploc": 7, "gold": 10}
+            )
+
+        app.state.active_players["hero"] = active_player
+        broadcasts: list[tuple[int, dict]] = []
+
+        async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+            broadcasts.append((room_id, message))
+
+        app.state.gateway.broadcast = _capture
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            hint_resp = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+            gold_resp = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+
+        assert hint_resp.status_code == 200
+        assert hint_resp.json()["status"] == "triggered"
+        assert hint_resp.json()["outcome"] == "hint"
+        assert hint_resp.json()["room_id"] == 7
+        assert hint_resp.json()["player_id"] == "hero"
+        assert hint_resp.json()["snapshot"]["mobs"][2]["id"] == "elf"
+        assert hint_resp.json()["snapshot"]["mobs"][2]["room_id"] == 7
+
+        assert gold_resp.status_code == 200
+        assert gold_resp.json()["status"] == "triggered"
+        assert gold_resp.json()["outcome"] == "gold"
+        assert state.elf_last_room == 7
+        assert state.elf_reward_next == 0
+        assert state.elf_hint_index == 1
+
+        message_ids = [
+            event["payload"].get("message_id")
+            for _, event in broadcasts
+            if event.get("type") == "room_broadcast"
+        ]
+        assert message_ids == [
+            "EMSG00",
+            "EMSG03",
+            "EMSG04",
+            "EMSG00",
+            "EMSG02",
+            "EMSG04",
+        ]
+
+        hint_payload = broadcasts[1][1]["payload"]
+        assert hint_payload["target_player"] == "hero"
+        assert hint_payload["target_message_id"] == "EHINT0"
+        assert "The elf whispers to you" in hint_payload["target_text"]
+
+        gold_payload = broadcasts[4][1]["payload"]
+        assert gold_payload["target_player"] == "hero"
+        assert gold_payload["target_message_id"] == "EMSG01"
+
+        with app.state.session_factory() as db:
+            refreshed = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert refreshed is not None
+            assert refreshed.gold == active_player.gold
+            assert refreshed.gold > 10

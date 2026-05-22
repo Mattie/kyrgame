@@ -265,6 +265,11 @@ class ElfEncounterRoutine:
 
     def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
         room_id = self._room_picker(12, 168)
+        return self.trigger_room(state, room_id)
+
+    def trigger_room(self, state: AnimationTickState, room_id: int) -> list[AnimationTickEvent]:
+        # Legacy reference: KYRANIM.C elves() chooses eloc via genrdn(12,168)
+        # before using rndlgp(eloc) to find an active player (lines 363-389).
         player = self._player_getter(room_id)
         if player is None:
             return []
@@ -473,6 +478,9 @@ class AnimationTickSystem:
 
     def set_timed_flag(self, name: str, value: int = 1) -> None:
         self.state.timed_flags[name] = value
+        self._persist()
+
+    def persist_state(self) -> None:
         self._persist()
 
     def tick(self) -> AnimationTickResult:

@@ -243,6 +243,14 @@ async def bootstrap_app(app: FastAPI):
     def _animation_pronoun(player: models.PlayerModel) -> str:
         return "her" if player.flags & constants.PlayerFlag.FEMALE else "him"
 
+    elf_routine = ElfEncounterRoutine(
+        room_picker=_animation_room_picker,
+        gold_picker=_animation_pick_gold,
+        player_getter=_animation_player_getter,
+        player_persister=_animation_player_persister,
+        message_formatter=_animation_message_formatter,
+    )
+    app.state.animation_elf_routine = elf_routine
     app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence,
@@ -255,13 +263,7 @@ async def bootstrap_app(app: FastAPI):
                 location_phrase_lookup=_animation_location_phrase_lookup,
                 message_formatter=_animation_message_formatter,
             ),
-            "elves": ElfEncounterRoutine(
-                room_picker=_animation_room_picker,
-                gold_picker=_animation_pick_gold,
-                player_getter=_animation_player_getter,
-                player_persister=_animation_player_persister,
-                message_formatter=_animation_message_formatter,
-            ),
+            "elves": elf_routine,
             "gemakr": GemSpawnRoutine(
                 room_picker=_animation_room_picker,
                 gem_picker=_animation_pick_gem,
@@ -330,6 +332,8 @@ async def bootstrap_app(app: FastAPI):
             event.room_id,
             app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),
         )
+
+    app.state.dispatch_animation_event = _dispatch_animation_event
 
     app.state.animation_tick_callback = AnimationTickRuntimeBridge(
         system=app.state.animation_tick_system,

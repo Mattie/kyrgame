@@ -61,6 +61,11 @@ class LogoutResponse(BaseModel):
     status: str
 
 
+class AdminElfTriggerRequest(BaseModel):
+    player_id: str
+    room_id: int
+
+
 class AdminRole(str, Enum):
     PLAYER = "player_admin"
     CONTENT = "content_admin"
@@ -698,6 +703,27 @@ def _admin_mob_snapshot(provider: FixtureProvider):
     }
 
 
+async def _dispatch_animation_events(app: FastAPI, events) -> None:
+    dispatcher = getattr(app.state, "dispatch_animation_event", None)
+    if dispatcher is None:
+        raise HTTPException(status_code=503, detail="Animation dispatcher is not initialized")
+
+    for event in events:
+        maybe_awaitable = dispatcher(event)
+        if asyncio.iscoroutine(maybe_awaitable):
+            await maybe_awaitable
+
+
+def _elf_trigger_outcome(events) -> str:
+    for event in events:
+        target_message_id = event.payload.get("target_message_id")
+        if target_message_id == "EMSG01":
+            return "gold"
+        if isinstance(target_message_id, str) and target_message_id.startswith("EHINT"):
+            return "hint"
+    return "no_active_player"
+
+
 def _persist_player_from_template(
     db: OrmSession, alias: str, template: models.PlayerModel, room_id: int | None
 ) -> models.Player:
@@ -1002,6 +1028,43 @@ async def admin_list_mobs(
     admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
 ):
     return _admin_mob_snapshot(provider)
+
+
+@admin_router.post("/mobs/elf/trigger")
+async def admin_trigger_elf(
+    payload: AdminElfTriggerRequest,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+):
+    app = provider.scope.app
+    active_player = getattr(app.state, "active_players", {}).get(payload.player_id)
+    if active_player is None or active_player.gamloc != payload.room_id:
+        return {
+            "status": "no_active_player",
+            "room_id": payload.room_id,
+            "player_id": payload.player_id,
+            "outcome": "no_active_player",
+            "snapshot": _admin_mob_snapshot(provider),
+        }
+
+    elf_routine = getattr(app.state, "animation_elf_routine", None)
+    animation_system: AnimationTickSystem | None = getattr(app.state, "animation_tick_system", None)
+    if elf_routine is None or animation_system is None:
+        raise HTTPException(status_code=503, detail="Animation system is not initialized")
+
+    events = list(elf_routine.trigger_room(animation_system.state, payload.room_id))
+    # Admin-only test hook for KYRANIM.C elves(): force the random eloc to the
+    # current room while preserving the legacy hint/gold branch and messages.
+    animation_system.persist_state()
+    await _dispatch_animation_events(app, events)
+    outcome = _elf_trigger_outcome(events)
+    return {
+        "status": "triggered" if events else "no_active_player",
+        "room_id": payload.room_id,
+        "player_id": payload.player_id,
+        "outcome": outcome,
+        "snapshot": _admin_mob_snapshot(provider),
+    }
 
 
 @admin_router.get("/players")

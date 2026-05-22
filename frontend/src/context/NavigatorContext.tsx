@@ -153,6 +153,14 @@ export type AdminMobSnapshot = {
   mobs: AdminMobRecord[]
 }
 
+export type AdminElfTriggerResponse = {
+  status: 'triggered' | 'no_active_player'
+  room_id: number
+  player_id: string
+  outcome: 'hint' | 'gold' | 'no_active_player'
+  snapshot: AdminMobSnapshot
+}
+
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
 type NavigatorContextValue = {
@@ -169,6 +177,7 @@ type NavigatorContextValue = {
   setAdminToken: (token: string | null) => void
   fetchAdminPlayer: (playerId: string) => Promise<AdminPlayerRecord>
   fetchAdminMobs: () => Promise<AdminMobSnapshot>
+  triggerElf: (playerId: string, roomId: number) => Promise<AdminElfTriggerResponse>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (
@@ -752,6 +761,31 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     [adminToken, apiBaseUrl]
   )
 
+  const triggerElf = useCallback(
+    async (playerId: string, roomId: number) => {
+      if (!adminToken) {
+        throw new Error('Admin token required to trigger the elf')
+      }
+
+      const response = await fetch(`${apiBaseUrl}/admin/mobs/elf/trigger`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ player_id: playerId, room_id: roomId }),
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin elf trigger failed')
+      }
+
+      return (await response.json()) as AdminElfTriggerResponse
+    },
+    [adminToken, apiBaseUrl]
+  )
+
   const startSession = useCallback(
     async (playerId: string, roomId?: number | null) => {
       setConnectionStatus('connecting')
@@ -868,6 +902,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       setAdminToken,
       fetchAdminPlayer,
       fetchAdminMobs,
+      triggerElf,
       applyAdminUpdate,
       sendMove,
       sendCommand,
@@ -888,6 +923,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       sendCommand,
       session,
       startSession,
+      triggerElf,
       world,
     ]
   )

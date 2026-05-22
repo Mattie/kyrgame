@@ -337,6 +337,13 @@ p {
   margin-bottom: 0.5rem;
 }
 
+.mob-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
 .admin-mob-panel button {
   background: rgba(141, 225, 198, 0.9);
   color: #0b1723;
