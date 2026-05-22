@@ -6,9 +6,10 @@ const REFRESH_INTERVAL_MS = 15_000
 
 const formatSeconds = (seconds?: number | null) => {
   if (seconds === undefined || seconds === null) return 'n/a'
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const minutes = Math.floor(seconds / 60)
-  const remainder = Math.round(seconds % 60)
+  const totalSeconds = Math.round(seconds)
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const remainder = totalSeconds % 60
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`
 }
 
