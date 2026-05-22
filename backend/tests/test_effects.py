@@ -310,7 +310,7 @@ def test_pickpoc_steals_first_target_item_when_caster_has_space(sample_player):
     assert target.npobjs == 1
 
 
-def test_pickpoc_failure_uses_room_failure_message_with_target_context(sample_player):
+def test_pickpoc_failure_uses_legacy_room_failure_message(sample_player):
     messages = fixtures.load_messages()
     spells = fixtures.load_spells()
     engine = SpellEffectEngine(spells=spells, messages=messages)
@@ -335,9 +335,9 @@ def test_pickpoc_failure_uses_room_failure_message_with_target_context(sample_pl
     assert result.success is False
     assert result.message_id == "S47M00"
     assert result.context["target_message_id"] == "S47M01"
-    assert result.context["broadcast_message_id"] == "S47M02"
+    assert result.context["broadcast_message_id"] == "S47M00"
     assert result.context["broadcast"] == (
-        "***\r\nHero Alt casts a spell at Target but some magical resistance prevents it from working."
+        "...You cast the spell but some magical resistance prevents it from succeeding."
     )
 
 

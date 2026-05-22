@@ -517,9 +517,60 @@ def _remove_player_from_cache(app: FastAPI, alias: str):
     app.state.fixture_cache["summary"]["players"] = len(app.state.fixture_cache["players"])
 
 
+def _active_player_sessions(app: FastAPI) -> dict[str, models.PlayerModel]:
+    sessions = getattr(app.state, "active_player_sessions", None)
+    if sessions is None:
+        sessions = {}
+        app.state.active_player_sessions = sessions
+    return sessions
+
+
+def _register_active_player_session(
+    app: FastAPI, session_token: str, player: models.PlayerModel
+) -> None:
+    _active_player_sessions(app)[session_token] = player
+    app.state.active_players[player.plyrid] = player
+
+
+def _remove_active_player_session(
+    app: FastAPI, session_token: str, player_id: str | None = None
+) -> None:
+    sessions = _active_player_sessions(app)
+    removed = sessions.pop(session_token, None)
+    player_key = player_id or getattr(removed, "plyrid", None)
+    if not player_key:
+        return
+
+    replacement = next(
+        (
+            player
+            for player in sessions.values()
+            if getattr(player, "plyrid", None) == player_key
+        ),
+        None,
+    )
+    if replacement is not None:
+        app.state.active_players[player_key] = replacement
+    else:
+        app.state.active_players.pop(player_key, None)
+
+
+def _active_player_in_room(
+    app: FastAPI, player_id: str, room_id: int
+) -> models.PlayerModel | None:
+    for player in _active_player_sessions(app).values():
+        if player.plyrid == player_id and player.gamloc == room_id:
+            return player
+    active_player = getattr(app.state, "active_players", {}).get(player_id)
+    if active_player is not None and active_player.gamloc == room_id:
+        return active_player
+    return None
+
+
 async def _disconnect_sessions(app: FastAPI, tokens: list[str]):
     connections = app.state.session_connections
     for token in tokens:
+        _remove_active_player_session(app, token)
         socket = connections.pop(token, None)
         previous_room = await app.state.presence.remove(token)
         if previous_room is not None and socket is not None:
@@ -868,16 +919,7 @@ async def start_session(
 
     if not payload.allow_multiple and not payload.resume_token:
         # Commit happened inside the lock, now clean up old connections
-        session_connections = request.app.state.session_connections
-        for old_token in replaced_tokens:
-            old_socket = session_connections.pop(old_token, None)
-            previous_room = await request.app.state.presence.room_for_session(old_token)
-            if previous_room is not None and old_socket is not None:
-                await request.app.state.gateway.unregister(previous_room, old_socket)
-            if old_socket is not None and old_socket.application_state == WebSocketState.CONNECTED:
-                # Use WS_1008_POLICY_VIOLATION for concurrent session replacement
-                await old_socket.close(code=status.WS_1008_POLICY_VIOLATION)
-            await request.app.state.presence.remove(old_token)
+        await _disconnect_sessions(request.app, replaced_tokens)
 
     await request.app.state.presence.set_location(player.plyrid, room_id, token)
 
@@ -914,7 +956,7 @@ async def logout(
     db: Annotated[OrmSession, Depends(get_db_session)],
     request: Request,
 ):
-    session_record, _ = session_context
+    session_record, player = session_context
     repo = repositories.PlayerSessionRepository(db)
     repo.deactivate(session_record.session_token)
     db.commit()
@@ -928,6 +970,7 @@ async def logout(
             await request.app.state.gateway.unregister(session_record.room_id, active_socket)
             await active_socket.close(code=status.WS_1000_NORMAL_CLOSURE)
     finally:
+        _remove_active_player_session(request.app, session_record.session_token, player.plyrid)
         await request.app.state.presence.remove(session_record.session_token)
     
     return LogoutResponse(status="logged_out")
@@ -1044,8 +1087,8 @@ async def admin_trigger_elf(
     admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
 ):
     app = provider.scope.app
-    active_player = getattr(app.state, "active_players", {}).get(payload.player_id)
-    if active_player is None or active_player.gamloc != payload.room_id:
+    active_player = _active_player_in_room(app, payload.player_id, payload.room_id)
+    if active_player is None:
         return {
             "status": "no_active_player",
             "room_id": payload.room_id,
@@ -1405,6 +1448,7 @@ def create_app() -> FastAPI:
     gateway: RoomGateway | None = None
     app.state.session_connections = {}
     app.state.active_players = {}
+    app.state.active_player_sessions = {}
 
     @app.websocket("/ws/admin/kyraedit")
     async def kyraedit_socket(
@@ -1648,7 +1692,7 @@ def create_app() -> FastAPI:
             player_lookup=lookup_player,
         )
 
-        active_players[player_id] = player_state
+        _register_active_player_session(provider.scope.app, session_token, player_state)
         await provider.presence.set_location(player_id, current_room, session_token)
         await gateway.register(current_room, websocket)
 
@@ -2108,8 +2152,8 @@ def create_app() -> FastAPI:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)
         finally:
-            active_players.pop(player_id, None)
             if session_connections.get(session_token) is websocket:
+                _remove_active_player_session(provider.scope.app, session_token, player_id)
                 session_connections.pop(session_token, None)
             # Close the persistent database session
             if persistent_session:

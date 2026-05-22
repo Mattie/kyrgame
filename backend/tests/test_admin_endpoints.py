@@ -570,6 +570,49 @@ async def test_admin_elf_trigger_requires_admin_and_active_player(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_admin_elf_trigger_uses_session_scoped_active_player(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.elf_last_room = None
+        state.elf_reward_next = 0
+        state.elf_hint_index = 0
+
+        active_player = fixtures.build_player().model_copy(update={"gamloc": 7, "pgploc": 7})
+        app.state.active_players.clear()
+        app.state.active_player_sessions["hero-token"] = active_player
+        target_socket = _FakeSocket()
+        app.state.session_connections["hero-token"] = target_socket
+        await app.state.presence.set_location("hero", 7, "hero-token")
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "triggered"
+        assert response.json()["outcome"] == "hint"
+        assert state.elf_last_room == 7
+
+
+@pytest.mark.anyio
 async def test_admin_elf_trigger_reuses_legacy_hint_gold_flow(monkeypatch):
     monkeypatch.setenv(
         ADMIN_MAP_ENV,

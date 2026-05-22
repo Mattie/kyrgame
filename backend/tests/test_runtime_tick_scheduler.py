@@ -2,7 +2,7 @@ import pytest
 from fastapi import FastAPI
 from starlette.websockets import WebSocketState
 
-from kyrgame import models
+from kyrgame import fixtures, models
 from kyrgame.runtime import bootstrap_app, shutdown_app
 from kyrgame.world.animation_tick_system import AnimationTickEvent
 
@@ -121,6 +121,54 @@ async def test_animation_npcs_only_affect_active_players(monkeypatch):
     with app.state.session_factory() as session:
         refreshed = session.query(models.Player).filter(models.Player.id == player_id).one()
         assert refreshed.gold == 5
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_npcs_find_session_scoped_active_players(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    with app.state.session_factory() as session:
+        player = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        player.gamloc = 7
+        player.pgploc = 7
+        player.gold = 5
+        session.commit()
+
+    active_player = fixtures.build_player().model_copy(
+        update={"gamloc": 7, "pgploc": 7, "gold": 5}
+    )
+    app.state.active_players = {}
+    app.state.active_player_sessions = {"hero-token": active_player}
+    app.state.animation_rng = _FixedAnimationRng(7, 4)
+    app.state.animation_tick_system.state.routine_index = 1
+    app.state.animation_tick_system.state.elf_reward_next = 1
+    broadcasts: list[tuple[int, dict]] = []
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+        broadcasts.append((room_id, message))
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.animation_tick_callback()
+
+    assert [
+        event["payload"].get("message_id")
+        for _, event in broadcasts
+        if event.get("type") == "room_broadcast"
+    ] == ["EMSG00", "EMSG02", "EMSG04"]
+    assert active_player.gold == 9
+
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        assert refreshed.gold == 9
 
     await shutdown_app(app)
 

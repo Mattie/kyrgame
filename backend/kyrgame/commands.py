@@ -1270,6 +1270,17 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
             target_drop["player"] = target_player.plyrid
             events.append(target_drop)
         if dropped.get("broadcast"):
+            # Legacy reference: clutzopho prints each S11M06 drop line to the
+            # caster before sndbt2() broadcasts it to other room occupants
+            # (legacy/KYRSPEL.C:584-586).
+            events.append(
+                _message_event(
+                    "player",
+                    dropped.get("broadcast_message_id"),
+                    dropped.get("broadcast"),
+                    command_id,
+                )
+            )
             events.append(
                 _message_event(
                     "room",

@@ -225,6 +225,9 @@ async def bootstrap_app(app: FastAPI):
     def _animation_player_getter(room_id: int) -> models.PlayerModel | None:
         # Legacy rndlgp only scans active terminals for animation encounters
         # (legacy/KYRANIM.C:95-107).
+        for player in getattr(app.state, "active_player_sessions", {}).values():
+            if player.gamloc == room_id:
+                return player
         for player in getattr(app.state, "active_players", {}).values():
             if player.gamloc == room_id:
                 return player

@@ -8,7 +8,7 @@ import uvicorn
 import websockets
 from sqlalchemy import select
 
-from kyrgame import models, repositories
+from kyrgame import constants, models, repositories
 from kyrgame.webapp import create_app
 
 
@@ -124,6 +124,105 @@ async def test_websocket_bridge_emits_legacy_command_metadata():
                     )
                     assert move_broadcast["payload"]["command_id"] == 38
                     assert move_broadcast["payload"]["event"] == "player_enter"
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_clutzopho_drop_lines_reach_caster_and_bystanders():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 7})
+        hero_token = hero_session.json()["session"]["token"]
+        room_id = hero_session.json()["session"]["room_id"]
+
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": room_id})
+        seer_token = seer_session.json()["session"]["token"]
+
+        mystic_session = await client.post("/auth/session", json={"player_id": "mystic", "room_id": room_id})
+        mystic_token = mystic_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            seer = db.scalar(select(models.Player).where(models.Player.plyrid == "seer"))
+            mystic = db.scalar(select(models.Player).where(models.Player.plyrid == "mystic"))
+            location = db.get(models.Location, room_id)
+            assert hero is not None
+            assert seer is not None
+            assert mystic is not None
+            assert location is not None
+
+            hero.flags |= int(constants.PlayerFlag.LOADED)
+            hero.level = 25
+            hero.spts = 25
+            hero.spells = [10]
+            hero.nspells = 1
+            hero.gamloc = room_id
+            hero.pgploc = room_id
+            seer.gamloc = room_id
+            seer.pgploc = room_id
+            seer.gpobjs = [0]
+            seer.obvals = [10]
+            seer.npobjs = 1
+            mystic.gamloc = room_id
+            mystic.pgploc = room_id
+            location.objects = []
+            location.nlobjs = 0
+            db.commit()
+
+        uri_room_hero = f"ws://{host}:{port}/ws/rooms/{room_id}?token={hero_token}"
+        uri_room_seer = f"ws://{host}:{port}/ws/rooms/{room_id}?token={seer_token}"
+        uri_room_mystic = f"ws://{host}:{port}/ws/rooms/{room_id}?token={mystic_token}"
+
+        async with websockets.connect(uri_room_hero) as hero_ws:
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            async with websockets.connect(uri_room_seer) as seer_ws:
+                await _recv_matching(
+                    seer_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                async with websockets.connect(uri_room_mystic) as mystic_ws:
+                    await _recv_matching(
+                        mystic_ws,
+                        lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                    )
+
+                    await hero_ws.send(
+                        json.dumps({"type": "command", "command": "cast clutzopho seer"})
+                    )
+
+                    hero_drop = await _recv_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "S11M06",
+                    )
+                    seer_drop = await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "S11M05",
+                    )
+                    mystic_drop = await _recv_matching(
+                        mystic_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "S11M06",
+                    )
+
+                    assert hero_drop["payload"]["scope"] == "player"
+                    assert seer_drop["payload"]["scope"] == "target"
+                    assert mystic_drop["payload"]["scope"] == "room"
 
     server.should_exit = True
     await server_task

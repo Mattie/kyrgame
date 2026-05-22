@@ -863,9 +863,9 @@ class SpellEffectEngine:
                     target_player,
                     caster_key="S47M00",
                     target_key="S47M01",
-                    # Legacy catalog provides S47M02 as the room-facing pickpoc
-                    # failure text with caster + target names (legacy/Dist/ELWKYRM.MSG).
-                    broadcast_key="S47M02",
+                    # Legacy reference: KYRSPEL.C spl047() failure calls
+                    # msgutl3(S47M00,S47M01,S47M00) (legacy/KYRSPEL.C:994-995).
+                    broadcast_key="S47M00",
                     target=target,
                     success=False,
                     effect=effect,
