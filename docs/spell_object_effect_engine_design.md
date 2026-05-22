@@ -236,6 +236,8 @@ These routines support object effects (Zar) and world ambience; they should be m
 
 ## Implementation notes & next steps
 - Use the spell/object tables as authoritative: write tests that compare the modern effect lookup against the legacy catalog above.
+- For effects with multiple recipients, assert caster, target, and room-facing message IDs separately. Legacy helpers like `msgutl2`/`msgutl3` and direct `outprf` calls often map to different WebSocket envelopes.
+- Confirm every emitted `message_id` exists in the loaded fixtures. If legacy uses inline `prf(...)` or `CHAR_BUFFER` text, add an explicit fixture key only when the modern client needs a stable lookup ID.
 - For each ported spell/object, add a comment in new code linking back to the legacy source lines (per porting guidelines).
 - Implement animation ticks (`animat`) in the scheduler; align `rtkick` intervals to preserve encounter cadence.
 - Update `docs/PORTING_PLAN_world_object_spell_gaps.md` as each spell/object/animation is implemented.

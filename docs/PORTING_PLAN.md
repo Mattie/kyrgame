@@ -6,6 +6,11 @@
 - Build the new stack so it can run locally via Docker/WSL2 with repeatable tests and fixtures.
 - Keep the original MajorBBS sources organized in `legacy/` so they remain easy to reference as we extract content and parity requirements.
 
+## Porting Guardrails
+- For message parity, validate the C call site and the `.MSG` catalog together. Legacy routines may use inline `prf(...)` or `CHAR_BUFFER` text, and target/caster/room broadcasts may use different message IDs.
+- For multiplayer fan-out, preserve the legacy recipient split (`outprf`, `sndoth`, `sndbt2`, `sndloc`) in WebSocket delivery and test each recipient surface when messages differ.
+- For animation cadence, keep `animat()` aligned to the 15-tick scheduler and six-routine rotation (`dryads`, `elves`, `gemakr`, `gemakr`, `zarapp`, `browns`) unless a PR explicitly changes pacing.
+
 ## Porting Checklist
 
 - [x] Captured legacy constants (sizes, limits, flags) from `legacy/KYRANDIA.H` in `backend/kyrgame/constants.py` to anchor model validation.
