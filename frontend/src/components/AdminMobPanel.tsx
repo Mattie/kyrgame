@@ -85,6 +85,10 @@ export const AdminMobPanel = () => {
     if (!adminToken) {
       setSnapshot(null)
       setError(null)
+      setTriggerStatus(null)
+      setLastUpdated(null)
+      setLoading(false)
+      setTriggeringElf(false)
       return
     }
 
