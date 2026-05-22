@@ -634,7 +634,14 @@ def _admin_mob_snapshot(provider: FixtureProvider):
     next_brownie_room_id = BrownieRoutine.path_room(state.brownie_path_index)
 
     dryad_object_room_id = _find_room_containing_object(provider, 45)
-    dryad_room_id = dryad_object_room_id if dryad_object_room_id is not None else state.dryad_location
+    dryad_state_room_id = state.dryad_location
+    dryad_room_id = (
+        dryad_object_room_id if dryad_object_room_id is not None else dryad_state_room_id
+    )
+    # Normalize the primary dryad room value so downstream snapshot fields use
+    # the fallback-backed room id even when the object lookup is temporarily out
+    # of sync with animation state.
+    dryad_object_room_id = dryad_room_id
     dragon_room_id = _find_room_containing_object(provider, 52)
 
     # Legacy mob state comes from KYRANIM.C globals and routines:
