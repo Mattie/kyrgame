@@ -120,6 +120,10 @@ export const SessionForm = () => {
     setSubmitting(true)
     try {
       await startSession(session.playerId, currentRoom ?? session.roomId)
+    } catch {
+      // `startSession` is responsible for updating shared error state.
+      // Swallow reconnect failures here to avoid an unhandled promise rejection
+      // from this UI event handler.
     } finally {
       setSubmitting(false)
     }
