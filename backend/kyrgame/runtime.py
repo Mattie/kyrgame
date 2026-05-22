@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fastapi import FastAPI
+from starlette.websockets import WebSocketState
 
 from . import commands, constants, database, fixtures, loader, models, repositories, rooms
 from .env import load_env_file
@@ -315,6 +316,36 @@ async def bootstrap_app(app: FastAPI):
         if not text and not event.payload:
             return
         event_payload = dict(event.payload)
+        excluded_sockets = set()
+        target_player = event_payload.get("target_player")
+        target_text = event_payload.get("target_text")
+        target_message_id = event_payload.get("target_message_id")
+        if target_player and target_text and target_message_id:
+            # Legacy reference: KYRANIM.C elves() prints the hint/reward to usrnum,
+            # then prints EMSG02/EMSG03 to the rest of the room (lines 367-383).
+            target_payload = {
+                "event": "room_message",
+                "scope": "target",
+                "type": "room_message",
+                "message_id": target_message_id,
+                "text": target_text,
+                "animation_flag": event.flag,
+                "player": target_player,
+            }
+            target_envelope = {
+                "type": "command_response",
+                "room": event.room_id,
+                "payload": target_payload,
+            }
+            for token in await app.state.presence.sessions_for_player(target_player):
+                target_socket = app.state.session_connections.get(token)
+                if not target_socket:
+                    continue
+                if target_socket.application_state != WebSocketState.CONNECTED:
+                    continue
+                excluded_sockets.add(target_socket)
+                await target_socket.send_json(target_envelope)
+
         payload_event = event_payload.get(
             "event",
             event_payload.get("type", "room_message"),
@@ -331,6 +362,7 @@ async def bootstrap_app(app: FastAPI):
         await app.state.gateway.broadcast(
             event.room_id,
             app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),
+            exclude=excluded_sockets or None,
         )
 
     app.state.dispatch_animation_event = _dispatch_animation_event

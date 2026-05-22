@@ -3,6 +3,7 @@ import json
 import httpx
 import pytest
 from sqlalchemy import select
+from starlette.websockets import WebSocketState
 
 from kyrgame import constants, fixtures, models
 from kyrgame.webapp import create_app
@@ -13,6 +14,16 @@ ADMIN_MAP_ENV = "KYRGAME_ADMIN_TOKENS"
 
 def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+class _FakeSocket:
+    application_state = WebSocketState.CONNECTED
+
+    def __init__(self):
+        self.sent: list[dict] = []
+
+    async def send_json(self, message: dict):
+        self.sent.append(message)
 
 
 @pytest.mark.anyio
@@ -593,10 +604,13 @@ async def test_admin_elf_trigger_reuses_legacy_hint_gold_flow(monkeypatch):
             )
 
         app.state.active_players["hero"] = active_player
-        broadcasts: list[tuple[int, dict]] = []
+        target_socket = _FakeSocket()
+        app.state.session_connections["hero-token"] = target_socket
+        await app.state.presence.set_location("hero", 7, "hero-token")
+        broadcasts: list[tuple[int, dict, set | None]] = []
 
         async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
-            broadcasts.append((room_id, message))
+            broadcasts.append((room_id, message, exclude))
 
         app.state.gateway.broadcast = _capture
 
@@ -629,7 +643,7 @@ async def test_admin_elf_trigger_reuses_legacy_hint_gold_flow(monkeypatch):
 
         message_ids = [
             event["payload"].get("message_id")
-            for _, event in broadcasts
+            for _, event, _ in broadcasts
             if event.get("type") == "room_broadcast"
         ]
         assert message_ids == [
@@ -645,10 +659,23 @@ async def test_admin_elf_trigger_reuses_legacy_hint_gold_flow(monkeypatch):
         assert hint_payload["target_player"] == "hero"
         assert hint_payload["target_message_id"] == "EHINT0"
         assert "The elf whispers to you" in hint_payload["target_text"]
+        assert target_socket in broadcasts[1][2]
 
         gold_payload = broadcasts[4][1]["payload"]
         assert gold_payload["target_player"] == "hero"
         assert gold_payload["target_message_id"] == "EMSG01"
+        assert target_socket in broadcasts[4][2]
+
+        target_messages = [
+            message
+            for message in target_socket.sent
+            if message.get("payload", {}).get("animation_flag") == "elves"
+        ]
+        assert [
+            message["payload"].get("message_id") for message in target_messages
+        ] == ["EHINT0", "EMSG01"]
+        assert "The elf whispers to you" in target_messages[0]["payload"]["text"]
+        assert "hands you" in target_messages[1]["payload"]["text"]
 
         with app.state.session_factory() as db:
             refreshed = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
