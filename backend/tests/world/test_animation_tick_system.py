@@ -9,6 +9,7 @@ from kyrgame.world.animation_tick_system import (
     ElfEncounterRoutine,
     GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
+    ZarDragonRoutine,
 )
 
 
@@ -94,6 +95,8 @@ def test_animation_tick_uses_initial_state_from_persistence_for_multiplayer_boot
         {
             "routine_index": 4,
             "zar_counter": 11,
+            "zar_location": 250,
+            "zar_attack_index": 3,
             "timed_flags": {"sesame": 1},
         }
     )
@@ -102,6 +105,8 @@ def test_animation_tick_uses_initial_state_from_persistence_for_multiplayer_boot
 
     assert system.state.routine_index == 4
     assert system.state.zar_counter == 11
+    assert system.state.zar_location == 250
+    assert system.state.zar_attack_index == 3
     assert system.state.timed_flags["sesame"] == 1
 
 
@@ -246,3 +251,175 @@ def test_brownie_routine_follows_path_and_steals_gold_then_inventory():
     assert inventory_events[1].message_id == "BMSG04"
     assert inventory_events[1].payload["target_message_id"] == "BMSG03"
     assert persisted == [(0, [0, 1]), (0, [])]
+
+
+def _build_zar_routine(
+    *,
+    room_objects,
+    players=None,
+    room_rolls=None,
+    chance_rolls=None,
+    persisted=None,
+    location_updates=None,
+):
+    room_roll_iter = iter(room_rolls or [])
+    chance_roll_iter = iter(chance_rolls or [])
+    persisted = persisted if persisted is not None else []
+    location_updates = location_updates if location_updates is not None else []
+
+    def _set_room(room_id, objects):
+        room_objects[room_id] = list(objects)
+        location_updates.append((room_id, list(objects)))
+
+    return ZarDragonRoutine(
+        room_picker=lambda low, high: next(room_roll_iter),
+        chance_picker=lambda low, high: next(chance_roll_iter),
+        room_objects_getter=lambda room_id: list(room_objects.get(room_id, [])),
+        room_objects_setter=_set_room,
+        players_getter=lambda room_id: [
+            player for player in (players or []) if player.gamloc == room_id
+        ],
+        player_persister=lambda player: persisted.append(
+            (player.plyrid, player.hitpts, player.gamloc)
+        ),
+        message_formatter=_message_formatter,
+    )
+
+
+def test_zar_placement_clears_room_adds_special_prop_and_preserves_dryad():
+    room_objects = {7: [45, 0], 302: [52]}
+    location_updates: list[tuple[int, list[int]]] = []
+    routine = _build_zar_routine(
+        room_objects=room_objects,
+        location_updates=location_updates,
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+
+    events = routine.place_zar(state, 7, "ZMSG11")
+
+    assert state.zar_location == 7
+    assert room_objects[7] == [52, 47, 45]
+    assert events == [
+        AnimationTickEvent(flag="pzinlc", room_id=7, message_id="ZMSG11"),
+        AnimationTickEvent(
+            flag="pzinlc",
+            room_id=7,
+            payload={
+                "type": "room_objects",
+                "event": "room_objects",
+                "location": 7,
+                "objects": [{"id": 52}, {"id": 47}, {"id": 45}],
+            },
+        ),
+    ]
+    assert location_updates[-1] == (7, [52, 47, 45])
+
+
+def test_zar_chkzar_relocates_when_hungry_and_room_is_empty():
+    room_objects = {250: [], 302: [52]}
+    routine = _build_zar_routine(room_objects=room_objects, room_rolls=[250])
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 302
+    state.zar_counter = 5
+
+    events = routine.chkzar(state)
+
+    assert [event.message_id for event in events if event.message_id] == ["ZMSG00", "ZMSG01"]
+    assert room_objects[302] == []
+    assert room_objects[250] == [52]
+    assert state.zar_location == 250
+    assert state.zar_counter == 6
+
+
+def test_zar_chkzar_returns_home_after_legacy_counter_limit():
+    room_objects = {250: [52], 302: []}
+    routine = _build_zar_routine(room_objects=room_objects)
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 250
+    state.zar_counter = 25
+
+    events = routine.chkzar(state)
+
+    assert [event.message_id for event in events if event.message_id] == ["ZMSG00", "ZMSG01"]
+    assert room_objects[250] == []
+    assert room_objects[302] == [52]
+    assert state.zar_location == 302
+    assert state.zar_counter == 1
+
+
+def test_zarapp_broadcasts_sighting_to_random_legacy_room():
+    routine = _build_zar_routine(room_objects={}, room_rolls=[87])
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+
+    assert routine.zarapp(state) == [
+        AnimationTickEvent(flag="zarapp", room_id=87, message_id="ZARABO")
+    ]
+
+
+def test_zarfood_rotates_attacks_applies_protection_and_skips_level_25():
+    bite = _build_player(plyrid="bite", altnam="Bite", gamloc=302, hitpts=100)
+    breath = _build_player(plyrid="breath", altnam="Breath", gamloc=302, hitpts=100)
+    breath.charms[1] = 1
+    claw = _build_player(plyrid="claw", altnam="Claw", gamloc=302, hitpts=100)
+    lightning = _build_player(plyrid="lightning", altnam="Lightning", gamloc=302, hitpts=100)
+    lightning.charms[3] = 1
+    archmage = _build_player(
+        plyrid="archmage", altnam="Archmage", gamloc=302, level=25, hitpts=100
+    )
+    persisted: list[tuple[str, int, int]] = []
+    routine = _build_zar_routine(
+        room_objects={302: [52]},
+        players=[bite, breath, claw, lightning, archmage],
+        persisted=persisted,
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 302
+
+    found_food, events = routine.zarfood(state)
+
+    assert found_food is True
+    assert events[0].message_id == "ZMSG02"
+    assert [event.message_id for event in events if event.message_id == "ZMSG07"] == [
+        "ZMSG07",
+        "ZMSG07",
+        "ZMSG07",
+        "ZMSG07",
+    ]
+    target_events = [
+        event for event in events if event.payload.get("target_only") is True
+    ]
+    assert [event.payload["target_message_id"] for event in target_events] == [
+        "ZMSG03",
+        "ZMSG04",
+        "ZMSG05",
+        "ZMSG06",
+    ]
+    assert (bite.hitpts, breath.hitpts, claw.hitpts, lightning.hitpts, archmage.hitpts) == (
+        84,
+        72,
+        88,
+        84,
+        100,
+    )
+    assert state.zar_attack_index == 1
+    assert persisted == [
+        ("bite", 84, 302),
+        ("breath", 72, 302),
+        ("claw", 88, 302),
+        ("lightning", 84, 302),
+    ]
+
+
+def test_zarfood_emits_existing_death_messages_when_attack_kills_player():
+    player = _build_player(plyrid="target", altnam="Target", gamloc=302, hitpts=10)
+    routine = _build_zar_routine(room_objects={302: [52]}, players=[player])
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 302
+
+    _, events = routine.zarfood(state)
+
+    assert player.hitpts == 0
+    assert any(
+        event.payload.get("target_message_id") == "DIEMSG" for event in events
+    )
+    assert any(event.message_id == "KILLED" for event in events)

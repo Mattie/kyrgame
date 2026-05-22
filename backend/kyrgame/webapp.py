@@ -24,7 +24,7 @@ from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
-from .world.animation_tick_system import AnimationTickSystem, BrownieRoutine
+from .world.animation_tick_system import AnimationTickSystem, BrownieRoutine, ZarDragonRoutine
 
 logger = logging.getLogger(__name__)
 
@@ -694,9 +694,14 @@ def _admin_mob_snapshot(provider: FixtureProvider):
     # of sync with animation state.
     dryad_object_room_id = dryad_room_id
     dragon_room_id = _find_room_containing_object(provider, 52)
+    dragon_state_room_id = state.zar_location
+    dragon_display_room_id = (
+        dragon_room_id if dragon_room_id is not None else dragon_state_room_id
+    )
 
     # Legacy mob state comes from KYRANIM.C globals and routines:
-    # dloc/dryads lines 67,326-348; bpath/bpidx/bloc/browns lines 69-80,393-426.
+    # dloc/dryads lines 67,326-348; bpath/bpidx/bloc/browns lines 69-80,393-426;
+    # zloc/zstat/zattck/chkzar/zarapp lines 81-84,154-173,452-459.
     return {
         "animation": {
             "routine_index": state.routine_index,
@@ -751,11 +756,17 @@ def _admin_mob_snapshot(provider: FixtureProvider):
                 "id": "dragon",
                 "name": "Zar",
                 "kind": "persistent_room_object",
-                "status": "present" if dragon_room_id is not None else "unported",
+                "status": "present" if dragon_room_id is not None else "state_only",
                 "object_id": 52,
-                "room_id": dragon_room_id,
-                "room": _admin_room_summary(provider, dragon_room_id),
-                "legacy_source": "legacy/KYRANIM.C:155-263,453-466",
+                "room_id": dragon_display_room_id,
+                "state_room_id": dragon_state_room_id,
+                "object_room_id": dragon_room_id,
+                "room": _admin_room_summary(provider, dragon_display_room_id),
+                "counter": state.zar_counter,
+                "attack_index": state.zar_attack_index % 4,
+                "next_attack": ZarDragonRoutine.attack_name(state.zar_attack_index),
+                "home_room_id": 302,
+                "legacy_source": "legacy/KYRANIM.C:155-263,453-459",
             },
         ],
     }
@@ -1690,6 +1701,12 @@ def create_app() -> FastAPI:
             db_session=persistent_session,
             presence=provider.presence,
             player_lookup=lookup_player,
+            zar_controller=getattr(provider.scope.app.state, "animation_zar_routine", None),
+            zar_state=getattr(
+                getattr(provider.scope.app.state, "animation_tick_system", None),
+                "state",
+                None,
+            ),
         )
 
         _register_active_player_session(provider.scope.app, session_token, player_state)

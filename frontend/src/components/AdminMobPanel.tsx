@@ -30,6 +30,9 @@ const formatMobDetail = (mob: AdminMobRecord) => {
   if (mob.id === 'elf') {
     return `next ${mob.next_outcome ?? 'event'}; hint ${mob.hint_index ?? 0}`
   }
+  if (mob.id === 'dragon') {
+    return `next ${mob.next_attack ?? 'attack'}; counter ${mob.counter ?? 0}`
+  }
   return mob.status.replace(/_/g, ' ')
 }
 

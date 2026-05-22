@@ -4,10 +4,15 @@ name: wingam
 spoiler_summary: "Wing animation chamber where answering the riddle completes the level 25 trial."
 spoiler_interaction: "Answer the riddle phrase to attempt the level 25 ascension."
 legacy_ref: "legacy/KYRROUS.C:1406-1421"
+state:
+  # Legacy wingam only handles the riddle while zloc == 302. (legacy/KYRROUS.C:1409)
+  zar_location: 302
 triggers:
   - verbs: [answer]
     # Legacy compares the answer phrase (RIDDLE) to the full response after "answer". (legacy/KYRROUS.C:1410-1416)
     arg_phrase_key: RIDDLE
+    room_state_equals:
+      zar_location: 302
     actions:
       - type: level_gate
         target_level: 25

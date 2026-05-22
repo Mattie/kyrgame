@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol, Sequence
 
+from .. import constants, models
+
 
 @dataclass(eq=True, frozen=True)
 class AnimationTickEvent:
@@ -35,6 +37,8 @@ class AnimationTickState:
 
     routine_index: int = 0
     zar_counter: int = 0
+    zar_location: int = 302
+    zar_attack_index: int = 0
     timed_flags: MutableMapping[str, int] = field(
         default_factory=lambda: {"sesame": 0, "chantd": 0, "rockpr": 0}
     )
@@ -74,7 +78,7 @@ class InMemoryAnimationTickPersistence:
 
 
 RoutineHandler = Callable[[AnimationTickState], Sequence[AnimationTickEvent] | None]
-MobUpdateHandler = Callable[[AnimationTickState], None]
+MobUpdateHandler = Callable[[AnimationTickState], Sequence[AnimationTickEvent] | None]
 TimedFlagHandler = Callable[[AnimationTickState], AnimationTickEvent]
 MessageLookup = Callable[[str], str | None]
 RoomFlagGetter = Callable[[int, str], int]
@@ -102,6 +106,253 @@ BROWNIE_PATH = (
     168, 77, 133, 92, 61, 101, 73, 99, 69, 111,
     45, 132, 3, 2, 55, 60, 160, 48, 70, 112,
 )
+
+ZAR_HOME_ROOM = 302
+ZAR_DRAGON_OBJECT_ID = 52
+ZAR_DRYAD_OBJECT_ID = 45
+ZAR_SPECIAL_ROOM_OBJECTS = {
+    0: 46,
+    7: 47,
+    9: 48,
+    42: 49,
+    101: 50,
+    186: 51,
+    295: 53,
+}
+ZAR_ATTACKS = ("bite", "breath", "claw", "lightning")
+
+
+class ZarDragonRoutine:
+    """Port Zar's legacy animation, movement, and attack routines.
+
+    Legacy references:
+    - `inianm`, `chkzar`: legacy/KYRANIM.C lines 88-173.
+    - `zaritm`, `zarfood`, `rmvzar`, `pzinlc`, `dthbyz`: lines 176-322.
+    - `zarapp`: lines 452-459.
+    """
+
+    def __init__(
+        self,
+        *,
+        room_picker: Callable[[int, int], int],
+        chance_picker: Callable[[int, int], int],
+        room_objects_getter: Callable[[int], Sequence[int]],
+        room_objects_setter: Callable[[int, Sequence[int]], None],
+        players_getter: Callable[[int], Sequence[models.PlayerModel]],
+        player_persister: Callable[[models.PlayerModel], None],
+        message_formatter: Callable[..., str],
+        zar_location_setter: Callable[[int], None] | None = None,
+        home_room_id: int = ZAR_HOME_ROOM,
+        dragon_object_id: int = ZAR_DRAGON_OBJECT_ID,
+    ) -> None:
+        self._room_picker = room_picker
+        self._chance_picker = chance_picker
+        self._room_objects_getter = room_objects_getter
+        self._room_objects_setter = room_objects_setter
+        self._players_getter = players_getter
+        self._player_persister = player_persister
+        self._message_formatter = message_formatter
+        self._zar_location_setter = zar_location_setter
+        self.home_room_id = home_room_id
+        self.dragon_object_id = dragon_object_id
+
+    @staticmethod
+    def attack_name(attack_index: int) -> str:
+        return ZAR_ATTACKS[attack_index % len(ZAR_ATTACKS)]
+
+    def initialize(self, state: AnimationTickState) -> None:
+        if self.dragon_object_id not in self._room_objects_getter(state.zar_location):
+            self._set_zar_room_objects(
+                state.zar_location,
+                self._placement_objects(state.zar_location),
+            )
+        self._sync_zar_location(state.zar_location)
+
+    def chkzar(self, state: AnimationTickState) -> list[AnimationTickEvent]:
+        events: list[AnimationTickEvent] = []
+
+        if state.zar_counter > 24:
+            events.extend(self.remove_zar(state, "ZMSG00"))
+            events.extend(self.place_zar(state, self.home_room_id, "ZMSG01"))
+            state.zar_counter = 0
+        elif state.zar_counter < 5:
+            _, attack_events = self.zarfood(state)
+            events.extend(attack_events)
+        else:
+            found_food, attack_events = self.zarfood(state)
+            events.extend(attack_events)
+            if not found_food:
+                events.extend(self.remove_zar(state, "ZMSG00"))
+                events.extend(
+                    self.place_zar(
+                        state,
+                        self._room_picker(219, 300),
+                        "ZMSG01",
+                    )
+                )
+
+        state.zar_counter += 1
+        return events
+
+    def should_attack_after_staff(self) -> bool:
+        return self._chance_picker(0, 2) == 1
+
+    def zarapp(self, _: AnimationTickState) -> list[AnimationTickEvent]:
+        return [
+            AnimationTickEvent(
+                flag="zarapp",
+                room_id=self._room_picker(0, 168),
+                message_id="ZARABO",
+            )
+        ]
+
+    def remove_zar(
+        self, state: AnimationTickState, message_id: str
+    ) -> list[AnimationTickEvent]:
+        room_id = state.zar_location
+        updated = [
+            object_id
+            for object_id in self._room_objects_getter(room_id)
+            if object_id != self.dragon_object_id
+        ]
+        self._set_zar_room_objects(room_id, updated)
+        return [
+            AnimationTickEvent(
+                flag="rmvzar",
+                room_id=room_id,
+                message_id=message_id,
+            ),
+            AnimationTickEvent(
+                flag="rmvzar",
+                room_id=room_id,
+                payload=_room_objects_payload(room_id, updated),
+            )
+        ]
+
+    def place_zar(
+        self, state: AnimationTickState, room_id: int, message_id: str
+    ) -> list[AnimationTickEvent]:
+        objects = self._placement_objects(room_id)
+        state.zar_location = room_id
+        self._sync_zar_location(room_id)
+        self._set_zar_room_objects(room_id, objects)
+        return [
+            AnimationTickEvent(
+                flag="pzinlc",
+                room_id=room_id,
+                message_id=message_id,
+            ),
+            AnimationTickEvent(
+                flag="pzinlc",
+                room_id=room_id,
+                payload=_room_objects_payload(room_id, objects),
+            )
+        ]
+
+    def zarfood(
+        self, state: AnimationTickState
+    ) -> tuple[bool, list[AnimationTickEvent]]:
+        players = list(self._players_getter(state.zar_location))
+        if not players:
+            return False, []
+
+        events = [
+            AnimationTickEvent(
+                flag="zarfood",
+                room_id=state.zar_location,
+                message_id="ZMSG02",
+            )
+        ]
+        for player in players:
+            if state.zar_attack_index == len(ZAR_ATTACKS):
+                state.zar_attack_index = 0
+            attack_index = state.zar_attack_index
+            if player.level < constants.MAX_PLAYER_LEVEL:
+                events.extend(self._attack_player(state.zar_location, player, attack_index))
+            state.zar_attack_index += 1
+        return True, events
+
+    def _attack_player(
+        self, room_id: int, player: models.PlayerModel, attack_index: int
+    ) -> list[AnimationTickEvent]:
+        attack = self.attack_name(attack_index)
+        message_id, damage = self._attack_message_and_damage(player, attack)
+
+        player.hitpts = max(0, player.hitpts - damage)
+        self._player_persister(player)
+
+        events = [
+            AnimationTickEvent(
+                flag="zarfood",
+                room_id=room_id,
+                message_id="ZMSG07",
+                message_text=self._message_formatter("ZMSG07", player.altnam),
+                payload={"exclude_player": player.plyrid, "attack": attack},
+            ),
+            AnimationTickEvent(
+                flag="zarfood",
+                room_id=room_id,
+                payload={
+                    "target_only": True,
+                    "target_player": player.plyrid,
+                    "target_message_id": message_id,
+                    "target_text": self._message_formatter(message_id),
+                    "damage": damage,
+                    "attack": attack,
+                },
+            ),
+        ]
+        if player.hitpts <= 0:
+            events.extend(
+                [
+                    AnimationTickEvent(
+                        flag="zarfood",
+                        room_id=room_id,
+                        payload={
+                            "target_only": True,
+                            "target_player": player.plyrid,
+                            "target_message_id": "DIEMSG",
+                            "target_text": self._message_formatter("DIEMSG"),
+                        },
+                    ),
+                    AnimationTickEvent(
+                        flag="zarfood",
+                        room_id=room_id,
+                        message_id="KILLED",
+                        message_text=self._message_formatter("KILLED", player.altnam),
+                        payload={"exclude_player": player.plyrid},
+                    ),
+                ]
+            )
+        return events
+
+    def _attack_message_and_damage(
+        self, player: models.PlayerModel, attack: str
+    ) -> tuple[str, int]:
+        if attack == "bite":
+            return "ZMSG03", 16
+        if attack == "breath":
+            return "ZMSG04", 28 if player.charms[constants.FIRPRO] else 48
+        if attack == "claw":
+            return "ZMSG05", 12
+        return "ZMSG06", 16 if player.charms[constants.LIGPRO] else 32
+
+    def _placement_objects(self, room_id: int) -> list[int]:
+        existing = list(self._room_objects_getter(room_id))
+        objects = [self.dragon_object_id]
+        special_object = ZAR_SPECIAL_ROOM_OBJECTS.get(room_id)
+        if special_object is not None:
+            objects.append(special_object)
+        if ZAR_DRYAD_OBJECT_ID in existing:
+            objects.append(ZAR_DRYAD_OBJECT_ID)
+        return objects
+
+    def _set_zar_room_objects(self, room_id: int, objects: Sequence[int]) -> None:
+        self._room_objects_setter(room_id, list(objects))
+
+    def _sync_zar_location(self, room_id: int) -> None:
+        if self._zar_location_setter:
+            self._zar_location_setter(room_id)
 
 
 class GemSpawnRoutine:
@@ -486,11 +737,11 @@ class AnimationTickSystem:
     def tick(self) -> AnimationTickResult:
         # Legacy reference: `animat()` starts with `chkzar()` before routine switch.
         # See legacy/KYRANIM.C lines 116-133.
-        self._mob_updater(self.state)
+        mob_events = list(self._mob_updater(self.state) or [])
 
         routine_name = self.next_routine_name()
         handler = self._routine_handlers[routine_name]
-        routine_events = list(handler(self.state) or [])
+        routine_events = [*mob_events, *list(handler(self.state) or [])]
 
         timed_events = self._consume_timed_flags()
 
@@ -517,6 +768,8 @@ class AnimationTickSystem:
             {
                 "routine_index": self.state.routine_index,
                 "zar_counter": self.state.zar_counter,
+                "zar_location": self.state.zar_location,
+                "zar_attack_index": self.state.zar_attack_index,
                 "timed_flags": dict(self.state.timed_flags),
                 "gem_counter": self.state.gem_counter,
                 "dryad_location": self.state.dryad_location,
@@ -544,6 +797,8 @@ class AnimationTickSystem:
         return AnimationTickState(
             routine_index=int(payload.get("routine_index", 0)),
             zar_counter=int(payload.get("zar_counter", 0)),
+            zar_location=int(payload.get("zar_location", ZAR_HOME_ROOM)),
+            zar_attack_index=int(payload.get("zar_attack_index", 0)),
             timed_flags=normalized_flags,
             gem_counter=int(payload.get("gem_counter", 0)),
             dryad_location=int(payload.get("dryad_location", 0)),

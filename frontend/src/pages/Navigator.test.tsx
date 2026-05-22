@@ -135,6 +135,21 @@ describe('Navigator flow', () => {
         hint_index: 4,
         legacy_source: 'legacy/KYRANIM.C:352-389',
       },
+      {
+        id: 'dragon',
+        name: 'Zar',
+        kind: 'persistent_room_object',
+        status: 'present',
+        object_id: 52,
+        room_id: 250,
+        state_room_id: 250,
+        home_room_id: 302,
+        counter: 8,
+        attack_index: 2,
+        next_attack: 'claw',
+        room: { id: 250, brief: 'in a dark passage', object_landing: 'on the ground' },
+        legacy_source: 'legacy/KYRANIM.C:155-263,453-459',
+      },
     ],
   }
 
@@ -969,8 +984,10 @@ describe('Navigator flow', () => {
 
     expect(await screen.findByText(/Mob tracker/i)).toBeInTheDocument()
     expect(screen.getByText(/Dryad/i)).toBeInTheDocument()
+    expect(screen.getByText(/Zar/i)).toBeInTheDocument()
     expect(screen.getAllByText(/near a mystical willow tree/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/next 129/i)).toBeInTheDocument()
+    expect(screen.getByText(/next claw; counter 8/i)).toBeInTheDocument()
     await act(async () => {
       await user.click(screen.getByRole('button', { name: /trigger elf/i }))
     })

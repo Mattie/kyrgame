@@ -8,7 +8,7 @@ This checklist is intended for admins/testers validating recently ported object 
 - Action-gated item behavior for `drink`, `read`, `rub`, and `aim/point` flows.
 - Consumable inventory mutation for drinkables/readables/dragonstaff.
 - Room/context restrictions for non-portable scenery props.
-- Dragonstaff bridge behavior pending full Zar animation/service wiring.
+- Dragonstaff `zaritm` behavior with full Zar summon, relocation, and attack wiring.
 
 ---
 
@@ -94,17 +94,23 @@ Suggested props/rooms to spot-check:
 
 ---
 
-## F. Dragonstaff (`rub` flow + Zar bridge)
+## F. Dragonstaff (`rub` flow + Zar)
 
-> Ported behavior: dragonstaff requires `rub`, consumes the item on use, and currently bridges to callback/pending flow until full Zar systems are integrated.
+> Ported behavior: dragonstaff requires `rub`, consumes the item on use, and routes through Zar's legacy `zaritm` summon/attack flow.
 
 - [ ] Grant `dragonstaff`; issue `rub dragonstaff`.
-  - Expected: rub flow succeeds with dragonstaff/Zar messaging.
-  - Expected: dragonstaff inventory entry is consumed.
-- [ ] If running with Zar callback wiring enabled in the environment:
-  - Expected: callback-backed summon/response path is returned.
-- [ ] If callback wiring is not enabled:
-  - Expected: pending/placeholder bridge response appears (non-crashing graceful path).
+  - Expected: the room sees `*** <player> is rubbing <his/her/its> dragonstaff!`.
+  - Expected: dragonstaff inventory entry is consumed immediately.
+- [ ] With Zar in another room, issue `rub dragonstaff`.
+  - Expected: the player receives `ZMSG13`, Zar's old room receives `ZMSG10`, the player's room receives `ZMSG11`, and the player receives `ZMSG14`.
+  - Expected: Zar's old room loses object `52`; the player's room gains object `52` plus any legacy special prop for that room.
+  - Expected: Zar may attack after the summon according to the legacy 50% chance.
+- [ ] With Zar already in the player's room, issue `rub dragonstaff`.
+  - Expected: the player receives `ZMSG12`, then `ZMSG14`.
+  - Expected: Zar attacks active non-level-25 players in the room using the rotating bite/breath/claw/lightning sequence.
+- [ ] Spot-check protections during Zar attacks.
+  - Expected: fire protection reduces dragon breath damage and lightning protection reduces lightning damage.
+- [ ] Confirm a level 25 player in Zar's room is skipped by Zar's attack pass.
 
 ---
 

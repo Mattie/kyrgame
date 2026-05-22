@@ -53,7 +53,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] IDs 0–11: gems (ruby, emerald, garnet, pearl, aquamarine, moonstone, sapphire, diamond, amethyst, onyx, opal, bloodstone)【F:legacy/KYROBJS.C†L63-L99】
 - [x] ID 12: elixir (drinkable)【F:legacy/KYROBJS.C†L100-L103】
 - [x] IDs 13–29: equipment/curios (staff, key, locket, amulet, pendant, charm, bracelet, coronet, tiara, necklace, broach, sceptre, rod, wand, trinket, soulstone, kyragem)【F:legacy/KYROBJS.C†L103-L154】
-- [x] ID 30: dragonstaff (rub-to-summon Zar behavior via `zaritm`)【F:legacy/KYROBJS.C†L154-L157】【F:legacy/KYRANIM.C†L206-L237】
+- [x] ID 30: dragonstaff (rub-to-summon Zar behavior via `zaritm`)【F:legacy/KYROBJS.C†L154-L157】【F:legacy/KYRANIM.C†L176-L198】
 - [x] ID 31: potion (drinkable)【F:legacy/KYROBJS.C†L157-L160】
 - [x] ID 34: sword (attack item)【F:legacy/KYROBJS.C†L165-L169】
 - [x] IDs 35–38: readables (scroll, codex, tome, parchment)【F:legacy/KYROBJS.C†L169-L178】
@@ -136,13 +136,13 @@ Spell timer cadence (`splrtk`) now runs through `SpellTickSystem` (macro reset, 
 ## Animation routines still to port (`KYRANIM.C`)
 Legacy animation ticks coordinate Zar, dryads, elves, brownies, and gem spawns. Mirror these behaviors in a scheduler-driven service and check them off once parity behavior (including broadcasts and damage) is covered:
 
-- [ ] `inianm` + `animat` main tick loop and cadence (rtkick 30/15).【F:legacy/KYRANIM.C†L88-L152】
-- [ ] `chkzar` Zar roaming/timeout behavior.【F:legacy/KYRANIM.C†L154-L173】
-- [ ] `zaritm` dragonstaff use (summon/attack flow).【F:legacy/KYRANIM.C†L176-L198】
-- [ ] `zarfood`/`dthbyz` Zar attack sequencing + protection checks.【F:legacy/KYRANIM.C†L201-L322】
-- [ ] `pzinlc`/`rmvzar` Zar placement/removal (including props).【F:legacy/KYRANIM.C†L211-L267】
+- [x] `inianm` + `animat` main tick loop and cadence (rtkick 30/15).【F:legacy/KYRANIM.C†L88-L152】
+- [x] `chkzar` Zar roaming/timeout behavior.【F:legacy/KYRANIM.C†L154-L173】
+- [x] `zaritm` dragonstaff use (summon/attack flow).【F:legacy/KYRANIM.C†L176-L198】
+- [x] `zarfood`/`dthbyz` Zar attack sequencing + protection checks.【F:legacy/KYRANIM.C†L201-L322】
+- [x] `pzinlc`/`rmvzar` Zar placement/removal (including props).【F:legacy/KYRANIM.C†L211-L267】
 - [x] `dryads` wandering dryad logic (room capacity handling).【F:legacy/KYRANIM.C†L325-L348】
 - [x] `elves` hint/gold alternating encounter behavior.【F:legacy/KYRANIM.C†L351-L389】
 - [x] `browns` brownie theft/taunt behavior (gold/inventory clearing).【F:legacy/KYRANIM.C†L392-L426】
 - [x] `gemakr` periodic gem spawns in forest rooms.【F:legacy/KYRANIM.C†L428-L449】
-- [ ] `zarapp` Zar sighting broadcast warnings.【F:legacy/KYRANIM.C†L452-L459】
+- [x] `zarapp` Zar sighting broadcast warnings.【F:legacy/KYRANIM.C†L452-L459】

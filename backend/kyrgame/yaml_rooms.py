@@ -131,6 +131,14 @@ class YamlRoomEngine:
             stripped = re.sub(r"[^a-z0-9\\s]", "", lowered)
             return " ".join(stripped.split())
 
+        required_state_equal = trigger.get("room_state_equals", {})
+        if required_state_equal:
+            state = self._get_room_state(room_id)
+            defaults = self.room_state_defaults.get(room_id, {})
+            for key, value in required_state_equal.items():
+                if state.get(key, defaults.get(key, 0)) != value:
+                    return False
+
         phrase_key = trigger.get("match_phrase_key")
         if phrase_key:
             target_phrase = self.messages.messages.get(phrase_key, "")
