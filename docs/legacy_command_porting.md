@@ -7,31 +7,31 @@ This document enumerates the legacy Kyrandia player commands so the modern dispa
 | Commands | Legacy handler | Behavioral summary | Ported & server parity | Frontend rendering verified |
 | --- | --- | --- | --- | --- |
 | `?`, `help` | `helper` | Displays contextual help screens or the general help message depending on optional topic flags. | [x] | [ ] |
-| `aim`, `point` | `aimer` | Aims an item at a target and routes through object-specific logic when the item supports aiming. | [ ] | [ ] |
-| `brief` / `unbrief` | `briefr` / `ubrief` | Toggles brief room descriptions on or off for the player. | [ ] | [ ] |
-| `cast`, `chant` | `caster` | Validates spell knowledge, level, and spell points before invoking the spell routine and deducting costs. | [ ] | [ ] |
+| `aim`, `point` | `aimer` | Aims an item at a target and routes through object-specific logic when the item supports aiming. | [x] | [ ] |
+| `brief` / `unbrief` | `briefr` / `ubrief` | Toggles brief room descriptions on or off for the player. | [x] | [ ] |
+| `cast`, `chant` | `caster` | Validates spell knowledge, level, and spell points before invoking the spell routine and deducting costs. | [x] | [ ] |
 | `check`, `count` (incl. `count gold`) | `countr` / `gldcnt` | Shows generic count feedback or gold-specific totals. | [x] | [ ] |
 | `comfort`, `cuddle`, `embrace`, `french`, `hold`, `love`, `rape`, `romance`, `squeeze`, `tickle` | `kissr1` | Performs friendly/intimate emotes toward targets using the shared kissing utility. | [ ] | [ ] |
 | `hug`, `kick`, `kiss`, `pinch`, `punch`, `slap`, `smack`, `smooch` | `kissr2` | Performs the alternate kissing/physical interaction flow with target validation. | [ ] | [ ] |
 | `concentrate`, `meditate`, `think` | `thinkr` | Thinks about an item (or telepathically via amulet), delegating to item logic when allowed. | [ ] | [ ] |
-| `drink`, `swallow` | `drinkr` | Consumes a drinkable item, triggering its effect when allowed. | [ ] | [ ] |
-| `drop` | `dropit` | Drops an item from inventory into the room, with checks for ownership, curses, and room capacity. | [ ] | [ ] |
+| `drink`, `swallow` | `drinkr` | Consumes a drinkable item, triggering its effect when allowed. | [x] | [ ] |
+| `drop` | `dropit` | Drops an item from inventory into the room, with checks for ownership, curses, and room capacity. | [x] | [ ] |
 | `east`, `e`, `west`, `w`, `north`, `n`, `south`, `s` | `gi_east` / `gi_west` / `gi_north` / `gi_south` | Moves the player via room exits using `movutl`, broadcasting departure/arrival text. | [x] | [ ] |
-| `examine`, `look`, `see` | `looker` | Describes objects, players, or room state (including brief descriptions) depending on arguments. | [ ] | [ ] |
+| `examine`, `look`, `see` | `looker` | Describes objects, players, or room state (including brief descriptions) depending on arguments. | [x] | [ ] |
 | `fly` | `flyrou` | Handles flight attempts, delegating to will-o-wisp or pegasus routines when available. | [ ] | [ ] |
-| `get`, `grab`, `pickpocket`, `pilfer`, `snatch`, `steal`, `take` | `getter` | Gets items from the room or another player with theft chance handling and inventory limits. | [ ] | [ ] |
+| `get`, `grab`, `pickpocket`, `pilfer`, `snatch`, `steal`, `take` | `getter` | Gets items from the room or another player with theft chance handling and inventory limits. | [x] | [ ] |
 | `give`, `hand`, `pass`, `toss` | `giveit` | Gives items or gold to another player, handling currency parsing and item transfers. | [x] *(player-to-player flow for `give`/`hand`/`pass`; `toss` remains room-script driven where applicable)* | [ ] |
 | `gold` | `gldcnt` | Shortcut to display current gold total with singular/plural handling. | [x] | [ ] |
 | `hits` | `hitctr` | Displays hit point totals/status. | [x] | [ ] |
 | `inv` | `gi_invrou` | Shows the player’s inventory contents. | [x] | [x] |
-| `learn`, `memorize` | `memori` | Learns or memorizes spells through the spellbook logic. | [ ] | [ ] |
+| `learn`, `memorize` | `memori` | Learns or memorizes spells through the spellbook logic. | [x] | [ ] |
 | `note`, `say`, `comment` | `speakr` | Sends a spoken message to the room with local echo and nearby broadcast text. | [x] *(existing chat bridge path)* | [ ] |
 | `pray` | `prayer` | Performs the prayer routine. | [x] | [ ] |
 | `push`, `shove` | `shover` | Attempts to shove another player, including resistance and state updates. | [ ] | [ ] |
-| `read` | `reader` | Reads items such as scrolls or the spellbook, invoking `scroll` for magical items. | [ ] | [ ] |
-| `rub` | `rubber` | Rubs an item and triggers its rub-enabled effect when applicable. | [ ] | [ ] |
+| `read` | `reader` | Reads items such as scrolls or the spellbook, invoking `scroll` for magical items. | [x] | [ ] |
+| `rub` | `rubber` | Rubs an item and triggers its rub-enabled effect when applicable. | [x] | [ ] |
 | `scream`, `shout`, `shriek`, `yell`, `yell` | `yeller` | Delivers shouted messages with uppercase emphasis and broadcasts. | [x] *(existing chat bridge path)* | [ ] |
-| `spells` | `shwpsp` | Lists known spells for the player. | [ ] | [ ] |
+| `spells` | `shwpsp` | Lists known spells for the player. | [x] | [ ] |
 | `think` variants (already covered) | `thinkr` | See above. | [ ] | [ ] |
 | `what?`, `where?`, `why?`, `how?` | `ponder` | Responds with rhetorical/pondering text. | [x] | [ ] |
 | `whisper` | `whispr` | Sends a directed whisper to a specific player if present. | [x] | [ ] |

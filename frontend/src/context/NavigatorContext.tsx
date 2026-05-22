@@ -39,6 +39,8 @@ export type SessionRecord = {
   token: string
   playerId: string
   roomId: number
+  expiresAt?: string | null
+  expiresInSeconds?: number | null
 }
 
 export type WorldData = {
@@ -537,8 +539,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         setConnectionStatus('connected')
       }
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setConnectionStatus('disconnected')
+        if (event.code !== 1000) {
+          setError(event.reason || `WebSocket closed with code ${event.code}`)
+        }
       }
 
       socket.onerror = () => {
@@ -665,6 +670,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           token: sessionPayload.token,
           playerId: sessionPayload.player_id,
           roomId: sessionPayload.room_id,
+          expiresAt: sessionPayload.expires_at ?? null,
+          expiresInSeconds:
+            typeof sessionPayload.expires_in_seconds === 'number'
+              ? sessionPayload.expires_in_seconds
+              : null,
         }
         setSession(record)
         setCurrentRoom(record.roomId)

@@ -15,7 +15,7 @@ class MockWebSocket {
   sent: string[] = []
   onmessage: ((event: { data: string }) => void) | null = null
   onopen: (() => void) | null = null
-  onclose: (() => void) | null = null
+  onclose: ((event: { code: number; reason: string }) => void) | null = null
 
   constructor(url: string) {
     this.url = url
@@ -29,8 +29,8 @@ class MockWebSocket {
     this.sent.push(data)
   }
 
-  close() {
-    this.onclose?.()
+  close(code = 1000, reason = '') {
+    this.onclose?.({ code, reason })
   }
 
   triggerMessage(data: unknown) {
@@ -185,6 +185,87 @@ describe('Navigator flow', () => {
     expect(
       screen.getAllByText(/praying to the Goddess Tashanna/i).length
     ).toBeGreaterThan(0)
+  })
+
+  it('shows session expiration metadata and reconnects with a fresh token after close', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            expires_at: '2026-05-22T00:00:00+00:00',
+            expires_in_seconds: 86400,
+          },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'fresh456',
+            player_id: 'hero',
+            room_id: 7,
+            expires_at: '2026-05-22T00:30:00+00:00',
+            expires_in_seconds: 88200,
+          },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    fetchMock.mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const firstSocket = await waitFor(() => MockWebSocket.instances[0])
+    expect(firstSocket.url).toContain('/rooms/7?token=abc123')
+    expect(await screen.findByText(/token expires in 24h 0m/i)).toBeInTheDocument()
+
+    act(() => {
+      firstSocket.close(1008, 'Invalid session token')
+    })
+
+    await screen.findByText(/connection: disconnected/i)
+    expect(screen.getByText(/Invalid session token/i)).toBeInTheDocument()
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /reconnect session/i }))
+    })
+
+    const secondSocket = await waitFor(() => MockWebSocket.instances[1])
+    expect(secondSocket.url).toContain('/rooms/7?token=fresh456')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/auth/session',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ player_id: 'hero', room_id: 7 }),
+      })
+    )
+    expect(await screen.findByText(/token expires in 24h 30m/i)).toBeInTheDocument()
   })
 
   it('renders command_response room_message text for look-style replies', async () => {

@@ -5,6 +5,14 @@ from kyrgame import models
 from kyrgame.runtime import bootstrap_app, shutdown_app
 
 
+class _FixedAnimationRng:
+    def __init__(self, *values: int) -> None:
+        self._values = list(values)
+
+    def randint(self, low: int, high: int) -> int:  # noqa: ARG002
+        return self._values.pop(0)
+
+
 @pytest.mark.anyio
 async def test_bootstrap_initializes_tick_scheduler_and_shutdown_cancels_timers(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
@@ -63,6 +71,44 @@ async def test_animation_tick_callback_syncs_room_flags_and_clears_one_shots(mon
     await app.state.animation_tick_callback()
 
     assert app.state.room_scripts.yaml_engine.get_room_state(185)["sesame"] == 0
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_npcs_only_affect_active_players(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    with app.state.session_factory() as session:
+        player = session.query(models.Player).first()
+        assert player is not None
+        player.gamloc = 50
+        player.gold = 5
+        player_id = player.id
+        session.commit()
+
+    app.state.animation_rng = _FixedAnimationRng(50, 7)
+    app.state.animation_tick_system.state.routine_index = 1
+    app.state.animation_tick_system.state.elf_reward_next = 1
+    broadcasts: list[tuple[int, dict]] = []
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+        broadcasts.append((room_id, message))
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.animation_tick_callback()
+
+    assert broadcasts == []
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Player).filter(models.Player.id == player_id).one()
+        assert refreshed.gold == 5
 
     await shutdown_app(app)
 

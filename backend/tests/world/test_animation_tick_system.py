@@ -1,8 +1,12 @@
 import pytest
 
+from kyrgame import fixtures
 from kyrgame.world.animation_tick_system import (
     AnimationTickEvent,
     AnimationTickSystem,
+    BrownieRoutine,
+    DryadWanderRoutine,
+    ElfEncounterRoutine,
     GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
 )
@@ -137,3 +141,107 @@ def test_gemakr_uses_legacy_cadence_capacity_and_random_gem_every_11th_spawn():
     )(state)
     assert blocked_event == []
     assert room_objects[51] == [0, 1, 2, 3]
+
+
+def _message_formatter(message_id: str, *args):
+    messages = fixtures.load_messages().messages
+    template = messages[message_id]
+    return template % args if args else template
+
+
+def _build_player(**updates):
+    player = fixtures.build_player()
+    data = player.model_dump()
+    data.update(updates)
+    return player.model_copy(update=data)
+
+
+def test_dryad_routine_moves_dryad_and_evicts_full_destination_room():
+    room_objects = {0: [45], 20: [0, 1, 2, 3, 4, 5]}
+
+    routine = DryadWanderRoutine(
+        room_picker=lambda low, high: 20,
+        room_objects_getter=lambda room_id: room_objects.get(room_id, []),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(room_id, list(objects)),
+        object_name_lookup=lambda object_id: f"object {object_id}",
+        location_phrase_lookup=lambda room_id: "nearby",
+        message_formatter=_message_formatter,
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+
+    events = routine(state)
+
+    assert state.dryad_location == 20
+    assert room_objects[0] == []
+    assert room_objects[20] == [0, 1, 2, 3, 4, 45]
+    assert [event.message_id for event in events if event.message_id] == [
+        "DMSG00",
+        "DMSG01",
+        "DMSG02",
+    ]
+    evict_event = next(event for event in events if event.message_id == "DMSG01")
+    assert "object 5" in evict_event.message_text
+    assert events[-1].payload["objects"] == [{"id": 0}, {"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 45}]
+
+
+def test_elf_routine_alternates_hints_and_gold_rewards():
+    player = _build_player(plyrid="hero", altnam="Hero", gamloc=50, gold=5)
+    persisted: list[int] = []
+    room_rolls = iter([50, 50])
+    gold_rolls = iter([7])
+
+    routine = ElfEncounterRoutine(
+        room_picker=lambda low, high: next(room_rolls),
+        gold_picker=lambda low, high: next(gold_rolls),
+        player_getter=lambda room_id: player if player.gamloc == room_id else None,
+        player_persister=lambda updated: persisted.append(updated.gold),
+        message_formatter=_message_formatter,
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+
+    hint_events = routine(state)
+    reward_events = routine(state)
+
+    assert state.elf_hint_index == 1
+    assert state.elf_reward_next == 0
+    assert hint_events[1].message_id == "EMSG03"
+    assert hint_events[1].payload["target_message_id"] == "EHINT0"
+    assert reward_events[1].message_id == "EMSG02"
+    assert reward_events[1].payload["target_message_id"] == "EMSG01"
+    assert player.gold == 12
+    assert persisted == [12]
+
+
+def test_brownie_routine_follows_path_and_steals_gold_then_inventory():
+    player = _build_player(
+        plyrid="hero",
+        altnam="Hero",
+        gamloc=71,
+        gold=9,
+        gpobjs=[0, 1],
+        obvals=[10, 20],
+        npobjs=2,
+    )
+    persisted: list[tuple[int, list[int]]] = []
+
+    routine = BrownieRoutine(
+        player_getter=lambda room_id: player if player.gamloc == room_id else None,
+        player_persister=lambda updated: persisted.append((updated.gold, list(updated.gpobjs))),
+        message_formatter=_message_formatter,
+        pronoun_lookup=lambda updated: "him",
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+
+    gold_events = routine(state)
+    state.brownie_path_index = 0
+    inventory_events = routine(state)
+
+    assert player.gold == 0
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert gold_events[1].message_id == "BMSG02"
+    assert gold_events[1].payload["target_message_id"] == "BMSG01"
+    assert inventory_events[1].message_id == "BMSG04"
+    assert inventory_events[1].payload["target_message_id"] == "BMSG03"
+    assert persisted == [(0, [0, 1]), (0, [])]

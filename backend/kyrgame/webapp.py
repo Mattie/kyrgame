@@ -5,6 +5,7 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -43,6 +44,8 @@ class SessionData(BaseModel):
     token: str
     player_id: str
     room_id: int
+    expires_at: str
+    expires_in_seconds: int
     first_login: bool = False
     resumed: bool = False
     replaced_sessions: int = 0
@@ -609,7 +612,7 @@ def _persist_player_from_template(
 
 
 def _session_payload(
-    token: str,
+    session_record: models.PlayerSession,
     player: models.Player,
     room_id: int,
     *,
@@ -617,14 +620,24 @@ def _session_payload(
     resumed: bool = False,
     replaced_sessions: int = 0,
 ):
+    expires_at = _as_utc(session_record.expires_at)
+    now = datetime.now(timezone.utc)
     return {
-        "token": token,
+        "token": session_record.session_token,
         "player_id": player.plyrid,
         "room_id": room_id,
+        "expires_at": expires_at.isoformat(),
+        "expires_in_seconds": max(0, int((expires_at - now).total_seconds())),
         "first_login": first_login,
         "resumed": resumed,
         "replaced_sessions": replaced_sessions,
     }
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
@@ -678,6 +691,7 @@ async def start_session(
     room_id = payload.room_id if payload.room_id is not None else player.gamloc
 
     replaced_tokens: list[str] = []
+    session_record: models.PlayerSession | None = None
     resumed = False
     status_code = status.HTTP_201_CREATED
 
@@ -689,6 +703,7 @@ async def start_session(
         db.commit()
         room_id = existing.room_id
         token = existing.session_token
+        session_record = existing
         resumed = True
         status_code = status.HTTP_200_OK
     else:
@@ -700,12 +715,15 @@ async def start_session(
             async with request.app.state.session_replacement_lock:
                 replaced_tokens = repo.deactivate_all(player.id)
                 token = secrets.token_urlsafe(24)
-                repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+                session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
                 db.commit()
         else:
             token = secrets.token_urlsafe(24)
-            repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+            session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
             db.commit()
+
+    if session_record is None:
+        raise HTTPException(status_code=500, detail="Session creation failed")
 
     if not payload.allow_multiple and not payload.resume_token:
         # Commit happened inside the lock, now clean up old connections
@@ -725,7 +743,7 @@ async def start_session(
     body = {
         "status": "recovered" if resumed else "created",
         "session": _session_payload(
-            token,
+            session_record,
             player,
             room_id,
             first_login=first_login,
@@ -744,7 +762,7 @@ async def validate_session(
     return {
         "status": "active",
         "session": _session_payload(
-            session_record.session_token, player, session_record.room_id, first_login=False
+            session_record, player, session_record.room_id, first_login=False
         ),
     }
 

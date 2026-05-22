@@ -32,19 +32,19 @@ def test_spell_effects_respect_costs_and_cooldowns(sample_player):
     base_points = sample_player.spts
 
     result = engine.cast_spell(
-        player=sample_player, spell_id=2, target="goblin", target_player=None
+        player=sample_player, spell_id=13, target="goblin", target_player=None
     )
     assert sample_player.spts < base_points
-    assert result.animation == spells[2].splrou
+    assert result.animation == spells[13].splrou
 
     with pytest.raises(CooldownActiveError):
         engine.cast_spell(
-            player=sample_player, spell_id=2, target="goblin", target_player=None
+            player=sample_player, spell_id=13, target="goblin", target_player=None
         )
 
-    now += engine.effects[2].cooldown
+    now += engine.effects[13].cooldown
     repeat = engine.cast_spell(
-        player=sample_player, spell_id=2, target="ogre", target_player=None
+        player=sample_player, spell_id=13, target="ogre", target_player=None
     )
     assert repeat.context["target"] == "ogre"
 
@@ -77,6 +77,11 @@ def test_see_invisibility_spells_apply_legacy_charm_timers(sample_player):
     engine = SpellEffectEngine(spells=spells, messages=messages)
 
     sample_player.charms[constants.CharmSlot.INVISIBILITY] = 0
+    tier_one = engine.cast_spell(player=sample_player, spell_id=6, target=None, target_player=None)
+    assert sample_player.charms[constants.CharmSlot.INVISIBILITY] == 2 * 4
+    assert tier_one.message_id == "S07M00"
+
+    sample_player.charms[constants.CharmSlot.INVISIBILITY] = 0
     tier_two = engine.cast_spell(player=sample_player, spell_id=38, target=None, target_player=None)
     assert sample_player.charms[constants.CharmSlot.INVISIBILITY] == 2 * 4
     assert tier_two.message_id == "S39M00"
@@ -85,6 +90,223 @@ def test_see_invisibility_spells_apply_legacy_charm_timers(sample_player):
     tier_three = engine.cast_spell(player=sample_player, spell_id=37, target=None, target_player=None)
     assert sample_player.charms[constants.CharmSlot.INVISIBILITY] == 2 * 8
     assert tier_three.message_id == "S38M00"
+
+
+@pytest.mark.parametrize(
+    ("spell_id", "start_hp", "level", "expected_hp", "message_id"),
+    [
+        (1, 7, 9, 36, "SPM002"),
+        (14, 10, 9, 35, "S15M00"),
+        (42, 10, 9, 14, "S43M00"),
+        (57, 10, 9, 22, "S58M00"),
+        (42, 35, 9, 36, "S43M00"),
+    ],
+)
+def test_healing_spells_match_legacy_hitpoint_caps(
+    spell_id, start_hp, level, expected_hp, message_id
+):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    player = _build_caster(hitpts=start_hp, level=level)
+
+    result = engine.cast_spell(
+        player=player,
+        spell_id=spell_id,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert result.message_id == message_id
+    assert player.hitpts == expected_hp
+
+
+@pytest.mark.parametrize(
+    ("spell_id", "duration", "message_id", "broadcast_id"),
+    [(7, 2 * 2, "S08M00", "S08M01"), (44, 2 * 4, "S45M00", "S45M01")],
+)
+def test_invisibility_spells_apply_chgbod_state(
+    sample_player, spell_id, duration, message_id, broadcast_id
+):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    sample_player.flags |= constants.PlayerFlag.PEGASU | constants.PlayerFlag.WILLOW
+    sample_player.charms[constants.ALTNAM] = 3
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=spell_id,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert result.message_id == message_id
+    assert result.context["broadcast_message_id"] == broadcast_id
+    assert sample_player.altnam == "Some Unseen Force"
+    assert sample_player.attnam == "Unseen Force"
+    assert sample_player.flags & constants.PlayerFlag.INVISF
+    assert not sample_player.flags & constants.PlayerFlag.PEGASU
+    assert not sample_player.flags & constants.PlayerFlag.WILLOW
+    assert sample_player.charms[constants.ALTNAM] == 3 + duration
+
+
+def test_destroy_one_item_spell_removes_targets_first_inventory_item(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(
+        altnam="Target",
+        attnam="target",
+        gpobjs=[0, 1],
+        obvals=[10, 20],
+        npobjs=2,
+    )
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=2,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "SPM004"
+    assert result.context["target_message_id"] == "SPM005"
+    assert result.context["broadcast_message_id"] == "SPM006"
+    assert result.context["destroyed_object_id"] == 0
+    assert target.gpobjs == [1]
+    assert target.obvals == [20]
+    assert target.npobjs == 1
+
+
+def test_destroy_all_items_spell_clears_target_inventory(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    target = _build_target(
+        altnam="Target",
+        attnam="target",
+        gpobjs=[0, 1],
+        obvals=[10, 20],
+        npobjs=2,
+    )
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=3,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "SPM007"
+    assert result.context["target_message_id"] == "SPM008"
+    assert result.context["broadcast_message_id"] == "SPM009"
+    assert target.gpobjs == []
+    assert target.obvals == []
+    assert target.npobjs == 0
+
+
+def test_clutzopho_drops_target_inventory_into_caster_room(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    locations = fixtures.load_locations()
+    engine = SpellEffectEngine(
+        spells=spells, messages=messages, objects=objects, locations=locations
+    )
+    sample_player.gamloc = 7
+    location = engine.locations[7]
+    object.__setattr__(location, "objects", [2])
+    object.__setattr__(location, "nlobjs", 1)
+    target = _build_target(
+        altnam="Target",
+        attnam="target",
+        gpobjs=[0, 1],
+        obvals=[10, 20],
+        npobjs=2,
+    )
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=10,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S11M02"
+    assert result.context["target_message_id"] == "S11M03"
+    assert result.context["broadcast_message_id"] == "S11M04"
+    assert result.context["room_objects_update"] == {"location": 7, "objects": [2, 1, 0]}
+    assert result.context["dropped_object_ids"] == [1, 0]
+    assert target.gpobjs == []
+    assert target.obvals == []
+    assert target.npobjs == 0
+    assert engine.locations[7].objects == [2, 1, 0]
+
+
+def test_mower_destroys_pickup_ground_items_only(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    locations = fixtures.load_locations()
+    engine = SpellEffectEngine(
+        spells=spells, messages=messages, objects=objects, locations=locations
+    )
+    sample_player.gamloc = 7
+    location = engine.locations[7]
+    object.__setattr__(location, "objects", [0, 45])
+    object.__setattr__(location, "nlobjs", 2)
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=41,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S42M00"
+    assert result.context["destroyed_object_ids"] == [0]
+    assert result.context["room_objects_update"] == {"location": 7, "objects": [45]}
+    assert engine.locations[7].objects == [45]
+
+
+def test_pickpoc_steals_first_target_item_when_caster_has_space(sample_player):
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(spells=spells, messages=messages)
+    sample_player = _build_caster(gpobjs=[2], obvals=[30], npobjs=1)
+    target = _build_target(
+        altnam="Target",
+        attnam="target",
+        gpobjs=[0, 1],
+        obvals=[10, 20],
+        npobjs=2,
+    )
+
+    result = engine.cast_spell(
+        player=sample_player,
+        spell_id=46,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+
+    assert result.message_id == "S47M03"
+    assert result.context["target_message_id"] == "S47M04"
+    assert result.context["broadcast_message_id"] == "S47M05"
+    assert result.context["stolen_object_id"] == 0
+    assert sample_player.gpobjs == [2, 0]
+    assert sample_player.obvals == [30, 0]
+    assert sample_player.npobjs == 2
+    assert target.gpobjs == [1]
+    assert target.obvals == [20]
+    assert target.npobjs == 1
 
 
 def test_object_effects_apply_cooldowns_and_require_targets():
@@ -618,7 +840,7 @@ def test_abbracada_adds_object_protection():
 
     result = engine.cast_spell(
         player=player,
-        spell_id=1,
+        spell_id=0,
         target=None,
         target_player=None,
         apply_cost=False,

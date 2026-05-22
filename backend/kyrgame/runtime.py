@@ -6,11 +6,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fastapi import FastAPI
 
-from . import commands, database, fixtures, loader, models, repositories, rooms
+from . import commands, constants, database, fixtures, loader, models, repositories, rooms
 from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
@@ -26,6 +27,9 @@ from .timing.scheduler import TickScheduler
 from .world.animation_tick_system import (
     AnimationTickRuntimeBridge,
     AnimationTickSystem,
+    BrownieRoutine,
+    DryadWanderRoutine,
+    ElfEncounterRoutine,
     GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
 )
@@ -174,17 +178,20 @@ async def bootstrap_app(app: FastAPI):
     object_names_by_id = {obj.id: obj.name for obj in app.state.fixture_cache["objects"]}
     app.state.animation_rng = random.Random()
 
-    def _gemakr_room_picker(low: int, high: int) -> int:
+    def _animation_room_picker(low: int, high: int) -> int:
         return app.state.animation_rng.randint(low, high)
 
-    def _gemakr_pick_gem(low: int, high: int) -> int:
+    def _animation_pick_gem(low: int, high: int) -> int:
         return app.state.animation_rng.randint(low, high)
 
-    def _gemakr_get_room_objects(room_id: int) -> list[int]:
+    def _animation_pick_gold(low: int, high: int) -> int:
+        return app.state.animation_rng.randint(low, high)
+
+    def _animation_get_room_objects(room_id: int) -> list[int]:
         location = app.state.location_index.get(room_id)
         return list(location.objects) if location else []
 
-    def _gemakr_set_room_objects(room_id: int, object_ids: list[int]) -> None:
+    def _animation_set_room_objects(room_id: int, object_ids: list[int]) -> None:
         location = app.state.location_index.get(room_id)
         if location:
             app.state.location_index[room_id] = location.model_copy(
@@ -195,25 +202,80 @@ async def bootstrap_app(app: FastAPI):
             location_repo.update_objects(room_id, list(object_ids))
             db.commit()
 
-    def _gemakr_name_lookup(gem_id: int) -> str:
-        return object_names_by_id.get(gem_id, "gem")
+    def _animation_object_name_lookup(object_id: int) -> str:
+        return object_names_by_id.get(object_id, "object")
+
+    def _animation_location_phrase_lookup(room_id: int) -> str:
+        location = app.state.location_index.get(room_id)
+        return location.objlds if location else "nearby"
+
+    def _animation_message_formatter(message_id: str, *args: object) -> str:
+        template = messages_catalog.get(message_id, "")
+        if args:
+            try:
+                return template % args
+            except TypeError:
+                return template
+        return template
 
     def _gemakr_message_formatter(gem_name: str) -> str:
-        template = messages_catalog.get("GEMAPP", "")
-        return template % gem_name if "%s" in template else template
+        return _animation_message_formatter("GEMAPP", gem_name)
+
+    def _animation_player_getter(room_id: int) -> models.PlayerModel | None:
+        # Legacy rndlgp only scans active terminals for animation encounters
+        # (legacy/KYRANIM.C:95-107).
+        for player in getattr(app.state, "active_players", {}).values():
+            if player.gamloc == room_id:
+                return player
+        return None
+
+    def _animation_player_persister(player: models.PlayerModel) -> None:
+        with session_factory() as db:
+            record = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
+            if not record:
+                return
+            record.gold = player.gold
+            record.gpobjs = list(player.gpobjs)
+            record.obvals = list(player.obvals)
+            record.npobjs = player.npobjs
+            db.commit()
+
+    def _animation_pronoun(player: models.PlayerModel) -> str:
+        return "her" if player.flags & constants.PlayerFlag.FEMALE else "him"
 
     app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence,
         routine_handlers={
+            "dryads": DryadWanderRoutine(
+                room_picker=_animation_room_picker,
+                room_objects_getter=_animation_get_room_objects,
+                room_objects_setter=_animation_set_room_objects,
+                object_name_lookup=_animation_object_name_lookup,
+                location_phrase_lookup=_animation_location_phrase_lookup,
+                message_formatter=_animation_message_formatter,
+            ),
+            "elves": ElfEncounterRoutine(
+                room_picker=_animation_room_picker,
+                gold_picker=_animation_pick_gold,
+                player_getter=_animation_player_getter,
+                player_persister=_animation_player_persister,
+                message_formatter=_animation_message_formatter,
+            ),
             "gemakr": GemSpawnRoutine(
-                room_picker=_gemakr_room_picker,
-                gem_picker=_gemakr_pick_gem,
-                room_objects_getter=_gemakr_get_room_objects,
-                room_objects_setter=_gemakr_set_room_objects,
-                gem_name_lookup=_gemakr_name_lookup,
+                room_picker=_animation_room_picker,
+                gem_picker=_animation_pick_gem,
+                room_objects_getter=_animation_get_room_objects,
+                room_objects_setter=_animation_set_room_objects,
+                gem_name_lookup=_animation_object_name_lookup,
                 message_formatter=_gemakr_message_formatter,
-            )
+            ),
+            "browns": BrownieRoutine(
+                player_getter=_animation_player_getter,
+                player_persister=_animation_player_persister,
+                message_formatter=_animation_message_formatter,
+                pronoun_lookup=_animation_pronoun,
+            ),
         },
     )
 

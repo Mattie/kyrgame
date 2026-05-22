@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import asyncio
-from typing import Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol, Sequence
+from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol, Sequence
 
 
 @dataclass(eq=True, frozen=True)
@@ -39,6 +39,10 @@ class AnimationTickState:
         default_factory=lambda: {"sesame": 0, "chantd": 0, "rockpr": 0}
     )
     gem_counter: int = 0
+    dryad_location: int = 0
+    brownie_path_index: int = 0
+    elf_reward_next: int = 0
+    elf_hint_index: int = 0
 
 
 class AnimationTickStateStore(Protocol):
@@ -78,6 +82,15 @@ EventDispatcher = Callable[[AnimationTickEvent], Awaitable[None] | None]
 
 def _noop_handler(_: AnimationTickState) -> Sequence[AnimationTickEvent] | None:
     return None
+
+
+def _room_objects_payload(room_id: int, object_ids: Sequence[int]) -> dict[str, object]:
+    return {
+        "type": "room_objects",
+        "event": "room_objects",
+        "location": room_id,
+        "objects": [{"id": object_id} for object_id in object_ids],
+    }
 
 
 class GemSpawnRoutine:
@@ -135,6 +148,237 @@ class GemSpawnRoutine:
                 },
             )
         ]
+
+
+class DryadWanderRoutine:
+    """Port KYRANIM.C `dryads()` wandering dryad placement.
+
+    Legacy reference: `dryads()` in `legacy/KYRANIM.C` lines 326-348.
+    """
+
+    def __init__(
+        self,
+        *,
+        room_picker: Callable[[int, int], int],
+        room_objects_getter: Callable[[int], Sequence[int]],
+        room_objects_setter: Callable[[int, Sequence[int]], None],
+        object_name_lookup: Callable[[int], str],
+        location_phrase_lookup: Callable[[int], str],
+        message_formatter: Callable[..., str],
+        dryad_object_id: int = 45,
+        max_room_objects: int = 6,
+    ) -> None:
+        self._room_picker = room_picker
+        self._room_objects_getter = room_objects_getter
+        self._room_objects_setter = room_objects_setter
+        self._object_name_lookup = object_name_lookup
+        self._location_phrase_lookup = location_phrase_lookup
+        self._message_formatter = message_formatter
+        self._dryad_object_id = dryad_object_id
+        self._max_room_objects = max_room_objects
+
+    def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
+        destination = self._room_picker(12, 168)
+        origin = state.dryad_location
+        if destination == origin:
+            return []
+
+        events: list[AnimationTickEvent] = []
+        origin_objects = list(self._room_objects_getter(origin))
+        if self._dryad_object_id in origin_objects:
+            origin_objects.remove(self._dryad_object_id)
+            self._room_objects_setter(origin, origin_objects)
+            events.append(AnimationTickEvent(flag="dryads", room_id=origin, message_id="DMSG00"))
+            events.append(
+                AnimationTickEvent(
+                    flag="dryads",
+                    room_id=origin,
+                    payload=_room_objects_payload(origin, origin_objects),
+                )
+            )
+
+        destination_objects = list(self._room_objects_getter(destination))
+        if len(destination_objects) >= self._max_room_objects:
+            evicted_object_id = destination_objects[-1]
+            destination_objects = destination_objects[:-1]
+            events.append(
+                AnimationTickEvent(
+                    flag="dryads",
+                    room_id=destination,
+                    message_id="DMSG01",
+                    message_text=self._message_formatter(
+                        "DMSG01",
+                        self._object_name_lookup(evicted_object_id),
+                        self._location_phrase_lookup(destination),
+                    ),
+                    payload={"evicted_object_id": evicted_object_id},
+                )
+            )
+
+        destination_objects.append(self._dryad_object_id)
+        self._room_objects_setter(destination, destination_objects)
+        state.dryad_location = destination
+        events.append(AnimationTickEvent(flag="dryads", room_id=destination, message_id="DMSG02"))
+        events.append(
+            AnimationTickEvent(
+                flag="dryads",
+                room_id=destination,
+                payload=_room_objects_payload(destination, destination_objects),
+            )
+        )
+        return events
+
+
+class ElfEncounterRoutine:
+    """Port KYRANIM.C `elves()` hint/reward encounters.
+
+    Legacy reference: `elves()` in `legacy/KYRANIM.C` lines 352-389.
+    """
+
+    _HINT_IDS = tuple(f"EHINT{idx}" for idx in range(10))
+
+    def __init__(
+        self,
+        *,
+        room_picker: Callable[[int, int], int],
+        gold_picker: Callable[[int, int], int],
+        player_getter: Callable[[int], Any | None],
+        player_persister: Callable[[Any], None],
+        message_formatter: Callable[..., str],
+    ) -> None:
+        self._room_picker = room_picker
+        self._gold_picker = gold_picker
+        self._player_getter = player_getter
+        self._player_persister = player_persister
+        self._message_formatter = message_formatter
+
+    def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
+        room_id = self._room_picker(12, 168)
+        player = self._player_getter(room_id)
+        if player is None:
+            return []
+
+        events = [
+            AnimationTickEvent(flag="elves", room_id=room_id, message_id="EMSG00")
+        ]
+        player_name = getattr(player, "altnam", getattr(player, "plyrid", "player"))
+        player_id = getattr(player, "plyrid", player_name)
+
+        if state.elf_reward_next:
+            gold = self._gold_picker(2, 11)
+            player.gold += gold
+            self._player_persister(player)
+            state.elf_reward_next = 0
+            target_message_id = "EMSG01"
+            target_text = self._message_formatter("EMSG01", gold)
+            room_message_id = "EMSG02"
+            room_text = self._message_formatter("EMSG02", player_name, gold)
+        else:
+            hint_id = self._HINT_IDS[state.elf_hint_index % len(self._HINT_IDS)]
+            state.elf_hint_index = (state.elf_hint_index + 1) % len(self._HINT_IDS)
+            state.elf_reward_next = 1
+            target_message_id = hint_id
+            target_text = self._message_formatter(hint_id)
+            room_message_id = "EMSG03"
+            room_text = self._message_formatter("EMSG03", player_name)
+
+        events.append(
+            AnimationTickEvent(
+                flag="elves",
+                room_id=room_id,
+                message_id=room_message_id,
+                message_text=room_text,
+                payload={
+                    "target_player": player_id,
+                    "target_message_id": target_message_id,
+                    "target_text": target_text,
+                },
+            )
+        )
+        events.append(AnimationTickEvent(flag="elves", room_id=room_id, message_id="EMSG04"))
+        return events
+
+
+class BrownieRoutine:
+    """Port KYRANIM.C `browns()` gold/inventory theft encounters.
+
+    Legacy reference: `browns()` in `legacy/KYRANIM.C` lines 393-426.
+    """
+
+    _PATH = (
+        71, 144, 66, 29, 82, 96, 136, 31, 114, 134,
+        67, 52, 103, 53, 43, 150, 137, 18, 0, 129,
+        168, 77, 133, 92, 61, 101, 73, 99, 69, 111,
+        45, 132, 3, 2, 55, 60, 160, 48, 70, 112,
+    )
+
+    def __init__(
+        self,
+        *,
+        player_getter: Callable[[int], Any | None],
+        player_persister: Callable[[Any], None],
+        message_formatter: Callable[..., str],
+        pronoun_lookup: Callable[[Any], str],
+    ) -> None:
+        self._player_getter = player_getter
+        self._player_persister = player_persister
+        self._message_formatter = message_formatter
+        self._pronoun_lookup = pronoun_lookup
+
+    def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
+        if state.brownie_path_index >= len(self._PATH):
+            state.brownie_path_index = 0
+        room_id = self._PATH[state.brownie_path_index]
+        state.brownie_path_index += 1
+
+        player = self._player_getter(room_id)
+        if player is None:
+            return []
+
+        events = [
+            AnimationTickEvent(flag="browns", room_id=room_id, message_id="BMSG00")
+        ]
+        player_name = getattr(player, "altnam", getattr(player, "plyrid", "player"))
+        player_id = getattr(player, "plyrid", player_name)
+
+        if getattr(player, "gold", 0) > 0:
+            player.gold = 0
+            target_message_id = "BMSG01"
+            room_message_id = "BMSG02"
+            target_text = self._message_formatter(target_message_id)
+            room_text = self._message_formatter(
+                room_message_id, player_name, self._pronoun_lookup(player)
+            )
+        elif getattr(player, "npobjs", 0) > 0:
+            object.__setattr__(player, "gpobjs", [])
+            object.__setattr__(player, "obvals", [])
+            object.__setattr__(player, "npobjs", 0)
+            target_message_id = "BMSG03"
+            room_message_id = "BMSG04"
+            target_text = self._message_formatter(target_message_id)
+            room_text = self._message_formatter(room_message_id, player_name)
+        else:
+            target_message_id = "BMSG05"
+            room_message_id = "BMSG06"
+            target_text = self._message_formatter(target_message_id)
+            room_text = self._message_formatter(room_message_id, player_name)
+
+        self._player_persister(player)
+        events.append(
+            AnimationTickEvent(
+                flag="browns",
+                room_id=room_id,
+                message_id=room_message_id,
+                message_text=room_text,
+                payload={
+                    "target_player": player_id,
+                    "target_message_id": target_message_id,
+                    "target_text": target_text,
+                },
+            )
+        )
+        events.append(AnimationTickEvent(flag="browns", room_id=room_id, message_id="BMSG07"))
+        return events
 
 
 def _sesame_event(_: AnimationTickState) -> AnimationTickEvent:
@@ -244,6 +488,10 @@ class AnimationTickSystem:
                 "zar_counter": self.state.zar_counter,
                 "timed_flags": dict(self.state.timed_flags),
                 "gem_counter": self.state.gem_counter,
+                "dryad_location": self.state.dryad_location,
+                "brownie_path_index": self.state.brownie_path_index,
+                "elf_reward_next": self.state.elf_reward_next,
+                "elf_hint_index": self.state.elf_hint_index,
             }
         )
 
@@ -265,6 +513,10 @@ class AnimationTickSystem:
             zar_counter=int(payload.get("zar_counter", 0)),
             timed_flags=normalized_flags,
             gem_counter=int(payload.get("gem_counter", 0)),
+            dryad_location=int(payload.get("dryad_location", 0)),
+            brownie_path_index=int(payload.get("brownie_path_index", 0)),
+            elf_reward_next=int(payload.get("elf_reward_next", 0)),
+            elf_hint_index=int(payload.get("elf_hint_index", 0)),
         )
 
 
