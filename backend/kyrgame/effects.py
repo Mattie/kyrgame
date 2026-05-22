@@ -282,8 +282,9 @@ class SpellEffectEngine:
             )
 
         if 41 in effects:
-            # Legacy spell: mower destroys PICKUP objects on the ground (legacy/KYRSPEL.C:889-904).
-            effects[41].message_id = "S42M00"
+            # Legacy spell: mower prints YOUCASTSPELL, then removes PICKUP ground objects.
+            # Source trace: legacy/KYRSPEL.C spl042, lines 889-904.
+            effects[41].message_id = "YOUCASTSPELL"
             effects[41].requires_target = False
             effects[41].handler = self._destroy_ground_items_handler()
 
@@ -806,7 +807,7 @@ class SpellEffectEngine:
             if location is None:
                 return EffectResult(
                     success=False,
-                    message_id="S42M00",
+                    message_id="YOUCASTSPELL",
                     text="...You cast the spell!",
                     animation=effect.animation,
                     context={"target": target} if target else {},
@@ -830,7 +831,7 @@ class SpellEffectEngine:
                 context["target"] = target
             return EffectResult(
                 success=True,
-                message_id="S42M00",
+                message_id="YOUCASTSPELL",
                 text="...You cast the spell!",
                 animation=effect.animation,
                 context=context,

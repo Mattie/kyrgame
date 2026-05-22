@@ -99,6 +99,7 @@ def test_messages_fixture_shape():
     assert parsed.locale == "en-US"
     assert parsed.version.startswith("legacy-")
     assert "FOREST" in parsed.messages
+    assert parsed.messages["YOUCASTSPELL"] == "...You cast the spell!"
     assert len(parsed.messages) > 100
 
 

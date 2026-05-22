@@ -270,7 +270,8 @@ def test_mower_destroys_pickup_ground_items_only(sample_player):
         apply_cost=False,
     )
 
-    assert result.message_id == "S42M00"
+    assert result.message_id == "YOUCASTSPELL"
+    assert messages.messages[result.message_id] == "...You cast the spell!"
     assert result.context["destroyed_object_ids"] == [0]
     assert result.context["room_objects_update"] == {"location": 7, "objects": [45]}
     assert engine.locations[7].objects == [45]
