@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, Optional
 
 from . import constants, models
-from .inventory import remove_inventory_item
+from .inventory import pop_inventory_index, remove_inventory_item
 from .spellbook import (
     forget_all_memorized,
     forget_one_random_memorized,
@@ -99,15 +99,70 @@ class SpellEffectEngine:
             effects[15].requires_target = False
             effects[15].handler = self._transformation_handler(
                 flag=constants.PlayerFlag.PEGASU,
+                alternate_name="Some pegasus",
+                attire_name="pegasus",
+                duration=2,
                 direct_key="S16M00",
                 broadcast_key="S16M01",
             )
+
+        if 1 in effects:
+            # Legacy spell: allbettoo restores HP to the level cap (legacy/KYRSPEL.C:444-449).
+            effects[1].message_id = "SPM002"
+            effects[1].requires_target = False
+            effects[1].handler = self._healing_handler(
+                amount=None,
+                caster_key="SPM002",
+                broadcast_key="SPM003",
+            )
+
+        if 2 in effects:
+            # Legacy spell: blowitawa destroys the target's first item (legacy/KYRSPEL.C:451-468).
+            effects[2].message_id = "SPM004"
+            effects[2].requires_target = True
+            effects[2].handler = self._destroy_one_item_handler()
+
+        if 3 in effects:
+            # Legacy spell: blowoutma destroys all target inventory (legacy/KYRSPEL.C:471-486).
+            effects[3].message_id = "SPM007"
+            effects[3].requires_target = True
+            effects[3].handler = self._destroy_all_items_handler()
 
         if 4 in effects:
             # Legacy spell: bookworm wipes target spellbook (legacy/KYRSPEL.C:490-513).
             effects[4].message_id = "S05M03"
             effects[4].requires_target = True
             effects[4].handler = self._bookworm_handler()
+
+        if 6 in effects:
+            # Legacy spell: cadabra sets CINVIS to 2*4 ticks (legacy/KYRSPEL.C:524-529).
+            effects[6].message_id = "S07M00"
+            effects[6].requires_target = False
+            effects[6].handler = self._protection_handler(
+                updates={constants.CINVIS: 2 * 4},
+                additive=False,
+                caster_key="S07M00",
+                broadcast_key="S07M01",
+            )
+
+        if 7 in effects:
+            # Legacy spell: cantcmeha applies chgbod invisibility for duration 2 (legacy/KYRSPEL.C:531-537).
+            effects[7].message_id = "S08M00"
+            effects[7].requires_target = False
+            effects[7].handler = self._transformation_handler(
+                flag=constants.PlayerFlag.INVISF,
+                alternate_name="Some Unseen Force",
+                attire_name="Unseen Force",
+                duration=2,
+                direct_key="S08M00",
+                broadcast_key="S08M01",
+            )
+
+        if 10 in effects:
+            # Legacy spell: clutzopho drops target inventory into the caster room (legacy/KYRSPEL.C:564-586).
+            effects[10].message_id = "S11M02"
+            effects[10].requires_target = True
+            effects[10].handler = self._drop_all_items_handler()
 
         if 12 in effects:
             # Legacy spell: dumdum forgets all memorized spells (legacy/KYRSPEL.C:606-616).
@@ -122,7 +177,15 @@ class SpellEffectEngine:
                 success_broadcast_key="S13M05",
             )
 
-
+        if 14 in effects:
+            # Legacy spell: firstai heals 25 HP up to level cap (legacy/KYRSPEL.C:634-641).
+            effects[14].message_id = "S15M00"
+            effects[14].requires_target = False
+            effects[14].handler = self._healing_handler(
+                amount=25,
+                caster_key="S15M00",
+                broadcast_key="S15M01",
+            )
 
         if 22 in effects:
             # Legacy spell: goto teleports to a specific room (legacy/KYRSPEL.C:694-712).
@@ -171,12 +234,25 @@ class SpellEffectEngine:
                 success_ids=("S57M03", "S57M04", "S57M05"),
             )
 
+        if 57 in effects:
+            # Legacy spell: thedoc heals 12 HP up to level cap (legacy/KYRSPEL.C:1110-1117).
+            effects[57].message_id = "S58M00"
+            effects[57].requires_target = False
+            effects[57].handler = self._healing_handler(
+                amount=12,
+                caster_key="S58M00",
+                broadcast_key="S58M01",
+            )
+
         if 61 in effects:
             # Legacy transformation: weewillo grants willowisp wings (legacy/KYRSPEL.C lines 1188-1195).
             effects[61].message_id = "S62M00"
             effects[61].requires_target = False
             effects[61].handler = self._transformation_handler(
                 flag=constants.PlayerFlag.WILLOW,
+                alternate_name="Some willowisp",
+                attire_name="willowisp",
+                duration=2,
                 direct_key="S62M00",
                 broadcast_key="S62M01",
             )
@@ -205,6 +281,42 @@ class SpellEffectEngine:
                 broadcast_key="S39M01",
             )
 
+        if 41 in effects:
+            # Legacy spell: mower prints YOUCASTSPELL, then removes PICKUP ground objects.
+            # Source trace: legacy/KYRSPEL.C spl042, lines 889-904.
+            effects[41].message_id = "YOUCASTSPELL"
+            effects[41].requires_target = False
+            effects[41].handler = self._destroy_ground_items_handler()
+
+        if 42 in effects:
+            # Legacy spell: noouch heals 4 HP up to level cap (legacy/KYRSPEL.C:908-915).
+            effects[42].message_id = "S43M00"
+            effects[42].requires_target = False
+            effects[42].handler = self._healing_handler(
+                amount=4,
+                caster_key="S43M00",
+                broadcast_key="S43M01",
+            )
+
+        if 44 in effects:
+            # Legacy spell: peekabo applies chgbod invisibility for duration 4 (legacy/KYRSPEL.C:954-960).
+            effects[44].message_id = "S45M00"
+            effects[44].requires_target = False
+            effects[44].handler = self._transformation_handler(
+                flag=constants.PlayerFlag.INVISF,
+                alternate_name="Some Unseen Force",
+                attire_name="Unseen Force",
+                duration=4,
+                direct_key="S45M00",
+                broadcast_key="S45M01",
+            )
+
+        if 46 in effects:
+            # Legacy spell: pickpoc steals the target's first inventory item (legacy/KYRSPEL.C:987-1010).
+            effects[46].message_id = "S47M03"
+            effects[46].requires_target = True
+            effects[46].handler = self._pickpoc_handler()
+
         if 64 in effects:
             # Legacy spell: whoub reveals a target's true plyrid and grants short detect-identity charm (legacy/KYRSPEL.C:1208-1223).
             effects[64].message_id = "S65M00"
@@ -222,7 +334,7 @@ class SpellEffectEngine:
             effects[62].handler = self._whereami_handler()
 
         protection_spells: dict[int, tuple[dict[int, int], bool, str, str]] = {
-            1: ({constants.OBJPRO: 2 * 4}, True, "SPM000", "SPM001"),  # Legacy: abbracada (legacy/KYRSPEL.C:437-441).
+            0: ({constants.OBJPRO: 2 * 4}, True, "SPM000", "SPM001"),  # Legacy: abbracada (legacy/KYRSPEL.C:437-441).
             8: (
                 {
                     constants.FIRPRO: 2 * 2,
@@ -393,6 +505,9 @@ class SpellEffectEngine:
     def _transformation_handler(
         self,
         flag: constants.PlayerFlag,
+        alternate_name: str,
+        attire_name: str,
+        duration: int,
         direct_key: str,
         broadcast_key: str,
     ) -> Callable[
@@ -405,7 +520,19 @@ class SpellEffectEngine:
             target_player: Optional[models.PlayerModel],
             effect: SpellEffect,
         ) -> EffectResult:  # noqa: ARG001
-            player.flags |= flag
+            visible_name = player.altnam
+            # Legacy chgbod updates identity fields, clears other body flags,
+            # sets the new body flag, and extends ALTNAM (legacy/KYRSPEL.C:325-337).
+            transform_mask = (
+                constants.PlayerFlag.INVISF
+                | constants.PlayerFlag.PEGASU
+                | constants.PlayerFlag.WILLOW
+                | constants.PlayerFlag.PDRAGN
+            )
+            player.altnam = alternate_name
+            player.attnam = attire_name
+            player.flags = (int(player.flags) & ~int(transform_mask)) | int(flag)
+            player.charms[constants.ALTNAM] += 2 * duration
 
             direct_text = self.messages.messages.get(direct_key, "")
             broadcast_text = self.messages.messages.get(broadcast_key, "")
@@ -416,10 +543,368 @@ class SpellEffectEngine:
                 text=direct_text,
                 animation=effect.animation,
                 context={
-                    "broadcast": broadcast_text % getattr(player, "plyrid", "")
+                    "broadcast": broadcast_text % visible_name
                     if "%s" in broadcast_text
                     else broadcast_text,
+                    "broadcast_message_id": broadcast_key,
                     "target": target,
+                },
+            )
+
+        return _handler
+
+    def _healing_handler(
+        self,
+        *,
+        amount: int | None,
+        caster_key: str,
+        broadcast_key: str,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            hp_cap = player.level * 4
+            player.hitpts = hp_cap if amount is None else min(hp_cap, player.hitpts + amount)
+            return self._msgutl2(
+                player,
+                caster_key=caster_key,
+                broadcast_key=broadcast_key,
+                target=target,
+                success=True,
+                effect=effect,
+            )
+
+        return _handler
+
+    def _set_player_inventory(
+        self,
+        player: models.PlayerModel,
+        object_ids: list[int],
+        object_values: list[int],
+    ) -> None:
+        object.__setattr__(player, "gpobjs", list(object_ids))
+        object.__setattr__(player, "obvals", list(object_values))
+        object.__setattr__(player, "npobjs", len(object_ids))
+
+    def _set_location_objects(
+        self, location: models.LocationModel, object_ids: list[int]
+    ) -> None:
+        object.__setattr__(location, "objects", list(object_ids))
+        object.__setattr__(location, "nlobjs", len(object_ids))
+
+    def _object_name(self, object_id: int) -> str:
+        obj = self.objects.get(object_id)
+        return obj.name if obj else f"object {object_id}"
+
+    def _target_inventory_is_protected_or_empty(
+        self, target_player: models.PlayerModel
+    ) -> bool:
+        return bool(target_player.charms[constants.OBJPRO] or target_player.npobjs == 0)
+
+    def _destroy_one_item_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+            if self._target_inventory_is_protected_or_empty(target_player):
+                return self._msgutl3(
+                    player,
+                    target_player,
+                    caster_key="SNW000",
+                    target_key="SNW001",
+                    broadcast_key="SNW002",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            object_id = target_player.gpobjs[0]
+            object_name = self._object_name(object_id)
+            caster_text = self._format_message("SPM004", target_player.attnam, object_name)
+            target_text = self._format_message("SPM005", player.altnam, object_name)
+            broadcast_text = self._format_message(
+                "SPM006",
+                player.altnam,
+                target_player.altnam,
+                self._hisher(target_player),
+                object_name,
+            )
+            pop_inventory_index(target_player, 0)
+            return EffectResult(
+                success=True,
+                message_id="SPM004",
+                text=caster_text,
+                animation=effect.animation,
+                context={
+                    "target_message_id": "SPM005",
+                    "target_text": target_text,
+                    "broadcast": broadcast_text,
+                    "broadcast_message_id": "SPM006",
+                    "broadcast_exclude_player": target_player.plyrid,
+                    "target": target,
+                    "destroyed_object_id": object_id,
+                    "destroyed_object_name": object_name,
+                },
+            )
+
+        return _handler
+
+    def _destroy_all_items_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+            if self._target_inventory_is_protected_or_empty(target_player):
+                return self._msgutl3(
+                    player,
+                    target_player,
+                    caster_key="SNW000",
+                    target_key="SNW001",
+                    broadcast_key="SNW002",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            destroyed = list(target_player.gpobjs)
+            caster_text = self._format_message(
+                "SPM007", target_player.attnam, self._hisher(target_player)
+            )
+            target_text = self._format_message("SPM008", player.altnam)
+            broadcast_text = self._format_message(
+                "SPM009", player.altnam, target_player.altnam, self._hisher(target_player)
+            )
+            self._set_player_inventory(target_player, [], [])
+            return EffectResult(
+                success=True,
+                message_id="SPM007",
+                text=caster_text,
+                animation=effect.animation,
+                context={
+                    "target_message_id": "SPM008",
+                    "target_text": target_text,
+                    "broadcast": broadcast_text,
+                    "broadcast_message_id": "SPM009",
+                    "broadcast_exclude_player": target_player.plyrid,
+                    "target": target,
+                    "destroyed_object_ids": destroyed,
+                },
+            )
+
+        return _handler
+
+    def _drop_all_items_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+            location = self.locations.get(player.gamloc)
+            if (
+                target_player.charms[constants.OBJPRO]
+                or target_player.npobjs == 0
+                or location is None
+                or location.nlobjs >= constants.MXLOBS
+            ):
+                return self._msgutl2(
+                    player,
+                    caster_key="S11M00",
+                    broadcast_key="NOSUCC",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            result = self._msgutl3(
+                player,
+                target_player,
+                caster_key="S11M02",
+                target_key="S11M03",
+                broadcast_key="S11M04",
+                target=target,
+                success=True,
+                effect=effect,
+            )
+            room_objects = list(location.objects)
+            dropped_ids: list[int] = []
+            dropped_messages: list[dict[str, object]] = []
+            while target_player.npobjs and len(room_objects) < constants.MXLOBS:
+                object_id, _ = pop_inventory_index(target_player, target_player.npobjs - 1)
+                object_name = self._object_name(object_id)
+                room_objects.append(object_id)
+                dropped_ids.append(object_id)
+                dropped_messages.append(
+                    {
+                        "object_id": object_id,
+                        "target_message_id": "S11M05",
+                        "target_text": self._format_message("S11M05", object_name),
+                        "broadcast_message_id": "S11M06",
+                        "broadcast": self._format_message(
+                            "S11M06",
+                            target_player.altnam,
+                            self._hisher(target_player),
+                            object_name,
+                        ),
+                    }
+                )
+
+            self._set_location_objects(location, room_objects)
+            result.context["room_objects_update"] = {
+                "location": location.id,
+                "objects": room_objects,
+            }
+            result.context["dropped_object_ids"] = dropped_ids
+            result.context["dropped_messages"] = dropped_messages
+            return result
+
+        return _handler
+
+    def _destroy_ground_items_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            location = self.locations.get(player.gamloc)
+            if location is None:
+                return EffectResult(
+                    success=False,
+                    message_id="YOUCASTSPELL",
+                    text="...You cast the spell!",
+                    animation=effect.animation,
+                    context={"target": target} if target else {},
+                )
+
+            kept: list[int] = []
+            destroyed: list[int] = []
+            for object_id in location.objects:
+                obj = self.objects.get(object_id)
+                if obj and "PICKUP" in obj.flags:
+                    destroyed.append(object_id)
+                else:
+                    kept.append(object_id)
+
+            self._set_location_objects(location, kept)
+            context: dict[str, object] = {
+                "destroyed_object_ids": destroyed,
+                "room_objects_update": {"location": location.id, "objects": kept},
+            }
+            if target:
+                context["target"] = target
+            return EffectResult(
+                success=True,
+                message_id="YOUCASTSPELL",
+                text="...You cast the spell!",
+                animation=effect.animation,
+                context=context,
+            )
+
+        return _handler
+
+    def _pickpoc_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+            if (
+                target_player.charms[constants.OBJPRO]
+                or target_player.npobjs == 0
+                or player.npobjs >= constants.MXPOBS
+            ):
+                return self._msgutl3(
+                    player,
+                    target_player,
+                    caster_key="S47M00",
+                    target_key="S47M01",
+                    # Legacy reference: KYRSPEL.C spl047() failure calls
+                    # msgutl3(S47M00,S47M01,S47M00) (legacy/KYRSPEL.C:994-995).
+                    broadcast_key="S47M00",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            object_id = target_player.gpobjs[0]
+            object_name = self._object_name(object_id)
+            caster_text = self._format_message(
+                "S47M03", object_name, target_player.altnam, object_name
+            )
+            target_text = self._format_message(
+                "S47M04", player.altnam, object_name, object_name, player.altnam
+            )
+            broadcast_text = self._format_message(
+                "S47M05",
+                player.altnam,
+                object_name,
+                target_player.altnam,
+                object_name,
+                player.altnam,
+            )
+            stolen_object_id, _ = pop_inventory_index(target_player, 0)
+            player.gpobjs.append(stolen_object_id)
+            player.obvals.append(0)
+            player.npobjs = len(player.gpobjs)
+            return EffectResult(
+                success=True,
+                message_id="S47M03",
+                text=caster_text,
+                animation=effect.animation,
+                context={
+                    "target_message_id": "S47M04",
+                    "target_text": target_text,
+                    "broadcast": broadcast_text,
+                    "broadcast_message_id": "S47M05",
+                    "broadcast_exclude_player": target_player.plyrid,
+                    "target": target,
+                    "stolen_object_id": stolen_object_id,
+                    "stolen_object_name": object_name,
                 },
             )
 

@@ -1200,6 +1200,8 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     departure_broadcast = context.pop("departure_broadcast", None)
     departure_broadcast_message_id = context.pop("departure_broadcast_message_id", None)
     departure_emote = context.pop("departure_emote", None)
+    room_objects_update = context.pop("room_objects_update", None)
+    dropped_messages = context.pop("dropped_messages", [])
 
     event = _message_event(
         "player",
@@ -1239,6 +1241,55 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
         )
     if area_damage:
         await _apply_area_damage(state, command_id, area_damage, events)
+
+    if room_objects_update:
+        location_id = room_objects_update["location"]
+        object_ids = list(room_objects_update["objects"])
+        location = state.locations.get(location_id)
+        if location:
+            object.__setattr__(location, "objects", object_ids)
+            object.__setattr__(location, "nlobjs", len(object_ids))
+            _persist_location_objects(state, location_id, object_ids)
+            events.append(
+                _room_objects_event(
+                    location,
+                    state.objects,
+                    command_id,
+                    result.message_id,
+                )
+            )
+
+    for dropped in dropped_messages:
+        if target_player:
+            target_drop = _message_event(
+                "target",
+                dropped.get("target_message_id"),
+                dropped.get("target_text"),
+                command_id,
+            )
+            target_drop["player"] = target_player.plyrid
+            events.append(target_drop)
+        if dropped.get("broadcast"):
+            # Legacy reference: clutzopho prints each S11M06 drop line to the
+            # caster before sndbt2() broadcasts it to other room occupants
+            # (legacy/KYRSPEL.C:584-586).
+            events.append(
+                _message_event(
+                    "player",
+                    dropped.get("broadcast_message_id"),
+                    dropped.get("broadcast"),
+                    command_id,
+                )
+            )
+            events.append(
+                _message_event(
+                    "room",
+                    dropped.get("broadcast_message_id"),
+                    dropped.get("broadcast"),
+                    command_id,
+                    exclude_player=target_player.plyrid if target_player else state.player.plyrid,
+                )
+            )
 
     if move_to_room is not None and move_from_room is not None:
         # Legacy goto teleports through remvgp/entrgp so movement side effects

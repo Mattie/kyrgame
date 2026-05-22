@@ -3,6 +3,7 @@ import json
 import httpx
 import pytest
 from sqlalchemy import select
+from starlette.websockets import WebSocketState
 
 from kyrgame import constants, fixtures, models
 from kyrgame.webapp import create_app
@@ -13,6 +14,16 @@ ADMIN_MAP_ENV = "KYRGAME_ADMIN_TOKENS"
 
 def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+class _FakeSocket:
+    application_state = WebSocketState.CONNECTED
+
+    def __init__(self):
+        self.sent: list[dict] = []
+
+    async def send_json(self, message: dict):
+        self.sent.append(message)
 
 
 @pytest.mark.anyio
@@ -450,3 +461,271 @@ async def test_admin_player_patch_grants_all_spells(monkeypatch):
             assert updated["othspls"] == expected_oth
             assert updated["level"] == 25
             assert updated["spts"] == 50
+
+
+@pytest.mark.anyio
+async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1.0")
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.routine_index = 5
+        state.dryad_location = 18
+        state.brownie_location = 0
+        state.brownie_path_index = 19
+        state.elf_last_room = 52
+        state.elf_reward_next = 1
+        state.elf_hint_index = 4
+        app.state.location_index[0] = app.state.location_index[0].model_copy(
+            update={
+                "objects": [obj for obj in app.state.location_index[0].objects if obj != 45],
+                "nlobjs": len([obj for obj in app.state.location_index[0].objects if obj != 45]),
+            }
+        )
+        room_18_objects = [*app.state.location_index[18].objects, 45]
+        app.state.location_index[18] = app.state.location_index[18].model_copy(
+            update={"objects": room_18_objects, "nlobjs": len(room_18_objects)}
+        )
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_auth = await client.get("/admin/mobs")
+            assert missing_auth.status_code == 401
+
+            resp = await client.get("/admin/mobs", headers=_auth("content-token"))
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["animation"]["next_routine"] == "browns"
+        assert payload["animation"]["animation_tick_interval_seconds"] == 15.0
+        assert payload["animation"]["brownie_routine_interval_seconds"] == 90.0
+        assert payload["animation"]["brownie_full_path_interval_seconds"] == 3600.0
+
+        mobs = {mob["id"]: mob for mob in payload["mobs"]}
+        assert mobs["dryad"]["room_id"] == 18
+        assert mobs["dryad"]["room"]["brief"] == app.state.location_index[18].brfdes
+        assert mobs["brownie"]["room_id"] == 0
+        assert mobs["brownie"]["room"]["brief"] == "near a mystical willow tree"
+        assert mobs["brownie"]["path_index"] == 19
+        assert mobs["brownie"]["next_room_id"] == 129
+        assert mobs["brownie"]["path_length"] == 40
+        assert mobs["elf"]["room_id"] == 52
+        assert mobs["elf"]["status"] == "last_seen"
+
+
+@pytest.mark.anyio
+async def test_admin_elf_trigger_requires_admin_and_active_player(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        original_state = app.state.animation_tick_system.state
+        original_state.elf_last_room = None
+        original_state.elf_reward_next = 0
+        original_state.elf_hint_index = 0
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_auth = await client.post(
+                "/admin/mobs/elf/trigger",
+                json={"player_id": "hero", "room_id": 7},
+            )
+            assert missing_auth.status_code == 401
+
+            no_player = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+
+        assert no_player.status_code == 200
+        assert no_player.json()["status"] == "no_active_player"
+        assert original_state.elf_last_room is None
+        assert original_state.elf_reward_next == 0
+        assert original_state.elf_hint_index == 0
+
+
+@pytest.mark.anyio
+async def test_admin_elf_trigger_uses_session_scoped_active_player(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.elf_last_room = None
+        state.elf_reward_next = 0
+        state.elf_hint_index = 0
+
+        active_player = fixtures.build_player().model_copy(update={"gamloc": 7, "pgploc": 7})
+        app.state.active_players.clear()
+        app.state.active_player_sessions["hero-token"] = active_player
+        target_socket = _FakeSocket()
+        app.state.session_connections["hero-token"] = target_socket
+        await app.state.presence.set_location("hero", 7, "hero-token")
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "triggered"
+        assert response.json()["outcome"] == "hint"
+        assert state.elf_last_room == 7
+
+
+@pytest.mark.anyio
+async def test_admin_elf_trigger_reuses_legacy_hint_gold_flow(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.elf_last_room = None
+        state.elf_reward_next = 0
+        state.elf_hint_index = 0
+
+        with app.state.session_factory() as db:
+            record = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert record is not None
+            record.gamloc = 7
+            record.pgploc = 7
+            record.gold = 10
+            db.commit()
+            active_player = fixtures.build_player().model_copy(
+                update={"gamloc": 7, "pgploc": 7, "gold": 10}
+            )
+
+        app.state.active_players["hero"] = active_player
+        target_socket = _FakeSocket()
+        app.state.session_connections["hero-token"] = target_socket
+        await app.state.presence.set_location("hero", 7, "hero-token")
+        broadcasts: list[tuple[int, dict, set | None]] = []
+
+        async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+            broadcasts.append((room_id, message, exclude))
+
+        app.state.gateway.broadcast = _capture
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            hint_resp = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+            gold_resp = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+
+        assert hint_resp.status_code == 200
+        assert hint_resp.json()["status"] == "triggered"
+        assert hint_resp.json()["outcome"] == "hint"
+        assert hint_resp.json()["room_id"] == 7
+        assert hint_resp.json()["player_id"] == "hero"
+        assert hint_resp.json()["snapshot"]["mobs"][2]["id"] == "elf"
+        assert hint_resp.json()["snapshot"]["mobs"][2]["room_id"] == 7
+
+        assert gold_resp.status_code == 200
+        assert gold_resp.json()["status"] == "triggered"
+        assert gold_resp.json()["outcome"] == "gold"
+        assert state.elf_last_room == 7
+        assert state.elf_reward_next == 0
+        assert state.elf_hint_index == 1
+
+        message_ids = [
+            event["payload"].get("message_id")
+            for _, event, _ in broadcasts
+            if event.get("type") == "room_broadcast"
+        ]
+        assert message_ids == [
+            "EMSG00",
+            "EMSG03",
+            "EMSG04",
+            "EMSG00",
+            "EMSG02",
+            "EMSG04",
+        ]
+
+        hint_payload = broadcasts[1][1]["payload"]
+        assert hint_payload["message_id"] == "EMSG03"
+        assert "secretly" in hint_payload["text"]
+        assert "target_player" not in hint_payload
+        assert "target_message_id" not in hint_payload
+        assert "target_text" not in hint_payload
+        assert target_socket in broadcasts[1][2]
+
+        gold_payload = broadcasts[4][1]["payload"]
+        assert gold_payload["message_id"] == "EMSG02"
+        assert "target_player" not in gold_payload
+        assert "target_message_id" not in gold_payload
+        assert "target_text" not in gold_payload
+        assert target_socket in broadcasts[4][2]
+
+        target_messages = [
+            message
+            for message in target_socket.sent
+            if message.get("payload", {}).get("animation_flag") == "elves"
+        ]
+        assert [
+            message["payload"].get("message_id") for message in target_messages
+        ] == ["EHINT0", "EMSG01"]
+        assert "The elf whispers to you" in target_messages[0]["payload"]["text"]
+        assert "hands you" in target_messages[1]["payload"]["text"]
+
+        with app.state.session_factory() as db:
+            refreshed = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert refreshed is not None
+            assert refreshed.gold == active_player.gold
+            assert refreshed.gold > 10

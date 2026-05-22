@@ -42,14 +42,28 @@ const navigatorState: any = {
   sendCommand: mockSendCommand,
 }
 
-vi.mock('../context/NavigatorContext', () => ({
-  useNavigator: () => navigatorState,
-}))
+vi.mock('../context/NavigatorContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../context/NavigatorContext')>()
+  return {
+    ...actual,
+    useNavigator: () => navigatorState,
+  }
+})
 
 describe('MudConsole', () => {
   beforeEach(() => {
     mockSendCommand.mockReset()
     mockSendMove.mockReset()
+    navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
+    navigatorState.world = {
+      locations: [{ id: 0, brfdes: 'A dark forest surrounds you in all directions.' }],
+      objects: [],
+      commands: [],
+      messages: {},
+    }
+    navigatorState.currentRoom = 0
+    navigatorState.occupants = []
+    navigatorState.connectionStatus = 'connected'
     navigatorState.activity = [
       {
         id: 'test-entry',
@@ -106,6 +120,30 @@ describe('MudConsole', () => {
     expect(resetToken).toBeDefined()
     expect(resetToken).not.toHaveClass('ansi-fg-green')
     expect(container.textContent).not.toContain('\u001b[0m')
+  })
+
+  it('renders the legacy dryad presence line for the hidden dryad object', () => {
+    navigatorState.world = {
+      locations: [
+        {
+          id: 0,
+          brfdes: 'A dark forest surrounds you in all directions.',
+          objlds: 'among the roots',
+          objects: [45],
+        },
+      ],
+      objects: [{ id: 45, name: 'dryad', flags: [] }],
+      commands: [],
+      messages: {
+        KUTM05: 'There is a dryad standing here.',
+      },
+    }
+    navigatorState.activity = []
+
+    render(<MudConsole />)
+
+    expect(screen.getByText('There is nothing lying among the roots.')).toBeInTheDocument()
+    expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
   })
 
   it('activates an inventory status card with auto-refresh toggled on by default', () => {

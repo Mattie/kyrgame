@@ -15,7 +15,7 @@ class MockWebSocket {
   sent: string[] = []
   onmessage: ((event: { data: string }) => void) | null = null
   onopen: (() => void) | null = null
-  onclose: (() => void) | null = null
+  onclose: ((event: { code: number; reason: string }) => void) | null = null
 
   constructor(url: string) {
     this.url = url
@@ -29,8 +29,8 @@ class MockWebSocket {
     this.sent.push(data)
   }
 
-  close() {
-    this.onclose?.()
+  close(code = 1000, reason = '') {
+    this.onclose?.({ code, reason })
   }
 
   triggerMessage(data: unknown) {
@@ -84,6 +84,58 @@ describe('Navigator flow', () => {
     KRD007: 'A long description of the temple.',
     KRD008: 'A long description of the clearing.',
     SAPRAY: '*** hero is praying to the Goddess Tashanna.',
+    KUTM05: 'There is a dryad standing here.',
+  }
+
+  const adminMobSnapshot = {
+    animation: {
+      routine_index: 5,
+      next_routine: 'browns',
+      routine_sequence: ['dryads', 'elves', 'gemakr', 'gemakr', 'zarapp', 'browns'],
+      tick_seconds: 1,
+      animation_tick_interval_seconds: 15,
+      brownie_routine_interval_seconds: 90,
+      brownie_full_path_interval_seconds: 3600,
+      legacy_source: 'legacy/KYRANIM.C:116-133',
+    },
+    mobs: [
+      {
+        id: 'dryad',
+        name: 'Dryad',
+        kind: 'persistent_room_object',
+        status: 'present',
+        object_id: 45,
+        room_id: 0,
+        room: { id: 0, brief: 'near a mystical willow tree', object_landing: 'on the ground' },
+        legacy_source: 'legacy/KYRANIM.C:326-348',
+      },
+      {
+        id: 'brownie',
+        name: 'Brownie',
+        kind: 'path_encounter',
+        status: 'last_checked',
+        room_id: 0,
+        room: { id: 0, brief: 'near a mystical willow tree', object_landing: 'on the ground' },
+        path_index: 19,
+        path_length: 40,
+        next_room_id: 129,
+        next_room: { id: 129, brief: 'on a winding trail', object_landing: 'nearby' },
+        routine_interval_seconds: 90,
+        full_path_interval_seconds: 3600,
+        legacy_source: 'legacy/KYRANIM.C:69-80,393-426',
+      },
+      {
+        id: 'elf',
+        name: 'Elf',
+        kind: 'transient_encounter',
+        status: 'between_encounters',
+        room_id: null,
+        room: null,
+        next_outcome: 'hint',
+        hint_index: 4,
+        legacy_source: 'legacy/KYRANIM.C:352-389',
+      },
+    ],
   }
 
   beforeEach(() => {
@@ -185,6 +237,87 @@ describe('Navigator flow', () => {
     expect(
       screen.getAllByText(/praying to the Goddess Tashanna/i).length
     ).toBeGreaterThan(0)
+  })
+
+  it('shows session expiration metadata and reconnects with a fresh token after close', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            expires_at: '2026-05-22T00:00:00+00:00',
+            expires_in_seconds: 86400,
+          },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'fresh456',
+            player_id: 'hero',
+            room_id: 7,
+            expires_at: '2026-05-22T00:30:00+00:00',
+            expires_in_seconds: 88200,
+          },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    fetchMock.mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const firstSocket = await waitFor(() => MockWebSocket.instances[0])
+    expect(firstSocket.url).toContain('/rooms/7?token=abc123')
+    expect(await screen.findByText(/token expires in 24h 0m/i)).toBeInTheDocument()
+
+    act(() => {
+      firstSocket.close(1008, 'Invalid session token')
+    })
+
+    await screen.findByText(/connection: disconnected/i)
+    expect(screen.getByText(/Invalid session token/i)).toBeInTheDocument()
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /reconnect session/i }))
+    })
+
+    const secondSocket = await waitFor(() => MockWebSocket.instances[1])
+    expect(secondSocket.url).toContain('/rooms/7?token=fresh456')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/auth/session',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ player_id: 'hero', room_id: 7 }),
+      })
+    )
+    expect(await screen.findByText(/token expires in 24h 30m/i)).toBeInTheDocument()
   })
 
   it('renders command_response room_message text for look-style replies', async () => {
@@ -354,6 +487,142 @@ describe('Navigator flow', () => {
     await waitFor(() =>
       expect(screen.getAllByText(/emerald/i).length).toBeGreaterThan(0)
     )
+  })
+
+  it('shows the legacy dryad presence line after animation room_objects moves her into the room', async () => {
+    const localLocations = [
+      {
+        id: 7,
+        brfdes: 'Edge of the forest',
+        objlds: 'among the roots',
+        objects: [],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
+    ]
+    const localObjects = [...objects, { id: 45, name: 'dryad', flags: [] }]
+
+    let responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => localLocations },
+      { ok: true, json: async () => localObjects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    expect(screen.queryByText('There is a dryad standing here.')).toBeNull()
+
+    act(() => {
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_objects',
+          location: 7,
+          objects: [{ id: 45, name: 'dryad' }],
+          animation_flag: 'dryads',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
+    )
+  })
+
+  it('keeps the dryad presence line on explicit look responses', async () => {
+    const localLocations = [
+      {
+        id: 7,
+        brfdes: 'Edge of the forest',
+        objlds: 'among the roots',
+        objects: [45],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
+    ]
+    const localObjects = [...objects, { id: 45, name: 'dryad', flags: [] }]
+
+    let responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => localLocations },
+      { ok: true, json: async () => localObjects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'location_description',
+          location: 7,
+          text: 'You look around the forest edge.',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(screen.getAllByText('You look around the forest edge.').length).toBeGreaterThan(0)
+    )
+    expect(screen.getByText('There is nothing lying among the roots.')).toBeInTheDocument()
+    expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
   })
 
   it('renders spoiler command responses with a whisper prompt', async () => {
@@ -594,6 +863,131 @@ describe('Navigator flow', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
     await screen.findByText(/Admin update saved/i)
+  })
+
+  it('shows the admin mob tracker from the admin-only endpoint', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [],
+      nmpdes: 1,
+      modno: 0,
+      level: 4,
+      gamloc: 7,
+      pgploc: 7,
+      flags: 0,
+      gold: 150,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 10,
+      hitpts: 20,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: '',
+    }
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/admin/mobs/elf/trigger')) {
+        expect(init?.method).toBe('POST')
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer dev-admin',
+          'Content-Type': 'application/json',
+        })
+        expect(JSON.parse(String(init?.body))).toEqual({ player_id: 'hero', room_id: 7 })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'triggered',
+            room_id: 7,
+            player_id: 'hero',
+            outcome: 'hint',
+            snapshot: adminMobSnapshot,
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/admin/mobs')) {
+        expect(init?.headers).toMatchObject({ Authorization: 'Bearer dev-admin' })
+        return Promise.resolve({
+          ok: true,
+          json: async () => adminMobSnapshot,
+        } as unknown as Response)
+      }
+      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ player: adminPlayer }),
+        } as unknown as Response)
+      }
+
+      const next = responses.shift()
+      if (!next) {
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    expect(await screen.findByText(/Mob tracker/i)).toBeInTheDocument()
+    expect(screen.getByText(/Dryad/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/near a mystical willow tree/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/next 129/i)).toBeInTheDocument()
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /trigger elf/i }))
+    })
+    expect(await screen.findByText(/Elf triggered: hint/i)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/admin/mobs',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer dev-admin' }),
+      })
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/admin/mobs/elf/trigger',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ player_id: 'hero', room_id: 7 }),
+      })
+    )
   })
 
   it('prepopulates admin fields from the current player and supports refresh', async () => {

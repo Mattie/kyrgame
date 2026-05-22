@@ -28,7 +28,7 @@
 - **Room 199 — `tulips` (tulip grove):** Getting a tulip grants tulip object if inventory space; otherwise failure message.【F:legacy/KYRROUS.C†L1051-L1064】
 - **Room 201 — `crystt` (crystal tunnel):** Aiming wand at tree (with crystal keyword setup) and level 11 gate grants progression messaging; requires wand possession.【F:legacy/KYRROUS.C†L1066-L1084】
 - **Room 204 — `rainbo` (rainbow bridge):** Breaking wand consumes it; if player already has Kyragem flag set, gives messaging; else awards Kyragem object and sets flag.【F:legacy/KYRROUS.C†L1086-L1101】
-- **Room 213 — `sunshi` (sunshine chamber):** Casting `zapher` on tulip converts tulip to Kyragem shard; casting `zennyra` prints lore; offering Kyragem at level 12 triggers level-up messaging.【F:legacy/KYRROUS.C†L1103-L1131】
+- **Room 213 — `sunshi` (sunshine chamber):** Casting `zapher` on tulip converts tulip to Kyragem shard; casting `zennyra` prints lore; offering Kyragem at level 12 triggers level-up messaging. `zennyra` is the hidden "spell that is not a spell" hinted by `EHINT6`: it is handled by this room routine instead of the spellbook table.【F:legacy/KYRROUS.C†L1103-L1131】
 - **Room 218 — `demong` (demon gate):** Dropping soulstone into niche teleports player to room 219 with messaging.【F:legacy/KYRROUS.C†L1133-L1149】
 - **Room 252 — `singer` (singing contest):** Singing/humming/whistling with level 19 gate levels up and prints success text.【F:legacy/KYRROUS.C†L1308-L1318】
 - **Room 253 — `forgtr` (forgetful NPC):** Saying “forget” checks level 20 gate to level up with messaging.【F:legacy/KYRROUS.C†L1320-L1329】

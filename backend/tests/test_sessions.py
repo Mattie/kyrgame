@@ -18,6 +18,26 @@ def _get_open_port() -> int:
     return port
 
 
+async def _receive_initial_room_payloads(websocket):
+    welcome = json.loads(await asyncio.wait_for(websocket.recv(), timeout=1))
+    assert welcome["type"] == "room_welcome"
+    for _ in range(4):
+        try:
+            message = json.loads(await asyncio.wait_for(websocket.recv(), timeout=1))
+        except asyncio.TimeoutError:
+            break
+        assert message["type"] == "command_response"
+
+
+async def _wait_until(predicate, timeout: float = 2.0):
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.05)
+    assert predicate()
+
+
 @pytest.mark.anyio
 async def test_session_creation_first_login_and_recovery():
     app = create_app()
@@ -127,6 +147,60 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
         async with websockets.connect(reconnect_uri) as ws:
             welcome_again = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
             assert welcome_again["type"] == "room_welcome"
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
+async def test_multiple_websocket_sessions_keep_player_active_until_all_disconnect():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        first_session = await client.post(
+            "/auth/session",
+            json={"player_id": "hero", "room_id": 7, "allow_multiple": True},
+        )
+        first_token = first_session.json()["session"]["token"]
+        second_session = await client.post(
+            "/auth/session",
+            json={"player_id": "hero", "room_id": 7, "allow_multiple": True},
+        )
+        second_token = second_session.json()["session"]["token"]
+
+        first_uri = f"ws://{host}:{port}/ws/rooms/7?token={first_token}"
+        second_uri = f"ws://{host}:{port}/ws/rooms/7?token={second_token}"
+
+        async with websockets.connect(first_uri) as first_ws:
+            await _receive_initial_room_payloads(first_ws)
+            async with websockets.connect(second_uri) as second_ws:
+                await _receive_initial_room_payloads(second_ws)
+                await _wait_until(
+                    lambda: first_token
+                    in getattr(app.state, "active_player_sessions", {})
+                    and second_token in getattr(app.state, "active_player_sessions", {})
+                )
+
+                await first_ws.close()
+                await _wait_until(
+                    lambda: first_token
+                    not in getattr(app.state, "active_player_sessions", {})
+                )
+
+                active_session_players = getattr(app.state, "active_player_sessions", {})
+                assert second_token in active_session_players
+                assert app.state.active_players.get("hero") is active_session_players[second_token]
+
+            await _wait_until(lambda: "hero" not in app.state.active_players)
+            assert second_token not in getattr(app.state, "active_player_sessions", {})
 
     server.should_exit = True
     await server_task

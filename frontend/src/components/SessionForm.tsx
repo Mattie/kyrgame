@@ -10,8 +10,24 @@ const storageKeys = {
   adminToken: 'kyrgame.navigator.adminToken',
 }
 
+const formatTokenTtl = (seconds?: number | null) => {
+  if (seconds === undefined || seconds === null) return null
+  const safeSeconds = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  return `${hours}h ${minutes}m`
+}
+
 export const SessionForm = () => {
-  const { startSession, connectionStatus, error, apiBaseUrl, setAdminToken } = useNavigator()
+  const {
+    startSession,
+    connectionStatus,
+    error,
+    apiBaseUrl,
+    setAdminToken,
+    session,
+    currentRoom,
+  } = useNavigator()
   const [playerId, setPlayerId] = useState('')
   const [roomId, setRoomId] = useState('')
   const [adminTokenInput, setAdminTokenInput] = useState('')
@@ -98,6 +114,22 @@ export const SessionForm = () => {
       setSubmitting(false)
     }
   }
+
+  const handleReconnect = async () => {
+    if (!session) return
+    setSubmitting(true)
+    try {
+      await startSession(session.playerId, currentRoom ?? session.roomId)
+    } catch {
+      // `startSession` is responsible for updating shared error state.
+      // Swallow reconnect failures here to avoid an unhandled promise rejection
+      // from this UI event handler.
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const tokenTtl = formatTokenTtl(session?.expiresInSeconds)
 
   return (
     <section className={`panel session-form ${collapsed ? 'collapsed' : ''}`}>
@@ -193,7 +225,13 @@ export const SessionForm = () => {
           <p className={`status ${connectionStatus}`}>
             Connection: {connectionStatus}
           </p>
+          {tokenTtl && <p className="status">Token expires in {tokenTtl}</p>}
           {error && <p className="status error">{error}</p>}
+          {session && connectionStatus === 'disconnected' && (
+            <button type="button" onClick={handleReconnect} disabled={submitting}>
+              Reconnect session
+            </button>
+          )}
         </div>
       )}
     </section>

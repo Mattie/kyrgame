@@ -407,6 +407,7 @@
     "LOSSPL": "...You master the %s spell, however the %s spell slips from your memory!",
     "GAISPL": "...You master the %s spell!",
     "MEMSPL": "***\r\n%s has just memorized a spell from %s spellbook!",
+    "YOUCASTSPELL": "...You cast the spell!",
     "MISS00": "...You concentrate on the spell and start to cast it.  The power of the spell\r\nbuilds but suddenly fizzles out as though something were still missing.",
     "MISS01": "***\r\n%s is concentrating on casting a spell that suddenly fizzles out as though\r\nsomething were still missing.",
     "SPM000": "...As you cast the spell, a flash of bright blue light encircles you for a\r\nbrief moment!  You suddenly feel mystically protected.",

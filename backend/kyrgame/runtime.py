@@ -6,11 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fastapi import FastAPI
+from starlette.websockets import WebSocketState
 
-from . import commands, database, fixtures, loader, models, repositories, rooms
+from . import commands, constants, database, fixtures, loader, models, repositories, rooms
 from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
@@ -26,6 +28,9 @@ from .timing.scheduler import TickScheduler
 from .world.animation_tick_system import (
     AnimationTickRuntimeBridge,
     AnimationTickSystem,
+    BrownieRoutine,
+    DryadWanderRoutine,
+    ElfEncounterRoutine,
     GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
 )
@@ -174,17 +179,20 @@ async def bootstrap_app(app: FastAPI):
     object_names_by_id = {obj.id: obj.name for obj in app.state.fixture_cache["objects"]}
     app.state.animation_rng = random.Random()
 
-    def _gemakr_room_picker(low: int, high: int) -> int:
+    def _animation_room_picker(low: int, high: int) -> int:
         return app.state.animation_rng.randint(low, high)
 
-    def _gemakr_pick_gem(low: int, high: int) -> int:
+    def _animation_pick_gem(low: int, high: int) -> int:
         return app.state.animation_rng.randint(low, high)
 
-    def _gemakr_get_room_objects(room_id: int) -> list[int]:
+    def _animation_pick_gold(low: int, high: int) -> int:
+        return app.state.animation_rng.randint(low, high)
+
+    def _animation_get_room_objects(room_id: int) -> list[int]:
         location = app.state.location_index.get(room_id)
         return list(location.objects) if location else []
 
-    def _gemakr_set_room_objects(room_id: int, object_ids: list[int]) -> None:
+    def _animation_set_room_objects(room_id: int, object_ids: list[int]) -> None:
         location = app.state.location_index.get(room_id)
         if location:
             app.state.location_index[room_id] = location.model_copy(
@@ -195,25 +203,85 @@ async def bootstrap_app(app: FastAPI):
             location_repo.update_objects(room_id, list(object_ids))
             db.commit()
 
-    def _gemakr_name_lookup(gem_id: int) -> str:
-        return object_names_by_id.get(gem_id, "gem")
+    def _animation_object_name_lookup(object_id: int) -> str:
+        return object_names_by_id.get(object_id, "object")
+
+    def _animation_location_phrase_lookup(room_id: int) -> str:
+        location = app.state.location_index.get(room_id)
+        return location.objlds if location else "nearby"
+
+    def _animation_message_formatter(message_id: str, *args: object) -> str:
+        template = messages_catalog.get(message_id, "")
+        if args:
+            try:
+                return template % args
+            except TypeError:
+                return template
+        return template
 
     def _gemakr_message_formatter(gem_name: str) -> str:
-        template = messages_catalog.get("GEMAPP", "")
-        return template % gem_name if "%s" in template else template
+        return _animation_message_formatter("GEMAPP", gem_name)
 
+    def _animation_player_getter(room_id: int) -> models.PlayerModel | None:
+        # Legacy rndlgp only scans active terminals for animation encounters
+        # (legacy/KYRANIM.C:95-107).
+        for player in getattr(app.state, "active_player_sessions", {}).values():
+            if player.gamloc == room_id:
+                return player
+        for player in getattr(app.state, "active_players", {}).values():
+            if player.gamloc == room_id:
+                return player
+        return None
+
+    def _animation_player_persister(player: models.PlayerModel) -> None:
+        with session_factory() as db:
+            record = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
+            if not record:
+                return
+            record.gold = player.gold
+            record.gpobjs = list(player.gpobjs)
+            record.obvals = list(player.obvals)
+            record.npobjs = player.npobjs
+            db.commit()
+
+    def _animation_pronoun(player: models.PlayerModel) -> str:
+        return "her" if player.flags & constants.PlayerFlag.FEMALE else "him"
+
+    elf_routine = ElfEncounterRoutine(
+        room_picker=_animation_room_picker,
+        gold_picker=_animation_pick_gold,
+        player_getter=_animation_player_getter,
+        player_persister=_animation_player_persister,
+        message_formatter=_animation_message_formatter,
+    )
+    app.state.animation_elf_routine = elf_routine
     app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence,
         routine_handlers={
+            "dryads": DryadWanderRoutine(
+                room_picker=_animation_room_picker,
+                room_objects_getter=_animation_get_room_objects,
+                room_objects_setter=_animation_set_room_objects,
+                object_name_lookup=_animation_object_name_lookup,
+                location_phrase_lookup=_animation_location_phrase_lookup,
+                message_formatter=_animation_message_formatter,
+            ),
+            "elves": elf_routine,
             "gemakr": GemSpawnRoutine(
-                room_picker=_gemakr_room_picker,
-                gem_picker=_gemakr_pick_gem,
-                room_objects_getter=_gemakr_get_room_objects,
-                room_objects_setter=_gemakr_set_room_objects,
-                gem_name_lookup=_gemakr_name_lookup,
+                room_picker=_animation_room_picker,
+                gem_picker=_animation_pick_gem,
+                room_objects_getter=_animation_get_room_objects,
+                room_objects_setter=_animation_set_room_objects,
+                gem_name_lookup=_animation_object_name_lookup,
                 message_formatter=_gemakr_message_formatter,
-            )
+            ),
+            "browns": BrownieRoutine(
+                player_getter=_animation_player_getter,
+                player_persister=_animation_player_persister,
+                message_formatter=_animation_message_formatter,
+                pronoun_lookup=_animation_pronoun,
+            ),
         },
     )
 
@@ -251,23 +319,61 @@ async def bootstrap_app(app: FastAPI):
         if not text and not event.payload:
             return
         event_payload = dict(event.payload)
-        payload_event = event_payload.get(
+        room_event_payload = {
+            key: value
+            for key, value in event_payload.items()
+            if not key.startswith("target_")
+        }
+        excluded_sockets = set()
+        target_player = event_payload.get("target_player")
+        target_text = event_payload.get("target_text")
+        target_message_id = event_payload.get("target_message_id")
+        if target_player and target_text and target_message_id:
+            # Legacy reference: KYRANIM.C elves() prints the hint/reward to usrnum,
+            # then prints EMSG02/EMSG03 to the rest of the room (lines 367-383).
+            target_payload = {
+                "event": "room_message",
+                "scope": "target",
+                "type": "room_message",
+                "message_id": target_message_id,
+                "text": target_text,
+                "animation_flag": event.flag,
+                "player": target_player,
+            }
+            target_envelope = {
+                "type": "command_response",
+                "room": event.room_id,
+                "payload": target_payload,
+            }
+            for token in await app.state.presence.sessions_for_player(target_player):
+                target_socket = app.state.session_connections.get(token)
+                if not target_socket:
+                    continue
+                if target_socket.application_state != WebSocketState.CONNECTED:
+                    continue
+                excluded_sockets.add(target_socket)
+                await target_socket.send_json(target_envelope)
+
+        payload_event = room_event_payload.get(
             "event",
-            event_payload.get("type", "room_message"),
+            room_event_payload.get("type", "room_message"),
         )
         payload = {
             "event": payload_event,
             "scope": "room",
-            "type": event_payload.get("type", "room_message"),
+            "type": room_event_payload.get("type", "room_message"),
             "message_id": event.message_id,
             "text": text,
             "animation_flag": event.flag,
         }
-        payload.update(event_payload)
+        payload.update(room_event_payload)
         await app.state.gateway.broadcast(
             event.room_id,
             app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),
+            exclude=excluded_sockets or None,
         )
+
+    app.state.dispatch_animation_event = _dispatch_animation_event
 
     app.state.animation_tick_callback = AnimationTickRuntimeBridge(
         system=app.state.animation_tick_system,

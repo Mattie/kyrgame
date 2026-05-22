@@ -39,6 +39,8 @@ export type SessionRecord = {
   token: string
   playerId: string
   roomId: number
+  expiresAt?: string | null
+  expiresInSeconds?: number | null
 }
 
 export type WorldData = {
@@ -113,6 +115,52 @@ export type AdminPlayerRecord = {
   spouse: string
 }
 
+export type AdminMobRoom = {
+  id: number
+  brief?: string | null
+  object_landing?: string | null
+}
+
+export type AdminMobRecord = {
+  id: string
+  name: string
+  kind: string
+  status: string
+  room_id?: number | null
+  room?: AdminMobRoom | null
+  next_room_id?: number | null
+  next_room?: AdminMobRoom | null
+  path_index?: number
+  path_length?: number
+  next_outcome?: string
+  hint_index?: number
+  routine_interval_seconds?: number
+  full_path_interval_seconds?: number
+  legacy_source?: string
+}
+
+export type AdminMobSnapshot = {
+  animation: {
+    routine_index: number
+    next_routine: string
+    routine_sequence?: string[]
+    tick_seconds: number
+    animation_tick_interval_seconds: number
+    brownie_routine_interval_seconds?: number
+    brownie_full_path_interval_seconds?: number
+    legacy_source?: string
+  }
+  mobs: AdminMobRecord[]
+}
+
+export type AdminElfTriggerResponse = {
+  status: 'triggered' | 'no_active_player'
+  room_id: number
+  player_id: string
+  outcome: 'hint' | 'gold' | 'no_active_player'
+  snapshot: AdminMobSnapshot
+}
+
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
 type NavigatorContextValue = {
@@ -128,6 +176,8 @@ type NavigatorContextValue = {
   adminToken: string | null
   setAdminToken: (token: string | null) => void
   fetchAdminPlayer: (playerId: string) => Promise<AdminPlayerRecord>
+  fetchAdminMobs: () => Promise<AdminMobSnapshot>
+  triggerElf: (playerId: string, roomId: number) => Promise<AdminElfTriggerResponse>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (
@@ -154,9 +204,25 @@ const articleizedName = (object: GameObject | undefined): string => {
   return `${article} ${object.name}`
 }
 
-const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+const LEGACY_ROOM_PRESENCE_LINES = [
+  {
+    objectId: 45,
+    objectName: 'dryad',
+    messageId: 'KUTM05',
+    fallback: 'There is a dryad standing here.',
+  },
+  {
+    objectId: 52,
+    objectName: 'dragon',
+    messageId: 'KUTM06',
+    fallback: 'By the way, there is a very large and angry dragon here too!',
+  },
+] as const
 
-const formatRoomObjectsLine = (
+const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+const normalizeObjectName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+
+const formatVisibleRoomObjectsLine = (
   location: LocationRecord | null,
   objects: GameObject[] | null
 ): string | null => {
@@ -182,6 +248,35 @@ const formatRoomObjectsLine = (
       return `There is ${rest.reverse().join(', ')}, and ${last} lying ${landing}.`
     }
   }
+}
+
+export const formatLegacyRoomObjectLines = (
+  location: LocationRecord | null,
+  objects: GameObject[] | null,
+  messages?: Record<string, string> | null
+): string[] => {
+  if (!location) return []
+
+  const lines = [
+    formatVisibleRoomObjectsLine(location, objects),
+  ].filter(Boolean) as string[]
+  const objectsById = new Map(objects?.map((obj) => [obj.id, obj]) ?? [])
+
+  // Mirrors the hidden NPC presence append in legacy/KYRUTIL.C locobjs() lines 261-306.
+  LEGACY_ROOM_PRESENCE_LINES.forEach((presence) => {
+    const hasPresenceObject = (location.objects ?? []).some((id) => {
+      const object = objectsById.get(id)
+      return (
+        id === presence.objectId ||
+        normalizeObjectName(object?.name) === presence.objectName
+      )
+    })
+    if (hasPresenceObject) {
+      lines.push(messages?.[presence.messageId] ?? presence.fallback)
+    }
+  })
+
+  return lines
 }
 
 const formatOccupantsLine = (players: string[], currentPlayerId?: string | null): string | null => {
@@ -428,12 +523,16 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               locationId !== null
                 ? worldRef.current?.locations.find((loc) => loc.id === locationId) ?? null
                 : null
-            const objectLine = formatRoomObjectsLine(locationRecord, worldRef.current?.objects ?? null)
+            const objectLines = formatLegacyRoomObjectLines(
+              locationRecord,
+              worldRef.current?.objects ?? null,
+              worldRef.current?.messages ?? null
+            )
             const occupantsLine = formatOccupantsLine(
               occupantsRef.current,
               session?.playerId ?? null
             )
-            extraLines = [objectLine, occupantsLine].filter(Boolean) as string[]
+            extraLines = [...objectLines, occupantsLine].filter(Boolean) as string[]
           } else if (message.payload?.event === 'location_update') {
             // Don't show location_update event separately - it will be followed by location_description
             handleRoomChange(message.payload.location ?? null, 'location_update')
@@ -537,8 +636,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         setConnectionStatus('connected')
       }
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setConnectionStatus('disconnected')
+        if (event.code !== 1000) {
+          setError(event.reason || `WebSocket closed with code ${event.code}`)
+        }
       }
 
       socket.onerror = () => {
@@ -637,6 +739,53 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     [adminToken, apiBaseUrl]
   )
 
+  const fetchAdminMobs = useCallback(
+    async () => {
+      if (!adminToken) {
+        throw new Error('Admin token required to fetch mob data')
+      }
+
+      const response = await fetch(`${apiBaseUrl}/admin/mobs`, {
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin mob fetch failed')
+      }
+
+      return (await response.json()) as AdminMobSnapshot
+    },
+    [adminToken, apiBaseUrl]
+  )
+
+  const triggerElf = useCallback(
+    async (playerId: string, roomId: number) => {
+      if (!adminToken) {
+        throw new Error('Admin token required to trigger the elf')
+      }
+
+      const response = await fetch(`${apiBaseUrl}/admin/mobs/elf/trigger`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ player_id: playerId, room_id: roomId }),
+      })
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin elf trigger failed')
+      }
+
+      return (await response.json()) as AdminElfTriggerResponse
+    },
+    [adminToken, apiBaseUrl]
+  )
+
   const startSession = useCallback(
     async (playerId: string, roomId?: number | null) => {
       setConnectionStatus('connecting')
@@ -665,6 +814,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           token: sessionPayload.token,
           playerId: sessionPayload.player_id,
           roomId: sessionPayload.room_id,
+          expiresAt: sessionPayload.expires_at ?? null,
+          expiresInSeconds:
+            typeof sessionPayload.expires_in_seconds === 'number'
+              ? sessionPayload.expires_in_seconds
+              : null,
         }
         setSession(record)
         setCurrentRoom(record.roomId)
@@ -747,6 +901,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       adminToken,
       setAdminToken,
       fetchAdminPlayer,
+      fetchAdminMobs,
+      triggerElf,
       applyAdminUpdate,
       sendMove,
       sendCommand,
@@ -759,6 +915,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       connectionStatus,
       currentRoom,
       error,
+      fetchAdminMobs,
       fetchAdminPlayer,
       occupants,
       setAdminToken,
@@ -766,6 +923,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       sendCommand,
       session,
       startSession,
+      triggerElf,
       world,
     ]
   )

@@ -1,8 +1,10 @@
 import random
 
 import pytest
+from sqlalchemy import select
 
-from kyrgame import commands, constants, fixtures
+from kyrgame import commands, constants, fixtures, models
+from kyrgame.database import create_session, get_engine, init_db_schema
 from kyrgame.effects import EffectResult, SpellEffect
 
 
@@ -375,6 +377,98 @@ async def test_cast_area_damage_spells_apply_damage_and_protection():
     assert "S06M04" in message_ids
     assert target.hitpts == 20
     assert protected.hitpts == 30
+
+
+@pytest.mark.anyio
+async def test_cast_clutzopho_persists_target_inventory_and_room_objects(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        player = _build_player(
+            flags=int(constants.PlayerFlag.LOADED),
+            level=25,
+            spts=25,
+            gamloc=7,
+            gpobjs=[],
+            obvals=[],
+            npobjs=0,
+            spells=[10],
+            nspells=1,
+        )
+        target = _build_player(
+            plyrid="target",
+            attnam="target",
+            altnam="Target",
+            gamloc=7,
+            gpobjs=[0, 1],
+            obvals=[10, 20],
+            npobjs=2,
+        )
+        state = _build_state(player)
+        location = state.locations[7].model_copy(update={"objects": [2], "nlobjs": 1})
+        state.locations[7] = location
+        state.presence = TrackingPresence({player.plyrid, target.plyrid})
+        state.player_lookup = lambda pid: {player.plyrid: player, target.plyrid: target}.get(pid)
+        state.db_session = session
+        session.add(models.Player(**player.model_dump()))
+        session.add(models.Player(**target.model_dump()))
+        session.add(models.Location(**location.model_dump()))
+        session.commit()
+
+        registry = commands.build_default_registry()
+        dispatcher = commands.CommandDispatcher(registry)
+
+        result = await dispatcher.dispatch("cast", {"raw": "clutzopho target"}, state)
+
+        target_record = session.scalar(select(models.Player).where(models.Player.plyrid == "target"))
+        location_record = session.scalar(select(models.Location).where(models.Location.id == 7))
+        room_events = [event for event in result.events if event.get("type") == "room_objects"]
+
+        assert target_record is not None
+        assert location_record is not None
+        assert target_record.gpobjs == []
+        assert target_record.npobjs == 0
+        assert location_record.objects == [2, 1, 0]
+        assert room_events
+        assert [obj["id"] for obj in room_events[-1]["objects"]] == [2, 1, 0]
+
+
+@pytest.mark.anyio
+async def test_cast_mower_persists_ground_cleanup_and_room_objects(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        player = _build_player(
+            flags=int(constants.PlayerFlag.LOADED),
+            level=25,
+            spts=25,
+            gamloc=7,
+            gpobjs=[],
+            obvals=[],
+            npobjs=0,
+            spells=[41],
+            nspells=1,
+        )
+        state = _build_state(player)
+        location = state.locations[7].model_copy(update={"objects": [0, 45], "nlobjs": 2})
+        state.locations[7] = location
+        state.db_session = session
+        session.add(models.Player(**player.model_dump()))
+        session.add(models.Location(**location.model_dump()))
+        session.commit()
+
+        registry = commands.build_default_registry()
+        dispatcher = commands.CommandDispatcher(registry)
+
+        result = await dispatcher.dispatch("cast", {"raw": "mower"}, state)
+
+        location_record = session.scalar(select(models.Location).where(models.Location.id == 7))
+        room_events = [event for event in result.events if event.get("type") == "room_objects"]
+
+        assert location_record is not None
+        assert location_record.objects == [45]
+        assert room_events
+        assert [obj["id"] for obj in room_events[-1]["objects"]] == [45]
 
 
 @pytest.mark.anyio

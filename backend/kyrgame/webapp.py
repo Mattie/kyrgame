@@ -5,6 +5,7 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -23,6 +24,7 @@ from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
+from .world.animation_tick_system import AnimationTickSystem, BrownieRoutine
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,8 @@ class SessionData(BaseModel):
     token: str
     player_id: str
     room_id: int
+    expires_at: str
+    expires_in_seconds: int
     first_login: bool = False
     resumed: bool = False
     replaced_sessions: int = 0
@@ -55,6 +59,11 @@ class SessionResponse(BaseModel):
 
 class LogoutResponse(BaseModel):
     status: str
+
+
+class AdminElfTriggerRequest(BaseModel):
+    player_id: str
+    room_id: int
 
 
 class AdminRole(str, Enum):
@@ -508,9 +517,60 @@ def _remove_player_from_cache(app: FastAPI, alias: str):
     app.state.fixture_cache["summary"]["players"] = len(app.state.fixture_cache["players"])
 
 
+def _active_player_sessions(app: FastAPI) -> dict[str, models.PlayerModel]:
+    sessions = getattr(app.state, "active_player_sessions", None)
+    if sessions is None:
+        sessions = {}
+        app.state.active_player_sessions = sessions
+    return sessions
+
+
+def _register_active_player_session(
+    app: FastAPI, session_token: str, player: models.PlayerModel
+) -> None:
+    _active_player_sessions(app)[session_token] = player
+    app.state.active_players[player.plyrid] = player
+
+
+def _remove_active_player_session(
+    app: FastAPI, session_token: str, player_id: str | None = None
+) -> None:
+    sessions = _active_player_sessions(app)
+    removed = sessions.pop(session_token, None)
+    player_key = player_id or getattr(removed, "plyrid", None)
+    if not player_key:
+        return
+
+    replacement = next(
+        (
+            player
+            for player in sessions.values()
+            if getattr(player, "plyrid", None) == player_key
+        ),
+        None,
+    )
+    if replacement is not None:
+        app.state.active_players[player_key] = replacement
+    else:
+        app.state.active_players.pop(player_key, None)
+
+
+def _active_player_in_room(
+    app: FastAPI, player_id: str, room_id: int
+) -> models.PlayerModel | None:
+    for player in _active_player_sessions(app).values():
+        if player.plyrid == player_id and player.gamloc == room_id:
+            return player
+    active_player = getattr(app.state, "active_players", {}).get(player_id)
+    if active_player is not None and active_player.gamloc == room_id:
+        return active_player
+    return None
+
+
 async def _disconnect_sessions(app: FastAPI, tokens: list[str]):
     connections = app.state.session_connections
     for token in tokens:
+        _remove_active_player_session(app, token)
         socket = connections.pop(token, None)
         previous_room = await app.state.presence.remove(token)
         if previous_room is not None and socket is not None:
@@ -587,6 +647,141 @@ def get_websocket_provider(websocket: WebSocket) -> FixtureProvider:
     return FixtureProvider(websocket)
 
 
+def _admin_room_summary(provider: FixtureProvider, room_id: int | None):
+    if room_id is None:
+        return None
+    location = provider.location_index.get(room_id)
+    if location is None:
+        return {"id": room_id, "brief": None, "object_landing": None}
+    return {
+        "id": location.id,
+        "brief": location.brfdes,
+        "object_landing": location.objlds,
+    }
+
+
+def _find_room_containing_object(provider: FixtureProvider, object_id: int) -> int | None:
+    for location in sorted(provider.location_index.values(), key=lambda loc: loc.id):
+        if object_id in location.objects:
+            return location.id
+    return None
+
+
+def _admin_mob_snapshot(provider: FixtureProvider):
+    animation_system: AnimationTickSystem | None = getattr(
+        provider.scope.app.state, "animation_tick_system", None
+    )
+    if animation_system is None:
+        raise HTTPException(status_code=503, detail="Animation system is not initialized")
+
+    state = animation_system.state
+    tick_scheduler = getattr(provider.scope.app.state, "tick_scheduler", None)
+    tick_seconds = float(getattr(tick_scheduler, "tick_seconds", 1.0))
+    routine_interval_seconds = 15.0 * tick_seconds
+    brownie_interval_seconds = (
+        routine_interval_seconds * len(AnimationTickSystem.routine_sequence())
+    )
+    brownie_path = BrownieRoutine.path()
+    next_brownie_room_id = BrownieRoutine.path_room(state.brownie_path_index)
+
+    dryad_object_room_id = _find_room_containing_object(provider, 45)
+    dryad_state_room_id = state.dryad_location
+    dryad_room_id = (
+        dryad_object_room_id if dryad_object_room_id is not None else dryad_state_room_id
+    )
+    # Normalize the primary dryad room value so downstream snapshot fields use
+    # the fallback-backed room id even when the object lookup is temporarily out
+    # of sync with animation state.
+    dryad_object_room_id = dryad_room_id
+    dragon_room_id = _find_room_containing_object(provider, 52)
+
+    # Legacy mob state comes from KYRANIM.C globals and routines:
+    # dloc/dryads lines 67,326-348; bpath/bpidx/bloc/browns lines 69-80,393-426.
+    return {
+        "animation": {
+            "routine_index": state.routine_index,
+            "next_routine": animation_system.next_routine_name(),
+            "routine_sequence": list(AnimationTickSystem.routine_sequence()),
+            "tick_seconds": tick_seconds,
+            "animation_tick_interval_seconds": routine_interval_seconds,
+            "brownie_routine_interval_seconds": brownie_interval_seconds,
+            "brownie_full_path_interval_seconds": brownie_interval_seconds * len(brownie_path),
+            "legacy_source": "legacy/KYRANIM.C:116-133",
+        },
+        "mobs": [
+            {
+                "id": "dryad",
+                "name": "Dryad",
+                "kind": "persistent_room_object",
+                "status": "present" if dryad_object_room_id is not None else "unknown",
+                "object_id": 45,
+                "room_id": dryad_object_room_id,
+                "state_room_id": state.dryad_location,
+                "object_room_id": dryad_object_room_id,
+                "room": _admin_room_summary(provider, dryad_object_room_id),
+                "legacy_source": "legacy/KYRANIM.C:326-348",
+            },
+            {
+                "id": "brownie",
+                "name": "Brownie",
+                "kind": "path_encounter",
+                "status": "last_checked",
+                "room_id": state.brownie_location,
+                "room": _admin_room_summary(provider, state.brownie_location),
+                "path_index": state.brownie_path_index % len(brownie_path),
+                "path_length": len(brownie_path),
+                "next_room_id": next_brownie_room_id,
+                "next_room": _admin_room_summary(provider, next_brownie_room_id),
+                "routine_interval_seconds": brownie_interval_seconds,
+                "full_path_interval_seconds": brownie_interval_seconds * len(brownie_path),
+                "legacy_source": "legacy/KYRANIM.C:69-80,393-426",
+            },
+            {
+                "id": "elf",
+                "name": "Elf",
+                "kind": "transient_encounter",
+                "status": "last_seen" if state.elf_last_room is not None else "between_encounters",
+                "room_id": state.elf_last_room,
+                "room": _admin_room_summary(provider, state.elf_last_room),
+                "next_outcome": "gold" if state.elf_reward_next else "hint",
+                "hint_index": state.elf_hint_index,
+                "legacy_source": "legacy/KYRANIM.C:352-389",
+            },
+            {
+                "id": "dragon",
+                "name": "Zar",
+                "kind": "persistent_room_object",
+                "status": "present" if dragon_room_id is not None else "unported",
+                "object_id": 52,
+                "room_id": dragon_room_id,
+                "room": _admin_room_summary(provider, dragon_room_id),
+                "legacy_source": "legacy/KYRANIM.C:155-263,453-466",
+            },
+        ],
+    }
+
+
+async def _dispatch_animation_events(app: FastAPI, events) -> None:
+    dispatcher = getattr(app.state, "dispatch_animation_event", None)
+    if dispatcher is None:
+        raise HTTPException(status_code=503, detail="Animation dispatcher is not initialized")
+
+    for event in events:
+        maybe_awaitable = dispatcher(event)
+        if asyncio.iscoroutine(maybe_awaitable):
+            await maybe_awaitable
+
+
+def _elf_trigger_outcome(events) -> str:
+    for event in events:
+        target_message_id = event.payload.get("target_message_id")
+        if target_message_id == "EMSG01":
+            return "gold"
+        if isinstance(target_message_id, str) and target_message_id.startswith("EHINT"):
+            return "hint"
+    return "no_active_player"
+
+
 def _persist_player_from_template(
     db: OrmSession, alias: str, template: models.PlayerModel, room_id: int | None
 ) -> models.Player:
@@ -609,7 +804,7 @@ def _persist_player_from_template(
 
 
 def _session_payload(
-    token: str,
+    session_record: models.PlayerSession,
     player: models.Player,
     room_id: int,
     *,
@@ -617,14 +812,24 @@ def _session_payload(
     resumed: bool = False,
     replaced_sessions: int = 0,
 ):
+    expires_at = _as_utc(session_record.expires_at)
+    now = datetime.now(timezone.utc)
     return {
-        "token": token,
+        "token": session_record.session_token,
         "player_id": player.plyrid,
         "room_id": room_id,
+        "expires_at": expires_at.isoformat(),
+        "expires_in_seconds": max(0, int((expires_at - now).total_seconds())),
         "first_login": first_login,
         "resumed": resumed,
         "replaced_sessions": replaced_sessions,
     }
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
@@ -678,6 +883,7 @@ async def start_session(
     room_id = payload.room_id if payload.room_id is not None else player.gamloc
 
     replaced_tokens: list[str] = []
+    session_record: models.PlayerSession | None = None
     resumed = False
     status_code = status.HTTP_201_CREATED
 
@@ -689,6 +895,7 @@ async def start_session(
         db.commit()
         room_id = existing.room_id
         token = existing.session_token
+        session_record = existing
         resumed = True
         status_code = status.HTTP_200_OK
     else:
@@ -700,32 +907,26 @@ async def start_session(
             async with request.app.state.session_replacement_lock:
                 replaced_tokens = repo.deactivate_all(player.id)
                 token = secrets.token_urlsafe(24)
-                repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+                session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
                 db.commit()
         else:
             token = secrets.token_urlsafe(24)
-            repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+            session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
             db.commit()
+
+    if session_record is None:
+        raise HTTPException(status_code=500, detail="Session creation failed")
 
     if not payload.allow_multiple and not payload.resume_token:
         # Commit happened inside the lock, now clean up old connections
-        session_connections = request.app.state.session_connections
-        for old_token in replaced_tokens:
-            old_socket = session_connections.pop(old_token, None)
-            previous_room = await request.app.state.presence.room_for_session(old_token)
-            if previous_room is not None and old_socket is not None:
-                await request.app.state.gateway.unregister(previous_room, old_socket)
-            if old_socket is not None and old_socket.application_state == WebSocketState.CONNECTED:
-                # Use WS_1008_POLICY_VIOLATION for concurrent session replacement
-                await old_socket.close(code=status.WS_1008_POLICY_VIOLATION)
-            await request.app.state.presence.remove(old_token)
+        await _disconnect_sessions(request.app, replaced_tokens)
 
     await request.app.state.presence.set_location(player.plyrid, room_id, token)
 
     body = {
         "status": "recovered" if resumed else "created",
         "session": _session_payload(
-            token,
+            session_record,
             player,
             room_id,
             first_login=first_login,
@@ -744,7 +945,7 @@ async def validate_session(
     return {
         "status": "active",
         "session": _session_payload(
-            session_record.session_token, player, session_record.room_id, first_login=False
+            session_record, player, session_record.room_id, first_login=False
         ),
     }
 
@@ -755,7 +956,7 @@ async def logout(
     db: Annotated[OrmSession, Depends(get_db_session)],
     request: Request,
 ):
-    session_record, _ = session_context
+    session_record, player = session_context
     repo = repositories.PlayerSessionRepository(db)
     repo.deactivate(session_record.session_token)
     db.commit()
@@ -769,6 +970,7 @@ async def logout(
             await request.app.state.gateway.unregister(session_record.room_id, active_socket)
             await active_socket.close(code=status.WS_1000_NORMAL_CLOSURE)
     finally:
+        _remove_active_player_session(request.app, session_record.session_token, player.plyrid)
         await request.app.state.presence.remove(session_record.session_token)
     
     return LogoutResponse(status="logged_out")
@@ -868,6 +1070,51 @@ async def reload_room_scripts(
     scripts = provider.room_scripts
     scripts.reload_scripts()
     return {"status": "ok", "reloads": scripts.reloads}
+
+
+@admin_router.get("/mobs")
+async def admin_list_mobs(
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+):
+    return _admin_mob_snapshot(provider)
+
+
+@admin_router.post("/mobs/elf/trigger")
+async def admin_trigger_elf(
+    payload: AdminElfTriggerRequest,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+):
+    app = provider.scope.app
+    active_player = _active_player_in_room(app, payload.player_id, payload.room_id)
+    if active_player is None:
+        return {
+            "status": "no_active_player",
+            "room_id": payload.room_id,
+            "player_id": payload.player_id,
+            "outcome": "no_active_player",
+            "snapshot": _admin_mob_snapshot(provider),
+        }
+
+    elf_routine = getattr(app.state, "animation_elf_routine", None)
+    animation_system: AnimationTickSystem | None = getattr(app.state, "animation_tick_system", None)
+    if elf_routine is None or animation_system is None:
+        raise HTTPException(status_code=503, detail="Animation system is not initialized")
+
+    events = list(elf_routine.trigger_room(animation_system.state, payload.room_id))
+    # Admin-only test hook for KYRANIM.C elves(): force the random eloc to the
+    # current room while preserving the legacy hint/gold branch and messages.
+    animation_system.persist_state()
+    await _dispatch_animation_events(app, events)
+    outcome = _elf_trigger_outcome(events)
+    return {
+        "status": "triggered" if events else "no_active_player",
+        "room_id": payload.room_id,
+        "player_id": payload.player_id,
+        "outcome": outcome,
+        "snapshot": _admin_mob_snapshot(provider),
+    }
 
 
 @admin_router.get("/players")
@@ -1201,6 +1448,7 @@ def create_app() -> FastAPI:
     gateway: RoomGateway | None = None
     app.state.session_connections = {}
     app.state.active_players = {}
+    app.state.active_player_sessions = {}
 
     @app.websocket("/ws/admin/kyraedit")
     async def kyraedit_socket(
@@ -1444,7 +1692,7 @@ def create_app() -> FastAPI:
             player_lookup=lookup_player,
         )
 
-        active_players[player_id] = player_state
+        _register_active_player_session(provider.scope.app, session_token, player_state)
         await provider.presence.set_location(player_id, current_room, session_token)
         await gateway.register(current_room, websocket)
 
@@ -1904,8 +2152,8 @@ def create_app() -> FastAPI:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)
         finally:
-            active_players.pop(player_id, None)
             if session_connections.get(session_token) is websocket:
+                _remove_active_player_session(provider.scope.app, session_token, player_id)
                 session_connections.pop(session_token, None)
             # Close the persistent database session
             if persistent_session:

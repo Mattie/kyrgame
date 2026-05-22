@@ -7,17 +7,13 @@ import {
   useState,
 } from 'react'
 
-import { ActivityEntry, useNavigator } from '../context/NavigatorContext'
+import {
+  ActivityEntry,
+  formatLegacyRoomObjectLines,
+  useNavigator,
+} from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
 import { GemstoneText } from './GemstoneText'
-
-const articleizedName = (object?: { name: string; flags?: string[] }) => {
-  if (!object) return 'an object'
-  const needsAn = object.flags?.includes('NEEDAN')
-  const article = needsAn ? 'an' : 'a'
-  // Return plain name - GemstoneText will add emoji and color when rendering
-  return `${article} ${object.name}`
-}
 
 const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
 
@@ -37,33 +33,7 @@ const formatLegacyRoomLines = (
   const location = world.locations.find((loc) => loc.id === locationId)
   if (!location) return []
 
-  const visibleNames = (location.objects ?? [])
-    .map((id) => world.objects.find((obj) => obj.id === id))
-    .filter((obj): obj is { id: number; name: string; flags?: string[] } =>
-      Boolean(obj && (!obj.flags || obj.flags.includes('VISIBL')))
-    )
-    .map((obj) => articleizedName(obj))
-
-  const landing = location.objlds ?? 'here'
-  const lines: string[] = []
-
-  // Mirrors locobjs formatting from legacy/KYRUTIL.C for ground objects.【F:legacy/KYRUTIL.C†L256-L311】
-  switch (visibleNames.length) {
-    case 0:
-      lines.push(`There is nothing lying ${landing}.`)
-      break
-    case 1:
-      lines.push(`There is ${visibleNames[0]} lying ${landing}.`)
-      break
-    case 2:
-      lines.push(`There is ${visibleNames[0]} and ${visibleNames[1]} lying ${landing}.`)
-      break
-    default: {
-      const [last, ...rest] = visibleNames.reverse()
-      lines.push(`There is ${rest.reverse().join(', ')}, and ${last} lying ${landing}.`)
-      break
-    }
-  }
+  const lines = formatLegacyRoomObjectLines(location, world.objects, world.messages)
 
   const current = normalizeName(playerId)
   const others = occupants

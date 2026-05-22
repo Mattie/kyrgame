@@ -61,24 +61,24 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] IDs 45–53: scenery/NPC props (dryad, willow tree, temple altar, spell-shop sign, forest statue, hidden shrine, slot machine, Zar dragon, chamber-of-life altar)【F:legacy/KYROBJS.C†L199-L225】
 
 ## Spell behaviors, timers, and animations still to model
-`SpellEffectEngine` currently applies generic costs/cooldowns and only specializes the `flyaway` (ID 16) and `weewillo` (ID 62) transformations. Check off each legacy `spells` entry once explicit effect handling (including timers/charms/animations) is implemented:
+`SpellEffectEngine` currently applies generic costs/cooldowns plus the checked explicit handlers below. Check off each legacy `spells` entry once explicit effect handling (including timers/charms/animations) is implemented:
 
 - [x] ID 0 `abbracada` (other protection II)【F:legacy/KYRSPEL.C†L138-L145】
-- [ ] ID 1 `allbettoo` (ultimate heal)【F:legacy/KYRSPEL.C†L138-L145】
-- [ ] ID 2 `blowitawa` (destroy one item)【F:legacy/KYRSPEL.C†L140-L146】
-- [ ] ID 3 `blowoutma` (destroy all items)【F:legacy/KYRSPEL.C†L140-L146】
+- [x] ID 1 `allbettoo` (ultimate heal)【F:legacy/KYRSPEL.C†L138-L145】
+- [x] ID 2 `blowitawa` (destroy one item)【F:legacy/KYRSPEL.C†L140-L146】
+- [x] ID 3 `blowoutma` (destroy all items)【F:legacy/KYRSPEL.C†L140-L146】
 - [x] ID 4 `bookworm` (zap other's spell book)【F:legacy/KYRSPEL.C†L141-L148】
 - [x] ID 5 `burnup` (fireball I)【F:legacy/KYRSPEL.C†L142-L149】
-- [ ] ID 6 `cadabra` (see invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
-- [ ] ID 7 `cantcmeha` (invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
+- [x] ID 6 `cadabra` (see invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
+- [x] ID 7 `cantcmeha` (invisibility I)【F:legacy/KYRSPEL.C†L143-L150】
 - [x] ID 8 `canthur` (ultimate protection I)【F:legacy/KYRSPEL.C†L145-L152】
 - [x] ID 9 `chillou` (ice storm II)【F:legacy/KYRSPEL.C†L147-L154】
-- [ ] ID 10 `clutzopho` (drop all items)【F:legacy/KYRSPEL.C†L148-L155】
+- [x] ID 10 `clutzopho` (drop all items)【F:legacy/KYRSPEL.C†L148-L155】
 - [ ] ID 11 `cuseme` (detect power)【F:legacy/KYRSPEL.C†L149-L156】
 - [x] ID 12 `dumdum` (forget all spells)【F:legacy/KYRSPEL.C†L150-L157】
 - [ ] ID 13 `feeluck` (teleport random)【F:legacy/KYRSPEL.C†L151-L158】
-- [ ] ID 14 `firstai` (heal III)【F:legacy/KYRSPEL.C†L152-L159】
-- [ ] ID 15 `flyaway` (pegasus transformation; needs timers/flags beyond current stub)【F:legacy/KYRSPEL.C†L153-L160】
+- [x] ID 14 `firstai` (heal III)【F:legacy/KYRSPEL.C†L152-L159】
+- [x] ID 15 `flyaway` (pegasus transformation)【F:legacy/KYRSPEL.C†L153-L160】
 - [x] ID 16 `fpandl` (firebolt I)【F:legacy/KYRSPEL.C†L154-L161】
 - [x] ID 17 `freezuu` (ice ball II)【F:legacy/KYRSPEL.C†L155-L162】
 - [x] ID 18 `frostie` (cone of cold II)【F:legacy/KYRSPEL.C†L156-L163】
@@ -104,12 +104,12 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 38 `iseeyou` (see invisibility II)【F:legacy/KYRSPEL.C†L176-L183】
 - [x] ID 39 `koolit` (cone of cold I)【F:legacy/KYRSPEL.C†L177-L184】
 - [x] ID 40 `makemyd` (object protection II)【F:legacy/KYRSPEL.C†L178-L185】
-- [ ] ID 41 `mower` (destroy ground items)【F:legacy/KYRSPEL.C†L179-L186】
-- [ ] ID 42 `noouch` (heal I)【F:legacy/KYRSPEL.C†L180-L187】
+- [x] ID 41 `mower` (destroy ground items)【F:legacy/KYRSPEL.C†L179-L186】
+- [x] ID 42 `noouch` (heal I)【F:legacy/KYRSPEL.C†L180-L187】
 - [x] ID 43 `nosey` (read memorized spells)【F:legacy/KYRSPEL.C†L181-L188】
-- [ ] ID 44 `peekabo` (invisibility II)【F:legacy/KYRSPEL.C†L182-L189】
+- [x] ID 44 `peekabo` (invisibility II)【F:legacy/KYRSPEL.C†L182-L189】
 - [ ] ID 45 `peepint` (scry someone)【F:legacy/KYRSPEL.C†L183-L190】
-- [ ] ID 46 `pickpoc` (steal item)【F:legacy/KYRSPEL.C†L184-L191】
+- [x] ID 46 `pickpoc` (steal item)【F:legacy/KYRSPEL.C†L184-L191】
 - [x] ID 47 `pocus` (magic missile)【F:legacy/KYRSPEL.C†L185-L192】
 - [x] ID 48 `polarba` (ice protection III)【F:legacy/KYRSPEL.C†L186-L193】
 - [x] ID 49 `sapspel` (sap spell points II)【F:legacy/KYRSPEL.C†L187-L194】
@@ -120,11 +120,11 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 54 `sunglass` (lightning protection I)【F:legacy/KYRSPEL.C†L192-L199】
 - [x] ID 55 `surgless` (lightning protection III)【F:legacy/KYRSPEL.C†L193-L200】
 - [x] ID 56 `takethat` (sap spell points I)【F:legacy/KYRSPEL.C†L194-L201】
-- [ ] ID 57 `thedoc` (heal II)【F:legacy/KYRSPEL.C†L195-L202】
+- [x] ID 57 `thedoc` (heal II)【F:legacy/KYRSPEL.C†L195-L202】
 - [ ] ID 58 `tiltowait` (earthquake)【F:legacy/KYRSPEL.C†L196-L203】
 - [x] ID 59 `tinting` (lightning protection II)【F:legacy/KYRSPEL.C†L197-L204】
 - [x] ID 60 `toastem` (fireball III)【F:legacy/KYRSPEL.C†L198-L205】
-- [ ] ID 61 `weewillo` (willowisp transformation; needs timer/animation)【F:legacy/KYRSPEL.C†L199-L205】
+- [x] ID 61 `weewillo` (willowisp transformation)【F:legacy/KYRSPEL.C†L199-L205】
 - [x] ID 62 `whereami` (location finder)【F:legacy/KYRSPEL.C†L200-L204】
 - [x] ID 63 `whopper` (fire protection III)【F:legacy/KYRSPEL.C†L201-L205】
 - [x] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
@@ -141,8 +141,8 @@ Legacy animation ticks coordinate Zar, dryads, elves, brownies, and gem spawns. 
 - [ ] `zaritm` dragonstaff use (summon/attack flow).【F:legacy/KYRANIM.C†L176-L198】
 - [ ] `zarfood`/`dthbyz` Zar attack sequencing + protection checks.【F:legacy/KYRANIM.C†L201-L322】
 - [ ] `pzinlc`/`rmvzar` Zar placement/removal (including props).【F:legacy/KYRANIM.C†L211-L267】
-- [ ] `dryads` wandering dryad logic (room capacity handling).【F:legacy/KYRANIM.C†L325-L348】
-- [ ] `elves` hint/gold alternating encounter behavior.【F:legacy/KYRANIM.C†L351-L389】
-- [ ] `browns` brownie theft/taunt behavior (gold/inventory clearing).【F:legacy/KYRANIM.C†L392-L426】
-- [ ] `gemakr` periodic gem spawns in forest rooms.【F:legacy/KYRANIM.C†L428-L449】
+- [x] `dryads` wandering dryad logic (room capacity handling).【F:legacy/KYRANIM.C†L325-L348】
+- [x] `elves` hint/gold alternating encounter behavior.【F:legacy/KYRANIM.C†L351-L389】
+- [x] `browns` brownie theft/taunt behavior (gold/inventory clearing).【F:legacy/KYRANIM.C†L392-L426】
+- [x] `gemakr` periodic gem spawns in forest rooms.【F:legacy/KYRANIM.C†L428-L449】
 - [ ] `zarapp` Zar sighting broadcast warnings.【F:legacy/KYRANIM.C†L452-L459】
