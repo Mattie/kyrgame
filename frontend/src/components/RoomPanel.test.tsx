@@ -12,10 +12,13 @@ vi.mock('../context/NavigatorContext', () => ({
           id: 1,
           brfdes: 'Cavern of jewels',
           objlds: 'on a velvet pillow',
-          objects: [0],
+          objects: [0, 45],
         },
       ],
-      objects: [{ id: 0, name: 'ruby' }],
+      objects: [
+        { id: 0, name: 'ruby' },
+        { id: 45, name: 'dryad' },
+      ],
       commands: [],
       messages: {},
     },
@@ -38,5 +41,7 @@ describe('RoomPanel', () => {
       '--gem-light': visual.lightColor,
       '--gem-dark': visual.darkColor,
     })
+
+    expect(screen.getByText('🌱 dryad')).toHaveClass('creature-dryad')
   })
 })

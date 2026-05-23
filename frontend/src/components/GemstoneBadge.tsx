@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 
 import { formatGemstoneLabel, getGemstoneVisual } from '../data/gemstonePalette'
+import { GemstoneText } from './GemstoneText'
 
 type GemstoneBadgeProps = {
   name: string
@@ -18,7 +19,7 @@ export const GemstoneBadge = ({ name }: GemstoneBadgeProps) => {
   if (!visual) {
     return (
       <span className="gemstone-badge" style={badgeStyle()}>
-        {formatGemstoneLabel(name)}
+        <GemstoneText text={formatGemstoneLabel(name)} />
       </span>
     )
   }

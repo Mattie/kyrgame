@@ -127,9 +127,15 @@ export type AdminMobRecord = {
   kind: string
   status: string
   room_id?: number | null
+  state_room_id?: number | null
+  object_room_id?: number | null
   room?: AdminMobRoom | null
   next_room_id?: number | null
   next_room?: AdminMobRoom | null
+  home_room_id?: number | null
+  counter?: number
+  attack_index?: number
+  next_attack?: string
   path_index?: number
   path_length?: number
   next_outcome?: string

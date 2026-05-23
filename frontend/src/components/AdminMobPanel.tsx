@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { AdminMobRecord, AdminMobSnapshot, useNavigator } from '../context/NavigatorContext'
+import { GemstoneText } from './GemstoneText'
 
 const REFRESH_INTERVAL_MS = 15_000
 
@@ -29,6 +30,9 @@ const formatMobDetail = (mob: AdminMobRecord) => {
   }
   if (mob.id === 'elf') {
     return `next ${mob.next_outcome ?? 'event'}; hint ${mob.hint_index ?? 0}`
+  }
+  if (mob.id === 'dragon') {
+    return `next ${mob.next_attack ?? 'attack'}; counter ${mob.counter ?? 0}`
   }
   return mob.status.replace(/_/g, ' ')
 }
@@ -112,7 +116,7 @@ export const AdminMobPanel = () => {
           <h2>Mob tracker</h2>
           {snapshot && (
             <p className="muted">
-              Next {snapshot.animation.next_routine}; tick every{' '}
+              <GemstoneText text={`Next ${snapshot.animation.next_routine}; tick every `} />
               {formatSeconds(snapshot.animation.animation_tick_interval_seconds)}
             </p>
           )}
@@ -129,11 +133,18 @@ export const AdminMobPanel = () => {
 
       <div className="mob-panel-body">
         {error && <p className="status error">{error}</p>}
-        {triggerStatus && <p className="field-hint">{triggerStatus}</p>}
+        {triggerStatus && (
+          <p className="field-hint">
+            <GemstoneText text={triggerStatus} />
+          </p>
+        )}
         {lastUpdated && <p className="field-hint">Updated {lastUpdated}</p>}
         {snapshot && (
           <div className="mob-timing">
-            <span>Brownie step {formatSeconds(snapshot.animation.brownie_routine_interval_seconds)}</span>
+            <span>
+              <GemstoneText text="Brownie step " />
+              {formatSeconds(snapshot.animation.brownie_routine_interval_seconds)}
+            </span>
             <span>Full path {formatSeconds(snapshot.animation.brownie_full_path_interval_seconds)}</span>
           </div>
         )}
@@ -141,10 +152,16 @@ export const AdminMobPanel = () => {
           {mobs.map((mob) => (
             <article className="mob-row" key={mob.id}>
               <div>
-                <h3>{mob.name}</h3>
-                <p>{formatRoom(mob)}</p>
+                <h3>
+                  <GemstoneText text={mob.name} />
+                </h3>
+                <p>
+                  <GemstoneText text={formatRoom(mob)} />
+                </p>
               </div>
-              <span>{formatMobDetail(mob)}</span>
+              <span>
+                <GemstoneText text={formatMobDetail(mob)} />
+              </span>
             </article>
           ))}
         </div>

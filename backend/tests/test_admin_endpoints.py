@@ -490,6 +490,15 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         state.elf_last_room = 52
         state.elf_reward_next = 1
         state.elf_hint_index = 4
+        state.zar_location = 250
+        state.zar_counter = 8
+        state.zar_attack_index = 2
+        app.state.location_index[302] = app.state.location_index[302].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+        app.state.location_index[250] = app.state.location_index[250].model_copy(
+            update={"objects": [52], "nlobjs": 1}
+        )
         app.state.location_index[0] = app.state.location_index[0].model_copy(
             update={
                 "objects": [obj for obj in app.state.location_index[0].objects if obj != 45],
@@ -524,6 +533,12 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         assert mobs["brownie"]["path_length"] == 40
         assert mobs["elf"]["room_id"] == 52
         assert mobs["elf"]["status"] == "last_seen"
+        assert mobs["dragon"]["room_id"] == 250
+        assert mobs["dragon"]["state_room_id"] == 250
+        assert mobs["dragon"]["counter"] == 8
+        assert mobs["dragon"]["attack_index"] == 2
+        assert mobs["dragon"]["next_attack"] == "claw"
+        assert mobs["dragon"]["home_room_id"] == 302
 
 
 @pytest.mark.anyio

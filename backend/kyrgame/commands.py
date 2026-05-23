@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Dict, List, Protocol, Set
+from typing import Any, Awaitable, Callable, Dict, List, Protocol, Set
 
 from sqlalchemy import select
 
@@ -17,6 +17,7 @@ from .spellbook import (
     list_spellbook_spells,
     memorize_spell,
 )
+from .world.animation_tick_system import AnimationTickEvent
 
 
 class CommandError(Exception):
@@ -104,6 +105,8 @@ class GameState:
     db_session: any = None  # SQLAlchemy session for persistence
     presence: PresenceAccessor | None = None
     player_lookup: Callable[[str], models.PlayerModel | None] | None = None
+    zar_controller: Any | None = None
+    zar_state: Any | None = None
 
 
 @dataclass
@@ -928,6 +931,136 @@ def _player_and_room_message_events(
             )
         )
     return events
+
+
+def _zar_animation_events_to_command_events(
+    state: GameState,
+    animation_events: list[AnimationTickEvent],
+    command_id: int | None,
+) -> list[dict]:
+    events: list[dict] = []
+    for animation_event in animation_events:
+        payload = dict(animation_event.payload)
+        target_only = bool(payload.pop("target_only", False))
+        target_player = payload.pop("target_player", None)
+        target_message_id = payload.pop("target_message_id", None)
+        target_text = payload.pop("target_text", None)
+        exclude_player = payload.pop("exclude_player", None)
+
+        if target_only:
+            event = _message_event(
+                "target",
+                target_message_id,
+                target_text,
+                command_id,
+            )
+            if target_player:
+                event["player"] = target_player
+            event["animation_flag"] = animation_event.flag
+            event.update(payload)
+            events.append(event)
+            continue
+
+        text = animation_event.message_text or _format_message(
+            state, animation_event.message_id
+        )
+        scope = (
+            "room"
+            if animation_event.room_id == state.player.gamloc
+            else "nearby_room"
+        )
+        event = _message_event(
+            scope,
+            animation_event.message_id,
+            text,
+            command_id,
+            exclude_player=exclude_player if isinstance(exclude_player, str) else None,
+        )
+        event["animation_flag"] = animation_event.flag
+        if scope == "nearby_room":
+            event["room_id"] = animation_event.room_id
+        event.update(payload)
+        events.append(event)
+    return events
+
+
+def _handle_dragonstaff_rub(
+    state: GameState,
+    command_id: int | None,
+    inventory_index: int,
+) -> CommandResult:
+    # Legacy zaritm() is reached from dragonstaff's rub routine and consumes
+    # the staff before summoning/attacking with Zar. (legacy/KYRANIM.C:176-198)
+    controller = state.zar_controller
+    zar_state = state.zar_state
+    if controller is None or zar_state is None:
+        return CommandResult(state=state, events=[])
+
+    pop_inventory_index(state.player, inventory_index)
+    _persist_player_state(state, state.player)
+
+    events = [
+        _message_event(
+            "room",
+            None,
+            _sndutl_text(state.player, "rubbing %s dragonstaff!"),
+            command_id,
+            exclude_player=state.player.plyrid,
+        )
+    ]
+
+    if getattr(zar_state, "zar_location") == state.player.gamloc:
+        events.append(
+            _message_event(
+                "player",
+                "ZMSG12",
+                _format_message(state, "ZMSG12"),
+                command_id,
+            )
+        )
+        events.append(
+            _message_event(
+                "player",
+                "ZMSG14",
+                _format_message(state, "ZMSG14"),
+                command_id,
+            )
+        )
+        _, attack_events = controller.zarfood(zar_state)
+        events.extend(
+            _zar_animation_events_to_command_events(state, attack_events, command_id)
+        )
+        return CommandResult(state=state, events=events)
+
+    events.append(
+        _message_event(
+            "player",
+            "ZMSG13",
+            _format_message(state, "ZMSG13"),
+            command_id,
+        )
+    )
+    movement_events = [
+        *controller.remove_zar(zar_state, "ZMSG10"),
+        *controller.place_zar(zar_state, state.player.gamloc, "ZMSG11"),
+    ]
+    events.extend(
+        _zar_animation_events_to_command_events(state, movement_events, command_id)
+    )
+    events.append(
+        _message_event(
+            "player",
+            "ZMSG14",
+            _format_message(state, "ZMSG14"),
+            command_id,
+        )
+    )
+    if controller.should_attack_after_staff():
+        _, attack_events = controller.zarfood(zar_state)
+        events.extend(
+            _zar_animation_events_to_command_events(state, attack_events, command_id)
+        )
+    return CommandResult(state=state, events=events)
 
 
 
@@ -2151,6 +2284,9 @@ def _handle_rub(state: GameState, args: dict) -> CommandResult:
                 room_template="rubbing something.",
             ),
         )
+
+    if object_id == 30 and state.zar_controller is not None and state.zar_state is not None:
+        return _handle_dragonstaff_rub(state, command_id, inventory_index)
 
     effect = _build_object_engine(state).use_object(
         player_id=state.player.plyrid,

@@ -3,6 +3,11 @@ from sqlalchemy import select
 
 from kyrgame import commands, constants, fixtures, models
 from kyrgame.database import create_session, get_engine, init_db_schema
+from kyrgame.world.animation_tick_system import (
+    AnimationTickSystem,
+    InMemoryAnimationTickPersistence,
+    ZarDragonRoutine,
+)
 
 
 class FakeClock:
@@ -978,16 +983,115 @@ async def test_rub_dragonstaff_uses_legacy_rub_path(base_state):
     dispatcher = commands.CommandDispatcher(registry)
 
     base_state.player = base_state.player.model_copy(update={"gpobjs": [30], "obvals": [0], "npobjs": 1})
+    base_state.player.gamloc = 42
+    zar_state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    zar_state.zar_location = 302
+
+    def _set_room(room_id, object_ids):
+        location = base_state.locations[room_id]
+        base_state.locations[room_id] = location.model_copy(
+            update={"objects": list(object_ids), "nlobjs": len(object_ids)}
+        )
+
+    base_state.zar_state = zar_state
+    base_state.zar_controller = ZarDragonRoutine(
+        room_picker=lambda low, high: 42,
+        chance_picker=lambda low, high: 0,
+        room_objects_getter=lambda room_id: list(base_state.locations[room_id].objects),
+        room_objects_setter=_set_room,
+        players_getter=lambda room_id: [base_state.player]
+        if base_state.player.gamloc == room_id
+        else [],
+        player_persister=lambda player: None,
+        message_formatter=lambda message_id, *args: (
+            (base_state.messages or fixtures.load_messages()).messages[message_id] % args
+            if args
+            else (base_state.messages or fixtures.load_messages()).messages[message_id]
+        ),
+    )
 
     parsed = vocabulary.parse_text("rub dragonstaff")
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
-    assert any(evt.get("message_id") == "ZMSG14" for evt in result.events)
+    assert [evt.get("message_id") for evt in result.events] == [
+        None,
+        "ZMSG13",
+        "ZMSG10",
+        None,
+        "ZMSG11",
+        None,
+        "ZMSG14",
+    ]
     assert base_state.player.gpobjs == []
-    room_events = [evt for evt in result.events if evt.get("scope") == "room"]
+    assert base_state.locations[302].objects == []
+    assert base_state.locations[42].objects == [52, 49]
+    room_events = [
+        evt
+        for evt in result.events
+        if evt.get("scope") == "room" and evt.get("message_id") is None
+        and evt.get("event") == "room_message"
+    ]
     assert len(room_events) == 1
     assert room_events[0]["text"] == "*** Hero Alt is rubbing her dragonstaff!"
     assert room_events[0]["exclude_player"] == base_state.player.plyrid
+
+
+@pytest.mark.anyio
+async def test_rub_dragonstaff_attacks_when_zar_is_already_here(base_state):
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [30], "obvals": [0], "npobjs": 1, "gamloc": 302, "hitpts": 100}
+    )
+    base_state.locations[302] = base_state.locations[302].model_copy(
+        update={"objects": [52], "nlobjs": 1}
+    )
+    zar_state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    zar_state.zar_location = 302
+
+    def _set_room(room_id, object_ids):
+        location = base_state.locations[room_id]
+        base_state.locations[room_id] = location.model_copy(
+            update={"objects": list(object_ids), "nlobjs": len(object_ids)}
+        )
+
+    base_state.zar_state = zar_state
+    base_state.zar_controller = ZarDragonRoutine(
+        room_picker=lambda low, high: 302,
+        chance_picker=lambda low, high: 1,
+        room_objects_getter=lambda room_id: list(base_state.locations[room_id].objects),
+        room_objects_setter=_set_room,
+        players_getter=lambda room_id: [base_state.player]
+        if base_state.player.gamloc == room_id
+        else [],
+        player_persister=lambda player: None,
+        message_formatter=lambda message_id, *args: (
+            (base_state.messages or fixtures.load_messages()).messages[message_id] % args
+            if args
+            else (base_state.messages or fixtures.load_messages()).messages[message_id]
+        ),
+    )
+
+    result = await dispatcher.dispatch_parsed(
+        vocabulary.parse_text("rub dragonstaff"),
+        base_state,
+    )
+
+    assert base_state.player.gpobjs == []
+    assert base_state.player.hitpts == 84
+    assert [evt.get("message_id") for evt in result.events[:5]] == [
+        None,
+        "ZMSG12",
+        "ZMSG14",
+        "ZMSG02",
+        "ZMSG07",
+    ]
+    assert any(
+        evt.get("scope") == "target" and evt.get("message_id") == "ZMSG03"
+        for evt in result.events
+    )
 
 
 @pytest.mark.anyio

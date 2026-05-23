@@ -43,6 +43,16 @@ Object.defineProperty(global, 'WebSocket', {
   value: MockWebSocket,
 })
 
+const getConsoleLines = (text: string) =>
+  screen.getAllByText((_, element) =>
+    Boolean(element?.classList.contains('crt-line') && element.textContent === text)
+  )
+
+const queryConsoleLines = (text: string) =>
+  screen.queryAllByText((_, element) =>
+    Boolean(element?.classList.contains('crt-line') && element.textContent === text)
+  )
+
 describe('Navigator flow', () => {
   const locations = [
     {
@@ -134,6 +144,21 @@ describe('Navigator flow', () => {
         next_outcome: 'hint',
         hint_index: 4,
         legacy_source: 'legacy/KYRANIM.C:352-389',
+      },
+      {
+        id: 'dragon',
+        name: 'Zar',
+        kind: 'persistent_room_object',
+        status: 'present',
+        object_id: 52,
+        room_id: 250,
+        state_room_id: 250,
+        home_room_id: 302,
+        counter: 8,
+        attack_index: 2,
+        next_attack: 'claw',
+        room: { id: 250, brief: 'in a dark passage', object_landing: 'on the ground' },
+        legacy_source: 'legacy/KYRANIM.C:155-263,453-459',
       },
     ],
   }
@@ -539,7 +564,7 @@ describe('Navigator flow', () => {
       socket.triggerMessage({ type: 'room_welcome', room: 7 })
     })
 
-    expect(screen.queryByText('There is a dryad standing here.')).toBeNull()
+    expect(queryConsoleLines('There is a 🌱 dryad standing here.')).toHaveLength(0)
 
     act(() => {
       socket.triggerMessage({
@@ -555,7 +580,10 @@ describe('Navigator flow', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
+      expect(getConsoleLines('There is a 🌱 dryad standing here.').length).toBeGreaterThan(0)
+    )
+    expect(getConsoleLines('There is a 🌱 dryad standing here.')[0]).toContainElement(
+      getConsoleLines('There is a 🌱 dryad standing here.')[0].querySelector('.creature-dryad')
     )
   })
 
@@ -622,7 +650,11 @@ describe('Navigator flow', () => {
       expect(screen.getAllByText('You look around the forest edge.').length).toBeGreaterThan(0)
     )
     expect(screen.getByText('There is nothing lying among the roots.')).toBeInTheDocument()
-    expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
+    const dryadLine = getConsoleLines('There is a 🌱 dryad standing here.')[0]
+    expect(dryadLine).toBeInTheDocument()
+    expect(dryadLine.querySelector('.creature-dryad')).toHaveStyle({
+      color: 'rgb(154, 205, 50)',
+    })
   })
 
   it('renders spoiler command responses with a whisper prompt', async () => {
@@ -968,13 +1000,22 @@ describe('Navigator flow', () => {
     })
 
     expect(await screen.findByText(/Mob tracker/i)).toBeInTheDocument()
-    expect(screen.getByText(/Dryad/i)).toBeInTheDocument()
+    expect(screen.getByText('🌱 Dryad')).toHaveClass('creature-dryad')
+    expect(screen.getByText('🐲 Zar')).toHaveClass('creature-dragon')
     expect(screen.getAllByText(/near a mystical willow tree/i).length).toBeGreaterThan(0)
     expect(screen.getByText(/next 129/i)).toBeInTheDocument()
+    expect(screen.getByText(/next claw; counter 8/i)).toBeInTheDocument()
     await act(async () => {
       await user.click(screen.getByRole('button', { name: /trigger elf/i }))
     })
-    expect(await screen.findByText(/Elf triggered: hint/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText((_, element) =>
+        Boolean(
+          element?.classList.contains('field-hint') &&
+            element.textContent === '🧝 Elf triggered: hint'
+        )
+      )
+    ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
       'http://api.local/admin/mobs',
       expect.objectContaining({

@@ -33,6 +33,7 @@ from .world.animation_tick_system import (
     ElfEncounterRoutine,
     GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
+    ZarDragonRoutine,
 )
 
 
@@ -182,6 +183,9 @@ async def bootstrap_app(app: FastAPI):
     def _animation_room_picker(low: int, high: int) -> int:
         return app.state.animation_rng.randint(low, high)
 
+    def _animation_chance_picker(low: int, high: int) -> int:
+        return app.state.animation_rng.randrange(low, high)
+
     def _animation_pick_gem(low: int, high: int) -> int:
         return app.state.animation_rng.randint(low, high)
 
@@ -194,14 +198,18 @@ async def bootstrap_app(app: FastAPI):
 
     def _animation_set_room_objects(room_id: int, object_ids: list[int]) -> None:
         location = app.state.location_index.get(room_id)
+        with session_factory() as db:
+            location_repo = repositories.LocationRepository(db)
+            try:
+                location_repo.update_objects(room_id, list(object_ids))
+            except ValueError:
+                db.rollback()
+                return
+            db.commit()
         if location:
             app.state.location_index[room_id] = location.model_copy(
                 update={"objects": list(object_ids), "nlobjs": len(object_ids)}
             )
-        with session_factory() as db:
-            location_repo = repositories.LocationRepository(db)
-            location_repo.update_objects(room_id, list(object_ids))
-            db.commit()
 
     def _animation_object_name_lookup(object_id: int) -> str:
         return object_names_by_id.get(object_id, "object")
@@ -233,16 +241,37 @@ async def bootstrap_app(app: FastAPI):
                 return player
         return None
 
+    def _animation_players_getter(room_id: int) -> list[models.PlayerModel]:
+        players_by_id: dict[str, models.PlayerModel] = {}
+        for player in getattr(app.state, "active_player_sessions", {}).values():
+            if player.gamloc == room_id:
+                players_by_id[player.plyrid] = player
+        for player in getattr(app.state, "active_players", {}).values():
+            if player.gamloc == room_id:
+                players_by_id.setdefault(player.plyrid, player)
+        return sorted(players_by_id.values(), key=lambda player: (player.modno, player.plyrid))
+
     def _animation_player_persister(player: models.PlayerModel) -> None:
         with session_factory() as db:
             record = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
             if not record:
                 return
+            record.gamloc = player.gamloc
+            record.pgploc = player.pgploc
+            record.hitpts = player.hitpts
+            record.spts = player.spts
             record.gold = player.gold
             record.gpobjs = list(player.gpobjs)
             record.obvals = list(player.obvals)
             record.npobjs = player.npobjs
             db.commit()
+
+    def _set_zar_location(room_id: int) -> None:
+        room_scripts = getattr(app.state, "room_scripts", None)
+        yaml_engine = getattr(room_scripts, "yaml_engine", None)
+        if yaml_engine is None:
+            return
+        yaml_engine.get_room_state(302)["zar_location"] = room_id
 
     def _animation_pronoun(player: models.PlayerModel) -> str:
         return "her" if player.flags & constants.PlayerFlag.FEMALE else "him"
@@ -255,6 +284,17 @@ async def bootstrap_app(app: FastAPI):
         message_formatter=_animation_message_formatter,
     )
     app.state.animation_elf_routine = elf_routine
+    zar_routine = ZarDragonRoutine(
+        room_picker=_animation_room_picker,
+        chance_picker=_animation_chance_picker,
+        room_objects_getter=_animation_get_room_objects,
+        room_objects_setter=_animation_set_room_objects,
+        players_getter=_animation_players_getter,
+        player_persister=_animation_player_persister,
+        message_formatter=_animation_message_formatter,
+        zar_location_setter=_set_zar_location,
+    )
+    app.state.animation_zar_routine = zar_routine
     app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence,
@@ -282,7 +322,9 @@ async def bootstrap_app(app: FastAPI):
                 message_formatter=_animation_message_formatter,
                 pronoun_lookup=_animation_pronoun,
             ),
+            "zarapp": zar_routine.zarapp,
         },
+        mob_updater=zar_routine.chkzar,
     )
 
     command_vocabulary = commands.CommandVocabulary(
@@ -303,6 +345,8 @@ async def bootstrap_app(app: FastAPI):
         objects=app.state.fixture_cache["objects"],
         spells=app.state.fixture_cache["spells"],
     )
+    zar_routine.initialize(app.state.animation_tick_system.state)
+    app.state.animation_tick_system.persist_state()
 
     def _get_room_flag(room_id: int, key: str) -> int:
         if not app.state.room_scripts.yaml_engine:
@@ -322,12 +366,13 @@ async def bootstrap_app(app: FastAPI):
         room_event_payload = {
             key: value
             for key, value in event_payload.items()
-            if not key.startswith("target_")
+            if not key.startswith("target_") and key not in {"target_only", "exclude_player"}
         }
         excluded_sockets = set()
         target_player = event_payload.get("target_player")
         target_text = event_payload.get("target_text")
         target_message_id = event_payload.get("target_message_id")
+        target_only = bool(event_payload.get("target_only"))
         if target_player and target_text and target_message_id:
             # Legacy reference: KYRANIM.C elves() prints the hint/reward to usrnum,
             # then prints EMSG02/EMSG03 to the rest of the room (lines 367-383).
@@ -353,6 +398,19 @@ async def bootstrap_app(app: FastAPI):
                     continue
                 excluded_sockets.add(target_socket)
                 await target_socket.send_json(target_envelope)
+
+        if target_only:
+            return
+
+        exclude_player = event_payload.get("exclude_player")
+        if exclude_player:
+            for token in await app.state.presence.sessions_for_player(exclude_player):
+                target_socket = app.state.session_connections.get(token)
+                if not target_socket:
+                    continue
+                if target_socket.application_state != WebSocketState.CONNECTED:
+                    continue
+                excluded_sockets.add(target_socket)
 
         payload_event = room_event_payload.get(
             "event",

@@ -1160,6 +1160,23 @@ def test_wingam_riddle_levels_up(room_engine, base_player):
     assert room_engine.messages.messages["SHEWON"] % player.altnam in global_texts
 
 
+def test_wingam_riddle_falls_through_when_zar_is_away(room_engine, base_player):
+    player = base_player.model_copy(update={"level": 24, "gpobjs": [], "obvals": [], "npobjs": 0})
+    room_engine.get_room_state(302)["zar_location"] = 250
+
+    riddle = room_engine.messages.messages["RIDDLE"]
+    result = room_engine.handle(
+        player=player,
+        room_id=302,
+        command="answer",
+        args=riddle.split(" "),
+    )
+
+    assert result.handled is False
+    assert player.level == 24
+    assert result.events == []
+
+
 def test_wingam_allows_case_and_punctuation(room_engine, base_player):
     player = base_player.model_copy(update={"level": 24, "gpobjs": [], "obvals": [], "npobjs": 0})
 
