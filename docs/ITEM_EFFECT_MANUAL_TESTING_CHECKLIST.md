@@ -112,6 +112,18 @@ Suggested props/rooms to spot-check:
   - Expected: fire protection reduces dragon breath damage and lightning protection reduces lightning damage.
 - [ ] Confirm a level 25 player in Zar's room is skipped by Zar's attack pass.
 
+## G. Creature inline display parity
+
+> Frontend-only display behavior: creature names are decorated by the shared inline renderer, while backend message text and event payloads remain legacy/plain.
+
+- [ ] Observe Zar/dragon text in the MUD console and admin mob tracker.
+  - Expected: `dragon` and `Zar` render with 🐲 and red text.
+- [ ] Observe dryad, elf, and brownie text in room/object lines or the admin mob tracker.
+  - Expected: `dryad` renders with 🌱 and yellowgreen text, `elf` renders with 🧝 and green text, and `brownie` renders with 😈 and brown text.
+- [ ] Verify token matching around dragon item names.
+  - Expected: `dragon` and `dragon's` are styled, while `dragonstaff` remains plain.
+- [ ] Confirm gemstone labels still render with their gemstone emoji/color treatment.
+
 ---
 
 ## Regression notes / observations
