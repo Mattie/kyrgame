@@ -146,3 +146,5 @@ Legacy animation ticks coordinate Zar, dryads, elves, brownies, and gem spawns. 
 - [x] `browns` brownie theft/taunt behavior (gold/inventory clearing).【F:legacy/KYRANIM.C†L392-L426】
 - [x] `gemakr` periodic gem spawns in forest rooms.【F:legacy/KYRANIM.C†L428-L449】
 - [x] `zarapp` Zar sighting broadcast warnings.【F:legacy/KYRANIM.C†L452-L459】
+
+Frontend parity support: the navigator now decorates legacy creature names client-side in console text, room object labels, HUD summaries, and the admin mob tracker. This keeps raw backend message text and event payloads unchanged while making Zar/dragon, dryad, elf, and brownie visually distinct for live parity checks.
