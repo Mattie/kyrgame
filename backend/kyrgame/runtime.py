@@ -198,10 +198,6 @@ async def bootstrap_app(app: FastAPI):
 
     def _animation_set_room_objects(room_id: int, object_ids: list[int]) -> None:
         location = app.state.location_index.get(room_id)
-        if location:
-            app.state.location_index[room_id] = location.model_copy(
-                update={"objects": list(object_ids), "nlobjs": len(object_ids)}
-            )
         with session_factory() as db:
             location_repo = repositories.LocationRepository(db)
             try:
@@ -210,6 +206,10 @@ async def bootstrap_app(app: FastAPI):
                 db.rollback()
                 return
             db.commit()
+        if location:
+            app.state.location_index[room_id] = location.model_copy(
+                update={"objects": list(object_ids), "nlobjs": len(object_ids)}
+            )
 
     def _animation_object_name_lookup(object_id: int) -> str:
         return object_names_by_id.get(object_id, "object")
