@@ -50,6 +50,11 @@ vi.mock('../context/NavigatorContext', async (importOriginal) => {
   }
 })
 
+const getConsoleLine = (text: string) =>
+  screen.getByText((_, element) =>
+    Boolean(element?.classList.contains('crt-line') && element.textContent === text)
+  )
+
 describe('MudConsole', () => {
   beforeEach(() => {
     mockSendCommand.mockReset()
@@ -143,7 +148,11 @@ describe('MudConsole', () => {
     render(<MudConsole />)
 
     expect(screen.getByText('There is nothing lying among the roots.')).toBeInTheDocument()
-    expect(screen.getByText('There is a dryad standing here.')).toBeInTheDocument()
+    const dryadLine = getConsoleLine('There is a 🌱 dryad standing here.')
+    expect(dryadLine).toBeInTheDocument()
+    expect(dryadLine.querySelector('.creature-dryad')).toHaveStyle({
+      color: 'rgb(154, 205, 50)',
+    })
   })
 
   it('activates an inventory status card with auto-refresh toggled on by default', () => {

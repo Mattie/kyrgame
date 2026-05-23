@@ -2,37 +2,48 @@ import { ReactNode } from 'react'
 
 import { gemstonePalette, getGemstoneVisual } from '../data/gemstonePalette'
 
+const creaturePalette: Record<
+  string,
+  { emoji: string; className: string; color: string }
+> = {
+  dragon: { emoji: '🐲', className: 'creature-dragon', color: '#ff6b5f' },
+  zar: { emoji: '🐲', className: 'creature-dragon', color: '#ff6b5f' },
+  dryad: { emoji: '🌱', className: 'creature-dryad', color: 'yellowgreen' },
+  elf: { emoji: '🧝', className: 'creature-elf', color: 'green' },
+  brownie: { emoji: '😈', className: 'creature-brownie', color: '#b07a4f' },
+}
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /**
- * Parses text and renders gemstone names with their emoji and color styling.
- * Matches gemstone names case-insensitively and replaces them with styled spans.
+ * Parses text and renders legacy named things with emoji and color styling.
+ * Matches names case-insensitively and replaces whole-word hits with styled spans.
  */
 export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
-  // Get gemstone names from the palette to maintain single source of truth
   const gemstoneNames = Object.keys(gemstonePalette)
+  const creatureNames = Object.keys(creaturePalette)
+  const inlineNames = [...gemstoneNames, ...creatureNames]
+    .map(escapeRegex)
+    .sort((left, right) => right.length - left.length)
 
-  // Create a regex pattern that matches any gemstone name (case-insensitive, word boundaries)
-  const pattern = new RegExp(`\\b(${gemstoneNames.join('|')})\\b`, 'gi')
+  const pattern = new RegExp(`\\b(${inlineNames.join('|')})\\b`, 'gi')
 
   const parts: ReactNode[] = []
   let lastIndex = 0
 
-  // Use matchAll for safer iteration
   const matches = text.matchAll(pattern)
 
   for (const match of matches) {
     const matchedText = match[0]
     const matchIndex = match.index!
 
-    // Add text before the match
     if (matchIndex > lastIndex) {
       parts.push(text.slice(lastIndex, matchIndex))
     }
 
-    // Get gemstone visual data
     const visual = getGemstoneVisual(matchedText)
 
     if (visual) {
-      // Render gemstone with emoji and light color for visibility on dark background
       parts.push(
         <span
           key={`gem-${matchIndex}`}
@@ -43,18 +54,28 @@ export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
         </span>
       )
     } else {
-      // Fallback if visual not found
-      parts.push(matchedText)
+      const creatureVisual = creaturePalette[matchedText.toLowerCase()]
+      if (creatureVisual) {
+        parts.push(
+          <span
+            key={`creature-${matchIndex}`}
+            className={`creature-inline ${creatureVisual.className}`}
+            style={{ color: creatureVisual.color }}
+          >
+            {creatureVisual.emoji} {matchedText}
+          </span>
+        )
+      } else {
+        parts.push(matchedText)
+      }
     }
 
     lastIndex = matchIndex + matchedText.length
   }
 
-  // Add remaining text
   if (lastIndex < text.length) {
     parts.push(text.slice(lastIndex))
   }
 
-  // Return parts directly without unnecessary Fragment wrappers
   return <>{parts}</>
 }

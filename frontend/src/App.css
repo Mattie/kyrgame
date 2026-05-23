@@ -511,6 +511,27 @@ p {
   white-space: nowrap;
 }
 
+.creature-inline {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.creature-dragon {
+  color: #ff6b5f;
+}
+
+.creature-dryad {
+  color: yellowgreen;
+}
+
+.creature-elf {
+  color: green;
+}
+
+.creature-brownie {
+  color: #b07a4f;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
