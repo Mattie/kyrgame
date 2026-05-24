@@ -265,6 +265,68 @@ async def test_admin_player_patch_caps_and_spouse(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_admin_player_routes_resolve_original_uid_alias(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "player-token": {
+                    "roles": ["player_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    alias = "Test2dsfdsdf"
+    canonical = alias[: constants.ALSSIZ]
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            session_resp = await client.post(
+                "/auth/session",
+                json={"player_id": alias, "room_id": 7},
+            )
+            assert session_resp.status_code == 201
+            assert session_resp.json()["session"]["player_id"] == canonical
+
+            alias_fetch = await client.get(
+                f"/admin/players/{alias}",
+                headers=_auth("player-token"),
+            )
+            assert alias_fetch.status_code == 200
+            player = alias_fetch.json()["player"]
+            assert player["plyrid"] == canonical
+            assert player["uidnam"] == alias
+
+            patch_resp = await client.patch(
+                f"/admin/players/{alias}",
+                headers=_auth("player-token"),
+                json={"gold": 321},
+            )
+            assert patch_resp.status_code == 200
+            assert patch_resp.json()["player"]["gold"] == 321
+
+            replacement = patch_resp.json()["player"]
+            replacement["gold"] = 432
+            put_resp = await client.put(
+                f"/admin/players/{alias}",
+                headers=_auth("player-token"),
+                json=replacement,
+            )
+            assert put_resp.status_code == 200
+            assert put_resp.json()["player"]["gold"] == 432
+
+            canonical_fetch = await client.get(
+                f"/admin/players/{canonical}",
+                headers=_auth("player-token"),
+            )
+            assert canonical_fetch.status_code == 200
+            assert canonical_fetch.json()["player"]["gold"] == 432
+
+
+@pytest.mark.anyio
 async def test_admin_player_patch_preserves_non_editable_flags(monkeypatch):
     monkeypatch.setenv(
         ADMIN_MAP_ENV,

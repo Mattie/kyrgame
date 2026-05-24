@@ -43,6 +43,14 @@ Details:
 
 - ...
 
+# Manual E2E Demo Checklist
+
+- [ ] Start backend and frontend.
+- [ ] Create a player session.
+- [ ] Run a realistic command loop for the changed behavior.
+- [ ] Refresh/reconnect and confirm relevant room/player state persists.
+- [ ] Capture a screenshot or short recording for UI-visible changes.
+
 # Risk & Rollback
 
 - Risk level: ☐ low ☐ medium ☐ high

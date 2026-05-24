@@ -222,7 +222,8 @@ export const AdminControls = () => {
         const player = await fetchAdminPlayer(targetId)
         hydrateFromPlayer(player)
         setLoadedPlayer(player)
-        setLoadedPlayerId(targetId)
+        setPlayerId(player.plyrid)
+        setLoadedPlayerId(player.plyrid)
         setStatus('Admin data refreshed')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unable to refresh admin data')

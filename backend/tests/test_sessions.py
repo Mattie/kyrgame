@@ -6,8 +6,10 @@ import httpx
 import pytest
 import uvicorn
 import websockets
+from sqlalchemy import select
 
-from kyrgame.webapp import create_app
+from kyrgame import constants, models
+from kyrgame.webapp import create_app, _websocket_command_rate_limiter
 
 
 def _get_open_port() -> int:
@@ -103,6 +105,62 @@ async def test_concurrent_login_policy_and_logout():
                 "/auth/session", headers={"Authorization": f"Bearer {token_two}"}
             )
             assert post_logout.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_long_alias_login_reuses_canonical_player_record():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    alias = "Test2dsfdsdf"
+    canonical = alias[: constants.ALSSIZ]
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            first = await client.post("/auth/session", json={"player_id": alias, "room_id": 7})
+            assert first.status_code == 201
+            first_session = first.json()["session"]
+            assert first_session["player_id"] == canonical
+            assert first_session["first_login"] is True
+
+            second = await client.post("/auth/session", json={"player_id": alias, "room_id": 7})
+            assert second.status_code == 201
+            second_session = second.json()["session"]
+            assert second_session["player_id"] == canonical
+            assert second_session["first_login"] is False
+            assert second_session["replaced_sessions"] == 1
+
+            old_validation = await client.get(
+                "/auth/session", headers={"Authorization": f"Bearer {first_session['token']}"}
+            )
+            assert old_validation.status_code == 401
+
+        db = app.state.session_factory()
+        try:
+            players = db.scalars(
+                select(models.Player).where(models.Player.plyrid == canonical)
+            ).all()
+            assert len(players) == 1
+            assert players[0].uidnam == alias
+        finally:
+            db.close()
+
+
+def test_websocket_command_rate_limit_env_uses_validated_defaults(monkeypatch):
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "not-an-int")
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS", "0")
+
+    fallback = _websocket_command_rate_limiter()
+
+    assert fallback.max_events == 2
+    assert fallback.window_seconds == 0.5
+
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "7")
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS", "0.25")
+
+    configured = _websocket_command_rate_limiter()
+
+    assert configured.max_events == 7
+    assert configured.window_seconds == 0.25
 
 
 @pytest.mark.anyio

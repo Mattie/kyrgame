@@ -27,6 +27,10 @@ from .runtime import bootstrap_app, shutdown_app
 from .world.animation_tick_system import AnimationTickSystem, BrownieRoutine, ZarDragonRoutine
 
 logger = logging.getLogger(__name__)
+DEFAULT_WS_COMMAND_RATE_LIMIT_MAX_EVENTS = 2
+DEFAULT_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS = 0.5
+WS_COMMAND_RATE_LIMIT_MAX_EVENTS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS"
+WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS"
 
 
 class LogoResponse(BaseModel):
@@ -813,6 +817,67 @@ def _persist_player_from_template(
     return player
 
 
+def _find_player_record(db: OrmSession, player_id: str) -> models.Player | None:
+    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    if record is not None:
+        return record
+
+    uid_alias = player_id[: constants.UIDSIZ]
+    record = db.scalar(select(models.Player).where(models.Player.uidnam == uid_alias))
+    if record is not None:
+        return record
+
+    canonical_id = player_id[: constants.ALSSIZ]
+    if canonical_id != player_id:
+        return db.scalar(select(models.Player).where(models.Player.plyrid == canonical_id))
+    return None
+
+
+def _env_int(name: str, *, default: int, minimum: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = int(raw)
+    except ValueError:
+        logger.warning("Ignoring invalid integer for %s: %r", name, raw)
+        return default
+    if parsed < minimum:
+        logger.warning("Ignoring out-of-range integer for %s: %r", name, raw)
+        return default
+    return parsed
+
+
+def _env_float(name: str, *, default: float, minimum: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        parsed = float(raw)
+    except ValueError:
+        logger.warning("Ignoring invalid float for %s: %r", name, raw)
+        return default
+    if parsed < minimum:
+        logger.warning("Ignoring out-of-range float for %s: %r", name, raw)
+        return default
+    return parsed
+
+
+def _websocket_command_rate_limiter() -> RateLimiter:
+    return RateLimiter(
+        max_events=_env_int(
+            WS_COMMAND_RATE_LIMIT_MAX_EVENTS_ENV,
+            default=DEFAULT_WS_COMMAND_RATE_LIMIT_MAX_EVENTS,
+            minimum=1,
+        ),
+        window_seconds=_env_float(
+            WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV,
+            default=DEFAULT_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS,
+            minimum=0.001,
+        ),
+    )
+
+
 def _session_payload(
     session_record: models.PlayerSession,
     player: models.Player,
@@ -881,7 +946,7 @@ async def start_session(
     template = request.app.state.fixture_cache["player_template"]
     repo = repositories.PlayerSessionRepository(db)
 
-    player = db.scalar(select(models.Player).where(models.Player.plyrid == payload.player_id))
+    player = _find_player_record(db, payload.player_id)
     first_login = False
     if player is None:
         player = _persist_player_from_template(db, payload.player_id, template, payload.room_id)
@@ -1138,7 +1203,7 @@ async def admin_get_player(
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
-    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    record = _find_player_record(db, player_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Player not found")
     model = _player_model_from_record(record)
@@ -1152,7 +1217,7 @@ async def admin_create_player(
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
-    existing = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
+    existing = _find_player_record(db, player.plyrid)
     if existing:
         raise HTTPException(status_code=409, detail="Player alias already exists")
 
@@ -1170,14 +1235,15 @@ async def admin_update_player(
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
-    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    record = _find_player_record(db, player_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Player not found")
+    original_player_id = record.plyrid
 
-    if player.plyrid != player_id and AdminFlag.ALLOW_RENAME.value not in admin.flags:
+    if player.plyrid != original_player_id and AdminFlag.ALLOW_RENAME.value not in admin.flags:
         raise HTTPException(status_code=403, detail="Rename not permitted for this admin token")
 
-    if player.plyrid != player_id:
+    if player.plyrid != original_player_id:
         conflict = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
         if conflict and conflict.id != record.id:
             raise HTTPException(status_code=409, detail="Player alias already exists")
@@ -1187,7 +1253,11 @@ async def admin_update_player(
 
     db.commit()
     updated = _player_model_from_record(record)
-    _set_player_in_cache(provider.scope.app, updated, original_alias=player_id if player.plyrid != player_id else None)
+    _set_player_in_cache(
+        provider.scope.app,
+        updated,
+        original_alias=original_player_id if player.plyrid != original_player_id else None,
+    )
     return {"status": "updated", "player": updated.model_dump()}
 
 
@@ -1199,7 +1269,7 @@ async def admin_patch_player(
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
-    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    record = _find_player_record(db, player_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Player not found")
 
@@ -1229,9 +1299,10 @@ async def admin_delete_player(
     if AdminFlag.ALLOW_DELETE.value not in admin.flags:
         raise HTTPException(status_code=403, detail="Delete not permitted for this admin token")
 
-    record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    record = _find_player_record(db, player_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Player not found")
+    canonical_player_id = record.plyrid
 
     session_repo = repositories.PlayerSessionRepository(db)
     tokens = session_repo.deactivate_all(record.id)
@@ -1240,8 +1311,8 @@ async def admin_delete_player(
     db.commit()
 
     await _disconnect_sessions(provider.scope.app, tokens)
-    _remove_player_from_cache(provider.scope.app, player_id)
-    return {"status": "deleted", "player_id": player_id}
+    _remove_player_from_cache(provider.scope.app, canonical_player_id)
+    return {"status": "deleted", "player_id": canonical_player_id}
 
 
 @admin_router.put("/content/locations/{location_id}")
@@ -1539,12 +1610,21 @@ def create_app() -> FastAPI:
 
                     db = provider.scope.app.state.session_factory()
                     try:
-                        record = db.scalar(select(models.Player).where(models.Player.plyrid == target_id))
+                        record = _find_player_record(db, target_id)
                         if record:
                             payload = _player_model_from_record(record)
                         else:
+                            uid_alias = target_id[: constants.UIDSIZ]
+                            canonical_id = target_id[: constants.ALSSIZ]
                             cached = next(
-                                (p for p in provider.players if p.plyrid == target_id), None
+                                (
+                                    p
+                                    for p in provider.players
+                                    if p.plyrid == target_id
+                                    or p.uidnam == uid_alias
+                                    or p.plyrid == canonical_id
+                                ),
+                                None,
                             )
                             if cached:
                                 payload = cached
@@ -1679,7 +1759,7 @@ def create_app() -> FastAPI:
             await existing_socket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         session_connections[session_token] = websocket
 
-        limiter = RateLimiter(max_events=2, window_seconds=0.5)
+        limiter = _websocket_command_rate_limiter()
 
         # Create a persistent database session for this WebSocket connection
         persistent_session = provider.scope.app.state.session_factory()
