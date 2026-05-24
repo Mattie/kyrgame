@@ -359,10 +359,15 @@ class ZarDragonRoutine:
 
     def _reset_dead_player(self, player: models.PlayerModel) -> None:
         old_flags = int(player.flags)
+        # Legacy initgp() zeroes the gmplyr record, preserves sex as FEMALE,
+        # resets MDES/FDES level-one description state, and rerolls four
+        # birthstones before hitoth()/entrgp() place the player at room 0
+        # (legacy/KYRANDIA.C:325-356; legacy/KYRSPEL.C:312-320).
         object.__setattr__(player, "altnam", player.plyrid)
         object.__setattr__(player, "attnam", player.plyrid)
         object.__setattr__(player, "gamloc", 0)
         object.__setattr__(player, "pgploc", 0)
+        object.__setattr__(player, "nmpdes", constants.level_to_nmpdes(1))
         object.__setattr__(player, "level", 1)
         object.__setattr__(player, "hitpts", 4)
         object.__setattr__(player, "spts", 2)
@@ -376,6 +381,21 @@ class ZarDragonRoutine:
         object.__setattr__(player, "defspls", 0)
         object.__setattr__(player, "othspls", 0)
         object.__setattr__(player, "charms", [0] * constants.NCHARM)
+        object.__setattr__(player, "gemidx", 0)
+        object.__setattr__(
+            player,
+            "stones",
+            [
+                self._chance_picker(
+                    constants.BIRTHSTONE_MIN,
+                    constants.BIRTHSTONE_MAX + 1,
+                )
+                for _ in range(constants.BIRTHSTONE_SLOTS)
+            ],
+        )
+        object.__setattr__(player, "macros", 0)
+        object.__setattr__(player, "stumpi", 0)
+        object.__setattr__(player, "spouse", "")
         object.__setattr__(
             player,
             "flags",

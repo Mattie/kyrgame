@@ -42,6 +42,18 @@ async def _assert_no_matching(ws, predicate, *, timeout: float = 0.5):
             raise AssertionError(f"Unexpected message received: {message}")
 
 
+class _FixedAnimationRng:
+    def __init__(self, *, randrange_values=(), randint_values=()) -> None:
+        self._randrange_values = list(randrange_values)
+        self._randint_values = list(randint_values)
+
+    def randrange(self, low: int, high: int) -> int:  # noqa: ARG002
+        return self._randrange_values.pop(0)
+
+    def randint(self, low: int, high: int) -> int:  # noqa: ARG002
+        return self._randint_values.pop(0)
+
+
 @pytest.mark.anyio
 async def test_websocket_bridge_emits_legacy_command_metadata():
     app = create_app()
@@ -896,6 +908,81 @@ async def test_websocket_zelastone_notifies_remote_target(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_websocket_global_target_spells_ignore_db_only_players(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 7}
+            )
+            await client.post(
+                "/auth/session", json={"player_id": "target", "room_id": 12}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                target = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == "target")
+                )
+                assert hero is not None
+                assert target is not None
+                hero.level = 25
+                hero.spts = 25
+                hero.spells = [45]
+                hero.nspells = 1
+                hero.gamloc = 7
+                hero.pgploc = 7
+                target.gamloc = 12
+                target.pgploc = 12
+                target.attnam = "Target"
+                target.altnam = "Target"
+                db.commit()
+
+            hero_uri = f"ws://{host}:{port}/ws/rooms/7?token={hero_token}"
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+
+                await hero_ws.send(
+                    json.dumps({"type": "command", "command": "cast peepint target"})
+                )
+
+                failure = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "KSPM03",
+                    timeout=2.0,
+                )
+
+                assert failure["payload"]["scope"] == "player"
+                await _assert_no_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "KSPM04",
+                    timeout=0.25,
+                )
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_tiltowait_global_and_room_messages_reach_visible_clients(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
@@ -1010,8 +1097,34 @@ async def test_websocket_zar_death_refreshes_target_room_and_arrival_witness(mon
                 )
                 assert hero is not None
                 assert witness is not None
+                hero.altnam = "Some psuedo dragon"
+                hero.attnam = "psuedo dragon"
+                hero.nmpdes = 12
+                hero.flags = int(
+                    constants.PlayerFlag.LOADED
+                    | constants.PlayerFlag.FEMALE
+                    | constants.PlayerFlag.MARRYD
+                    | constants.PlayerFlag.GOTKYG
+                    | constants.PlayerFlag.PDRAGN
+                )
                 hero.level = 10
                 hero.hitpts = 8
+                hero.spts = 21
+                hero.gold = 77
+                hero.gpobjs = [0, 1]
+                hero.obvals = [10, 20]
+                hero.npobjs = 2
+                hero.nspells = 2
+                hero.spells = [1, 23]
+                hero.offspls = 123
+                hero.defspls = 456
+                hero.othspls = 789
+                hero.charms = [1] * constants.NCHARM
+                hero.gemidx = 3
+                hero.stones = [9, 8, 7, 6]
+                hero.macros = 19
+                hero.stumpi = 8
+                hero.spouse = "beloved"
                 hero.gamloc = 302
                 hero.pgploc = 302
                 witness.level = 25
@@ -1037,6 +1150,10 @@ async def test_websocket_zar_death_refreshes_target_room_and_arrival_witness(mon
                     app.state.animation_tick_system.state.zar_location = 302
                     app.state.animation_tick_system.state.zar_counter = 0
                     app.state.animation_tick_system.state.zar_attack_index = 0
+                    app.state.animation_rng = _FixedAnimationRng(
+                        randrange_values=[2, 3, 4, 5],
+                        randint_values=[12],
+                    )
                     await app.state.animation_tick_callback()
 
                     await _recv_matching(
@@ -1075,8 +1192,30 @@ async def test_websocket_zar_death_refreshes_target_room_and_arrival_witness(mon
                 assert hero is not None
                 assert hero.gamloc == 0
                 assert hero.pgploc == 0
+                assert hero.altnam == "hero"
+                assert hero.attnam == "hero"
+                assert hero.nmpdes == constants.level_to_nmpdes(1)
+                assert hero.flags == int(
+                    constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE
+                )
                 assert hero.level == 1
                 assert hero.hitpts == 4
+                assert hero.spts == 2
+                assert hero.gold == 0
+                assert hero.gpobjs == []
+                assert hero.obvals == []
+                assert hero.npobjs == 0
+                assert hero.nspells == 0
+                assert hero.spells == []
+                assert hero.offspls == 0
+                assert hero.defspls == 0
+                assert hero.othspls == 0
+                assert hero.charms == [0] * constants.NCHARM
+                assert hero.gemidx == 0
+                assert hero.stones == [2, 3, 4, 5]
+                assert hero.macros == 0
+                assert hero.stumpi == 0
+                assert hero.spouse == ""
     finally:
         server.should_exit = True
         await server_task

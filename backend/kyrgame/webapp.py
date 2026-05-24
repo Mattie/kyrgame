@@ -1692,6 +1692,19 @@ def create_app() -> FastAPI:
                 return None
             return _player_model_from_record(record)
 
+        def lookup_active_player(player_alias: str) -> models.PlayerModel | None:
+            alias = player_alias.lower()
+            # Legacy fgamgp() scans only active in-memory players by true plyrid
+            # (legacy/KYRUTIL.C:486-494), so DB-only player records must stay
+            # invisible to remote-target spells.
+            for player in active_players.values():
+                if player.plyrid.lower() == alias:
+                    return player
+            for player in _active_player_sessions(provider.scope.app).values():
+                if player.plyrid.lower() == alias:
+                    return player
+            return None
+
         state = commands.GameState(
             player=player_state,
             locations=provider.location_index,
@@ -1701,7 +1714,7 @@ def create_app() -> FastAPI:
             db_session=persistent_session,
             presence=provider.presence,
             player_lookup=lookup_player,
-            global_player_lookup=lookup_player,
+            global_player_lookup=lookup_active_player,
             zar_controller=getattr(provider.scope.app.state, "animation_zar_routine", None),
             zar_state=getattr(
                 getattr(provider.scope.app.state, "animation_tick_system", None),

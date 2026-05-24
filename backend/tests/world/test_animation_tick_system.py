@@ -1,6 +1,6 @@
 import pytest
 
-from kyrgame import fixtures
+from kyrgame import constants, fixtures
 from kyrgame.world.animation_tick_system import (
     AnimationTickEvent,
     AnimationTickSystem,
@@ -411,8 +411,44 @@ def test_zarfood_rotates_attacks_applies_protection_and_skips_level_25():
 
 
 def test_zarfood_emits_existing_death_messages_when_attack_kills_player():
-    player = _build_player(plyrid="target", altnam="Target", gamloc=302, hitpts=10)
-    routine = _build_zar_routine(room_objects={302: [52]}, players=[player])
+    player = _build_player(
+        plyrid="target",
+        altnam="Some psuedo dragon",
+        attnam="psuedo dragon",
+        nmpdes=12,
+        flags=int(
+            constants.PlayerFlag.LOADED
+            | constants.PlayerFlag.FEMALE
+            | constants.PlayerFlag.MARRYD
+            | constants.PlayerFlag.GOTKYG
+            | constants.PlayerFlag.PDRAGN
+        ),
+        gamloc=302,
+        pgploc=302,
+        level=10,
+        hitpts=10,
+        spts=21,
+        gold=77,
+        gpobjs=[0, 1],
+        obvals=[10, 20],
+        npobjs=2,
+        nspells=2,
+        spells=[1, 23],
+        offspls=123,
+        defspls=456,
+        othspls=789,
+        charms=[1] * 6,
+        gemidx=3,
+        stones=[9, 8, 7, 6],
+        macros=19,
+        stumpi=8,
+        spouse="beloved",
+    )
+    routine = _build_zar_routine(
+        room_objects={302: [52]},
+        players=[player],
+        chance_rolls=[2, 3, 4, 5],
+    )
     state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
     state.zar_location = 302
 
@@ -420,8 +456,28 @@ def test_zarfood_emits_existing_death_messages_when_attack_kills_player():
 
     assert player.gamloc == 0
     assert player.pgploc == 0
+    assert player.altnam == "target"
+    assert player.attnam == "target"
+    assert player.nmpdes == constants.level_to_nmpdes(1)
     assert player.level == 1
     assert player.hitpts == 4
+    assert player.spts == 2
+    assert player.gold == 0
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert player.spells == []
+    assert player.nspells == 0
+    assert player.offspls == 0
+    assert player.defspls == 0
+    assert player.othspls == 0
+    assert player.charms == [0] * constants.NCHARM
+    assert player.gemidx == 0
+    assert player.stones == [2, 3, 4, 5]
+    assert player.macros == 0
+    assert player.stumpi == 0
+    assert player.spouse == ""
+    assert player.flags == int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE)
     assert any(
         event.payload.get("target_message_id") == "DIEMSG" for event in events
     )

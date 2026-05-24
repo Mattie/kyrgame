@@ -211,6 +211,8 @@ class SpellEffectEngine:
             effects[22].handler = self._goto_handler()
         if 23 in effects:
             # Legacy spl024 gringri applies chgbod pseudo-dragon form (legacy/KYRSPEL.C:719-725).
+            # legacy/KYRSPEL.C:725 spells the chgbod identity as "psuedo" (sic);
+            # preserve that runtime typo for alternate-name parity.
             effects[23].message_id = "S24M00"
             effects[23].requires_target = False
             effects[23].handler = self._transformation_handler(

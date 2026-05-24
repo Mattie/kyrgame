@@ -261,6 +261,7 @@ async def bootstrap_app(app: FastAPI):
             record.pgploc = player.pgploc
             record.altnam = player.altnam
             record.attnam = player.attnam
+            record.nmpdes = player.nmpdes
             record.flags = int(player.flags)
             record.level = player.level
             record.hitpts = player.hitpts
@@ -275,6 +276,11 @@ async def bootstrap_app(app: FastAPI):
             record.defspls = player.defspls
             record.othspls = player.othspls
             record.charms = list(player.charms)
+            record.gemidx = player.gemidx
+            record.stones = list(player.stones)
+            record.macros = player.macros
+            record.stumpi = player.stumpi
+            record.spouse = player.spouse
             db.commit()
 
     def _set_zar_location(room_id: int) -> None:
