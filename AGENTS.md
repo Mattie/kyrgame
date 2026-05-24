@@ -1,6 +1,7 @@
 # Agent Instructions
 
 - Before starting work, review `docs/PORTING_PLAN.md` for context on the tasks being performed.
+- If the current branch is `master`, sync from GitHub before starting work. Check `git status` first; when clean, run `git fetch origin` and `git pull --ff-only`, then create a feature branch from the updated `master`. If `master` has local changes, stop and ask before moving or rebasing them.
 - Review the legacy game implementation (the C sources) while making changes to ensure new behavior stays faithful to the original.
 - Follow TDD practices: write failing tests first (red), then implement changes to make them pass (green) for all code modifications.
 - Avoid re-inventing the wheel: use existing shared mechanisms/helpers in the codebase whenever possible before introducing new bespoke logic.
