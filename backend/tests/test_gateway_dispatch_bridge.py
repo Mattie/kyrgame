@@ -857,6 +857,79 @@ async def test_websocket_zelastone_notifies_remote_target(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_forced_move_syncs_room_script_dispatch_context(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+    handled_rooms: list[int] = []
+
+    async def _record_handle_command(player_id, room_id, *args, **kwargs):
+        handled_rooms.append(room_id)
+        return await original_handle_command(player_id, room_id, *args, **kwargs)
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+    original_handle_command = app.state.room_scripts.handle_command
+    app.state.room_scripts.handle_command = _record_handle_command
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 302})
+            hero_token = hero_session.json()["session"]["token"]
+
+            hero_uri = f"ws://{host}:{port}/ws/rooms/302?token={hero_token}"
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+
+                app.state.animation_tick_system.state.zar_location = 302
+                app.state.animation_tick_system.state.zar_counter = 0
+                app.state.animation_tick_system.state.zar_attack_index = 0
+                app.state.animation_rng = _FixedAnimationRng(
+                    randrange_values=[2, 3, 4, 5],
+                    randint_values=[12],
+                )
+                await app.state.animation_tick_callback()
+
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "DIEMSG",
+                    timeout=2.0,
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("event") == "location_description"
+                    and msg.get("payload", {}).get("location") == 0,
+                    timeout=2.0,
+                )
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "look"}))
+
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("verb") == "look",
+                    timeout=2.0,
+                )
+
+                assert handled_rooms[0] == 0
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_peepint_tags_remote_target_response_with_target_room(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")

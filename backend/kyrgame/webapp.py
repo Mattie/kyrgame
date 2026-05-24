@@ -1807,6 +1807,20 @@ def create_app() -> FastAPI:
             sender=websocket,
         )
 
+        async def _sync_current_room_from_state() -> None:
+            nonlocal current_room
+            target_room = state.player.gamloc
+            if target_room == current_room:
+                return
+            await gateway.register(target_room, websocket, announce=False)
+            await provider.presence.set_location(player_id, target_room, session_token)
+            with provider.scope.app.state.session_factory() as db:
+                repo = repositories.PlayerSessionRepository(db)
+                repo.set_room(session_token, target_room)
+                repo.mark_seen(session_token)
+                db.commit()
+            current_room = target_room
+
         try:
             while True:
                 payload = await websocket.receive_json()
@@ -1821,6 +1835,7 @@ def create_app() -> FastAPI:
                     await websocket.send_json({"type": "noop", "room": current_room})
                     continue
 
+                await _sync_current_room_from_state()
                 command_text = payload.get("command", "")
                 args = payload.get("args", {}) or {}
                 raw_tokens = command_text.strip().split()
