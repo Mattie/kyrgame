@@ -37,7 +37,6 @@ class LogoResponse(BaseModel):
 class SessionRequest(BaseModel):
     player_id: str
     resume_token: str | None = None
-    allow_multiple: bool = False
     room_id: int | None = None
 
 
@@ -910,17 +909,14 @@ async def start_session(
         resumed = True
         status_code = status.HTTP_200_OK
     else:
-        if not payload.allow_multiple:
-            # Use lock to prevent race condition during session replacement
-            if not hasattr(request.app.state, 'session_replacement_lock'):
-                request.app.state.session_replacement_lock = asyncio.Lock()
-            
-            async with request.app.state.session_replacement_lock:
-                replaced_tokens = repo.deactivate_all(player.id)
-                token = secrets.token_urlsafe(24)
-                session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
-                db.commit()
-        else:
+        # One active game session is allowed per player. A fresh login replaces
+        # any existing session for that same player, while other player accounts
+        # remain unaffected.
+        if not hasattr(request.app.state, 'session_replacement_lock'):
+            request.app.state.session_replacement_lock = asyncio.Lock()
+
+        async with request.app.state.session_replacement_lock:
+            replaced_tokens = repo.deactivate_all(player.id)
             token = secrets.token_urlsafe(24)
             session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
             db.commit()
@@ -928,7 +924,7 @@ async def start_session(
     if session_record is None:
         raise HTTPException(status_code=500, detail="Session creation failed")
 
-    if not payload.allow_multiple and not payload.resume_token:
+    if not payload.resume_token:
         # Commit happened inside the lock, now clean up old connections
         await _disconnect_sessions(request.app, replaced_tokens)
 
@@ -1619,6 +1615,7 @@ def create_app() -> FastAPI:
 
         db_session = provider.scope.app.state.session_factory()
         player_state: models.PlayerModel | None = None
+        replaced_tokens: list[str] = []
         try:
             session_repo = repositories.PlayerSessionRepository(db_session)
             session_record = session_repo.get_by_token(session_token)
@@ -1638,6 +1635,11 @@ def create_app() -> FastAPI:
                 return
 
             session_repo.mark_seen(session_token)
+            for active_session in session_repo.list_active(player.id):
+                if active_session.session_token == session_token:
+                    continue
+                replaced_tokens.append(active_session.session_token)
+                session_repo.deactivate(active_session.session_token)
             db_session.commit()
             player_id = player.plyrid
             current_room = session_record.room_id
@@ -1663,6 +1665,9 @@ def create_app() -> FastAPI:
                 Response(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content="Unable to load player state")
             )
             return
+
+        if replaced_tokens:
+            await _disconnect_sessions(provider.scope.app, replaced_tokens)
 
         # All validation passed - now accept the WebSocket connection
         await websocket.accept()

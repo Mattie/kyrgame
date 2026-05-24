@@ -8,7 +8,7 @@ import uvicorn
 import websockets
 from sqlalchemy import select
 
-from kyrgame import constants, models, repositories
+from kyrgame import constants, models
 from kyrgame.webapp import create_app
 
 
@@ -490,7 +490,7 @@ async def test_websocket_room_command_handles_unknown_verbs():
 
 
 @pytest.mark.anyio
-async def test_room_script_self_target_event_reaches_all_player_sessions():
+async def test_room_script_self_target_event_reaches_active_player_session():
     app = create_app()
     host = "127.0.0.1"
     port = _get_open_port()
@@ -505,47 +505,24 @@ async def test_room_script_self_target_event_reaches_all_player_sessions():
         first_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 181})
         first_token = first_session.json()["session"]["token"]
         room_id = first_session.json()["session"]["room_id"]
-        second_token = "hero-second-active-session"
-
-        with app.state.session_factory() as db:
-            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
-            assert player is not None
-            repositories.PlayerSessionRepository(db).create_session(
-                player_id=player.id,
-                session_token=second_token,
-                room_id=room_id,
-            )
-            db.commit()
 
         first_uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={first_token}"
-        second_uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={second_token}"
 
         async with websockets.connect(first_uri) as first_ws:
             await _recv_matching(
                 first_ws,
                 lambda msg: msg.get("payload", {}).get("event") == "location_update",
             )
-            async with websockets.connect(second_uri) as second_ws:
-                await _recv_matching(
-                    second_ws,
-                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
-                )
 
-                await first_ws.send(json.dumps({"type": "command", "command": "imagine dagger"}))
+            await first_ws.send(json.dumps({"type": "command", "command": "imagine dagger"}))
 
-                first_effect = await _recv_matching(
-                    first_ws,
-                    lambda msg: msg.get("type") == "room_broadcast"
-                    and msg.get("payload", {}).get("message_id") == "DAGM00",
-                )
-                second_effect = await _recv_matching(
-                    second_ws,
-                    lambda msg: msg.get("type") == "room_broadcast"
-                    and msg.get("payload", {}).get("message_id") == "DAGM00",
-                )
+            first_effect = await _recv_matching(
+                first_ws,
+                lambda msg: msg.get("type") == "room_broadcast"
+                and msg.get("payload", {}).get("message_id") == "DAGM00",
+            )
 
-                assert first_effect["payload"]["player"] == "hero"
-                assert second_effect["payload"]["player"] == "hero"
+            assert first_effect["payload"]["player"] == "hero"
 
     server.should_exit = True
     await server_task
@@ -567,20 +544,8 @@ async def test_silent_room_script_self_target_event_uses_command_response_envelo
         first_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 181})
         first_token = first_session.json()["session"]["token"]
         room_id = first_session.json()["session"]["room_id"]
-        second_token = "hero-second-silent-session"
-
-        with app.state.session_factory() as db:
-            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
-            assert player is not None
-            repositories.PlayerSessionRepository(db).create_session(
-                player_id=player.id,
-                session_token=second_token,
-                room_id=room_id,
-            )
-            db.commit()
 
         first_uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={first_token}"
-        second_uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={second_token}"
         meta = {"silent": True, "status_card": "room_script"}
 
         async with websockets.connect(first_uri) as first_ws:
@@ -588,47 +553,30 @@ async def test_silent_room_script_self_target_event_uses_command_response_envelo
                 first_ws,
                 lambda msg: msg.get("payload", {}).get("event") == "location_update",
             )
-            async with websockets.connect(second_uri) as second_ws:
-                await _recv_matching(
-                    second_ws,
-                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
-                )
 
-                await first_ws.send(
-                    json.dumps(
-                        {
-                            "type": "command",
-                            "command": "imagine dagger",
-                            "meta": meta,
-                        }
-                    )
+            await first_ws.send(
+                json.dumps(
+                    {
+                        "type": "command",
+                        "command": "imagine dagger",
+                        "meta": meta,
+                    }
                 )
+            )
 
-                first_effect = await _recv_matching(
-                    first_ws,
-                    lambda msg: msg.get("type") == "command_response"
-                    and msg.get("meta") == meta
-                    and msg.get("payload", {}).get("message_id") == "DAGM00",
-                )
-                second_effect = await _recv_matching(
-                    second_ws,
-                    lambda msg: msg.get("type") == "command_response"
-                    and msg.get("meta") == meta
-                    and msg.get("payload", {}).get("message_id") == "DAGM00",
-                )
+            first_effect = await _recv_matching(
+                first_ws,
+                lambda msg: msg.get("type") == "command_response"
+                and msg.get("meta") == meta
+                and msg.get("payload", {}).get("message_id") == "DAGM00",
+            )
 
-                assert first_effect["payload"]["player"] == "hero"
-                assert second_effect["payload"]["player"] == "hero"
-                await _assert_no_matching(
-                    first_ws,
-                    lambda msg: msg.get("type") == "room_broadcast"
-                    and msg.get("payload", {}).get("message_id") == "DAGM00",
-                )
-                await _assert_no_matching(
-                    second_ws,
-                    lambda msg: msg.get("type") == "room_broadcast"
-                    and msg.get("payload", {}).get("message_id") == "DAGM00",
-                )
+            assert first_effect["payload"]["player"] == "hero"
+            await _assert_no_matching(
+                first_ws,
+                lambda msg: msg.get("type") == "room_broadcast"
+                and msg.get("payload", {}).get("message_id") == "DAGM00",
+            )
 
     server.should_exit = True
     await server_task

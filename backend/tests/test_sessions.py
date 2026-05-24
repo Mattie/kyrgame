@@ -153,7 +153,7 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
 
 
 @pytest.mark.anyio
-async def test_multiple_websocket_sessions_keep_player_active_until_all_disconnect():
+async def test_duplicate_player_login_replaces_active_websocket_session():
     app = create_app()
     host = "127.0.0.1"
     port = _get_open_port()
@@ -167,40 +167,41 @@ async def test_multiple_websocket_sessions_keep_player_active_until_all_disconne
     async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
         first_session = await client.post(
             "/auth/session",
-            json={"player_id": "hero", "room_id": 7, "allow_multiple": True},
+            json={"player_id": "hero", "room_id": 7},
         )
         first_token = first_session.json()["session"]["token"]
-        second_session = await client.post(
-            "/auth/session",
-            json={"player_id": "hero", "room_id": 7, "allow_multiple": True},
-        )
-        second_token = second_session.json()["session"]["token"]
-
         first_uri = f"ws://{host}:{port}/ws/rooms/7?token={first_token}"
-        second_uri = f"ws://{host}:{port}/ws/rooms/7?token={second_token}"
 
         async with websockets.connect(first_uri) as first_ws:
             await _receive_initial_room_payloads(first_ws)
+            assert first_token in getattr(app.state, "active_player_sessions", {})
+
+            second_session = await client.post(
+                "/auth/session",
+                json={"player_id": "hero", "room_id": 7, "allow_multiple": True},
+            )
+            assert second_session.status_code == 201
+            second_payload = second_session.json()["session"]
+            second_token = second_payload["token"]
+            assert second_payload["replaced_sessions"] == 1
+
+            await _wait_until(lambda: first_ws.closed)
+            assert first_token not in getattr(app.state, "active_player_sessions", {})
+
+            old_validation = await client.get(
+                "/auth/session", headers={"Authorization": f"Bearer {first_token}"}
+            )
+            assert old_validation.status_code == 401
+
+            second_uri = f"ws://{host}:{port}/ws/rooms/7?token={second_token}"
             async with websockets.connect(second_uri) as second_ws:
                 await _receive_initial_room_payloads(second_ws)
-                await _wait_until(
-                    lambda: first_token
-                    in getattr(app.state, "active_player_sessions", {})
-                    and second_token in getattr(app.state, "active_player_sessions", {})
-                )
-
-                await first_ws.close()
-                await _wait_until(
-                    lambda: first_token
-                    not in getattr(app.state, "active_player_sessions", {})
-                )
-
                 active_session_players = getattr(app.state, "active_player_sessions", {})
-                assert second_token in active_session_players
+                assert list(active_session_players) == [second_token]
                 assert app.state.active_players.get("hero") is active_session_players[second_token]
 
-            await _wait_until(lambda: "hero" not in app.state.active_players)
-            assert second_token not in getattr(app.state, "active_player_sessions", {})
+        await _wait_until(lambda: "hero" not in app.state.active_players)
+        assert second_token not in getattr(app.state, "active_player_sessions", {})
 
     server.should_exit = True
     await server_task

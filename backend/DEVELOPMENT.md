@@ -146,7 +146,6 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
   {
     "player_id": "hero",
     "resume_token": "...",
-    "allow_multiple": false,
     "room_id": 7
   }
   ```
@@ -170,6 +169,7 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
     ```
 
     When resuming, `status` becomes `recovered`, `resumed` is `true`, and `first_login` is `false`.
+    A fresh login for the same `player_id` replaces any existing active game session for that player.
 
 ```bash
 curl -X POST http://localhost:8000/auth/session \
