@@ -177,6 +177,7 @@ async def bootstrap_app(app: FastAPI):
             # No database records yet, use fixtures
             app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
 
+    objects_by_id = {obj.id: obj for obj in app.state.fixture_cache["objects"]}
     object_names_by_id = {obj.id: obj.name for obj in app.state.fixture_cache["objects"]}
     app.state.animation_rng = random.Random()
 
@@ -258,12 +259,22 @@ async def bootstrap_app(app: FastAPI):
                 return
             record.gamloc = player.gamloc
             record.pgploc = player.pgploc
+            record.altnam = player.altnam
+            record.attnam = player.attnam
+            record.flags = int(player.flags)
+            record.level = player.level
             record.hitpts = player.hitpts
             record.spts = player.spts
             record.gold = player.gold
             record.gpobjs = list(player.gpobjs)
             record.obvals = list(player.obvals)
             record.npobjs = player.npobjs
+            record.spells = list(player.spells)
+            record.nspells = player.nspells
+            record.offspls = player.offspls
+            record.defspls = player.defspls
+            record.othspls = player.othspls
+            record.charms = list(player.charms)
             db.commit()
 
     def _set_zar_location(room_id: int) -> None:
@@ -358,6 +369,49 @@ async def bootstrap_app(app: FastAPI):
             return
         app.state.room_scripts.yaml_engine.get_room_state(room_id)[key] = value
 
+    async def _target_room_refresh_payloads(player_id: str, room_id: int) -> list[dict]:
+        location = app.state.location_index.get(room_id)
+        player_state = app.state.active_players.get(player_id)
+        if location is None or player_state is None:
+            return []
+
+        state = commands.GameState(
+            player=player_state,
+            locations=app.state.location_index,
+            objects=objects_by_id,
+            messages=default_messages,
+            content_mappings=content_mappings,
+            presence=app.state.presence,
+        )
+        description_id, long_description = commands._location_description(state, location)
+        payloads = [
+            {
+                "scope": "player",
+                "event": "location_description",
+                "type": "location_description",
+                "location": location.id,
+                "message_id": description_id,
+                "text": long_description or location.brfdes,
+            },
+            commands._room_objects_event(location, objects_by_id, None, description_id),
+        ]
+        occupants = await app.state.presence.players_in_room(room_id)
+        others = sorted(occupant for occupant in occupants if occupant != player_id)
+        text, message_id = commands._format_room_occupants(others, default_messages)
+        if text:
+            payloads.append(
+                {
+                    "scope": "player",
+                    "event": "room_occupants",
+                    "type": "room_occupants",
+                    "location": room_id,
+                    "occupants": others,
+                    "text": text,
+                    "message_id": message_id,
+                }
+            )
+        return payloads
+
     async def _dispatch_animation_event(event):
         text = app.state.animation_tick_callback.resolve_event_text(event)
         if not text and not event.payload:
@@ -366,28 +420,79 @@ async def bootstrap_app(app: FastAPI):
         room_event_payload = {
             key: value
             for key, value in event_payload.items()
-            if not key.startswith("target_") and key not in {"target_only", "exclude_player"}
+            if not key.startswith("target_") and key not in {"target_only"}
         }
         excluded_sockets = set()
         target_player = event_payload.get("target_player")
         target_text = event_payload.get("target_text")
         target_message_id = event_payload.get("target_message_id")
+        target_event = event_payload.get("target_event")
+        target_type = event_payload.get("target_type", target_event)
+        move_player_to = event_payload.get("move_player_to")
         target_only = bool(event_payload.get("target_only"))
-        if target_player and target_text and target_message_id:
+        if target_player and (
+            (target_text and target_message_id) or target_event or move_player_to is not None
+        ):
             # Legacy reference: KYRANIM.C elves() prints the hint/reward to usrnum,
             # then prints EMSG02/EMSG03 to the rest of the room (lines 367-383).
-            target_payload = {
-                "event": "room_message",
-                "scope": "target",
-                "type": "room_message",
-                "message_id": target_message_id,
-                "text": target_text,
-                "animation_flag": event.flag,
-                "player": target_player,
-            }
+            target_room = int(move_player_to if move_player_to is not None else event.room_id)
+            followup_payloads: list[dict] = []
+            if move_player_to is not None:
+                for session_token, player_state in getattr(
+                    app.state, "active_player_sessions", {}
+                ).items():
+                    if player_state.plyrid == target_player:
+                        player_state.pgploc = target_room
+                        player_state.gamloc = target_room
+                        app.state.active_players[target_player] = player_state
+                        await app.state.presence.set_location(
+                            target_player, target_room, session_token
+                        )
+                        target_socket = app.state.session_connections.get(session_token)
+                        if (
+                            target_socket
+                            and target_socket.application_state == WebSocketState.CONNECTED
+                        ):
+                            await app.state.gateway.register(
+                                target_room, target_socket, announce=False
+                            )
+                with session_factory() as db:
+                    session_repo = repositories.PlayerSessionRepository(db)
+                    for token in await app.state.presence.sessions_for_player(target_player):
+                        session_repo.set_room(token, target_room)
+                    db.commit()
+                # Legacy entrgp() sends the new room description, visible objects,
+                # and occupants after forced placement (legacy/KYRUTIL.C:236-256).
+                followup_payloads = await _target_room_refresh_payloads(
+                    target_player, target_room
+                )
+
+            if target_event:
+                target_payload = {
+                    "event": target_event,
+                    "scope": "target",
+                    "type": target_type or target_event,
+                    "message_id": target_message_id,
+                    "text": target_text or "",
+                    "animation_flag": event.flag,
+                    "player": target_player,
+                    "location": event_payload.get("location", target_room),
+                }
+                if move_player_to is not None:
+                    target_payload["move_player_to"] = target_room
+            else:
+                target_payload = {
+                    "event": "room_message",
+                    "scope": "target",
+                    "type": "room_message",
+                    "message_id": target_message_id,
+                    "text": target_text,
+                    "animation_flag": event.flag,
+                    "player": target_player,
+                }
             target_envelope = {
                 "type": "command_response",
-                "room": event.room_id,
+                "room": target_room,
                 "payload": target_payload,
             }
             for token in await app.state.presence.sessions_for_player(target_player):
@@ -398,6 +503,14 @@ async def bootstrap_app(app: FastAPI):
                     continue
                 excluded_sockets.add(target_socket)
                 await target_socket.send_json(target_envelope)
+                for followup_payload in followup_payloads:
+                    await target_socket.send_json(
+                        {
+                            "type": "command_response",
+                            "room": target_room,
+                            "payload": followup_payload,
+                        }
+                    )
 
         if target_only:
             return

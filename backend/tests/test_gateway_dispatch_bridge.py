@@ -805,3 +805,278 @@ async def test_room_broadcast_excludes_look_target():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_zelastone_notifies_remote_target(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 7}
+            )
+            target_session = await client.post(
+                "/auth/session", json={"player_id": "target", "room_id": 12}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            target_token = target_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                target = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == "target")
+                )
+                assert hero is not None
+                assert target is not None
+                hero.level = 25
+                hero.spts = 25
+                hero.spells = [66]
+                hero.nspells = 1
+                hero.gamloc = 7
+                hero.pgploc = 7
+                target.gamloc = 12
+                target.pgploc = 12
+                target.attnam = "Target"
+                target.altnam = "Target"
+                target_charms = list(target.charms)
+                target_charms[constants.OBJPRO] = 1
+                target.charms = target_charms
+                db.commit()
+
+            hero_uri = f"ws://{host}:{port}/ws/rooms/7?token={hero_token}"
+            target_uri = f"ws://{host}:{port}/ws/rooms/12?token={target_token}"
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                async with websockets.connect(target_uri) as target_ws:
+                    await _recv_matching(
+                        target_ws,
+                        lambda msg: msg.get("payload", {}).get("event")
+                        == "location_update",
+                    )
+
+                    await hero_ws.send(
+                        json.dumps({"type": "command", "command": "cast zelastone target"})
+                    )
+
+                    target_room = await _recv_matching(
+                        target_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "S67M04",
+                        timeout=2.0,
+                    )
+                    target_direct = await _recv_matching(
+                        target_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "S67M08",
+                        timeout=2.0,
+                    )
+
+                    assert target_room["room"] == 12
+                    assert target_direct["payload"]["player"] == "target"
+                    assert target_direct["payload"]["room_id"] == 12
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_tiltowait_global_and_room_messages_reach_visible_clients(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            caster_session = await client.post(
+                "/auth/session", json={"player_id": "caster", "room_id": 7}
+            )
+            witness_session = await client.post(
+                "/auth/session", json={"player_id": "witness", "room_id": 12}
+            )
+            caster_token = caster_session.json()["session"]["token"]
+            witness_token = witness_session.json()["session"]["token"]
+
+            rose_id = next(
+                obj.id for obj in app.state.fixture_cache["objects"] if obj.name == "rose"
+            )
+            with app.state.session_factory() as db:
+                caster = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == "caster")
+                )
+                assert caster is not None
+                caster.level = 25
+                caster.spts = 25
+                caster.spells = [58]
+                caster.nspells = 1
+                caster.gpobjs = [rose_id]
+                caster.obvals = [0]
+                caster.npobjs = 1
+                db.commit()
+
+            caster_uri = f"ws://{host}:{port}/ws/rooms/7?token={caster_token}"
+            witness_uri = f"ws://{host}:{port}/ws/rooms/12?token={witness_token}"
+
+            async with websockets.connect(caster_uri) as caster_ws:
+                await _recv_matching(
+                    caster_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                async with websockets.connect(witness_uri) as witness_ws:
+                    await _recv_matching(
+                        witness_ws,
+                        lambda msg: msg.get("payload", {}).get("event")
+                        == "location_update",
+                    )
+
+                    await caster_ws.send(
+                        json.dumps({"type": "command", "command": "cast tiltowait"})
+                    )
+
+                    caster_room = await _recv_matching(
+                        caster_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "S59M03",
+                        timeout=2.0,
+                    )
+                    witness_global = await _recv_matching(
+                        witness_ws,
+                        lambda msg: msg.get("type") == "system_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "S59M02",
+                        timeout=2.0,
+                    )
+
+                    assert caster_room["room"] == 7
+                    assert witness_global["payload"]["scope"] == "global"
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_zar_death_refreshes_target_room_and_arrival_witness(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 302}
+            )
+            witness_session = await client.post(
+                "/auth/session", json={"player_id": "witness", "room_id": 0}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            witness_token = witness_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                witness = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == "witness")
+                )
+                assert hero is not None
+                assert witness is not None
+                hero.level = 10
+                hero.hitpts = 8
+                hero.gamloc = 302
+                hero.pgploc = 302
+                witness.level = 25
+                witness.gamloc = 0
+                witness.pgploc = 0
+                db.commit()
+
+            hero_uri = f"ws://{host}:{port}/ws/rooms/302?token={hero_token}"
+            witness_uri = f"ws://{host}:{port}/ws/rooms/0?token={witness_token}"
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                async with websockets.connect(witness_uri) as witness_ws:
+                    await _recv_matching(
+                        witness_ws,
+                        lambda msg: msg.get("payload", {}).get("event")
+                        == "location_update",
+                    )
+
+                    app.state.animation_tick_system.state.zar_location = 302
+                    app.state.animation_tick_system.state.zar_counter = 0
+                    app.state.animation_tick_system.state.zar_attack_index = 0
+                    await app.state.animation_tick_callback()
+
+                    await _recv_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "DIEMSG",
+                        timeout=2.0,
+                    )
+                    description = await _recv_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("event") == "location_description"
+                        and msg.get("payload", {}).get("location") == 0,
+                        timeout=2.0,
+                    )
+                    objects = await _recv_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("event") == "room_objects"
+                        and msg.get("payload", {}).get("location") == 0,
+                        timeout=2.0,
+                    )
+                    arrival = await _recv_matching(
+                        witness_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and "appeared in a holy light" in msg.get("payload", {}).get("text", ""),
+                        timeout=2.0,
+                    )
+
+                    assert description["payload"]["message_id"] == "KRD000"
+                    assert objects["payload"]["objects"]
+                    assert arrival["payload"]["exclude_player"] == "hero"
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                assert hero is not None
+                assert hero.gamloc == 0
+                assert hero.pgploc == 0
+                assert hero.level == 1
+                assert hero.hitpts == 4
+    finally:
+        server.should_exit = True
+        await server_task

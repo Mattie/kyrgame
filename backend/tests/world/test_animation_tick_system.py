@@ -418,8 +418,22 @@ def test_zarfood_emits_existing_death_messages_when_attack_kills_player():
 
     _, events = routine.zarfood(state)
 
-    assert player.hitpts == 0
+    assert player.gamloc == 0
+    assert player.pgploc == 0
+    assert player.level == 1
+    assert player.hitpts == 4
     assert any(
         event.payload.get("target_message_id") == "DIEMSG" for event in events
     )
     assert any(event.message_id == "KILLED" for event in events)
+    assert any(
+        event.payload.get("target_only") is True
+        and event.payload.get("target_event") == "location_update"
+        and event.payload.get("move_player_to") == 0
+        for event in events
+    )
+    assert any(
+        "appeared in a holy light" in (event.message_text or "")
+        and event.payload.get("exclude_player") == "target"
+        for event in events
+    )

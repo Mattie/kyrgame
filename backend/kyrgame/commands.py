@@ -105,6 +105,7 @@ class GameState:
     db_session: any = None  # SQLAlchemy session for persistence
     presence: PresenceAccessor | None = None
     player_lookup: Callable[[str], models.PlayerModel | None] | None = None
+    global_player_lookup: Callable[[str], models.PlayerModel | None] | None = None
     zar_controller: Any | None = None
     zar_state: Any | None = None
 
@@ -856,6 +857,21 @@ async def _find_player_by_name(
     return None
 
 
+def _find_player_globally_by_true_id(
+    state: GameState, target_name: str
+) -> models.PlayerModel | None:
+    if not state.global_player_lookup:
+        return None
+    candidate = state.global_player_lookup(target_name)
+    if candidate is None or candidate.gamloc == -1:
+        return None
+    # Legacy fgamgp searches the full active game by true plyrid, bypassing
+    # current-room attnam matching used by findgp (legacy/KYRUTIL.C:486-494).
+    if candidate.plyrid.lower() != target_name.lower():
+        return None
+    return candidate
+
+
 async def _find_player_in_room(
     state: GameState, target_name: str
 ) -> models.PlayerModel | None:
@@ -1310,8 +1326,11 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
             else effect.requires_target_player
         )
     if effect and requires_target_player and target:
-        target_player = await _find_player_by_name(state, target)
-        if not target_player:
+        if effect.global_target_player:
+            target_player = _find_player_globally_by_true_id(state, target)
+        else:
+            target_player = await _find_player_by_name(state, target)
+        if not target_player and not effect.allow_missing_target_player:
             return CommandResult(
                 state=state,
                 events=_spell_target_failure_events(state, target, command_id),
@@ -1327,12 +1346,26 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     broadcast_exclude_player = context.pop("broadcast_exclude_player", None)
     target_text = context.pop("target_text", None)
     target_message_id = context.pop("target_message_id", None)
+    target_message_after_room_events = bool(
+        context.pop("target_message_after_room_events", False)
+    )
+    target_room_message_id = context.pop("target_room_message_id", None)
+    target_room_message = context.pop("target_room_message", None)
+    target_room_result_message_id = context.pop("target_room_result_message_id", None)
+    target_room_result_text = context.pop("target_room_result_text", None)
     area_damage = context.pop("area_damage", None)
+    extra_events = context.pop("extra_events", [])
+    global_broadcast_message_id = context.pop("global_broadcast_message_id", None)
+    room_broadcast_message_id = context.pop("room_broadcast_message_id", None)
+    room_broadcast_include_sender = bool(
+        context.pop("room_broadcast_include_sender", False)
+    )
     move_to_room = context.pop("move_to_room", None)
     move_from_room = context.pop("move_from_room", None)
     departure_broadcast = context.pop("departure_broadcast", None)
     departure_broadcast_message_id = context.pop("departure_broadcast_message_id", None)
     departure_emote = context.pop("departure_emote", None)
+    arrival_text = context.pop("arrival_text", None)
     room_objects_update = context.pop("room_objects_update", None)
     dropped_messages = context.pop("dropped_messages", [])
 
@@ -1353,6 +1386,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
         event["animation"] = result.animation
 
     events = [event]
+    target_event = None
     if target_message_id and target_player:
         target_event = _message_event(
             "target",
@@ -1361,7 +1395,9 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
             command_id,
         )
         target_event["player"] = target_player.plyrid
-        events.append(target_event)
+        target_event["room_id"] = target_player.gamloc
+        if not target_message_after_room_events:
+            events.append(target_event)
     if broadcast_text:
         events.append(
             _message_event(
@@ -1372,6 +1408,64 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                 exclude_player=broadcast_exclude_player or state.player.plyrid,
             )
         )
+    if global_broadcast_message_id:
+        events.append(
+            _message_event(
+                "global",
+                global_broadcast_message_id,
+                _format_message(state, global_broadcast_message_id),
+                command_id,
+            )
+        )
+    if room_broadcast_message_id:
+        room_event = _message_event(
+            "room",
+            room_broadcast_message_id,
+            _format_message(state, room_broadcast_message_id),
+            command_id,
+            exclude_player=state.player.plyrid
+            if not room_broadcast_include_sender
+            else None,
+        )
+        if room_broadcast_include_sender:
+            room_event["include_sender"] = True
+        events.append(room_event)
+    if target_room_message_id and target_player:
+        events.append(
+            {
+                "scope": "nearby_room",
+                "room_id": target_player.gamloc,
+                "event": "room_message",
+                "type": "room_message",
+                "player": state.player.plyrid,
+                "text": target_room_message
+                or _format_message(state, target_room_message_id),
+                "message_id": target_room_message_id,
+                "command_id": command_id,
+            }
+        )
+    if target_event and target_message_after_room_events:
+        events.append(target_event)
+    if target_room_result_message_id and target_player:
+        events.append(
+            {
+                "scope": "nearby_room",
+                "room_id": target_player.gamloc,
+                "event": "room_message",
+                "type": "room_message",
+                "player": target_player.plyrid,
+                "text": target_room_result_text
+                or _format_message(state, target_room_result_message_id),
+                "message_id": target_room_result_message_id,
+                "command_id": command_id,
+                "exclude_player": target_player.plyrid,
+            }
+        )
+    if extra_events:
+        for extra_event in extra_events:
+            event_payload = dict(extra_event)
+            event_payload.setdefault("command_id", command_id)
+            events.append(event_payload)
     if area_damage:
         await _apply_area_damage(state, command_id, area_damage, events)
 
@@ -1470,7 +1564,8 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
             command_id=command_id,
             message_id=_command_message_id(command_id),
             direction=None,
-            arrival_text=f"*** {state.player.plyrid} has just appeared in a red cloud!",
+            arrival_text=arrival_text
+            or f"*** {state.player.plyrid} has just appeared in a red cloud!",
         )
         events.extend(transition_events)
 
@@ -1583,7 +1678,7 @@ async def _apply_area_damage(
             continue
 
         protection = area_damage["protection"]
-        if target.charms[protection]:
+        if protection is not None and target.charms[protection]:
             caster_text = _format_message(
                 state, area_damage["protect_id"], target.altnam
             )

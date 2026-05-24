@@ -44,6 +44,14 @@ class TrackingPresence:
         return self._occupants
 
 
+class RoomPresence:
+    def __init__(self, occupants_by_room: dict[int, set[str]]):
+        self._occupants_by_room = occupants_by_room
+
+    async def players_in_room(self, room_id: int) -> set[str]:
+        return set(self._occupants_by_room.get(room_id, set()))
+
+
 @pytest.mark.anyio
 async def test_cast_requires_spell_name():
     player = _build_player(flags=int(constants.PlayerFlag.LOADED))
@@ -532,6 +540,133 @@ async def test_cast_whoub_reveals_target_true_identity():
     assert "truth" in result.events[0]["text"]
     assert result.events[1]["player"] == target.plyrid
     assert result.events[2]["exclude_player"] == target.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_peepint_uses_legacy_global_player_lookup_for_target_notification():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=7,
+        spells=[45],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="Target Mask",
+        altnam="Target Mask",
+        gamloc=12,
+    )
+    state = _build_state(player)
+    state.presence = RoomPresence({7: {player.plyrid}, 12: {target.plyrid}})
+    state.player_lookup = lambda pid: (
+        player if pid == player.plyrid else target if pid == target.plyrid else None
+    )
+    state.global_player_lookup = lambda name: target if name == target.plyrid else None
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "peepint target"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["KSPM04", "KSPM06", "KSPM07"]
+    assert state.messages.messages["KRD012"] in result.events[0]["text"]
+    assert result.events[1]["scope"] == "target"
+    assert result.events[1]["player"] == target.plyrid
+    assert result.events[1]["room_id"] == target.gamloc
+    assert result.events[2]["scope"] == "room"
+    assert result.events[2]["exclude_player"] == player.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_peepint_without_target_uses_legacy_objm07_failure():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=7,
+        spells=[45],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "peepint"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["OBJM07", "KSPM07"]
+    assert result.events[0]["scope"] == "player"
+    assert result.events[1]["scope"] == "room"
+    assert result.events[1]["exclude_player"] == player.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_zelastone_uses_legacy_global_player_lookup_and_target_room_surfaces():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=7,
+        spells=[66],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="Target Mask",
+        altnam="Target Mask",
+        gamloc=12,
+        hitpts=40,
+    )
+    target.charms[constants.OBJPRO] = 1
+    state = _build_state(player)
+    state.presence = RoomPresence({7: {player.plyrid}, 12: {target.plyrid}})
+    state.player_lookup = lambda pid: (
+        player if pid == player.plyrid else target if pid == target.plyrid else None
+    )
+    state.global_player_lookup = lambda name: target if name == target.plyrid else None
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "zelastone target"}, state)
+
+    assert [event["message_id"] for event in result.events] == [
+        "S67M02",
+        "S67M03",
+        "S67M04",
+        "S67M08",
+        "S67M09",
+    ]
+    assert result.events[3]["scope"] == "target"
+    assert result.events[3]["player"] == target.plyrid
+    assert result.events[3]["room_id"] == target.gamloc
+    assert result.events[2]["scope"] == "nearby_room"
+    assert result.events[2]["room_id"] == target.gamloc
+    assert result.events[4]["scope"] == "nearby_room"
+    assert result.events[4]["exclude_player"] == target.plyrid
+    assert result.events[1]["scope"] == "room"
+    assert result.events[1]["exclude_player"] == player.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_zelastone_without_target_uses_legacy_mystery_failure():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=7,
+        spells=[66],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "zelastone"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["KSPM03", None]
+    assert "failing at spellcasting" in result.events[1]["text"]
+    assert result.events[1]["scope"] == "room"
+    assert result.events[1]["exclude_player"] == player.plyrid
 
 
 @pytest.mark.anyio

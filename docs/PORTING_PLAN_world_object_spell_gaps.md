@@ -74,9 +74,9 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 8 `canthur` (ultimate protection I)【F:legacy/KYRSPEL.C†L145-L152】
 - [x] ID 9 `chillou` (ice storm II)【F:legacy/KYRSPEL.C†L147-L154】
 - [x] ID 10 `clutzopho` (drop all items)【F:legacy/KYRSPEL.C†L148-L155】
-- [ ] ID 11 `cuseme` (detect power)【F:legacy/KYRSPEL.C†L149-L156】
+- [x] ID 11 `cuseme` (detect power)【F:legacy/KYRSPEL.C†L149-L156】
 - [x] ID 12 `dumdum` (forget all spells)【F:legacy/KYRSPEL.C†L150-L157】
-- [ ] ID 13 `feeluck` (teleport random)【F:legacy/KYRSPEL.C†L151-L158】
+- [x] ID 13 `feeluck` (teleport random)【F:legacy/KYRSPEL.C†L151-L158】
 - [x] ID 14 `firstai` (heal III)【F:legacy/KYRSPEL.C†L152-L159】
 - [x] ID 15 `flyaway` (pegasus transformation)【F:legacy/KYRSPEL.C†L153-L160】
 - [x] ID 16 `fpandl` (firebolt I)【F:legacy/KYRSPEL.C†L154-L161】
@@ -86,11 +86,11 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 20 `frythes` (firebolt III)【F:legacy/KYRSPEL.C†L158-L165】
 - [x] ID 21 `gotcha` (lightning bolt II)【F:legacy/KYRSPEL.C†L159-L166】
 - [x] ID 22 `goto` (teleport specific)【F:legacy/KYRSPEL.C†L160-L167】
-- [ ] ID 23 `gringri` (pseudo-dragon form)【F:legacy/KYRSPEL.C†L161-L168】
+- [x] ID 23 `gringri` (pseudo-dragon form)【F:legacy/KYRSPEL.C†L161-L168】
 - [x] ID 24 `handsof` (object protection I)【F:legacy/KYRSPEL.C†L162-L169】
 - [x] ID 25 `heater` (ice protection II)【F:legacy/KYRSPEL.C†L163-L170】
 - [x] ID 26 `hehhehh` (lightning storm)【F:legacy/KYRSPEL.C†L164-L171】
-- [ ] ID 27 `hocus` (dispel magic)【F:legacy/KYRSPEL.C†L165-L172】
+- [x] ID 27 `hocus` (dispel magic)【F:legacy/KYRSPEL.C†L165-L172】
 - [x] ID 28 `holyshe` (lightning bolt III)【F:legacy/KYRSPEL.C†L166-L173】
 - [x] ID 29 `hotflas` (lightning ball)【F:legacy/KYRSPEL.C†L167-L174】
 - [x] ID 30 `hotfoot` (fireball II)【F:legacy/KYRSPEL.C†L168-L175】
@@ -108,7 +108,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 42 `noouch` (heal I)【F:legacy/KYRSPEL.C†L180-L187】
 - [x] ID 43 `nosey` (read memorized spells)【F:legacy/KYRSPEL.C†L181-L188】
 - [x] ID 44 `peekabo` (invisibility II)【F:legacy/KYRSPEL.C†L182-L189】
-- [ ] ID 45 `peepint` (scry someone)【F:legacy/KYRSPEL.C†L183-L190】
+- [x] ID 45 `peepint` (scry someone)【F:legacy/KYRSPEL.C†L183-L190】
 - [x] ID 46 `pickpoc` (steal item)【F:legacy/KYRSPEL.C†L184-L191】
 - [x] ID 47 `pocus` (magic missile)【F:legacy/KYRSPEL.C†L185-L192】
 - [x] ID 48 `polarba` (ice protection III)【F:legacy/KYRSPEL.C†L186-L193】
@@ -121,7 +121,7 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 55 `surgless` (lightning protection III)【F:legacy/KYRSPEL.C†L193-L200】
 - [x] ID 56 `takethat` (sap spell points I)【F:legacy/KYRSPEL.C†L194-L201】
 - [x] ID 57 `thedoc` (heal II)【F:legacy/KYRSPEL.C†L195-L202】
-- [ ] ID 58 `tiltowait` (earthquake)【F:legacy/KYRSPEL.C†L196-L203】
+- [x] ID 58 `tiltowait` (earthquake)【F:legacy/KYRSPEL.C†L196-L203】
 - [x] ID 59 `tinting` (lightning protection II)【F:legacy/KYRSPEL.C†L197-L204】
 - [x] ID 60 `toastem` (fireball III)【F:legacy/KYRSPEL.C†L198-L205】
 - [x] ID 61 `weewillo` (willowisp transformation)【F:legacy/KYRSPEL.C†L199-L205】
@@ -129,9 +129,9 @@ The modern `RoomScriptEngine` currently wires routines for rooms 0 (willow), 7 (
 - [x] ID 63 `whopper` (fire protection III)【F:legacy/KYRSPEL.C†L201-L205】
 - [x] ID 64 `whoub` (detect true identity)【F:legacy/KYRSPEL.C†L202-L205】
 - [x] ID 65 `zapher` (lightning bolt I)【F:legacy/KYRSPEL.C†L203-L206】
-- [ ] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
+- [x] ID 66 `zelastone` (aerial servant)【F:legacy/KYRSPEL.C†L203-L206】
 
-Spell timer cadence (`splrtk`) now runs through `SpellTickSystem` (macro reset, spell-point regen, charm countdown, and ALTNAM reversion), while individual spell effects above remain the parity gaps listed here.【F:legacy/KYRSPEL.C†L215-L259】
+Spell timer cadence (`splrtk`) now runs through `SpellTickSystem` (macro reset, spell-point regen, charm countdown, and ALTNAM reversion), and the explicit spell effects listed above are now covered.【F:legacy/KYRSPEL.C†L215-L259】
 
 ## Animation routines still to port (`KYRANIM.C`)
 Legacy animation ticks coordinate Zar, dryads, elves, brownies, and gem spawns. Mirror these behaviors in a scheduler-driven service and check them off once parity behavior (including broadcasts and damage) is covered:

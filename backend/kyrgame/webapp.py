@@ -1701,6 +1701,7 @@ def create_app() -> FastAPI:
             db_session=persistent_session,
             presence=provider.presence,
             player_lookup=lookup_player,
+            global_player_lookup=lookup_player,
             zar_controller=getattr(provider.scope.app.state, "animation_zar_routine", None),
             zar_state=getattr(
                 getattr(provider.scope.app.state, "animation_tick_system", None),
@@ -1897,8 +1898,12 @@ def create_app() -> FastAPI:
                                         target_socket = session_connections.get(token)
                                         if target_socket:
                                             excluded_sockets.add(target_socket)
+                                sender_socket = None if event.get("include_sender") else websocket
                                 await gateway.broadcast(
-                                    current_room, envelope, sender=websocket, exclude=excluded_sockets
+                                    current_room,
+                                    envelope,
+                                    sender=sender_socket,
+                                    exclude=excluded_sockets,
                                 )
                             elif scope == "global":
                                 envelope = {"type": "system_broadcast", "payload": event}
@@ -2134,9 +2139,21 @@ def create_app() -> FastAPI:
                                 target_socket = session_connections.get(token)
                                 if target_socket:
                                     excluded_sockets.add(target_socket)
+                        sender_socket = None if event.get("include_sender") else websocket
                         await gateway.broadcast(
-                            current_room, envelope, sender=websocket, exclude=excluded_sockets
+                            current_room,
+                            envelope,
+                            sender=sender_socket,
+                            exclude=excluded_sockets,
                         )
+                    elif scope == "global":
+                        envelope = {"type": "system_broadcast", "payload": event}
+                        if meta:
+                            envelope["meta"] = meta
+                        for target_socket in list(session_connections.values()):
+                            if target_socket.application_state != WebSocketState.CONNECTED:
+                                continue
+                            await target_socket.send_json(envelope)
                     elif scope == "nearby_room":
                         # Legacy sndnear(): broadcast to players in adjacent rooms.
                         # See legacy/KYRUTIL.C:193-208.
@@ -2145,7 +2162,20 @@ def create_app() -> FastAPI:
                             envelope = {"type": "room_broadcast", "room": nearby_room_id, "payload": event}
                             if meta:
                                 envelope["meta"] = meta
-                            await gateway.broadcast(nearby_room_id, envelope)
+                            excluded_player = event.get("exclude_player")
+                            excluded_sockets = set()
+                            if excluded_player:
+                                for token in await provider.presence.sessions_for_player(
+                                    excluded_player
+                                ):
+                                    target_socket = session_connections.get(token)
+                                    if target_socket:
+                                        excluded_sockets.add(target_socket)
+                            await gateway.broadcast(
+                                nearby_room_id,
+                                envelope,
+                                exclude=excluded_sockets or None,
+                            )
                     elif scope == "target":
                         target_id = event.get("player")
                         if not target_id:

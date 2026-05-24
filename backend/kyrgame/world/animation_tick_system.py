@@ -303,6 +303,9 @@ class ZarDragonRoutine:
             ),
         ]
         if player.hitpts <= 0:
+            old_name = player.altnam
+            self._reset_dead_player(player)
+            self._player_persister(player)
             events.extend(
                 [
                     AnimationTickEvent(
@@ -319,12 +322,66 @@ class ZarDragonRoutine:
                         flag="zarfood",
                         room_id=room_id,
                         message_id="KILLED",
-                        message_text=self._message_formatter("KILLED", player.altnam),
+                        message_text=self._message_formatter("KILLED", old_name),
                         payload={"exclude_player": player.plyrid},
+                    ),
+                    AnimationTickEvent(
+                        flag="zarfood",
+                        room_id=0,
+                        payload={
+                            "target_only": True,
+                            "target_player": player.plyrid,
+                            "target_event": "location_update",
+                            "target_type": "location_update",
+                            "location": 0,
+                            "move_player_to": 0,
+                        },
+                    ),
+                    # Legacy hitoth() reinitializes the player, then entrgp(0, ...)
+                    # announces a holy-light arrival (legacy/KYRSPEL.C:312-320;
+                    # legacy/KYRUTIL.C:236-256).
+                    AnimationTickEvent(
+                        flag="zarfood",
+                        room_id=0,
+                        message_text=(
+                            f"*** {player.plyrid} has just appeared in a holy light!"
+                        ),
+                        payload={
+                            "event": "room_message",
+                            "type": "room_message",
+                            "exclude_player": player.plyrid,
+                            "player": player.plyrid,
+                        },
                     ),
                 ]
             )
         return events
+
+    def _reset_dead_player(self, player: models.PlayerModel) -> None:
+        old_flags = int(player.flags)
+        object.__setattr__(player, "altnam", player.plyrid)
+        object.__setattr__(player, "attnam", player.plyrid)
+        object.__setattr__(player, "gamloc", 0)
+        object.__setattr__(player, "pgploc", 0)
+        object.__setattr__(player, "level", 1)
+        object.__setattr__(player, "hitpts", 4)
+        object.__setattr__(player, "spts", 2)
+        object.__setattr__(player, "gold", 0)
+        object.__setattr__(player, "gpobjs", [])
+        object.__setattr__(player, "obvals", [])
+        object.__setattr__(player, "npobjs", 0)
+        object.__setattr__(player, "spells", [])
+        object.__setattr__(player, "nspells", 0)
+        object.__setattr__(player, "offspls", 0)
+        object.__setattr__(player, "defspls", 0)
+        object.__setattr__(player, "othspls", 0)
+        object.__setattr__(player, "charms", [0] * constants.NCHARM)
+        object.__setattr__(
+            player,
+            "flags",
+            int(constants.PlayerFlag.LOADED)
+            | (old_flags & int(constants.PlayerFlag.FEMALE)),
+        )
 
     def _attack_message_and_damage(
         self, player: models.PlayerModel, attack: str
