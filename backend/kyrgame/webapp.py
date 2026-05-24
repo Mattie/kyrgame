@@ -37,7 +37,6 @@ class LogoResponse(BaseModel):
 class SessionRequest(BaseModel):
     player_id: str
     resume_token: str | None = None
-    allow_multiple: bool = False
     room_id: int | None = None
 
 
@@ -910,17 +909,14 @@ async def start_session(
         resumed = True
         status_code = status.HTTP_200_OK
     else:
-        if not payload.allow_multiple:
-            # Use lock to prevent race condition during session replacement
-            if not hasattr(request.app.state, 'session_replacement_lock'):
-                request.app.state.session_replacement_lock = asyncio.Lock()
-            
-            async with request.app.state.session_replacement_lock:
-                replaced_tokens = repo.deactivate_all(player.id)
-                token = secrets.token_urlsafe(24)
-                session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
-                db.commit()
-        else:
+        # One active game session is allowed per player. A fresh login replaces
+        # any existing session for that same player, while other player accounts
+        # remain unaffected.
+        if not hasattr(request.app.state, 'session_replacement_lock'):
+            request.app.state.session_replacement_lock = asyncio.Lock()
+
+        async with request.app.state.session_replacement_lock:
+            replaced_tokens = repo.deactivate_all(player.id)
             token = secrets.token_urlsafe(24)
             session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
             db.commit()
@@ -928,7 +924,7 @@ async def start_session(
     if session_record is None:
         raise HTTPException(status_code=500, detail="Session creation failed")
 
-    if not payload.allow_multiple and not payload.resume_token:
+    if not payload.resume_token:
         # Commit happened inside the lock, now clean up old connections
         await _disconnect_sessions(request.app, replaced_tokens)
 
@@ -1619,6 +1615,7 @@ def create_app() -> FastAPI:
 
         db_session = provider.scope.app.state.session_factory()
         player_state: models.PlayerModel | None = None
+        replaced_tokens: list[str] = []
         try:
             session_repo = repositories.PlayerSessionRepository(db_session)
             session_record = session_repo.get_by_token(session_token)
@@ -1638,6 +1635,11 @@ def create_app() -> FastAPI:
                 return
 
             session_repo.mark_seen(session_token)
+            for active_session in session_repo.list_active(player.id):
+                if active_session.session_token == session_token:
+                    continue
+                replaced_tokens.append(active_session.session_token)
+                session_repo.deactivate(active_session.session_token)
             db_session.commit()
             player_id = player.plyrid
             current_room = session_record.room_id
@@ -1663,6 +1665,9 @@ def create_app() -> FastAPI:
                 Response(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content="Unable to load player state")
             )
             return
+
+        if replaced_tokens:
+            await _disconnect_sessions(provider.scope.app, replaced_tokens)
 
         # All validation passed - now accept the WebSocket connection
         await websocket.accept()
@@ -1692,6 +1697,19 @@ def create_app() -> FastAPI:
                 return None
             return _player_model_from_record(record)
 
+        def lookup_active_player(player_alias: str) -> models.PlayerModel | None:
+            alias = player_alias.lower()
+            # Legacy fgamgp() scans only active in-memory players by true plyrid
+            # (legacy/KYRUTIL.C:486-494), so DB-only player records must stay
+            # invisible to remote-target spells.
+            for player in active_players.values():
+                if player.plyrid.lower() == alias:
+                    return player
+            for player in _active_player_sessions(provider.scope.app).values():
+                if player.plyrid.lower() == alias:
+                    return player
+            return None
+
         state = commands.GameState(
             player=player_state,
             locations=provider.location_index,
@@ -1701,6 +1719,7 @@ def create_app() -> FastAPI:
             db_session=persistent_session,
             presence=provider.presence,
             player_lookup=lookup_player,
+            global_player_lookup=lookup_active_player,
             zar_controller=getattr(provider.scope.app.state, "animation_zar_routine", None),
             zar_state=getattr(
                 getattr(provider.scope.app.state, "animation_tick_system", None),
@@ -1788,6 +1807,20 @@ def create_app() -> FastAPI:
             sender=websocket,
         )
 
+        async def _sync_current_room_from_state() -> None:
+            nonlocal current_room
+            target_room = state.player.gamloc
+            if target_room == current_room:
+                return
+            await gateway.register(target_room, websocket, announce=False)
+            await provider.presence.set_location(player_id, target_room, session_token)
+            with provider.scope.app.state.session_factory() as db:
+                repo = repositories.PlayerSessionRepository(db)
+                repo.set_room(session_token, target_room)
+                repo.mark_seen(session_token)
+                db.commit()
+            current_room = target_room
+
         try:
             while True:
                 payload = await websocket.receive_json()
@@ -1802,6 +1835,7 @@ def create_app() -> FastAPI:
                     await websocket.send_json({"type": "noop", "room": current_room})
                     continue
 
+                await _sync_current_room_from_state()
                 command_text = payload.get("command", "")
                 args = payload.get("args", {}) or {}
                 raw_tokens = command_text.strip().split()
@@ -1897,8 +1931,12 @@ def create_app() -> FastAPI:
                                         target_socket = session_connections.get(token)
                                         if target_socket:
                                             excluded_sockets.add(target_socket)
+                                sender_socket = None if event.get("include_sender") else websocket
                                 await gateway.broadcast(
-                                    current_room, envelope, sender=websocket, exclude=excluded_sockets
+                                    current_room,
+                                    envelope,
+                                    sender=sender_socket,
+                                    exclude=excluded_sockets,
                                 )
                             elif scope == "global":
                                 envelope = {"type": "system_broadcast", "payload": event}
@@ -1920,7 +1958,8 @@ def create_app() -> FastAPI:
                                 envelope_type = "command_response"
                                 if target_id == player_id and not silent:
                                     envelope_type = "room_broadcast"
-                                envelope = {"type": envelope_type, "room": current_room, "payload": event}
+                                envelope_room = event.get("room_id", current_room)
+                                envelope = {"type": envelope_type, "room": envelope_room, "payload": event}
                                 if meta:
                                     envelope["meta"] = meta
                                 for token in await provider.presence.sessions_for_player(target_id):
@@ -2134,9 +2173,21 @@ def create_app() -> FastAPI:
                                 target_socket = session_connections.get(token)
                                 if target_socket:
                                     excluded_sockets.add(target_socket)
+                        sender_socket = None if event.get("include_sender") else websocket
                         await gateway.broadcast(
-                            current_room, envelope, sender=websocket, exclude=excluded_sockets
+                            current_room,
+                            envelope,
+                            sender=sender_socket,
+                            exclude=excluded_sockets,
                         )
+                    elif scope == "global":
+                        envelope = {"type": "system_broadcast", "payload": event}
+                        if meta:
+                            envelope["meta"] = meta
+                        for target_socket in list(session_connections.values()):
+                            if target_socket.application_state != WebSocketState.CONNECTED:
+                                continue
+                            await target_socket.send_json(envelope)
                     elif scope == "nearby_room":
                         # Legacy sndnear(): broadcast to players in adjacent rooms.
                         # See legacy/KYRUTIL.C:193-208.
@@ -2145,12 +2196,26 @@ def create_app() -> FastAPI:
                             envelope = {"type": "room_broadcast", "room": nearby_room_id, "payload": event}
                             if meta:
                                 envelope["meta"] = meta
-                            await gateway.broadcast(nearby_room_id, envelope)
+                            excluded_player = event.get("exclude_player")
+                            excluded_sockets = set()
+                            if excluded_player:
+                                for token in await provider.presence.sessions_for_player(
+                                    excluded_player
+                                ):
+                                    target_socket = session_connections.get(token)
+                                    if target_socket:
+                                        excluded_sockets.add(target_socket)
+                            await gateway.broadcast(
+                                nearby_room_id,
+                                envelope,
+                                exclude=excluded_sockets or None,
+                            )
                     elif scope == "target":
                         target_id = event.get("player")
                         if not target_id:
                             continue
-                        envelope = {"type": "command_response", "room": current_room, "payload": event}
+                        envelope_room = event.get("room_id", current_room)
+                        envelope = {"type": "command_response", "room": envelope_room, "payload": event}
                         if meta:
                             envelope["meta"] = meta
                         for token in await provider.presence.sessions_for_player(target_id):

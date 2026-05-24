@@ -48,6 +48,8 @@ class SpellEffect:
     cooldown: float
     requires_target: bool
     requires_target_player: bool | None = None
+    global_target_player: bool = False
+    allow_missing_target_player: bool = False
     animation: Optional[str] = None
     message_id: Optional[str] = None
     handler: Optional[
@@ -187,6 +189,18 @@ class SpellEffectEngine:
                 broadcast_key="S15M01",
             )
 
+        if 11 in effects:
+            # Legacy spl012 cuseme reports target spell points to the three recipient surfaces (legacy/KYRSPEL.C:620-628).
+            effects[11].message_id = "S12M00"
+            effects[11].requires_target = True
+            effects[11].handler = self._detect_power_handler()
+
+        if 13 in effects:
+            # Legacy spl014 feeluck moves through remvgp/entrgp blue-light text (legacy/KYRSPEL.C:620-631).
+            effects[13].message_id = "S14M00"
+            effects[13].requires_target = False
+            effects[13].handler = self._feeluck_handler()
+
         if 22 in effects:
             # Legacy spell: goto teleports to a specific room (legacy/KYRSPEL.C:694-712).
             # requires_target is intentionally left False so that cast-with-no-argument
@@ -195,6 +209,25 @@ class SpellEffectEngine:
             effects[22].message_id = "S23M02"
             effects[22].requires_target_player = False
             effects[22].handler = self._goto_handler()
+        if 23 in effects:
+            # Legacy spl024 gringri applies chgbod pseudo-dragon form (legacy/KYRSPEL.C:719-725).
+            # legacy/KYRSPEL.C:725 spells the chgbod identity as "psuedo" (sic);
+            # preserve that runtime typo for alternate-name parity.
+            effects[23].message_id = "S24M00"
+            effects[23].requires_target = False
+            effects[23].handler = self._transformation_handler(
+                flag=constants.PlayerFlag.PDRAGN,
+                alternate_name="Some psuedo dragon",
+                attire_name="psuedo dragon",
+                duration=2,
+                direct_key="S24M00",
+                broadcast_key="S24M01",
+            )
+        if 27 in effects:
+            # Legacy spl028 hocus consumes bloodstone and strips protection charms (legacy/KYRSPEL.C:758-780).
+            effects[27].message_id = "S28M00"
+            effects[27].requires_target = True
+            effects[27].handler = self._hocus_handler()
         if 33 in effects:
             # Legacy spell: howru reports target HP (legacy/KYRSPEL.C:815-824).
             effects[33].message_id = "S34M00"
@@ -243,6 +276,12 @@ class SpellEffectEngine:
                 caster_key="S58M00",
                 broadcast_key="S58M01",
             )
+
+        if 58 in effects:
+            # Legacy spl059 tiltowait consumes a rose, damages the room, and clears pickup objects (legacy/KYRSPEL.C:1120-1164).
+            effects[58].message_id = "S59M00"
+            effects[58].requires_target = False
+            effects[58].handler = self._tiltowait_handler()
 
         if 61 in effects:
             # Legacy transformation: weewillo grants willowisp wings (legacy/KYRSPEL.C lines 1188-1195).
@@ -311,6 +350,15 @@ class SpellEffectEngine:
                 broadcast_key="S45M01",
             )
 
+        if 45 in effects:
+            # Legacy spl046 peepint uses fgamgp true-ID global lookup, then alerts the watched player (legacy/KYRSPEL.C:964-984; legacy/KYRUTIL.C:486-494).
+            effects[45].message_id = "KSPM04"
+            effects[45].requires_target = False
+            effects[45].requires_target_player = True
+            effects[45].global_target_player = True
+            effects[45].allow_missing_target_player = True
+            effects[45].handler = self._peepint_handler()
+
         if 46 in effects:
             # Legacy spell: pickpoc steals the target's first inventory item (legacy/KYRSPEL.C:987-1010).
             effects[46].message_id = "S47M03"
@@ -332,6 +380,15 @@ class SpellEffectEngine:
             effects[62].message_id = "S63M00"
             effects[62].requires_target = False
             effects[62].handler = self._whereami_handler()
+
+        if 66 in effects:
+            # Legacy spl067 zelastone uses fgamgp true-ID global lookup and separate caster, target-room, target, and room-result messages (legacy/KYRSPEL.C:1233-1264; legacy/KYRUTIL.C:486-494).
+            effects[66].message_id = "S67M02"
+            effects[66].requires_target = False
+            effects[66].requires_target_player = True
+            effects[66].global_target_player = True
+            effects[66].allow_missing_target_player = True
+            effects[66].handler = self._zelastone_handler()
 
         protection_spells: dict[int, tuple[dict[int, int], bool, str, str]] = {
             0: ({constants.OBJPRO: 2 * 4}, True, "SPM000", "SPM001"),  # Legacy: abbracada (legacy/KYRSPEL.C:437-441).
@@ -478,7 +535,12 @@ class SpellEffectEngine:
         if effect.requires_target and not target:
             raise TargetingError("This spell requires a target")
         needs_target_player = effect.requires_target if effect.requires_target_player is None else effect.requires_target_player
-        if effect.handler and needs_target_player and target_player is None:
+        if (
+            effect.handler
+            and needs_target_player
+            and target_player is None
+            and not effect.allow_missing_target_player
+        ):
             raise TargetingError("Target player is required for this spell")
 
         if apply_cost and player.spts < effect.cost:
@@ -839,6 +901,144 @@ class SpellEffectEngine:
 
         return _handler
 
+    def _detect_power_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+
+            caster_text = self._format_message(
+                "S12M00", target_player.altnam, target_player.spts
+            )
+            target_text = self._format_message("S12M01", player.altnam)
+            broadcast_text = self._format_message(
+                "S12M02", player.altnam, target_player.altnam
+            )
+            return EffectResult(
+                success=True,
+                message_id="S12M00",
+                text=caster_text,
+                animation=effect.animation,
+                context={
+                    "target_message_id": "S12M01",
+                    "target_text": target_text,
+                    "broadcast": broadcast_text,
+                    "broadcast_message_id": "S12M02",
+                    "broadcast_exclude_player": target_player.plyrid,
+                    "target_spell_points": target_player.spts,
+                    "target": target,
+                },
+            )
+
+        return _handler
+
+    def _feeluck_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            previous_room = player.gamloc
+            room_id = self.rng.randint(0, 218)
+            player.pgploc = previous_room
+            player.gamloc = room_id
+            return EffectResult(
+                success=True,
+                message_id="S14M00",
+                text=self._format_message("S14M00"),
+                animation=effect.animation,
+                context={
+                    "broadcast": self._format_message(
+                        "S14M01", player.altnam, self._kheshe(player)
+                    ),
+                    "broadcast_message_id": "S14M01",
+                    "move_to_room": room_id,
+                    "move_from_room": previous_room,
+                    "departure_emote": f"*** {player.altnam} has just vanished in a blue light!",
+                    "arrival_text": f"*** {player.plyrid} has just appeared in a blue!",
+                },
+            )
+
+        return _handler
+
+    def _hocus_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target_player:
+                raise TargetingError("Target player is required for this spell")
+            if not self._consume_required_object(player, "bloodstone"):
+                return self._msgutl2(
+                    player,
+                    caster_key="MISS00",
+                    broadcast_key="MISS01",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            for slot in (
+                constants.FIRPRO,
+                constants.ICEPRO,
+                constants.LIGPRO,
+                constants.OBJPRO,
+            ):
+                target_player.charms[slot] = 0
+
+            caster_text = self._format_message(
+                "S28M00",
+                target_player.altnam,
+                target_player.altnam,
+                self._kheshe(target_player),
+            )
+            target_text = self._format_message("S28M01", player.altnam)
+            broadcast_text = self._format_message(
+                "S28M02",
+                target_player.altnam,
+                self._kheshe(target_player),
+                target_player.altnam,
+                target_player.altnam,
+            )
+            return EffectResult(
+                success=True,
+                message_id="S28M00",
+                text=caster_text,
+                animation=effect.animation,
+                context={
+                    "target_message_id": "S28M01",
+                    "target_text": target_text,
+                    "broadcast": broadcast_text,
+                    "broadcast_message_id": "S28M02",
+                    "broadcast_exclude_player": target_player.plyrid,
+                    "target": target,
+                },
+            )
+
+        return _handler
+
     def _pickpoc_handler(
         self,
     ) -> Callable[
@@ -906,6 +1106,226 @@ class SpellEffectEngine:
                     "stolen_object_id": stolen_object_id,
                     "stolen_object_name": object_name,
                 },
+            )
+
+        return _handler
+
+
+    def _peepint_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target:
+                return EffectResult(
+                    success=False,
+                    message_id="OBJM07",
+                    text=self._format_message("OBJM07"),
+                    animation=effect.animation,
+                    context={
+                        "broadcast": self._format_message("KSPM07", player.altnam),
+                        "broadcast_message_id": "KSPM07",
+                    },
+                )
+            if not target_player or target_player.charms[constants.OBJPRO]:
+                return self._msgutl2(
+                    player,
+                    caster_key="KSPM03",
+                    broadcast_key="KSPM07",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            location = self.locations.get(target_player.gamloc)
+            description_id = f"KRD{target_player.gamloc:03d}"
+            description = self.messages.messages.get(
+                description_id,
+                location.brfdes if location else "",
+            )
+            caster_text = (
+                f"{self._format_message('KSPM04')}"
+                f"{description}"
+                f"{self._format_message('KSPM05')}"
+            )
+            return EffectResult(
+                success=True,
+                message_id="KSPM04",
+                text=caster_text,
+                animation=effect.animation,
+                context={
+                    "target_message_id": "KSPM06",
+                    "target_text": self._format_message("KSPM06"),
+                    "broadcast": self._format_message("KSPM07", player.altnam),
+                    "broadcast_message_id": "KSPM07",
+                    "scry_location": target_player.gamloc,
+                    "scry_description": location.brfdes if location else None,
+                    "scry_message_id": description_id,
+                    "target": target,
+                },
+            )
+
+        return _handler
+
+    def _tiltowait_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:  # noqa: ARG001
+            if not self._consume_required_object(player, "rose"):
+                return self._msgutl2(
+                    player,
+                    caster_key="MISS00",
+                    broadcast_key="MISS01",
+                    target=target,
+                    success=False,
+                    effect=effect,
+                )
+
+            location = self.locations.get(player.gamloc)
+            room_objects = list(location.objects if location else [])
+            remaining = [
+                object_id
+                for object_id in room_objects
+                if "PICKUP"
+                not in (
+                    self.objects.get(object_id).flags
+                    if self.objects.get(object_id)
+                    else []
+                )
+            ]
+            if location:
+                self._set_location_objects(location, remaining)
+
+            result = self._msgutl2(
+                player,
+                caster_key="S59M00",
+                broadcast_key="S59M01",
+                target=target,
+                success=True,
+                effect=effect,
+            )
+            result.context["global_broadcast_message_id"] = "S59M02"
+            result.context["room_broadcast_message_id"] = "S59M03"
+            result.context["room_broadcast_include_sender"] = True
+            result.context["room_objects_update"] = {
+                "location": player.gamloc,
+                "objects": remaining,
+            }
+            result.context["area_damage"] = {
+                "hit_id": "S59M04",
+                "other_id": "S59M05",
+                "protect_id": "MERCYU",
+                "damage": 50,
+                "protection": None,
+                "hits_self": True,
+                "mercy_level": 3,
+            }
+            return result
+
+        return _handler
+
+    def _zelastone_handler(
+        self,
+    ) -> Callable[
+        [models.PlayerModel, Optional[str], Optional[models.PlayerModel], SpellEffect],
+        EffectResult,
+    ]:
+        def _handler(
+            player: models.PlayerModel,
+            target: Optional[str],
+            target_player: Optional[models.PlayerModel],
+            effect: SpellEffect,
+        ) -> EffectResult:
+            if not target:
+                return EffectResult(
+                    success=False,
+                    message_id="KSPM03",
+                    text=self._format_message("KSPM03"),
+                    animation=effect.animation,
+                    context={
+                        "broadcast": f"*** {player.altnam} is failing at spellcasting.",
+                        "broadcast_message_id": None,
+                    },
+                )
+            if not target_player:
+                damage = self.rng.randint(20, 40)
+                player.hitpts = max(0, player.hitpts - damage)
+                return EffectResult(
+                    success=False,
+                    message_id="S67M00",
+                    text=self._format_message("S67M00"),
+                    animation=effect.animation,
+                    context={
+                        "broadcast": self._format_message(
+                            "S67M01",
+                            player.altnam,
+                            self._hisher(player),
+                            player.altnam,
+                            player.altnam,
+                        ),
+                        "broadcast_message_id": "S67M01",
+                        "damage": damage,
+                        "target": target,
+                    },
+                )
+
+            context = {
+                "broadcast": self._format_message(
+                    "S67M03", player.altnam, self._hisher(player)
+                ),
+                "broadcast_message_id": "S67M03",
+                "target_room_message_id": "S67M04",
+                "target_room_message": self._format_message("S67M04"),
+                "target_message_after_room_events": True,
+                "target": target,
+            }
+            if target_player.charms[constants.OBJPRO] or self.rng.randint(0, 101) <= 10:
+                context.update(
+                    {
+                        "target_message_id": "S67M08",
+                        "target_text": self._format_message("S67M08"),
+                        "target_room_result_message_id": "S67M09",
+                        "target_room_result_text": self._format_message(
+                            "S67M09", target_player.altnam
+                        ),
+                    }
+                )
+            else:
+                damage = self.rng.randint(20, 40)
+                target_player.hitpts = max(0, target_player.hitpts - damage)
+                context.update(
+                    {
+                        "target_message_id": "S67M05",
+                        "target_text": self._format_message("S67M05"),
+                        "target_room_result_message_id": "S67M06",
+                        "target_room_result_text": self._format_message(
+                            "S67M06", target_player.altnam, self._himher(target_player)
+                        ),
+                        "damage": damage,
+                    }
+                )
+
+            return EffectResult(
+                success=True,
+                message_id="S67M02",
+                text=self._format_message("S67M02"),
+                animation=effect.animation,
+                context=context,
             )
 
         return _handler

@@ -32,21 +32,22 @@ def test_spell_effects_respect_costs_and_cooldowns(sample_player):
     base_points = sample_player.spts
 
     result = engine.cast_spell(
-        player=sample_player, spell_id=13, target="goblin", target_player=None
+        player=sample_player, spell_id=13, target=None, target_player=None
     )
     assert sample_player.spts < base_points
     assert result.animation == spells[13].splrou
+    assert result.message_id == "S14M00"
 
     with pytest.raises(CooldownActiveError):
         engine.cast_spell(
-            player=sample_player, spell_id=13, target="goblin", target_player=None
+            player=sample_player, spell_id=13, target=None, target_player=None
         )
 
     now += engine.effects[13].cooldown
     repeat = engine.cast_spell(
-        player=sample_player, spell_id=13, target="ogre", target_player=None
+        player=sample_player, spell_id=13, target=None, target_player=None
     )
-    assert repeat.context["target"] == "ogre"
+    assert repeat.context["broadcast_message_id"] == "S14M01"
 
 
 def test_spell_effects_require_targets_and_resources(sample_player):
@@ -465,6 +466,13 @@ def test_transformation_spells_toggle_player_flags(sample_player):
     )
     assert willow.message_id == "S62M00"
     assert constants.PlayerFlag.WILLOW & sample_player.flags
+
+    dragon = engine.cast_spell(
+        player=sample_player, spell_id=23, target=None, target_player=None
+    )
+    assert dragon.message_id == "S24M00"
+    assert constants.PlayerFlag.PDRAGN & sample_player.flags
+    assert not (constants.PlayerFlag.WILLOW & sample_player.flags)
 
 
 
@@ -1065,6 +1073,132 @@ def test_whereami_reports_coordinate_and_broadcasts_to_room(sample_player):
     assert result.text == messages.messages["S63M00"] % 123
     assert result.context["broadcast_message_id"] == "S63M01"
     assert result.context["broadcast"] == expected_broadcast
+
+
+def test_world_mutation_spells_emit_room_object_updates_and_teleport_context():
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    locations = fixtures.load_locations()
+    rose_id = _find_object_id(objects, "rose")
+    room = locations[7].model_copy(update={"objects": [0, 45, rose_id], "nlobjs": 3})
+    indexed_locations = [room if location.id == 7 else location for location in locations]
+    engine = SpellEffectEngine(
+        spells=spells,
+        messages=messages,
+        rng=random.Random(4),
+        objects=objects,
+        locations=indexed_locations,
+    )
+    player = _build_caster(gamloc=7, pgploc=7, gpobjs=[rose_id], obvals=[0], npobjs=1)
+
+    luck = engine.cast_spell(
+        player=player,
+        spell_id=13,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+    assert luck.message_id == "S14M00"
+    assert luck.context["broadcast_message_id"] == "S14M01"
+    assert luck.context["move_from_room"] == 7
+    assert luck.context["move_to_room"] == 60
+    assert "blue light" in luck.context["departure_emote"]
+    assert "appeared in a blue" in luck.context["arrival_text"]
+
+    earthquake = engine.cast_spell(
+        player=player,
+        spell_id=58,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+    assert earthquake.message_id == "S59M00"
+    assert player.gpobjs == []
+    assert earthquake.context["room_objects_update"] == {"location": 60, "objects": []}
+    assert earthquake.context["area_damage"]["damage"] == 50
+    assert earthquake.context["global_broadcast_message_id"] == "S59M02"
+    assert earthquake.context["room_broadcast_message_id"] == "S59M03"
+    assert earthquake.context["room_broadcast_include_sender"] is True
+
+
+def test_hocus_detect_scry_and_servant_spells_surface_legacy_payloads():
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    objects = fixtures.load_objects()
+    locations = fixtures.load_locations()
+    bloodstone_id = _find_object_id(objects, "bloodstone")
+    engine = SpellEffectEngine(
+        spells=spells,
+        messages=messages,
+        rng=random.Random(3),
+        objects=objects,
+        locations=locations,
+    )
+    caster = _build_caster(gpobjs=[bloodstone_id], obvals=[0], npobjs=1)
+    target = _build_target(altnam="Target", attnam="Target", spts=17, gamloc=1)
+    target.charms[constants.FIRPRO] = 2
+    target.charms[constants.ICEPRO] = 2
+    target.charms[constants.LIGPRO] = 2
+    target.charms[constants.OBJPRO] = 2
+
+    detect = engine.cast_spell(
+        player=caster,
+        spell_id=11,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+    assert detect.message_id == "S12M00"
+    assert detect.context["target_message_id"] == "S12M01"
+    assert detect.context["broadcast_message_id"] == "S12M02"
+    assert "17" in detect.text
+
+    dispel = engine.cast_spell(
+        player=caster,
+        spell_id=27,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+    assert dispel.message_id == "S28M00"
+    assert dispel.context["target_message_id"] == "S28M01"
+    assert dispel.context["broadcast_message_id"] == "S28M02"
+    assert caster.gpobjs == []
+    assert target.charms[constants.FIRPRO] == 0
+    assert target.charms[constants.ICEPRO] == 0
+    assert target.charms[constants.LIGPRO] == 0
+    assert target.charms[constants.OBJPRO] == 0
+
+    scry = engine.cast_spell(
+        player=caster,
+        spell_id=45,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+    assert scry.message_id == "KSPM04"
+    assert scry.context["target_message_id"] == "KSPM06"
+    assert scry.context["broadcast_message_id"] == "KSPM07"
+    assert scry.context["scry_location"] == target.gamloc
+    assert scry.context["scry_message_id"] == "KRD001"
+    assert engine.effects[45].global_target_player
+    assert engine.effects[45].allow_missing_target_player
+
+    servant = engine.cast_spell(
+        player=caster,
+        spell_id=66,
+        target="target",
+        target_player=target,
+        apply_cost=False,
+    )
+    assert servant.message_id == "S67M02"
+    assert servant.context["target_room_message_id"] == "S67M04"
+    assert servant.context["target_message_id"] in {"S67M05", "S67M08"}
+    assert servant.context["target_room_result_message_id"] in {"S67M06", "S67M09"}
+    assert servant.context["target_message_after_room_events"] is True
+    assert engine.effects[66].global_target_player
+    assert engine.effects[66].allow_missing_target_player
 
 
 def _message_id_with_offset(base_id: str, offset: int) -> str:
