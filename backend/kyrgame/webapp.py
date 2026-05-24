@@ -1938,7 +1938,8 @@ def create_app() -> FastAPI:
                                 envelope_type = "command_response"
                                 if target_id == player_id and not silent:
                                     envelope_type = "room_broadcast"
-                                envelope = {"type": envelope_type, "room": current_room, "payload": event}
+                                envelope_room = event.get("room_id", current_room)
+                                envelope = {"type": envelope_type, "room": envelope_room, "payload": event}
                                 if meta:
                                     envelope["meta"] = meta
                                 for token in await provider.presence.sessions_for_player(target_id):
@@ -2193,7 +2194,8 @@ def create_app() -> FastAPI:
                         target_id = event.get("player")
                         if not target_id:
                             continue
-                        envelope = {"type": "command_response", "room": current_room, "payload": event}
+                        envelope_room = event.get("room_id", current_room)
+                        envelope = {"type": "command_response", "room": envelope_room, "payload": event}
                         if meta:
                             envelope["meta"] = meta
                         for token in await provider.presence.sessions_for_player(target_id):
