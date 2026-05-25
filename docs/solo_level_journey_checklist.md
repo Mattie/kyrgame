@@ -18,8 +18,8 @@ ordinary gemstone setup, spouse state, and the deterministic truth-maze branch.
 | 6 | 18 | Full stump sequence, 12 individual `drop <gem>` commands | Seed only the next required gem before each drop | Tested |
 | 7 | 101 | `offer heart and soul to tashanna` | Start in heart-and-soul room | Tested |
 | 8 | 188 | `drop dagger orb` | First get dagger in room 181 with `imagine dagger` | Tested |
-| 9 | 7 | Five `chant tashanna` commands, then `put charm` | First get charm in room 188 with `think orb` | Tested |
-| 10 | 7 | Five `chant tashanna` commands, then `put tiara` | Get dagger in room 181 with `imagine dagger`; turn it into sword in room 182 with `toss dagger pool`; pray at room 27 rock; drop sword on rock to receive tiara | Tested |
+| 9 | 7 | Five `chant tashanna` commands, then `put charm` | First get charm in room 188 with `think orb`; use a fresh altar glow window | Tested |
+| 10 | 7 | Five `chant tashanna` commands, then `put tiara` | Wait for the altar glow to reset after level 9; get dagger in room 181 with `imagine dagger`; turn it into sword in room 182 with `toss dagger pool`; pray at room 27 rock; drop sword on rock to receive tiara | Tested |
 | 11 | 201 | `aim wand tree` | Get tulip in room 199 with `get tulip`; turn it into wand in room 213 with `cast zapher tulip` | Tested |
 | 12 | 213 | `offer kyragem` | Carry wand from level 11; break it in room 204 with `break wand` to receive kyragem | Tested |
 | 13 | 282 | `jump chasm` | Get golden key in room 183 with `say legends of the time and space are true forever and never die`; cast memorized `abbracada` for object protection | Tested |

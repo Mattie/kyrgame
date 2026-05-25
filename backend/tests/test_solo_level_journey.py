@@ -285,6 +285,10 @@ async def test_solo_level_journey_reaches_level_25_with_in_game_commands(monkeyp
                     if step.setup:
                         step.setup(record)
                     db.commit()
+                if step.room_id == 7:
+                    # Legacy animat clears chantd after the altar glow window.
+                    # Source: legacy/KYRANIM.C:140-143.
+                    app.state.room_scripts.get_room_state(7).flags["chantd"] = 0
 
                 if step.target_level == 6:
                     for index, command in enumerate(step.commands):

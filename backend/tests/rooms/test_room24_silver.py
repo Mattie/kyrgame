@@ -143,7 +143,8 @@ async def test_silver_wrong_offering_resets_progress(engine_and_gateway):
 
 @pytest.mark.anyio
 async def test_silver_level_gate_blocks_reward_and_resets(engine_and_gateway):
-    engine, _ = engine_and_gateway
+    engine, gateway = engine_and_gateway
+    messages = fixtures.load_messages()
 
     player = _fresh_player()
     player.level = 2
@@ -161,6 +162,13 @@ async def test_silver_level_gate_blocks_reward_and_resets(engine_and_gateway):
     assert player.defspls == 0
     assert player.spells == []
     assert player.gemidx == 0
+
+    direct_texts = [
+        msg.get("text")
+        for msg in gateway.messages
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
+    ]
+    assert messages.messages["LVLM02"] in direct_texts
 
 
 @pytest.mark.anyio
