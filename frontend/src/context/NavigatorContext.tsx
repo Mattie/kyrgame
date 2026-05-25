@@ -702,7 +702,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         throw new Error('Admin token required for updates')
       }
 
-      const response = await fetch(`${apiBaseUrl}/admin/players/${playerId}`, {
+      const response = await fetch(`${apiBaseUrl}/admin/players/${encodeURIComponent(playerId)}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -728,7 +728,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         throw new Error('Admin token required to fetch player data')
       }
 
-      const response = await fetch(`${apiBaseUrl}/admin/players/${playerId}`, {
+      const response = await fetch(`${apiBaseUrl}/admin/players/${encodeURIComponent(playerId)}`, {
         headers: {
           Authorization: `Bearer ${adminToken}`,
         },

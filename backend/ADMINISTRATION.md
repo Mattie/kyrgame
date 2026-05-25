@@ -61,10 +61,10 @@ Keep `KYRGAME_RESET_ON_BOOT=0` for public demo/prod deployments so restarts are 
 | `POST /admin/mobs/elf/trigger` | player_admin or content_admin | Forces the legacy Elf encounter in the requesting admin session room for parity testing; uses the same hint/gold alternation as the scheduled animation tick. |
 | `POST /admin/reload-scripts` | content_admin | Hot-reloads room scripts. |
 | `GET /admin/players` | player_admin | Lists cached player models. |
-| `GET /admin/players/{alias}` | player_admin | Fetches a single player. |
+| `GET /admin/players/{alias}` | player_admin | Fetches a single player by canonical player id or original login alias. |
 | `POST /admin/players` | player_admin | Creates a new player (full `PlayerModel` body). |
-| `PUT /admin/players/{alias}` | player_admin (+`allow_player_rename` to change alias) | Validates and replaces a player; keeps fixture cache in sync. |
-| `DELETE /admin/players/{alias}` | player_admin + `allow_delete_players` | Deactivates active sessions, disconnects sockets, and removes the player. |
+| `PUT /admin/players/{alias}` | player_admin (+`allow_player_rename` to change alias) | Validates and replaces a player by canonical player id or original login alias; keeps fixture cache in sync. |
+| `DELETE /admin/players/{alias}` | player_admin + `allow_delete_players` | Deactivates active sessions, disconnects sockets, and removes the player by canonical player id or original login alias. |
 | `PUT /admin/content/locations/{id}` | content_admin | Replaces a location; updates location index. |
 | `PUT /admin/content/objects/{id}` | content_admin | Replaces an object; normalizes flag strings. |
 | `PUT /admin/content/spells/{id}` | content_admin | Replaces a spell definition. |

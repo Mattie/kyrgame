@@ -489,5 +489,6 @@ legacy/Dist/*.zip
 .venv/
 venv/
 env/
+.playwright-kyrgame.db*
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c,c++

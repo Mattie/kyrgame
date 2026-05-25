@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
@@ -894,6 +894,124 @@ describe('Navigator flow', () => {
     })
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
+    await screen.findByText(/Admin update saved/i)
+  })
+
+  it('normalizes admin alias lookups to the canonical player id before saving', async () => {
+    const alias = 'Test2dsfdsdf'
+    const canonical = 'Test2dsfds'
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: canonical, room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    const adminPlayer = {
+      uidnam: alias,
+      plyrid: canonical,
+      altnam: 'Hero',
+      attnam: 'Hero Attire',
+      gpobjs: [],
+      nmpdes: 1,
+      modno: 0,
+      level: 4,
+      gamloc: 7,
+      pgploc: 7,
+      flags: 0,
+      gold: 150,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 10,
+      hitpts: 20,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: '',
+    }
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes(`/admin/players/${canonical}`) && init?.method === 'PATCH') {
+        const payload = JSON.parse(init?.body as string)
+        expect(payload.altnam).toBe('Alias Admin')
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'updated', player: { ...adminPlayer, altnam: 'Alias Admin' } }),
+        } as unknown as Response)
+      }
+      if (url.includes(`/admin/players/${alias}`) && init?.method === 'PATCH') {
+        throw new Error('Admin save used the non-canonical alias')
+      }
+      if (
+        (url.includes(`/admin/players/${canonical}`) || url.includes(`/admin/players/${alias}`)) &&
+        (!init?.method || init?.method === 'GET')
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ player: adminPlayer }),
+        } as unknown as Response)
+      }
+
+      const next = responses.shift()
+      if (!next) {
+        throw new Error(`Unexpected fetch call: ${url}`)
+      }
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), alias)
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+    })
+
+    await screen.findByText(/admin controls/i)
+    const targetInput = screen.getByLabelText(/target player/i)
+    await waitFor(() => expect(targetInput).toHaveValue(canonical))
+
+    fireEvent.change(targetInput, { target: { value: alias } })
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`/admin/players/${alias}`), expect.anything())
+    )
+    await waitFor(() => expect(targetInput).toHaveValue(canonical))
+
+    await act(async () => {
+      await user.clear(screen.getByLabelText(/^alternate name$/i))
+      await user.type(screen.getByLabelText(/^alternate name$/i), 'Alias Admin')
+      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+    })
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/admin/players/${canonical}`),
+        expect.objectContaining({ method: 'PATCH' })
+      )
+    )
     await screen.findByText(/Admin update saved/i)
   })
 

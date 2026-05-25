@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 
 import { MudConsole } from './MudConsole'
@@ -53,6 +53,14 @@ vi.mock('../context/NavigatorContext', async (importOriginal) => {
 const getConsoleLine = (text: string) =>
   screen.getByText((_, element) =>
     Boolean(element?.classList.contains('crt-line') && element.textContent === text)
+  )
+
+const getConsoleLineContaining = (...textParts: string[]) =>
+  screen.getByText((_, element) =>
+    Boolean(
+      element?.classList.contains('crt-line') &&
+        textParts.every((part) => element.textContent?.includes(part))
+    )
   )
 
 describe('MudConsole', () => {
@@ -155,7 +163,7 @@ describe('MudConsole', () => {
     })
   })
 
-  it('activates an inventory status card with auto-refresh toggled on by default', () => {
+  it('renders status command output in the CRT without status sidebars or auto-refresh', () => {
     vi.useFakeTimers()
     navigatorState.activity = [
       ...navigatorState.activity,
@@ -166,41 +174,42 @@ describe('MudConsole', () => {
           'You have a ruby, an emerald, a pearl, a sapphire, your spellbook and 25 pieces of gold.',
         payload: { event: 'inventory', inventory: ['ruby', 'emerald', 'pearl', 'sapphire'] },
       },
+      {
+        id: 'spells-entry',
+        type: 'command_response',
+        summary:
+          '"Fireball" and "Shield" memorized, and 42 spell points of energy.  You are at level 10, titled "Wizard".',
+        payload: {
+          memorized_spell_names: ['Fireball', 'Shield'],
+          spts: 42,
+          level: 10,
+          title: 'Wizard',
+        },
+      },
     ]
 
-    render(<MudConsole />)
+    const { container } = render(<MudConsole />)
 
-    const autoRefreshCheckbox = screen.getByLabelText(
-      'Enable auto-refresh for inventory'
-    ) as HTMLInputElement
-    expect(autoRefreshCheckbox).toBeInTheDocument()
-    expect(autoRefreshCheckbox.checked).toBe(true)
-
-    expect(screen.getByText('inventory')).toBeInTheDocument()
-    const inventoryCard = screen.getByText('inventory').closest('.hud-card') as HTMLElement
-    expect(within(inventoryCard).getByText(/You have a/)).toBeInTheDocument()
+    expect(
+      getConsoleLineContaining('You have a', 'ruby', 'emerald', 'pearl', 'sapphire')
+    ).toBeInTheDocument()
+    expect(getConsoleLine('"Fireball" and "Shield" memorized, and 42 spell points of energy.  You are at level 10, titled "Wizard".')).toBeInTheDocument()
+    expect(container.querySelector('.hud-panel')).toBeNull()
+    expect(screen.queryByText('Character readout')).toBeNull()
+    expect(screen.queryByLabelText(/Enable auto-refresh/)).toBeNull()
 
     const input = screen.getByLabelText('command input')
     fireEvent.change(input, { target: { value: 'look' } })
     fireEvent.submit(input.closest('form') as HTMLFormElement)
 
     expect(mockSendCommand).toHaveBeenNthCalledWith(1, 'look')
-    expect(mockSendCommand).toHaveBeenNthCalledWith(2, 'inv', {
-      silent: true,
-      skipLog: true,
-      meta: { status_card: 'inventory' },
-    })
 
     vi.advanceTimersByTime(5000)
-    expect(mockSendCommand).toHaveBeenLastCalledWith('inv', {
-      silent: true,
-      skipLog: true,
-      meta: { status_card: 'inventory' },
-    })
+    expect(mockSendCommand).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
 
-  it('refreshes active status cards after reconnecting', () => {
+  it('does not refresh stale status sidebars after reconnecting', () => {
     vi.useFakeTimers()
     navigatorState.connectionStatus = 'disconnected'
     navigatorState.activity = [
@@ -218,35 +227,8 @@ describe('MudConsole', () => {
     navigatorState.connectionStatus = 'connected'
     rerender(<MudConsole />)
 
-    expect(mockSendCommand).toHaveBeenCalledWith('inv', {
-      silent: true,
-      skipLog: true,
-      meta: { status_card: 'inventory' },
-    })
+    expect(mockSendCommand).not.toHaveBeenCalled()
     vi.useRealTimers()
     navigatorState.connectionStatus = 'connected'
-  })
-
-  it('renders a spells status card with memorized spells and spell points', () => {
-    navigatorState.activity = [
-      {
-        id: 'spells-entry',
-        type: 'command_response',
-        summary:
-          '"Fireball" and "Shield" memorized, and 42 spell points of energy.  You are at level 10, titled "Wizard".',
-        payload: {
-          memorized_spell_names: ['Fireball', 'Shield'],
-          spts: 42,
-          level: 10,
-          title: 'Wizard',
-        },
-      },
-    ]
-
-    render(<MudConsole />)
-
-    expect(screen.getByText('Spells')).toBeInTheDocument()
-    expect(screen.getByText('Memorized: Fireball, Shield')).toBeInTheDocument()
-    expect(screen.getByText('Spell points: 42')).toBeInTheDocument()
   })
 })
