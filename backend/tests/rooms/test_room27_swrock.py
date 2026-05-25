@@ -101,9 +101,7 @@ async def test_drop_sword_on_rock_requires_prior_prayer(engine, player):
 
     assert handled is True
     assert 34 not in player.gpobjs
-
-    room_objects = engine.yaml_engine.get_room_objects(27)
-    assert 21 in room_objects
+    assert 21 in player.gpobjs
 
     direct_texts = _direct_texts(engine, player.plyrid)
     broadcast_texts = _broadcast_texts(engine)
@@ -122,7 +120,7 @@ async def test_drop_sword_on_rock_rejects_missing_sword(engine, player):
     )
 
     assert handled is True
-    assert 21 not in engine.yaml_engine.get_room_objects(27)
+    assert 21 not in player.gpobjs
 
     direct_texts = _direct_texts(engine, player.plyrid)
     broadcast_texts = _broadcast_texts(engine)

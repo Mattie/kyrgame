@@ -5,7 +5,7 @@ import asyncio
 import httpx
 import pytest
 
-from kyrgame import fixtures
+from kyrgame import constants, fixtures
 from kyrgame.rooms import RoomScriptEngine
 from kyrgame.scheduler import SchedulerService
 from kyrgame.webapp import create_app
@@ -80,10 +80,13 @@ async def test_willow_routine_matches_legacy_prompts():
 
     await scheduler.start()
     await engine.enter_room(player_id="hero", room_id=0)
+    player = fixtures.build_player().model_copy(update={"level": 1})
     await engine.handle_command("hero", 0, command="look", args=["willow"])
-    await engine.handle_command("hero", 0, command=messages.messages["WILCMD"], player_level=3)
+    await engine.handle_command("hero", 0, command=messages.messages["WILCMD"], player=player)
     await engine.handle_command("rogue", 0, command=messages.messages["WILCMD"], player_level=1)
     await scheduler.stop()
+
+    assert player.level == 2
 
     direct_texts = [
         msg.get("payload", {}).get("text")
@@ -244,15 +247,19 @@ async def test_heart_and_soul_offering_awards_willowisp_spell():
 
     await scheduler.start()
     await engine.enter_room(player_id="hero", room_id=101)
+    player = fixtures.build_player().model_copy(update={"level": 6})
     await engine.handle_command(
         "hero",
         101,
         command="offer",
         args=["heart", "and", "soul", "to", "tashanna"],
-        player_level=8,
+        player=player,
     )
     await asyncio.sleep(0.02)
     await scheduler.stop()
+
+    assert player.level == 7
+    assert player.othspls & constants.SBD062_WILLOWISP
 
     direct_texts = [
         msg.get("payload", {}).get("text")

@@ -295,8 +295,13 @@ async def _willow_on_command(
 
     kneel_word = catalog.get("WILCMD", "kneel").lower()
     if verb == kneel_word:
-        level = player_level or 0
-        if level < 2:
+        level = player_level if player_level is not None else (player.level if player else 0)
+        if player is not None and level == 1:
+            # Legacy willow calls chklvl(2), grants SBD053, then glvutl.
+            # Source: legacy/KYRROUS.C:184-191.
+            level_up_player(player)
+            _grant_def_spell(player, 52, constants.SBD053_FIREPROT1)
+        elif level < 2:
             await context.direct(
                 player_id,
                 "room_message",
@@ -307,11 +312,14 @@ async def _willow_on_command(
         blessed = context.state.flags.setdefault("willow_blessed", set())
         if player_id not in blessed:
             blessed.add(player_id)
-        await context.direct(player_id, "room_message", text=catalog["LVL200"])
+        await context.direct(
+            player_id, "room_message", text=catalog["LVL200"], message_id="LVL200"
+        )
         await context.broadcast(
             "room_message",
             text=catalog["GETLVL"] % player_id,
             player=player_id,
+            message_id="GETLVL",
         )
         return True
 
@@ -334,6 +342,8 @@ def _temple_on_enter(messages: MessageBundleModel) -> RoomCallback:
 
 
 def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
+
     async def _handler(
         context: RoomContext,
         player_id: str,
@@ -343,39 +353,75 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         player: Optional[PlayerModel],
     ) -> bool:
         verb = command.lower()
-        
+
+        effective_level = (
+            player_level if player_level is not None else (player.level if player is not None else 0)
+        )
+        display_name = player.altnam if player is not None else player_id
+
+        async def level_gate(target_level: int, direct_id: str, broadcast_id: str) -> bool:
+            if player is None:
+                return False
+            if effective_level == target_level - 1:
+                level_up_player(player)
+                await context.direct_and_others(
+                    player_id,
+                    "room_message",
+                    direct_text=messages.messages.get(direct_id, ""),
+                    others_text=messages.messages.get(broadcast_id, "") % display_name,
+                    direct_message_id=direct_id,
+                    others_message_id=broadcast_id,
+                )
+                return True
+            if effective_level >= target_level:
+                await context.direct_and_others(
+                    player_id,
+                    "room_message",
+                    direct_text=messages.messages.get("LVLM00", ""),
+                    others_text=messages.messages.get("LVLM01", "") % display_name,
+                    direct_message_id="LVLM00",
+                    others_message_id="LVLM01",
+                )
+                return True
+            await context.direct_and_others(
+                player_id,
+                "room_message",
+                direct_text=messages.messages.get("LVLM02", ""),
+                others_text=messages.messages.get("LVLM03", "") % display_name,
+                direct_message_id="LVLM02",
+                others_message_id="LVLM03",
+            )
+            return True
+
+        temple_phrase = messages.messages.get("TEMPLE", "glory be to tashanna").lower()
+        if " ".join(arg.lower() for arg in args) == temple_phrase:
+            # Legacy temple phrase calls chklvl(3), then glvutl and msgutl2(LVL300, GETLVL).
+            # Source: legacy/KYRROUS.C:331-340.
+            return await level_gate(3, "LVL300", "GETLVL")
+
         # Legacy: PUT object handling for level-up donations
         if verb == "put" and args:
             obj_arg = args[0].lower()
             # Check if chant requirement is met (chantd == 5 in legacy)
             chant_ready = context.state.flags.get("chant_count", 0) >= 5
             
-            if chant_ready:
-                # Legacy: case 18 - requires level 9
-                if obj_arg in {"amulet", "18"}:
-                    level = player_level or 0
-                    if level >= 9:
-                        await context.direct(player_id, "room_message", 
-                                           text=messages.messages.get("LVL9M0", "You have achieved level 9!"))
-                        await context.broadcast("room_message", 
-                                              text=messages.messages.get("LVL9M1", ""),
-                                              player=player_id)
-                        return True
-                # Legacy: case 21 - requires level 10
-                elif obj_arg in {"crystal", "21"}:
-                    level = player_level or 0
-                    if level >= 10:
-                        await context.direct(player_id, "room_message",
-                                           text=messages.messages.get("LV10M0", "You have achieved level 10!"))
-                        await context.broadcast("room_message",
-                                              text=messages.messages.get("LVL9M1", ""),
-                                              player=player_id)
-                        return True
+            if chant_ready and player is not None:
+                offered = _resolve_offering(obj_arg, objects_by_name)
+                if offered is None or offered not in player.gpobjs:
+                    return False
+                # Legacy temple consumes object 18 for level 9 and object 21 for level 10.
+                # Source: legacy/KYRROUS.C:295-314.
+                if offered == 18:
+                    remove_inventory_item(player, offered)
+                    return await level_gate(9, "LVL9M0", "LVL9M1")
+                if offered == 21:
+                    remove_inventory_item(player, offered)
+                    return await level_gate(10, "LV10M0", "LVL9M1")
                 # Default offering response
                 await context.direct(player_id, "room_message", 
                                    text=messages.messages.get("OFFER0", "The altar accepts your offering."))
                 await context.broadcast("room_message",
-                                      text=messages.messages.get("OFFER1", ""),
+                                      text=messages.messages.get("OFFER1", "") % display_name,
                                       player=player_id)
                 return True
         
@@ -690,7 +736,12 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             if expected is not None and offered == expected:
                 player.gemidx = progress + 1
                 if player.gemidx == len(player.stones):
-                    if (player_level or 0) >= 4:
+                    effective_level = (
+                        player_level
+                        if player_level is not None
+                        else (player.level if player is not None else 0)
+                    )
+                    if effective_level == 3:
                         # Legacy silver uses chklvl(4) + glvutl before granting the spell (legacy/KYRROUS.C:568-573).
                         level_up_player(player)
                         _grant_def_spell(player, hotseat_spell_id, hotseat_bit)
@@ -768,10 +819,22 @@ def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallb
         if len(words) < 5 or words[0] != "heart" or words[2] != "soul" or words[-1] != "tashanna":
             return False
 
-        # Legacy: offering heart and soul to Tashanna grants the willowisp spell at level 7+.
+        # Legacy: offering heart and soul to Tashanna grants the willowisp spell at level 7.
         # Source: legacy/KYRROUS.C lines 821-837 (hnsrou).
-        level = player_level or 0
-        if level < 7:
+        level = player_level if player_level is not None else (player.level if player else 0)
+        if player is not None and level == 6:
+            level_up_player(player)
+            add_spell_to_book(
+                player,
+                SpellModel(
+                    id=61,
+                    name="weewillo",
+                    sbkref=constants.OTHERS,
+                    bitdef=constants.SBD062_WILLOWISP,
+                    level=7,
+                ),
+            )
+        elif level < 6:
             await context.direct(
                 player_id,
                 "room_message",
@@ -781,7 +844,12 @@ def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallb
 
         rewarded = context.state.flags.setdefault("hns_rewards", set())
         if player_id in rewarded:
-            await context.direct(player_id, "room_message", text=messages.messages.get("HNSYOU", ""))
+            await context.direct(
+                player_id,
+                "room_message",
+                text=messages.messages.get("HNSYOU", ""),
+                message_id="HNSYOU",
+            )
             return True
 
         rewarded.add(player_id)
@@ -791,11 +859,13 @@ def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallb
             text=messages.messages.get(
                 "HNSYOU", "...As you offer your heart and soul, you feel newly empowered."
             ),
+            message_id="HNSYOU",
         )
         await context.broadcast(
             "room_message",
             text=messages.messages.get("HNSOTH", "%s is filled with new strength!") % player_id,
             player=player_id,
+            message_id="HNSOTH",
         )
         return True
 

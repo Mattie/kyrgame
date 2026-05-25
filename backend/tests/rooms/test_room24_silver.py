@@ -65,7 +65,7 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
     player = _fresh_player()
-    player.level = 4
+    player.level = 3
 
     for stone in player.stones:
         await engine.handle_command(
@@ -78,6 +78,7 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
         )
 
     assert player.gemidx == len(player.stones)
+    assert player.level == 4
     assert player.defspls
     assert player.spells == []
     assert player.nspells == 0

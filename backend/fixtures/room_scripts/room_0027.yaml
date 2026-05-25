@@ -27,7 +27,8 @@ triggers:
         then:
           - type: remove_item
             item: sword
-          - type: add_room_object
+          # Legacy swrock gives the tiara to the player with pgmpobj(&gmobjs[21],0). (legacy/KYRROUS.C:691-697)
+          - type: grant_object
             object: tiara
           - type: message
             scope: direct
