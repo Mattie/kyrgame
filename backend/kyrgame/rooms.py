@@ -329,7 +329,7 @@ async def _willow_on_command(
         )
         await context.broadcast(
             "room_message",
-            text=catalog["GETLVL"] % player_id,
+            text=catalog["GETLVL"] % display_name,
             player=player_id,
             message_id="GETLVL",
         )
@@ -730,13 +730,14 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             if player is None or not args:
                 return False
 
+            display_name = player.altnam
             offered = _resolve_offering(args[0], objects_by_name)
             if offered is None or offered not in player.gpobjs:
                 await context.direct_and_others(
                     player_id,
                     "room_message",
                     direct_text=messages.messages.get("TRDM05", ""),
-                    others_text=messages.messages.get("SILVM5", "") % player_id,
+                    others_text=messages.messages.get("SILVM5", "") % display_name,
                     direct_message_id="TRDM05",
                     others_message_id="SILVM5",
                 )
@@ -762,7 +763,7 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                             player_id,
                             "room_message",
                             direct_text=messages.messages.get("SILVM0", ""),
-                            others_text=messages.messages.get("SILVM1", "") % player_id,
+                            others_text=messages.messages.get("SILVM1", "") % display_name,
                             direct_message_id="SILVM0",
                             others_message_id="SILVM1",
                         )
@@ -774,7 +775,7 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                             player_id,
                             "room_message",
                             direct_text=messages.messages.get(message_id, ""),
-                            others_text=messages.messages.get(broadcast_id, "") % player_id,
+                            others_text=messages.messages.get(broadcast_id, "") % display_name,
                             direct_message_id=message_id,
                             others_message_id=broadcast_id,
                         )
@@ -784,7 +785,7 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     player_id,
                     "room_message",
                     direct_text=messages.messages.get("SILVM2", ""),
-                    others_text=messages.messages.get("SILVM3", "") % player_id,
+                    others_text=messages.messages.get("SILVM3", "") % display_name,
                     direct_message_id="SILVM2",
                     others_message_id="SILVM3",
                 )
@@ -795,7 +796,7 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 player_id,
                 "room_message",
                 direct_text=messages.messages.get("SILVM4", ""),
-                others_text=messages.messages.get("SILVM3", "") % player_id,
+                others_text=messages.messages.get("SILVM3", "") % display_name,
                 direct_message_id="SILVM4",
                 others_message_id="SILVM3",
             )

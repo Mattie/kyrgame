@@ -103,7 +103,7 @@ async def test_willow_routine_matches_legacy_prompts():
         if msg.get("payload", {}).get("scope") == "broadcast"
         and "text" in msg.get("payload", {})
     ]
-    assert messages.messages["GETLVL"] % "hero" in broadcast_texts
+    assert messages.messages["GETLVL"] % player.altnam in broadcast_texts
 
     rogue_texts = [
         msg.get("payload", {}).get("text")
@@ -297,6 +297,14 @@ async def test_willow_kneel_above_gate_reports_too_high():
     ]
     assert messages.messages["LVLM00"] in direct_texts
     assert messages.messages["LVL200"] not in direct_texts
+
+    broadcast_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "broadcast"
+        and "text" in msg.get("payload", {})
+    ]
+    assert messages.messages["LVLM01"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio

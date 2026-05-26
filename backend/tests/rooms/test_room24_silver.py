@@ -96,7 +96,7 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
         for msg in gateway.messages
         if msg.get("scope") == "broadcast" and msg.get("room") == 24 and "text" in msg
     ]
-    assert messages.messages["SILVM1"] % "hero" in broadcast_texts
+    assert messages.messages["SILVM1"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio
@@ -169,6 +169,13 @@ async def test_silver_level_gate_blocks_reward_and_resets(engine_and_gateway):
         if msg.get("scope") == "direct" and msg.get("player") == "hero"
     ]
     assert messages.messages["LVLM02"] in direct_texts
+
+    broadcast_texts = [
+        msg.get("text")
+        for msg in gateway.messages
+        if msg.get("scope") == "broadcast" and msg.get("room") == 24 and "text" in msg
+    ]
+    assert messages.messages["LVLM03"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio
