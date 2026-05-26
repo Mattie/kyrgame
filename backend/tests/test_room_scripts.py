@@ -5,7 +5,7 @@ import asyncio
 import httpx
 import pytest
 
-from kyrgame import fixtures
+from kyrgame import constants, fixtures
 from kyrgame.rooms import RoomScriptEngine
 from kyrgame.scheduler import SchedulerService
 from kyrgame.webapp import create_app
@@ -80,10 +80,13 @@ async def test_willow_routine_matches_legacy_prompts():
 
     await scheduler.start()
     await engine.enter_room(player_id="hero", room_id=0)
+    player = fixtures.build_player().model_copy(update={"level": 1})
     await engine.handle_command("hero", 0, command="look", args=["willow"])
-    await engine.handle_command("hero", 0, command=messages.messages["WILCMD"], player_level=3)
+    await engine.handle_command("hero", 0, command=messages.messages["WILCMD"], player=player)
     await engine.handle_command("rogue", 0, command=messages.messages["WILCMD"], player_level=1)
     await scheduler.stop()
+
+    assert player.level == 2
 
     direct_texts = [
         msg.get("payload", {}).get("text")
@@ -100,7 +103,7 @@ async def test_willow_routine_matches_legacy_prompts():
         if msg.get("payload", {}).get("scope") == "broadcast"
         and "text" in msg.get("payload", {})
     ]
-    assert messages.messages["GETLVL"] % "hero" in broadcast_texts
+    assert messages.messages["GETLVL"] % player.altnam in broadcast_texts
 
     rogue_texts = [
         msg.get("payload", {}).get("text")
@@ -180,6 +183,131 @@ async def test_temple_room_schedules_prayer_prompt_and_prayer_command():
 
 
 @pytest.mark.anyio
+async def test_temple_put_requires_exact_five_chants():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"level": 8, "gpobjs": [18], "obvals": [0], "npobjs": 1}, deep=True
+    )
+    engine.get_room_state(7).flags["chantd"] = 6
+
+    handled = await engine.handle_command(
+        "hero", 7, command="put", args=["charm"], player=player
+    )
+
+    assert handled is False
+    assert 18 in player.gpobjs
+
+
+@pytest.mark.anyio
+async def test_temple_put_consumes_default_offering_after_fifth_chant():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"gpobjs": [0], "obvals": [0], "npobjs": 1}, deep=True
+    )
+    engine.get_room_state(7).flags["chantd"] = 5
+
+    handled = await engine.handle_command(
+        "hero", 7, command="put", args=["ruby"], player=player
+    )
+
+    assert handled is True
+    assert 0 not in player.gpobjs
+
+    direct_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("player") == "hero"
+    ]
+    assert messages.messages["OFFER0"] in direct_texts
+
+
+@pytest.mark.anyio
+async def test_temple_put_consumes_level_item_before_failed_gate_for_legacy_parity():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"level": 7, "gpobjs": [18], "obvals": [0], "npobjs": 1}, deep=True
+    )
+    engine.get_room_state(7).flags["chantd"] = 5
+
+    handled = await engine.handle_command(
+        "hero", 7, command="put", args=["charm"], player=player
+    )
+
+    assert handled is True
+    assert player.level == 7
+    assert 18 not in player.gpobjs
+
+    direct_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("player") == "hero"
+    ]
+    assert messages.messages["LVLM02"] in direct_texts
+
+
+@pytest.mark.anyio
+async def test_willow_kneel_above_gate_reports_too_high():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(update={"level": 2}, deep=True)
+
+    handled = await engine.handle_command("hero", 0, command="kneel", player=player)
+
+    assert handled is True
+    assert player.level == 2
+
+    direct_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("player") == "hero"
+    ]
+    assert messages.messages["LVLM00"] in direct_texts
+    assert messages.messages["LVL200"] not in direct_texts
+
+    broadcast_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "broadcast"
+        and "text" in msg.get("payload", {})
+    ]
+    assert messages.messages["LVLM01"] % player.altnam in broadcast_texts
+
+
+@pytest.mark.anyio
 async def test_fountain_routine_tracks_donations_and_schedules_ambience():
     scheduler = SchedulerService()
     gateway = FakeGateway()
@@ -244,15 +372,19 @@ async def test_heart_and_soul_offering_awards_willowisp_spell():
 
     await scheduler.start()
     await engine.enter_room(player_id="hero", room_id=101)
+    player = fixtures.build_player().model_copy(update={"level": 6})
     await engine.handle_command(
         "hero",
         101,
         command="offer",
         args=["heart", "and", "soul", "to", "tashanna"],
-        player_level=8,
+        player=player,
     )
     await asyncio.sleep(0.02)
     await scheduler.stop()
+
+    assert player.level == 7
+    assert player.othspls & constants.SBD062_WILLOWISP
 
     direct_texts = [
         msg.get("payload", {}).get("text")
@@ -268,7 +400,41 @@ async def test_heart_and_soul_offering_awards_willowisp_spell():
         if msg.get("payload", {}).get("scope") == "broadcast"
         and "text" in msg.get("payload", {})
     ]
-    assert messages.messages["HNSOTH"] % "hero" in broadcast_texts
+    assert messages.messages["HNSOTH"] % player.altnam in broadcast_texts
+
+
+@pytest.mark.anyio
+async def test_heart_and_soul_above_gate_reports_too_high():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(update={"level": 7}, deep=True)
+
+    handled = await engine.handle_command(
+        "hero",
+        101,
+        command="offer",
+        args=["heart", "and", "soul", "to", "tashanna"],
+        player=player,
+    )
+
+    assert handled is True
+    assert player.level == 7
+
+    direct_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("player") == "hero"
+    ]
+    assert messages.messages["LVLM00"] in direct_texts
+    assert messages.messages["HNSYOU"] not in direct_texts
 
 
 @pytest.mark.anyio

@@ -41,6 +41,7 @@
 - [x] Added an admin-only Elf trigger in the mob tracker so testers can force the legacy `elves()` hint/gold encounter in the current room without waiting for random animation selection.
 - [x] Added shared client-side inline rendering for legacy creature names so console text, room object labels, HUD summaries, and the admin mob tracker visually call out Zar/dragon, dryad, elf, and brownie without changing backend message catalogs or event payloads.
 - [x] Bridged animation one-shot flags from room runtime state into scheduled animation broadcasts so legacy fade/reset messages (e.g., WALM05) trigger and clear like `KYRANIM.C` globals.
+- [x] Added a WebSocket solo level journey test and checklist covering level-up commands from level 1 through 25, with quest-item acquisition commands for dagger, charm, tiara, wand, kyragem, key, and devotion tokens plus controlled setup for birthstones, stump gem sequencing, spouse state, and the truth-maze random branch. [Tracker: `docs/solo_level_journey_checklist.md`]
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization. *(Admin panel now includes a grant-all-spells admin toggle that also sets max level and max spell points for spell-testing workflows.)*
 - [x] Preserve non-editable player flags when applying admin editor updates to mirror `KYRSYSP.C` flag handling.

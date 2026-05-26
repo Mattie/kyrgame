@@ -65,7 +65,7 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
     player = _fresh_player()
-    player.level = 4
+    player.level = 3
 
     for stone in player.stones:
         await engine.handle_command(
@@ -78,6 +78,7 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
         )
 
     assert player.gemidx == len(player.stones)
+    assert player.level == 4
     assert player.defspls
     assert player.spells == []
     assert player.nspells == 0
@@ -95,7 +96,7 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
         for msg in gateway.messages
         if msg.get("scope") == "broadcast" and msg.get("room") == 24 and "text" in msg
     ]
-    assert messages.messages["SILVM1"] % "hero" in broadcast_texts
+    assert messages.messages["SILVM1"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio
@@ -142,7 +143,8 @@ async def test_silver_wrong_offering_resets_progress(engine_and_gateway):
 
 @pytest.mark.anyio
 async def test_silver_level_gate_blocks_reward_and_resets(engine_and_gateway):
-    engine, _ = engine_and_gateway
+    engine, gateway = engine_and_gateway
+    messages = fixtures.load_messages()
 
     player = _fresh_player()
     player.level = 2
@@ -160,6 +162,20 @@ async def test_silver_level_gate_blocks_reward_and_resets(engine_and_gateway):
     assert player.defspls == 0
     assert player.spells == []
     assert player.gemidx == 0
+
+    direct_texts = [
+        msg.get("text")
+        for msg in gateway.messages
+        if msg.get("scope") == "direct" and msg.get("player") == "hero"
+    ]
+    assert messages.messages["LVLM02"] in direct_texts
+
+    broadcast_texts = [
+        msg.get("text")
+        for msg in gateway.messages
+        if msg.get("scope") == "broadcast" and msg.get("room") == 24 and "text" in msg
+    ]
+    assert messages.messages["LVLM03"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio
