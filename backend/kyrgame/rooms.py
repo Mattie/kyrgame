@@ -406,7 +406,10 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             return True
 
         temple_phrase = messages.messages.get("TEMPLE", "glory be to tashanna").lower()
-        if " ".join(arg.lower() for arg in args) == temple_phrase:
+        if (
+            verb in {"say", "comment", "note"}
+            and " ".join(arg.lower() for arg in args) == temple_phrase
+        ):
             # Legacy temple phrase calls chklvl(3), then glvutl and msgutl2(LVL300, GETLVL).
             # Source: legacy/KYRROUS.C:331-340.
             return await level_gate(3, "LVL300", "GETLVL")

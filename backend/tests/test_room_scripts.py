@@ -207,6 +207,38 @@ async def test_temple_put_requires_exact_five_chants():
 
 
 @pytest.mark.anyio
+async def test_temple_phrase_requires_speech_command():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(update={"level": 2}, deep=True)
+
+    handled = await engine.handle_command(
+        "hero",
+        7,
+        command="put",
+        args=["glory", "be", "to", "tashanna"],
+        player_level=player.level,
+        player=player,
+    )
+
+    assert handled is False
+    assert player.level == 2
+    direct_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "direct"
+    ]
+    assert messages.messages["LVL300"] not in direct_texts
+
+
+@pytest.mark.anyio
 async def test_temple_put_consumes_default_offering_after_fifth_chant():
     scheduler = SchedulerService()
     gateway = FakeGateway()

@@ -1,6 +1,6 @@
 import pytest
 
-from kyrgame import fixtures
+from kyrgame import constants, fixtures
 from kyrgame.rooms import RoomScriptEngine
 from kyrgame.scheduler import SchedulerService
 
@@ -109,6 +109,35 @@ async def test_drop_sword_on_rock_requires_prior_prayer(engine, player):
     messages = fixtures.load_messages().messages
     assert messages["ROCK00"] in direct_texts
     assert messages["ROCK01"] % player.plyrid in broadcast_texts
+
+
+@pytest.mark.anyio
+async def test_drop_sword_on_rock_trades_tiara_when_inventory_is_full(engine, player):
+    fillers = [0, 1, 2, 3, 4]
+    player = player.model_copy(
+        update={
+            "gpobjs": [34, *fillers],
+            "obvals": [0] * constants.MXPOBS,
+            "npobjs": constants.MXPOBS,
+        },
+        deep=True,
+    )
+    engine.players[player.plyrid] = player
+
+    await engine.handle_command(player.plyrid, 27, command="pray", args=["rock"], player=player)
+    handled = await engine.handle_command(
+        player.plyrid, 27, command="drop", args=["sword", "rock"], player=player
+    )
+
+    assert handled is True
+    assert player.npobjs == constants.MXPOBS
+    assert 34 not in player.gpobjs
+    assert 21 in player.gpobjs
+    assert set(fillers).issubset(player.gpobjs)
+
+    direct_texts = _direct_texts(engine, player.plyrid)
+    messages = fixtures.load_messages().messages
+    assert messages["ROCK00"] in direct_texts
 
 
 @pytest.mark.anyio
