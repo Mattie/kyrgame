@@ -1,6 +1,21 @@
 # Legacy Command Porting Guide
 
-This document enumerates the legacy Kyrandia player commands so the modern dispatcher and client can be verified against the original behavior. Each entry notes the command verbs, the legacy handler, and a summary of its effects. Use the porting checklist columns to track completion and ensure that each command not only triggers on the server but also renders its final text properly in the frontend client.
+This document enumerates the legacy Kyrandia player commands so the modern dispatcher and client can be verified against the original behavior. Each entry notes the command verbs, the legacy handler, and a summary of its effects. Use the porting checklist columns to track completion and ensure that each command triggers on the server and renders its final text properly in the frontend client.
+
+## Active game-completion focus
+
+The next porting lane is command/gameplay completion. The remaining primary handler families still need real parity handlers in the modern dispatcher:
+
+- `kissr1`: `comfort`, `cuddle`, `embrace`, `french`, `hold`, `love`, `rape`, `romance`, `squeeze`, `tickle`
+- `kissr2`: `hug`, `kick`, `kiss`, `pinch`, `punch`, `slap`, `smack`, `smooch`
+- `thinkr`: `concentrate`, `meditate`, `think`, including amulet telepathy and item thought actions
+- `flyrou`: `fly`, including willowisp and pegasus movement pairs plus failed flight messaging
+- `shover`: `push`, `shove`, including shove movement, invalid exits, missing targets, and `kissr2` fallback behavior
+- `smparr`: simple emotes (`blink` through `yawn`) with speak-flag delegation to `speakr`
+
+Until these land, their unchecked rows are the deliberate tracker entries for the generic stub/unknown-command gaps. Each gameplay PR should remove one handler family from that gap list with Goal, Steer, and Unit coverage following the 3HTDD strategy in `docs/PORTING_PLAN.md`.
+
+Frontend completion is tracked in the rightmost column. Browser-visible verification should cover the commands already marked server-ported before their frontend cells are checked.
 
 ## Primary command handlers
 
@@ -86,7 +101,8 @@ These commands route through the `smparr` table, emitting a short message to the
 
 ## Porting checkpoints
 
+- [ ] Add a command-registry parity Goal test proving every legacy `gi_cmdarr` and `smparr` entry is implemented or named in the active gap list above.
 - [ ] For each command above, confirm the modern dispatcher enforces the same preconditions (items present, spell costs, inventory limits, level gates) noted in the legacy handlers.
-- [ ] Validate that each command’s output text appears correctly in the client UI (including nearby/whisper/yell scopes), not just in server logs.
+- [ ] Validate each command's output text in the client UI, including direct, target, room, nearby-room, actor-excluding, and target-excluding scopes.
 - [ ] Add tests that assert both server-side effects and client-visible payloads for every ported command.
 - [ ] Update fixtures or message catalogs when legacy text is surfaced so the frontend can render localized output faithfully.
