@@ -627,6 +627,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         if player is None or hotkiss is None or not args:
             return False
 
+        display_name = player.altnam
         offered = _resolve_offering(args[0], objects_by_name)
         level = player_level if player_level is not None else (player.level or 0)
         progress = player.stumpi or 0
@@ -638,7 +639,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 player_id,
                 "room_message",
                 direct_text=messages.messages.get("BGEM05", ""),
-                others_text=messages.messages.get("BGEM06", "") % player_id,
+                others_text=messages.messages.get("BGEM06", "") % display_name,
                 direct_message_id="BGEM05",
                 others_message_id="BGEM06",
             )
@@ -652,7 +653,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 player_id,
                 "room_message",
                 direct_text=messages.messages.get("BGEM04", ""),
-                others_text=messages.messages.get("BGEM03", "") % player_id,
+                others_text=messages.messages.get("BGEM03", "") % display_name,
                 direct_message_id="BGEM04",
                 others_message_id="BGEM03",
             )
@@ -664,7 +665,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 player_id,
                 "room_message",
                 direct_text=messages.messages.get("BGEM04", ""),
-                others_text=messages.messages.get("BGEM03", "") % player_id,
+                others_text=messages.messages.get("BGEM03", "") % display_name,
                 direct_message_id="BGEM04",
                 others_message_id="BGEM03",
             )
@@ -680,7 +681,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     player_id,
                     "room_message",
                     direct_text=messages.messages.get("BGEM00", ""),
-                    others_text=messages.messages.get("BGEM01", "") % player_id,
+                    others_text=messages.messages.get("BGEM01", "") % display_name,
                     direct_message_id="BGEM00",
                     others_message_id="BGEM01",
                 )
@@ -690,7 +691,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     player_id,
                     "room_message",
                     direct_text=messages.messages.get("BGEM04", ""),
-                    others_text=messages.messages.get("BGEM03", "") % player_id,
+                    others_text=messages.messages.get("BGEM03", "") % display_name,
                     direct_message_id="BGEM04",
                     others_message_id="BGEM03",
                 )
@@ -700,7 +701,7 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             player_id,
             "room_message",
             direct_text=messages.messages.get("BGEM02", ""),
-            others_text=messages.messages.get("BGEM03", "") % player_id,
+            others_text=messages.messages.get("BGEM03", "") % display_name,
             direct_message_id="BGEM02",
             others_message_id="BGEM03",
         )

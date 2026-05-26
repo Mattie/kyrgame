@@ -109,7 +109,7 @@ async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
         for msg in gateway.messages
         if msg.get("scope") == "broadcast" and msg.get("room") == 18 and "text" in msg
     ]
-    assert messages.messages["BGEM01"] % "hero" in broadcast_texts
+    assert messages.messages["BGEM01"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio
@@ -136,12 +136,13 @@ async def test_stump_broadcast_message_goes_only_to_others(engine_and_gateway):
         for msg in gateway.messages
         if msg.get("scope") == "direct" and msg.get("player") == "hero"
     ]
-    assert messages.messages["BGEM03"] % "hero" not in direct_for_hero
+    assert messages.messages["BGEM03"] % player.altnam not in direct_for_hero
 
     broadcast_for_others = [
         msg
         for msg in gateway.messages
-        if msg.get("scope") == "broadcast" and msg.get("text") == (messages.messages["BGEM03"] % "hero")
+        if msg.get("scope") == "broadcast"
+        and msg.get("text") == (messages.messages["BGEM03"] % player.altnam)
     ]
     assert broadcast_for_others
     assert all(msg.get("exclude_player") == "hero" for msg in broadcast_for_others)
@@ -192,7 +193,7 @@ async def test_stump_wrong_item_resets_progress(engine_and_gateway):
         for msg in gateway.messages
         if msg.get("scope") == "broadcast" and msg.get("room") == 18 and "text" in msg
     ]
-    assert messages.messages["BGEM03"] % "hero" in broadcast_texts
+    assert messages.messages["BGEM03"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio
@@ -230,7 +231,7 @@ async def test_stump_requires_inventory(engine_and_gateway):
         for msg in gateway.messages
         if msg.get("scope") == "broadcast" and msg.get("room") == 18 and "text" in msg
     ]
-    assert messages.messages["BGEM06"] % "hero" in broadcast_texts
+    assert messages.messages["BGEM06"] % player.altnam in broadcast_texts
 
 
 @pytest.mark.anyio
@@ -265,4 +266,4 @@ async def test_stump_level_gate_resets(engine_and_gateway):
         for msg in gateway.messages
         if msg.get("scope") == "broadcast" and msg.get("room") == 18 and "text" in msg
     ]
-    assert messages.messages["BGEM03"] % "hero" in broadcast_texts
+    assert messages.messages["BGEM03"] % player.altnam in broadcast_texts
