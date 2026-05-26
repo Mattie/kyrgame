@@ -485,10 +485,12 @@ FodyWeavers.xsd
 # ZIP files in the Dist folder
 legacy/Dist/*.zip
 
-# Python virtual environment
+# Python virtual environment and test output
 .venv/
 venv/
 env/
+.pytest_cache*/
+.pytest_tmp*/
 .playwright-kyrgame.db*
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c,c++

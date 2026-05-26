@@ -78,47 +78,41 @@
 - [x] Preserve full whisper payloads for `whisper <target> <message...>` parsing so `whispr` receives complete `margv[2]` text (including quoted multi-word content).
 - [x] Preserve CRLF line breaks from the legacy `.MSG` files in the message bundle fixtures for accurate display formatting.
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
-- [ ] Provide Docker Compose, Makefile targets, and CI wiring to exercise API, WebSocket, and packaging flows in WSL2-friendly environments. *(In progress: added `backend/Dockerfile` with uvicorn startup, runtime env defaults, and default `/data` directory creation for SQLite deployments; still need compose orchestration, make targets, and CI integration.) (Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.)* [Tracker: command + client integration parity in `docs/legacy_command_porting.md`; world/object/spell parity dependencies in `docs/PORTING_PLAN_world_object_spell_gaps.md`]
-- [ ] Add integration/e2e tests that couple the JS client, WebSocket transport, and backend services against seeded fixtures. *(In progress: `frontend/tests/solo-play.spec.ts` launches an isolated FastAPI backend + Vite frontend, validates `/auth/session` -> WebSocket join -> command rendering, grants spells through the admin API, drives a solo command loop, and verifies persisted room resume. CI wiring remains.)* [Tracker: `docs/legacy_command_porting.md`]
 - [x] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling. *(Response contract now includes `expires_at`/`expires_in_seconds`, `backend/tests/test_api_contract_gaps.py` covers create/validate/resume, and the navigator displays expiry plus a fresh-token reconnect action.)* [Tracker: `docs/legacy_command_porting.md`]
+
+### Complete Playable Game Parity (Next Major Effort)
+
+- [ ] Complete remaining `KYRCMDS.C` command handler parity for `kissr1`, `kissr2`, `thinkr`, `flyrou`, `shover`, and the `smparr` simple-emote table. Cover direct, target, room, and failure branches with legacy message IDs and source comments where gameplay logic is ported. [Tracker: `docs/legacy_command_porting.md`]
+- [ ] Add command-registry parity coverage proving every legacy command and simple emote resolves to an implemented handler or a deliberate tracker entry, with no silent generic-stub path for gameplay verbs. [Tracker: `docs/legacy_command_porting.md`]
+- [ ] Verify browser-visible rendering for already ported commands: help, aim/point, brief/unbrief, check/count/gold/hits, drink/swallow, give/hand/pass/toss, pray, rub, yell/shout/scream/shriek, whisper, wink, and documented alias paths. [Tracker: `docs/legacy_command_porting.md`]
+- [ ] Add multiplayer client integration tests that exercise direct, target, room, nearby-room, actor-excluding, and target-excluding WebSocket fan-out using seeded fixtures and real browser rendering. [Tracker: `docs/legacy_command_porting.md`]
+- [ ] Convert the item/effect manual checklist into automated backend and Playwright scenarios for consumables, readables, weapon/aim flows, scenery restrictions, dragonstaff/Zar behavior, and creature/gem inline rendering. [Tracker: `docs/ITEM_EFFECT_MANUAL_TESTING_CHECKLIST.md`]
+- [ ] Extend solo-level and late-game regression coverage to include browser-visible reconnect/state persistence after late-game level-ups, key inventory transitions, and spellbook state changes. [Tracker: `docs/solo_level_journey_checklist.md`]
+
+### Release/Ops Cleanup (Final Porting Lane)
+
+- [ ] Provide Docker Compose, Makefile targets, CI wiring, and package-content automation after gameplay parity is complete. *(In progress: added `backend/Dockerfile` with uvicorn startup, runtime env defaults, and default `/data` directory creation for SQLite deployments; still need compose orchestration, make targets, and CI integration.)* Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.
 
 ## Remaining Implementation Task Plan
 
-1. **Complete player/domain modeling**
-   - Translate every `gmplyr` field (timers, charms, macros, marital status, gem layout, memorized spells) into validated Pydantic/ORM models.
-   - Normalize bitflag handling (player/object/spell flags) into enums/helpers and add fixtures or factories that respect the legacy limits.
-   - Extend loader and fixture validation tests to catch parity gaps versus `KYRANDIA.H` constants.
-2. **Persistence + migrations**
-   - Introduce PostgreSQL-backed storage with SQLAlchemy session configuration for pooled connections and Alembic migrations that mirror the domain models.
-   - Replace the in-memory bootstrap in `runtime.py` with environment-driven configuration (database URL, migration runner) and seed paths that can run in Docker/CI.
-   - Add repository/service layers that separate persistence (player inventory, spell timers, room occupants) from request handling.
-3. **Command dispatcher parity**
-   - Expand `commands.py` to cover the full verb set from `KYRCMDS.C` (movement variants, speech, trading, object interactions, spell casting, system commands) and encode level/flag/condition checks.
-   - Wire dispatcher results into the WebSocket gateway so server-side state updates drive broadcasts (movement, chat, combat outcomes) and error semantics mirror legacy text.
-   - Create fixture-driven tests that assert behavior against known message IDs and location/object relationships.
-   - Added long-form room entry descriptions and initial inventory pickup/drop handling aligned to `getter`/`dropit` in `KYRCMDS.C`.
-4. **World, object, and spell services**
-   - Port room routine behaviors from `KYRLOCS.C`/`KYRROUS.C` into `RoomScriptEngine`, preserving timers and entry/exit triggers; cover with scheduler-driven tests. (Progress: added YAML-driven routines for rooms 8, 9, 10, 12, 14, and 16.)
-   - Ported the remaining room routines (rooms 288/291/293/295/302) via YAML scripts in `backend/fixtures/room_scripts/`, reusing established patterns and adding legacy source file + line comments for reviewer parity checks.
-   - Model object effects and spell routines from `KYROBJS.C`/`KYRSPEL.C`/`KYRANIM.C`, including cooldowns, resource costs, and targeting rules, with unit + integration coverage.
-   - Use `backend/kyrgame/timing/TickScheduler` to register recurring spell/effect/mob timers (e.g., `register_spell_tick`, `register_animation_tick`, or `register_recurring_timer`) and wire them into runtime services as those handlers are ported.
-   - Captured Tashanna's heart-and-soul ritual (room 101) and the willowisp/pegasus transformation spells; flesh out remaining spellbook and room routines with legacy gating (inventory limits, level costs) and persistence hooks.
-   - Expose APIs for content lookups (descriptions, auxiliary text) that reference the legacy message catalogs.
-5. **Auth/session lifecycle**
-   - Implement login/session establishment matching `kyloin` expectations (logo display, first-time character creation), session tokens, and reconnection handling.
-   - Track active sessions in persistence + presence service, enforcing single-session or multi-session policies from the original module.
-   - Add tests for session recovery, concurrent logins, and logout flows.
-6. **Admin/editor tooling**
-   - Add secured HTTP endpoints (and CLI scripts if needed) for player management, content edits, and message bundle updates reflecting `KYRSYSP.C` behaviors.
-   - Cover authorization policies and validation with tests and update documentation for operator workflows.
-   - [x] Extend admin player editor to adjust inventory slots, gem/stump progression, and birthstones with catalog validation to mirror kyraedit flows.
-7. **Ops, packaging, and CI**
-   - Deliver Docker Compose with API, Postgres, and seed jobs; create Makefile targets for `make up`, `make test`, `make seed`, and `make package-content`.
-   - Configure CI (lint, type check, unit/integration tests) and artifact generation for offline bundles.
-   - Document local development steps in `backend/DEVELOPMENT.md` or README updates.
-8. **Integration + client alignment**
-   - Build end-to-end tests that drive the FastAPI/WebSocket stack with multiple simulated players and assert broadcast rules.
-   - Define the contract for the JS client (event schema, error payloads) and ensure fixtures + APIs expose the localized message catalog needed for UI parity.
+1. **Command handler parity**
+   - Finish the remaining legacy handler families: `kissr1`, `kissr2`, `thinkr`, `flyrou`, `shover`, and `smparr`.
+   - Use `docs/legacy_command_porting.md` as the source of truth for command completion status and frontend verification.
+   - Follow 3HTDD: one Goal scenario per handler family, Steer tests for recipient split/message IDs/state changes, Unit tests only for parser or formatting edge cases.
+2. **Browser-visible multiplayer parity**
+   - Expand Playwright coverage from the current solo journey into multi-player sessions that prove direct, target, room, nearby-room, actor-excluding, and target-excluding output appears in the client.
+   - Verify already-ported commands through the browser before marking their frontend column complete.
+   - Keep WebSocket envelopes stable: `command_response`, `command_error`, `room_broadcast`, room/target/direct scopes, and location/state update payloads.
+3. **Item/effect and late-game regression coverage**
+   - Promote `docs/ITEM_EFFECT_MANUAL_TESTING_CHECKLIST.md` scenarios into automated backend and browser tests.
+   - Extend the solo level journey with late-game reconnect/state persistence checks for level, inventory, room, and spellbook state.
+   - Add follow-up gaps to the relevant tracker as soon as a manual or automated pass exposes a mismatch.
+4. **Documentation and tracker closure**
+   - Keep `docs/PORTING_PLAN.md`, `docs/legacy_command_porting.md`, `docs/PORTING_PLAN_world_object_spell_gaps.md`, and `docs/solo_level_journey_checklist.md` aligned after each gameplay PR.
+   - For every ported gameplay routine, include legacy source references and verify both C call sites and message catalog IDs.
+5. **Release/Ops cleanup**
+   - Deliver Docker Compose, root Makefile targets, CI wiring, and package-content automation after gameplay parity and browser verification are complete.
+   - Keep this final lane focused on repeatable release/dev workflow and avoid adding gameplay scope.
 
 ## Architectural Direction
 - **Data contracts:** Mirror the structs in `legacy/KYRANDIA.H` as ORM/Pydantic models (player, location, objects, spells, commands) to maintain limits and flags when validating client input and persisting state.
@@ -131,46 +125,33 @@
 - **Frontend:** TypeScript + React (or Svelte) with state synced via WebSockets; Vite for dev/build; Vitest/Cypress for TDD.
 - **Runtime:** Docker-compose for API, DB (PostgreSQL), and front-end assets, runnable under WSL2. Include a `Makefile` to wrap common tasks (`make test`, `make up`, `make seed`).
 
-## Phase 1: Domain Modeling & Fixtures (TDD)
-1. **Schema extraction:** Convert `legacy/KYRANDIA.H` structs into Python domain models and matching DB schemas (players, locations, objects, spells, commands). Use unit tests to assert field constraints (e.g., max slots, flag masks).
-2. **Fixture generation:** Serialize content from `KYRLOCS.C`, `KYROBJS.C`, and spell tables into JSON fixtures. Add tests to validate fixture completeness (counts match `NGLOCS`, `NGOBJS`, `NGSPLS`) and referential integrity.
-3. **Content loader:** Implement a loader that seeds the database from fixtures; test idempotency and error handling for missing fields.
-4. **Docker baseline:** Add docker-compose with API + Postgres; include a healthcheck and smoke test (`pytest -m smoke`) to confirm the stack starts and schemas migrate in WSL2.
-
-## Phase 2: Backend Gameplay Services (TDD)
-1. **Command dispatcher service:** Model `KYRCMDS.C` behavior as typed commands (move, chat, inventory). TDD: start with command parsing tests, then handler behavior tests that mutate in-memory world state.
-2. **World service:** Implement room navigation using exits from location fixtures, with tests covering movement, invalid exits, and room entry triggers (mirroring `lcrous`).
-3. **Object service:** Port item metadata and behaviors; unit tests for pickup/drop rules, stack limits, and special interactions.
-4. **Spell/combat service:** Recreate spell flag gating and timers (from `KYRSPEL.C`/`KYRANIM.C`), with tests for level requirements, cooldowns, and concurrent effects.
-5. **Persistence layer:** Implement player load/save and session state caching, replacing `elwkyr.dat` semantics. TDD with repository tests and transactional rollbacks.
-6. **Admin endpoints:** Provide secured CRUD for player records and content, reflecting `KYRSYSP.C`. Tests cover authorization and validation.
-
-## Phase 3: Realtime Transport & Messaging (TDD)
-1. **WebSocket gateway:** Add room-level channels that broadcast events (movement, chat, spell effects) following patterns in `KYRUTIL.C`/`KYRANDIA.C`. Integration tests simulate multiple clients and assert fan-out/broadcast rules.
-2. **Message catalog delivery:** API for fetching message strings keyed by legacy IDs, seeded from catalogs. Tests ensure correct localization and fallback behavior.
-3. **Session lifecycle:** Implement login/logout hooks mirroring `kyloin` flow, issuing auth tokens and loading character state. Tests cover reconnection and concurrent logins.
-
-## Phase 4: Frontend Client (TDD)
-1. **Command UI:** Build a command input bar with autocomplete for verbs/targets; unit tests for parser logic and integration tests for round-tripping commands over WebSockets.
-2. **Room view:** Render location descriptions, exits, and occupants from server events. Snapshot tests ensure text rendering fidelity to fixtures; integration tests assert updates on movement broadcasts.
-3. **Inventory/spellbook panels:** Display objects and spells with actions gated by level/flags. Tests enforce UI state rules and disabled states.
-4. **Combat/effects HUD:** Show timers and status effects synced from server events; tests validate timer updates and expiration handling.
-
-## Phase 5: Ops & DX
-1. **CI pipeline:** Add lint/format/test stages for both stacks (ruff/pytest; eslint/prettier/vitest). Configure Docker build cache layers and WSL2-friendly volume mounts.
-2. **Dev ergonomics:** Provide `make dev` to start hot-reload back-end and front-end with seeded data; document setup in README.
-3. **Observability:** Add structured logging and basic metrics (request counts, WS connections); tests verify logging format and sampling.
+## Active Completion Phases (3HTDD)
+1. **Goal: full command surface parity**
+   - Goal tests prove each remaining handler family works through the command boundary with legacy message IDs and recipient splits.
+   - Steer tests cover the next rule: target lookup, inventory/object lookup, transformation movement, shove movement, or simple-emote speak fallback.
+   - Unit tests cover only parser/formatting details such as articles, prepositions, spouse/pronoun text, and amulet telepathy arguments.
+2. **Goal: browser-visible multiplayer parity**
+   - Goal tests drive at least two browser sessions through room, target, nearby, and actor-excluding output.
+   - Steer tests prove the client renders each WebSocket envelope shape used by ported commands.
+   - Unit tests stay at component/message-normalization boundaries when rendering defects are local.
+3. **Goal: late-game confidence**
+   - Goal tests prove solo level 1-25 remains intact and late-game reconnect restores level, room, inventory, and spellbook state.
+   - Steer tests promote the manual item/effect scenarios into executable checks.
+   - Unit tests protect effect helpers where broad examples would hide parsing or inventory edge cases.
+4. **Goal: release workflow**
+   - This phase stays last: Docker Compose, Makefile targets, CI, package-content smoke checks, and release-facing documentation.
 
 ## Cross-Cutting TDD Strategy
 - Start each subsystem with failing unit tests derived from legacy behaviors (counts, flags, level gates) before implementation.
 - Favor fixture-driven tests that compare modern outputs to legacy message IDs/structures so refactors stay grounded in original data.
-- Include integration tests that spin up Docker services locally (via `make test-e2e`) to validate API/WebSocket flows in WSL2.
+- Keep Goal tests focused on player-visible outcomes, Steer tests focused on the next meaningful rule, and Unit tests focused on narrow parser/effect mechanics.
 
-## Early Deliverables Checklist
-- Docker Compose stack runs (`make up`) and seeds DB from fixtures.
-- Core domain models with tests passing for constraints and fixture integrity.
-- Command dispatcher and world navigation available via WebSocket API with integration tests for movement and chat.
-- Basic React UI showing room description and handling command input in dev mode.
+## Completion Deliverables Checklist
+- Remaining command families have real parity handlers or deliberate tracker entries.
+- Already-ported commands have browser-visible verification where the tracker requires it.
+- Multiplayer fan-out is covered at backend and browser boundaries.
+- Manual item/effect checks have automated coverage or recorded follow-up gaps.
+- Release/Ops cleanup provides Docker Compose, Makefile targets, CI, and package-content smoke checks after gameplay parity closes.
 
 ## Current Backend Capabilities (for UI planning)
 - **Fixture delivery:** HTTP endpoints expose commands, locations, objects, spells, and localized message bundles seeded from JSON fixtures, with an admin summary route for quick sanity checks.
@@ -180,29 +161,21 @@
 - **Repositories/migrations:** SQLAlchemy models and fixture-backed repositories exist alongside Alembic scaffolding, though persistence is still in-memory for tests.
 - **Admin endpoints:** Provide secured CRUD for player records and content, reflecting `KYRSYSP.C` behaviors. Tests cover authorization and validation, and a PATCH flow clamps level-derived HP/SP, gold caps, and spouse updates for tooling parity. Admin tokens now come from environment configuration (auto-loaded from `backend/.env`, or override with `KYRGAME_ENV_FILE`; see `backend/.env.example` and `backend/ADMINISTRATION.md`).
 
-## Next Steps: View-Only Developer Navigator UI
-1. **Lock in client contracts**
-   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`)._
-   - [x] Document the minimal payloads the UI will consume: session creation shape, location listing (IDs, exits, descriptions), object catalog, and room broadcast envelope (`room_broadcast`, `command_response`). [Tracker: `docs/legacy_command_porting.md`]
-   - [x] Add an `/auth/session` convenience option for specifying a starting room to simplify navigating fixtures without gameplay gates. [Tracker: `docs/legacy_command_porting.md`]
-   - [x] Capture token lifetime/refresh requirements (currently defaulting to the repository session TTL). *(The `/auth/session` contract returns TTL metadata and `backend/tests/test_api_contract_gaps.py` covers create/validate/resume expiry shape.)* [Tracker: `docs/legacy_command_porting.md`]
-2. **Bootstrap the front-end workspace**
-   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`)._
-   - [x] Scaffold a Vite + React + TypeScript app (or reuse existing tooling if added later) under `frontend/` with lint/test hooks aligned to repository standards. [Tracker: `docs/legacy_command_porting.md`]
-   - [x] Wire shared configuration for API base URL and WebSocket endpoint (token injection to follow). [Tracker: `docs/legacy_command_porting.md`]
-   - [x] Enable CORS defaults for the navigator dev origin (`localhost:5173`) with an environment override knob (`KYRGAME_CORS_ORIGINS`). [Tracker: `docs/legacy_command_porting.md`]
-3. **Implement a "view-only" navigator flow**
-   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`, and world parity tracker status in `docs/PORTING_PLAN_world_object_spell_gaps.md`)._
-   - [ ] Simple session form that requests a token for a chosen player ID and optional room ID; persist token in memory for the session. [Tracker: `docs/legacy_command_porting.md`]
-   - [ ] Fetch world data on load (`/world/locations`, `/objects`, `/commands`, `/i18n/<locale>/messages`) and cache in state for rendering labels/tooltips. [Tracker: `docs/legacy_command_porting.md`]
-   - [ ] Connect to `/ws/rooms/{room_id}?token=...` and render the welcome payload plus ongoing `room_broadcast` events in an activity log. [Tracker: `docs/legacy_command_porting.md`]
-   - [ ] Present a room panel showing description, exits, ground objects, and current occupants; add an exit list that dispatches `move` commands over WebSocket to change rooms. [Tracker: `docs/legacy_command_porting.md`]
-4. **Developer ergonomics for exploration**
-   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`)._
-   - [ ] Add a lightweight world map/index view listing all locations with search/filter so developers can jump directly to a room via session reset. [Tracker: `docs/legacy_command_porting.md`]
-   - [ ] Include debug toggles to show raw event JSON and command IDs to aid future parity work. [Tracker: `docs/legacy_command_porting.md`]
-   - [x] Provide graceful fallbacks when the WebSocket closes (e.g., token expired) and a reconnect button to resume the navigator session. *(Navigator now displays closed/expired state, token expiry timing, and supports user-triggered reconnect using a fresh valid token.)* [Tracker: `docs/legacy_command_porting.md`]
-5. **Testing + docs**
-   - _Last verified against code on 2026-03-01 (`backend/kyrgame/webapp.py`, `backend/tests/test_app_contracts.py`, and world parity tracker status in `docs/PORTING_PLAN_world_object_spell_gaps.md`)._
-   - [ ] Add Vitest unit tests for parsing room data and rendering components; include a browser integration that spins up the FastAPI test app and confirms room joins/moves render correctly. *(In progress: `frontend/tests/solo-play.spec.ts` covers room join, movement, inventory, spellbook, spell casting, reconnect/resume, and the disabled console HUD. Remaining work: CI execution and broader multi-player/edge-case coverage.)* [Tracker: command/client behavior in `docs/legacy_command_porting.md`; world/object/spell dependencies in `docs/PORTING_PLAN_world_object_spell_gaps.md`]
-   - [ ] Update README/back-end docs with steps for launching the navigator UI alongside the API for local exploration. [Tracker: `docs/legacy_command_porting.md`]
+## Next Steps: Complete Playable Game Parity
+1. **Close command handler gaps**
+   - Implement the remaining `KYRCMDS.C` handler families tracked in `docs/legacy_command_porting.md`: `kissr1`, `kissr2`, `thinkr`, `flyrou`, `shover`, and `smparr`.
+   - Keep the public contract to the existing player command surface; no new HTTP API or schema is expected for this lane.
+   - Add a registry Goal test so legacy commands and simple emotes cannot drift into the generic stub path without a named tracker entry.
+2. **Verify client-visible command output**
+   - Use the existing WebSocket envelope contract: `command_response`, `command_error`, `room_broadcast`, room/target/direct scopes, and location/state updates.
+   - Add browser coverage for already-ported commands that still have unchecked frontend cells in `docs/legacy_command_porting.md`.
+   - Cover alias paths explicitly where the tracker calls them out, especially speech, pickup, give, and movement variants.
+3. **Prove multiplayer fan-out**
+   - Add two-player browser journeys for direct, target, room, nearby-room, actor-excluding, and target-excluding messages.
+   - Pair browser Goal tests with backend Steer tests for each fan-out shape so message IDs and recipients stay grounded in the legacy call sites.
+4. **Automate manual parity checks**
+   - Convert `docs/ITEM_EFFECT_MANUAL_TESTING_CHECKLIST.md` into backend and Playwright tests for item classes and Zar/dragonstaff behavior.
+   - Extend the solo level journey with browser-visible late-game reconnect checks for level, room, inventory, and spellbook state.
+5. **Release/Ops cleanup**
+   - Keep Docker Compose, Makefile targets, CI wiring, and package-content automation as the final porting lane after gameplay and browser parity are closed.
+   - Use the existing `backend/Dockerfile` as the starting point for that final workflow pass.
