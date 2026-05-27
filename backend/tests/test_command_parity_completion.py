@@ -388,17 +388,27 @@ async def test_simple_emote_without_text_uses_smputl_messages(base_state):
 
 
 @pytest.mark.anyio
-async def test_simple_emote_with_speak_flag_delegates_to_speech(base_state):
+@pytest.mark.parametrize(
+    ("raw_command", "expected_text"),
+    [
+        ("cheer for tashanna", "for tashanna"),
+        ("laugh at bob", "at bob"),
+        ("sing to seer", "to seer"),
+    ],
+)
+async def test_simple_emote_with_speak_flag_delegates_to_speech(
+    base_state, raw_command, expected_text
+):
     vocabulary, dispatcher = _dispatcher()
 
     result = await dispatcher.dispatch_parsed(
-        vocabulary.parse_text("cheer for tashanna"),
+        vocabulary.parse_text(raw_command),
         base_state,
     )
 
     assert any(event.get("message_id") == "SAIDIT" for event in result.events)
     assert any(
-        event.get("scope") == "room" and "for tashanna" in event.get("text", "")
+        event.get("scope") == "room" and expected_text in event.get("text", "")
         for event in result.events
     )
 

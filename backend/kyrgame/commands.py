@@ -3916,7 +3916,10 @@ class CommandVocabulary:
         tokens = raw.split()
         verb = tokens[0].lower()
         remainder = " ".join(tokens[1:]).strip()
-        if verb not in self.chat_aliases:
+        # Legacy cmpsmp()/smputl() delegates speaking emotes directly to speakr()
+        # without gi_bagthe()/bagprep(), so preserve post-verb text for smparr verbs.
+        # (legacy/KYRCMDS.C:1329-1353)
+        if verb not in self.chat_aliases and verb not in SIMPLE_EMOTES:
             tokens = normalize_tokens(tokens)
             remainder = " ".join(tokens[1:]).strip()
 

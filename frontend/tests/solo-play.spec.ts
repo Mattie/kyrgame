@@ -109,7 +109,7 @@ test('solo player can start, run core adventure commands, and resume persisted r
   await runCommand(page, 'point sword', /At who/i);
   await runCommand(page, 'fly', /power of flight/i);
   await runCommand(page, 'blink', /Blink!/i);
-  await runCommand(page, 'cheer for Tashanna', /for Tashanna/i);
+  await runCommand(page, 'sing to Tashanna', /to Tashanna/i);
   await runCommand(page, 'comfort', /Comfort who or what/i);
   await runCommand(page, 'think', /Okay, if you say so/i);
   await runCommand(page, 'say hello', 'hello');
