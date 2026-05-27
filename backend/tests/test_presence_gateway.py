@@ -6,9 +6,15 @@ import httpx
 import pytest
 import uvicorn
 import websockets
+from starlette.websockets import WebSocketState
 
+from kyrgame.gateway import RoomGateway
 from kyrgame.presence import PresenceService
 from kyrgame.webapp import create_app
+
+
+class DummyWebSocket:
+    application_state = WebSocketState.CONNECTED
 
 
 
@@ -58,6 +64,20 @@ async def test_presence_service_tracks_membership_and_moves():
     await presence.remove("seer")
     assert await presence.room_for_player("seer") is None
     assert await presence.players_in_room(1) == {"hero"}
+
+
+@pytest.mark.anyio
+async def test_gateway_unregister_removes_socket_from_registered_room_when_caller_room_is_stale():
+    gateway = RoomGateway()
+    websocket = DummyWebSocket()
+
+    await gateway.register(0, websocket, announce=False)
+    await gateway.register(1, websocket, announce=False)
+    await gateway.unregister(0, websocket)
+
+    assert websocket not in gateway.connections
+    assert websocket not in gateway.rooms.get(0, set())
+    assert websocket not in gateway.rooms.get(1, set())
 
 
 @pytest.mark.anyio

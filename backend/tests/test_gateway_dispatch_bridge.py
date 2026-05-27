@@ -405,6 +405,15 @@ async def test_websocket_shove_moves_target_and_fans_out_to_destination_room():
                     )
                     assert seer_location["room"] == 1
 
+                    seer_occupants = await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("event") == "room_occupants"
+                        and msg.get("payload", {}).get("location") == 1
+                        and "mystic" in msg.get("payload", {}).get("occupants", []),
+                    )
+                    assert seer_occupants["room"] == 1
+
                     mystic_arrival = await _recv_matching(
                         mystic_ws,
                         lambda msg: msg.get("type") == "room_broadcast"
