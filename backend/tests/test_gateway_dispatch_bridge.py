@@ -300,26 +300,117 @@ async def test_websocket_give_item_target_payload_includes_giver_name():
     async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
         hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
         seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 0})
+        observer_session = await client.post("/auth/session", json={"player_id": "watcher", "room_id": 0})
 
         uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_session.json()['session']['token']}"
         uri_room0_seer = f"ws://{host}:{port}/ws/rooms/0?token={seer_session.json()['session']['token']}"
+        uri_room0_observer = f"ws://{host}:{port}/ws/rooms/0?token={observer_session.json()['session']['token']}"
 
         async with websockets.connect(uri_room0_hero) as hero_ws:
             await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
             async with websockets.connect(uri_room0_seer) as seer_ws:
                 await _recv_matching(seer_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
                 await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "player_enter")
+                async with websockets.connect(uri_room0_observer) as observer_ws:
+                    await _recv_matching(
+                        observer_ws,
+                        lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                    )
 
-                # Legacy target-first order: give <target> <item> (KYRCMDS.C:503-504)
-                await hero_ws.send(json.dumps({"type": "command", "command": "give seer ruby"}))
+                    await hero_ws.send(json.dumps({"type": "command", "command": "give 0 gold to seer"}))
+                    observer_gold = await _recv_matching(
+                        observer_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "GIVCRD6",
+                    )
+                    assert "Hero Alt has just given" in observer_gold["payload"]["text"]
+                    assert "0 gold pieces" in observer_gold["payload"]["text"]
 
-                seer_msg = await _recv_matching(
-                    seer_ws,
-                    lambda msg: msg.get("type") == "command_response"
-                    and msg.get("payload", {}).get("message_id") == "GIVERU10",
-                )
-                assert "Hero Alt" in seer_msg["payload"]["text"]
-                assert "given you a ruby!" in seer_msg["payload"]["text"]
+                    # Legacy target-first order: give <target> <item> (KYRCMDS.C:503-504)
+                    await hero_ws.send(json.dumps({"type": "command", "command": "give seer ruby"}))
+
+                    seer_msg = await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "GIVERU10",
+                    )
+                    assert "Hero Alt" in seer_msg["payload"]["text"]
+                    assert "given you a ruby!" in seer_msg["payload"]["text"]
+
+                    observer_item = await _recv_matching(
+                        observer_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("message_id") == "GIVERU11",
+                    )
+                    assert "Hero Alt has just given" in observer_item["payload"]["text"]
+                    assert "a ruby" in observer_item["payload"]["text"]
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_shove_moves_target_and_fans_out_to_destination_room():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 0})
+        mystic_session = await client.post("/auth/session", json={"player_id": "mystic", "room_id": 1})
+
+        hero_uri = f"ws://{host}:{port}/ws/rooms/0?token={hero_session.json()['session']['token']}"
+        seer_uri = f"ws://{host}:{port}/ws/rooms/0?token={seer_session.json()['session']['token']}"
+        mystic_uri = f"ws://{host}:{port}/ws/rooms/1?token={mystic_session.json()['session']['token']}"
+
+        async with websockets.connect(hero_uri) as hero_ws:
+            await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+            async with websockets.connect(seer_uri) as seer_ws:
+                await _recv_matching(seer_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+                await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "player_enter")
+                async with websockets.connect(mystic_uri) as mystic_ws:
+                    await _recv_matching(
+                        mystic_ws,
+                        lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                    )
+
+                    await hero_ws.send(json.dumps({"type": "command", "command": "shove seer north"}))
+
+                    hero_result = await _recv_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "SHVUTL1",
+                    )
+                    assert hero_result["payload"]["message_id"] == "SHVUTL1"
+
+                    seer_direct = await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("message_id") == "SHVUTL2",
+                    )
+                    assert seer_direct["room"] == 1
+
+                    seer_location = await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("event") == "location_update"
+                        and msg.get("payload", {}).get("location") == 1,
+                    )
+                    assert seer_location["room"] == 1
+
+                    mystic_arrival = await _recv_matching(
+                        mystic_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and "been shoved from the south" in msg.get("payload", {}).get("text", ""),
+                    )
+                    assert mystic_arrival["room"] == 1
 
     server.should_exit = True
     await server_task

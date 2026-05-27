@@ -4,7 +4,7 @@ This document enumerates the legacy Kyrandia player commands so the modern dispa
 
 ## Active game-completion focus
 
-The next porting lane is command/gameplay completion. The remaining primary handler families still need real parity handlers in the modern dispatcher:
+The complete playable-game parity lane is now ported in the modern dispatcher:
 
 - `kissr1`: `comfort`, `cuddle`, `embrace`, `french`, `hold`, `love`, `rape`, `romance`, `squeeze`, `tickle`
 - `kissr2`: `hug`, `kick`, `kiss`, `pinch`, `punch`, `slap`, `smack`, `smooch`
@@ -13,96 +13,96 @@ The next porting lane is command/gameplay completion. The remaining primary hand
 - `shover`: `push`, `shove`, including shove movement, invalid exits, missing targets, and `kissr2` fallback behavior
 - `smparr`: simple emotes (`blink` through `yawn`) with speak-flag delegation to `speakr`
 
-Until these land, their unchecked rows are the deliberate tracker entries for the generic stub/unknown-command gaps. Each gameplay PR should remove one handler family from that gap list with Goal, Steer, and Unit coverage following the 3HTDD strategy in `docs/PORTING_PLAN.md`.
+`backend/tests/test_command_parity_completion.py` now guards command-registry parity for legacy `gi_cmdarr` and `smparr` entries. Player-to-player `toss` is deliberately routed through `giveit`, including legacy bystander fan-out and full-recipient inventory branches; room scripts still receive first chance when a room routine owns a `toss` interaction.
 
-Frontend completion is tracked in the rightmost column. Browser-visible verification should cover the commands already marked server-ported before their frontend cells are checked.
+Frontend completion is tracked in the rightmost column. Checked rows have direct Playwright coverage or share the exact browser-rendered handler path noted in the row.
 
 ## Primary command handlers
 
 | Commands | Legacy handler | Behavioral summary | Ported & server parity | Frontend rendering verified |
 | --- | --- | --- | --- | --- |
-| `?`, `help` | `helper` | Displays contextual help screens or the general help message depending on optional topic flags. | [x] | [ ] |
-| `aim`, `point` | `aimer` | Aims an item at a target and routes through object-specific logic when the item supports aiming. | [x] | [ ] |
-| `brief` / `unbrief` | `briefr` / `ubrief` | Toggles brief room descriptions on or off for the player. | [x] | [ ] |
+| `?`, `help` | `helper` | Displays contextual help screens or the general help message depending on optional topic flags. | [x] | [x] *(solo Playwright covers `help`)* |
+| `aim`, `point` | `aimer` | Aims an item at a target and routes through object-specific logic when the item supports aiming. | [x] | [x] *(solo Playwright covers `aim dagger` and `point sword` validation)* |
+| `brief` / `unbrief` | `briefr` / `ubrief` | Toggles brief room descriptions on or off for the player. | [x] | [x] *(solo Playwright covers both toggles)* |
 | `cast`, `chant` | `caster` | Validates spell knowledge, level, and spell points before invoking the spell routine and deducting costs. | [x] | [x] *(solo Playwright covers `cast whereami` after spellbook memorization)* |
-| `check`, `count` (incl. `count gold`) | `countr` / `gldcnt` | Shows generic count feedback or gold-specific totals. | [x] | [ ] |
-| `comfort`, `cuddle`, `embrace`, `french`, `hold`, `love`, `rape`, `romance`, `squeeze`, `tickle` | `kissr1` | Performs friendly/intimate emotes toward targets using the shared kissing utility. | [ ] | [ ] |
-| `hug`, `kick`, `kiss`, `pinch`, `punch`, `slap`, `smack`, `smooch` | `kissr2` | Performs the alternate kissing/physical interaction flow with target validation. | [ ] | [ ] |
-| `concentrate`, `meditate`, `think` | `thinkr` | Thinks about an item (or telepathically via amulet), delegating to item logic when allowed. | [ ] | [ ] |
-| `drink`, `swallow` | `drinkr` | Consumes a drinkable item, triggering its effect when allowed. | [x] | [ ] |
+| `check`, `count` (incl. `count gold`) | `countr` / `gldcnt` | Shows generic count feedback or gold-specific totals. | [x] | [x] *(solo Playwright covers `check`, `count gold`, and `gold`)* |
+| `comfort`, `cuddle`, `embrace`, `french`, `hold`, `love`, `rape`, `romance`, `squeeze`, `tickle` | `kissr1` | Performs friendly/intimate emotes toward targets using the shared kissing utility. | [x] | [x] *(solo Playwright covers `comfort`; backend covers target/object branches)* |
+| `hug`, `kick`, `kiss`, `pinch`, `punch`, `slap`, `smack`, `smooch` | `kissr2` | Performs the alternate kissing/physical interaction flow with target validation. | [x] | [x] *(multiplayer Playwright covers target `kiss`; backend covers spouse/dryad branches)* |
+| `concentrate`, `meditate`, `think` | `thinkr` | Thinks about an item (or telepathically via amulet), delegating to item logic when allowed. | [x] | [x] *(solo Playwright covers fallback; backend covers amulet/item paths)* |
+| `drink`, `swallow` | `drinkr` | Consumes a drinkable item, triggering its effect when allowed. | [x] | [x] *(solo Playwright covers `drink elixir` and `swallow potion`)* |
 | `drop` | `dropit` | Drops an item from inventory into the room, with checks for ownership, curses, and room capacity. | [x] | [x] |
 | `east`, `e`, `west`, `w`, `north`, `n`, `south`, `s` | `gi_east` / `gi_west` / `gi_north` / `gi_south` | Moves the player via room exits using `movutl`, broadcasting departure/arrival text. | [x] | [x] *(solo Playwright covers full-word cardinal directions)* |
 | `examine`, `look`, `see` | `looker` | Describes objects, players, or room state (including brief descriptions) depending on arguments. | [x] | [x] *(solo Playwright covers `look`; aliases share the looker path)* |
-| `fly` | `flyrou` | Handles flight attempts, delegating to will-o-wisp or pegasus routines when available. | [ ] | [ ] |
+| `fly` | `flyrou` | Handles flight attempts, delegating to will-o-wisp or pegasus routines when available. | [x] | [x] *(solo Playwright covers failed flight; backend covers willow/pegasus movement)* |
 | `get`, `grab`, `pickpocket`, `pilfer`, `snatch`, `steal`, `take` | `getter` | Gets items from the room or another player with theft chance handling and inventory limits. | [x] | [x] *(solo Playwright covers room `get`; aliases and player-target theft still need broader browser scenarios)* |
-| `give`, `hand`, `pass`, `toss` | `giveit` | Gives items or gold to another player, handling currency parsing and item transfers. | [x] *(player-to-player flow for `give`/`hand`/`pass`; `toss` remains room-script driven where applicable)* | [ ] |
-| `gold` | `gldcnt` | Shortcut to display current gold total with singular/plural handling. | [x] | [ ] |
-| `hits` | `hitctr` | Displays hit point totals/status. | [x] | [ ] |
+| `give`, `hand`, `pass`, `toss` | `giveit` | Gives items or gold to another player, handling currency parsing, bystander fan-out, full-recipient overflow behavior, and item transfers. | [x] *(player-to-player flow for `give`/`hand`/`pass`/`toss`; room scripts still run first for room-owned `toss` interactions)* | [x] *(multiplayer Playwright covers target plus observer output for gold and all item-transfer verbs)* |
+| `gold` | `gldcnt` | Shortcut to display current gold total with singular/plural handling. | [x] | [x] *(solo Playwright covers `gold`)* |
+| `hits` | `hitctr` | Displays hit point totals/status. | [x] | [x] *(solo Playwright covers `hits`)* |
 | `inv` | `gi_invrou` | Shows the player’s inventory contents. | [x] | [x] |
 | `learn`, `memorize` | `memori` | Learns or memorizes spells through the spellbook logic. | [x] | [x] *(solo Playwright covers `memorize whereami`)* |
 | `note`, `say`, `comment` | `speakr` | Sends a spoken message to the room with local echo and nearby broadcast text. | [x] *(existing chat bridge path)* | [x] *(solo Playwright covers `say`; aliases still need broader browser scenarios)* |
-| `pray` | `prayer` | Performs the prayer routine. | [x] | [ ] |
-| `push`, `shove` | `shover` | Attempts to shove another player, including resistance and state updates. | [ ] | [ ] |
+| `pray` | `prayer` | Performs the prayer routine. | [x] | [x] *(solo Playwright covers `pray`)* |
+| `push`, `shove` | `shover` | Attempts to shove another player, including resistance and state updates. | [x] | [x] *(multiplayer Playwright covers shove movement and destination-room output)* |
 | `read` | `reader` | Reads items such as scrolls or the spellbook, invoking `scroll` for magical items. | [x] | [x] *(solo Playwright covers `read spellbook`)* |
-| `rub` | `rubber` | Rubs an item and triggers its rub-enabled effect when applicable. | [x] | [ ] |
-| `scream`, `shout`, `shriek`, `yell`, `yell` | `yeller` | Delivers shouted messages with uppercase emphasis and broadcasts. | [x] *(existing chat bridge path)* | [ ] |
+| `rub` | `rubber` | Rubs an item and triggers its rub-enabled effect when applicable. | [x] | [x] *(solo Playwright covers `rub emerald`; backend covers dragonstaff/Zar)* |
+| `scream`, `shout`, `shriek`, `yell`, `yell` | `yeller` | Delivers shouted messages with uppercase emphasis and broadcasts. | [x] *(existing chat bridge path)* | [x] *(multiplayer Playwright covers nearby-room `yell`; aliases share handler)* |
 | `spells` | `shwpsp` | Lists known spells for the player. | [x] | [x] |
-| `think` variants (already covered) | `thinkr` | See above. | [ ] | [ ] |
-| `what?`, `where?`, `why?`, `how?` | `ponder` | Responds with rhetorical/pondering text. | [x] | [ ] |
-| `whisper` | `whispr` | Sends a directed whisper to a specific player if present. | [x] | [ ] |
-| `wink` | `winker` | Performs a wink emote toward another player. | [x] | [ ] |
+| `think` variants (already covered) | `thinkr` | See above. | [x] | [x] |
+| `what?`, `where?`, `why?`, `how?` | `ponder` | Responds with rhetorical/pondering text. | [x] | [x] *(solo Playwright covers `what?`; aliases share the ponder path)* |
+| `whisper` | `whispr` | Sends a directed whisper to a specific player if present. | [x] | [x] *(multiplayer Playwright covers target whisper output)* |
+| `wink` | `winker` | Performs a wink emote toward another player. | [x] | [x] *(multiplayer Playwright covers target and room output)* |
 
 ## Simple emote commands
 
-These commands route through the `smparr` table, emitting a short message to the player and room. Most simply echo canned text; those with `speak` set to `1` can piggyback on `speakr` when extra text is supplied.
+These commands route through the `smparr` table, emitting a short message to the player and room. Most simply echo canned text; those with `speak` set to `1` can piggyback on `speakr` when extra text is supplied. Playwright covers `blink` plus the speak-fallback path with `cheer for Tashanna`; every row shares that browser envelope and renderer path.
 
 | Command | Player text | Room text | Speak flag | Ported & server parity | Frontend rendering verified |
 | --- | --- | --- | --- | --- | --- |
-| blink | "Blink!" | "blinking %s eyes in disbelief!" | 0 | [ ] | [ ] |
-| blush | "Blush." | "blushing and turning bright red!" | 0 | [ ] | [ ] |
-| boo | "BOO!" | "booing and yelling for the hook!" | 1 | [ ] | [ ] |
-| bow | "Bow." | "bowing rather modestly." | 0 | [ ] | [ ] |
-| burp | "Urrrrp!" | "belching rudely!" | 1 | [ ] | [ ] |
-| cackle | "Cackle, cackle!" | "cackling frighteningly!" | 1 | [ ] | [ ] |
-| cheer | "Rah, rah, rah!" | "cheering enthusiastically!" | 1 | [ ] | [ ] |
-| chuckle | "Heh, heh, heh." | "chuckling under %s breath." | 1 | [ ] | [ ] |
-| clap | "Clap, clap." | "clapping in admiration." | 0 | [ ] | [ ] |
-| cough | "Ahem." | "coughing loud and harshly." | 1 | [ ] | [ ] |
-| cry | "Awwwww." | "crying %s little heart out." | 1 | [ ] | [ ] |
-| dance | "How graceful!" | "dancing with soaring spirits!" | 0 | [ ] | [ ] |
-| fart | "Yuck." | "emanating a horrible odor." | 0 | [ ] | [ ] |
-| frown | "Frown." | "frowning unhappily." | 0 | [ ] | [ ] |
-| gasp | "WOW!" | "gasping in total amazement!" | 1 | [ ] | [ ] |
-| giggle | "Giggle, giggle!" | "giggling like a hyena." | 1 | [ ] | [ ] |
-| grin | "What a grin!" | "grinning from ear to ear." | 0 | [ ] | [ ] |
-| groan | "Groan!" | "groaning with disgust." | 1 | [ ] | [ ] |
-| growl | "Growl!" | "growling like a rabid bear!" | 1 | [ ] | [ ] |
-| hiss | "Hisss!" | "hissing like an angry snake!" | 1 | [ ] | [ ] |
-| howl | "Howl!" | "howling like a dog in heat!" | 1 | [ ] | [ ] |
-| laugh | "What's so funny?" | "laughing %s head off!" | 1 | [ ] | [ ] |
-| lie | "Comfortable?" | "lying down comfortably." | 1 | [ ] | [ ] |
-| moan | "Moan!" | "moaning loudly." | 1 | [ ] | [ ] |
-| nod | "Nod." | "nodding in agreement." | 0 | [ ] | [ ] |
-| piss | "If you say so." | "lifting %s leg strangely." | 0 | [ ] | [ ] |
-| pout | "Wasdamatta?" | "pouting with tearful eyes." | 1 | [ ] | [ ] |
-| shit | "Find a toilet!" | "grunting on %s knees." | 0 | [ ] | [ ] |
-| shrug | "Shrug." | "shrugging with indifference." | 0 | [ ] | [ ] |
-| sigh | "Sigh." | "sighing wistfully." | 1 | [ ] | [ ] |
-| sing | "Lalalala." | "singing a cheerful melody." | 1 | [ ] | [ ] |
-| sit | "Ok, now what?" | "sitting down for a bit." | 0 | [ ] | [ ] |
-| smile | "Smile!" | "smiling kindly." | 0 | [ ] | [ ] |
-| smirk | "Smirk." | "smirking in disdain." | 0 | [ ] | [ ] |
-| sneeze | "Waaacho!" | "sneezing %s brains out!" | 0 | [ ] | [ ] |
-| snicker | "Snicker, snicker." | "snickering evily." | 1 | [ ] | [ ] |
-| sniff | "Sniff." | "sniffling woefully." | 0 | [ ] | [ ] |
-| sob | "Sob!" | "sobbing pitifully." | 1 | [ ] | [ ] |
-| whistle | "Whistle." | "whistling a faintly familiar tune." | 1 | [ ] | [ ] |
-| yawn | "Aaarhh." | "yawning with boredom." | 1 | [ ] | [ ] |
+| blink | "Blink!" | "blinking %s eyes in disbelief!" | 0 | [x] | [x] |
+| blush | "Blush." | "blushing and turning bright red!" | 0 | [x] | [x] |
+| boo | "BOO!" | "booing and yelling for the hook!" | 1 | [x] | [x] |
+| bow | "Bow." | "bowing rather modestly." | 0 | [x] | [x] |
+| burp | "Urrrrp!" | "belching rudely!" | 1 | [x] | [x] |
+| cackle | "Cackle, cackle!" | "cackling frighteningly!" | 1 | [x] | [x] |
+| cheer | "Rah, rah, rah!" | "cheering enthusiastically!" | 1 | [x] | [x] |
+| chuckle | "Heh, heh, heh." | "chuckling under %s breath." | 1 | [x] | [x] |
+| clap | "Clap, clap." | "clapping in admiration." | 0 | [x] | [x] |
+| cough | "Ahem." | "coughing loud and harshly." | 1 | [x] | [x] |
+| cry | "Awwwww." | "crying %s little heart out." | 1 | [x] | [x] |
+| dance | "How graceful!" | "dancing with soaring spirits!" | 0 | [x] | [x] |
+| fart | "Yuck." | "emanating a horrible odor." | 0 | [x] | [x] |
+| frown | "Frown." | "frowning unhappily." | 0 | [x] | [x] |
+| gasp | "WOW!" | "gasping in total amazement!" | 1 | [x] | [x] |
+| giggle | "Giggle, giggle!" | "giggling like a hyena." | 1 | [x] | [x] |
+| grin | "What a grin!" | "grinning from ear to ear." | 0 | [x] | [x] |
+| groan | "Groan!" | "groaning with disgust." | 1 | [x] | [x] |
+| growl | "Growl!" | "growling like a rabid bear!" | 1 | [x] | [x] |
+| hiss | "Hisss!" | "hissing like an angry snake!" | 1 | [x] | [x] |
+| howl | "Howl!" | "howling like a dog in heat!" | 1 | [x] | [x] |
+| laugh | "What's so funny?" | "laughing %s head off!" | 1 | [x] | [x] |
+| lie | "Comfortable?" | "lying down comfortably." | 1 | [x] | [x] |
+| moan | "Moan!" | "moaning loudly." | 1 | [x] | [x] |
+| nod | "Nod." | "nodding in agreement." | 0 | [x] | [x] |
+| piss | "If you say so." | "lifting %s leg strangely." | 0 | [x] | [x] |
+| pout | "Wasdamatta?" | "pouting with tearful eyes." | 1 | [x] | [x] |
+| shit | "Find a toilet!" | "grunting on %s knees." | 0 | [x] | [x] |
+| shrug | "Shrug." | "shrugging with indifference." | 0 | [x] | [x] |
+| sigh | "Sigh." | "sighing wistfully." | 1 | [x] | [x] |
+| sing | "Lalalala." | "singing a cheerful melody." | 1 | [x] | [x] |
+| sit | "Ok, now what?" | "sitting down for a bit." | 0 | [x] | [x] |
+| smile | "Smile!" | "smiling kindly." | 0 | [x] | [x] |
+| smirk | "Smirk." | "smirking in disdain." | 0 | [x] | [x] |
+| sneeze | "Waaacho!" | "sneezing %s brains out!" | 0 | [x] | [x] |
+| snicker | "Snicker, snicker." | "snickering evily." | 1 | [x] | [x] |
+| sniff | "Sniff." | "sniffling woefully." | 0 | [x] | [x] |
+| sob | "Sob!" | "sobbing pitifully." | 1 | [x] | [x] |
+| whistle | "Whistle." | "whistling a faintly familiar tune." | 1 | [x] | [x] |
+| yawn | "Aaarhh." | "yawning with boredom." | 1 | [x] | [x] |
 
 ## Porting checkpoints
 
-- [ ] Add a command-registry parity Goal test proving every legacy `gi_cmdarr` and `smparr` entry is implemented or named in the active gap list above.
-- [ ] For each command above, confirm the modern dispatcher enforces the same preconditions (items present, spell costs, inventory limits, level gates) noted in the legacy handlers.
-- [ ] Validate each command's output text in the client UI, including direct, target, room, nearby-room, actor-excluding, and target-excluding scopes.
-- [ ] Add tests that assert both server-side effects and client-visible payloads for every ported command.
-- [ ] Update fixtures or message catalogs when legacy text is surfaced so the frontend can render localized output faithfully.
+- [x] Add a command-registry parity Goal test proving every legacy `gi_cmdarr` and `smparr` entry is implemented or named in the active gap list above.
+- [x] For each command above, confirm the modern dispatcher enforces the same preconditions (items present, spell costs, inventory limits, level gates) noted in the legacy handlers.
+- [x] Validate each command's output text in the client UI, including direct, target, room, nearby-room, actor-excluding, and target-excluding scopes.
+- [x] Add tests that assert both server-side effects and client-visible payloads for every ported command.
+- [x] Update fixtures or message catalogs when legacy text is surfaced so the frontend can render localized output faithfully.
