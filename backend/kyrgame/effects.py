@@ -1280,6 +1280,7 @@ class SpellEffectEngine:
                         ),
                         "broadcast_message_id": "S67M01",
                         "damage": damage,
+                        "hitoth_target": "caster",
                         "target": target,
                     },
                 )
@@ -1317,6 +1318,7 @@ class SpellEffectEngine:
                             "S67M06", target_player.altnam, self._himher(target_player)
                         ),
                         "damage": damage,
+                        "hitoth_target": "target",
                     }
                 )
 
@@ -1546,6 +1548,7 @@ class SpellEffectEngine:
                     "broadcast": broadcast_text,
                     "broadcast_message_id": broadcast_id,
                     "broadcast_exclude_player": target_player.plyrid,
+                    "hitoth_target": "target",
                     "target": target,
                 },
             )

@@ -17,6 +17,7 @@ from .env import load_env_file
 from .gateway import RoomGateway
 from .presence import PresenceService
 from .scheduler import SchedulerService
+from .session_state import sync_active_player_state_from_db
 from .spells.tick_system import (
     NoopSpellTickMessaging,
     SQLAlchemySpellTickPlayerRepository,
@@ -436,6 +437,8 @@ async def bootstrap_app(app: FastAPI):
         target_type = event_payload.get("target_type", target_event)
         move_player_to = event_payload.get("move_player_to")
         target_only = bool(event_payload.get("target_only"))
+        if target_player and event_payload.get("death_reset"):
+            sync_active_player_state_from_db(app, target_player)
         if target_player and (
             (target_text and target_message_id) or target_event or move_player_to is not None
         ):
@@ -486,6 +489,8 @@ async def bootstrap_app(app: FastAPI):
                 }
                 if move_player_to is not None:
                     target_payload["move_player_to"] = target_room
+                if event_payload.get("death_reset"):
+                    target_payload["death_reset"] = True
             else:
                 target_payload = {
                     "event": "room_message",
@@ -496,6 +501,8 @@ async def bootstrap_app(app: FastAPI):
                     "animation_flag": event.flag,
                     "player": target_player,
                 }
+                if event_payload.get("death_reset"):
+                    target_payload["death_reset"] = True
             target_envelope = {
                 "type": "command_response",
                 "room": target_room,
