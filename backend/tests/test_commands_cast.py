@@ -607,7 +607,7 @@ async def test_cast_area_self_death_stops_later_old_room_damage():
     )
     state = _build_state(player)
     state.rng = FixedRng(randrange_values=[2, 3, 4, 5])
-    state.presence = OrderedPresence([player.plyrid, target.plyrid])
+    state.presence = OrderedPresence([target.plyrid, player.plyrid])
     players = {player.plyrid: player, target.plyrid: target}
     state.player_lookup = players.get
 

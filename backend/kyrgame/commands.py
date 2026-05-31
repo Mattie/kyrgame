@@ -2451,7 +2451,16 @@ async def _apply_area_damage(
     if not state.presence or not state.player_lookup:
         return
     origin_room = state.player.gamloc
-    occupants = await state.presence.players_in_room(origin_room)
+    occupants = list(await state.presence.players_in_room(origin_room))
+    if area_damage.get("hits_self") and state.player.plyrid in occupants:
+        occupants = [
+            state.player.plyrid,
+            *sorted(
+                occupant_id
+                for occupant_id in occupants
+                if occupant_id != state.player.plyrid
+            ),
+        ]
 
     def _origin_room_message(
         message_id: str,
