@@ -2469,10 +2469,17 @@ async def _apply_area_damage(
         return event
 
     for occupant_id in occupants:
+        # Legacy masshitr() compares the caster room with each candidate while
+        # iterating; if hitoth() resets a self-killing caster to room 0, later
+        # old-room occupants no longer match. (legacy/KYRSPEL.C:411-429)
+        if state.player.gamloc != origin_room:
+            break
         if not area_damage.get("hits_self") and occupant_id == state.player.plyrid:
             continue
         target = state.player_lookup(occupant_id)
         if not target:
+            continue
+        if target.gamloc != state.player.gamloc:
             continue
 
         protection = area_damage["protection"]

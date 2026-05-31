@@ -581,7 +581,7 @@ async def test_cast_area_damage_death_resets_each_dead_target_and_preserves_guar
 
 
 @pytest.mark.anyio
-async def test_cast_area_self_death_keeps_later_room_messages_on_origin_room():
+async def test_cast_area_self_death_stops_later_old_room_damage():
     rose_id = next(obj.id for obj in fixtures.load_objects() if obj.name == "rose")
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
@@ -616,16 +616,22 @@ async def test_cast_area_self_death_keeps_later_room_messages_on_origin_room():
 
     result = await dispatcher.dispatch("cast", {"raw": "tiltowait"}, state)
 
-    later_target_room_message = next(
+    self_hit_room_message = next(
         event
         for event in result.events
         if event.get("message_id") == "S59M05"
-        and event.get("exclude_player") == target.plyrid
+        and event.get("exclude_player") == player.plyrid
     )
     assert state.player.gamloc == 0
     assert target.gamloc == 7
-    assert later_target_room_message["scope"] == "nearby_room"
-    assert later_target_room_message["room_id"] == 7
+    assert target.hitpts == 60
+    assert self_hit_room_message["scope"] == "nearby_room"
+    assert self_hit_room_message["room_id"] == 7
+    assert not any(
+        event.get("message_id") in {"S59M04", "S59M05"}
+        and event.get("player") == target.plyrid
+        for event in result.events
+    )
 
 
 @pytest.mark.anyio
