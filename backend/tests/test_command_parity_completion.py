@@ -333,6 +333,14 @@ async def test_shove_moves_target_and_notifies_actor_target_and_rooms(base_state
     )
     assert any(
         event.get("scope") == "nearby_room"
+        and event.get("event") == "player_enter"
+        and event.get("room_id") == 1
+        and event.get("player") == target.plyrid
+        and event.get("exclude_player") == target.plyrid
+        for event in result.events
+    )
+    assert any(
+        event.get("scope") == "nearby_room"
         and event.get("room_id") == 1
         and "been shoved from the south" in event.get("text", "")
         for event in result.events
@@ -546,6 +554,8 @@ async def test_give_recipient_full_random_drop_puts_actor_item_in_room(base_stat
         "GIVERU6",
     ]
     assert result.events[1]["event"] == "room_objects"
+    assert result.events[1]["scope"] == "room"
+    assert result.events[1]["include_sender"] is True
     assert result.events[1]["objects"] == [{"id": item_id, "name": "ruby"}]
     assert "Hero Alt just dropped her ruby by mistake" in result.events[2]["text"]
 
@@ -580,6 +590,8 @@ async def test_give_recipient_full_random_swap_drops_target_first_item(base_stat
     ]
     assert f"drop her {dropped_name}" in result.events[0]["text"]
     assert result.events[1]["event"] == "room_objects"
+    assert result.events[1]["scope"] == "room"
+    assert result.events[1]["include_sender"] is True
     assert result.events[1]["objects"] == [
         {"id": dropped_item_id, "name": dropped_name}
     ]

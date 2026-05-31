@@ -1617,6 +1617,21 @@ async def _handle_shove(state: GameState, args: dict) -> CommandResult:
         {
             "scope": "nearby_room",
             "room_id": destination,
+            "event": "player_enter",
+            "type": "player_moved",
+            "player": target.plyrid,
+            "from": from_room,
+            "to": destination,
+            "description": state.locations[destination].brfdes,
+            "command_id": command_id,
+            "message_id": _command_message_id(command_id),
+            "exclude_player": target.plyrid,
+        }
+    )
+    events.append(
+        {
+            "scope": "nearby_room",
+            "room_id": destination,
             "event": "room_message",
             "type": "room_message",
             "player": target.plyrid,
@@ -2796,6 +2811,9 @@ def _room_objects_event(
     objects: dict[int, models.GameObjectModel],
     command_id: int | None,
     message_id: str | None,
+    *,
+    scope: str = "player",
+    include_sender: bool | None = None,
 ) -> dict:
     visible = []
     for obj_id in location.objects:
@@ -2804,8 +2822,8 @@ def _room_objects_event(
         if obj:
             entry["name"] = obj.name
         visible.append(entry)
-    return {
-        "scope": "player",
+    event = {
+        "scope": scope,
         "event": "room_objects",
         "type": "room_objects",
         "objects": visible,
@@ -2813,6 +2831,9 @@ def _room_objects_event(
         "command_id": command_id,
         "message_id": message_id,
     }
+    if include_sender is not None:
+        event["include_sender"] = include_sender
+    return event
 
 
 def _format_room_occupants(
@@ -3715,7 +3736,14 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                         _format_message(state, "GIVERU5"),
                         command_id,
                     ),
-                    _room_objects_event(location, objects, command_id, message_id),
+                    _room_objects_event(
+                        location,
+                        objects,
+                        command_id,
+                        message_id,
+                        scope="room",
+                        include_sender=True,
+                    ),
                     _message_event(
                         "room",
                         "GIVERU6",
@@ -3762,7 +3790,14 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                     ),
                     command_id,
                 ),
-                _room_objects_event(location, objects, command_id, message_id),
+                _room_objects_event(
+                    location,
+                    objects,
+                    command_id,
+                    message_id,
+                    scope="room",
+                    include_sender=True,
+                ),
                 {
                     **_message_event(
                         "target",
