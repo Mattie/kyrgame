@@ -9,6 +9,7 @@ from sqlalchemy import select
 from . import constants, fixtures, models, repositories, room_spoilers
 from .effects import EffectError, ObjectEffectEngine, SpellEffectEngine
 from .inventory import pop_inventory_index
+from .player_lifecycle import reset_player_after_death
 from .spellbook import (
     add_spell_to_book,
     forget_all_memorized,
@@ -1487,44 +1488,122 @@ def _target_location_events(
     target: models.PlayerModel,
     command_id: int | None,
 ) -> list[dict]:
-    destination = state.locations[target.gamloc]
-    description_id, long_description = _location_description(state, destination)
-    return [
+    return _location_refresh_events(state, target, command_id, scope="target")
+
+
+def _location_refresh_events(
+    state: GameState,
+    player: models.PlayerModel,
+    command_id: int | None,
+    *,
+    scope: str,
+    death_reset: bool = False,
+) -> list[dict]:
+    destination = state.locations[player.gamloc]
+    description_id, long_description = _location_description(
+        state, destination, player=player
+    )
+    location_update = {
+        "scope": scope,
+        "event": "location_update",
+        "type": "location_update",
+        "location": destination.id,
+        "description": destination.brfdes,
+        "description_id": description_id,
+        "long_description": long_description,
+        "command_id": command_id,
+        "message_id": _command_message_id(command_id),
+    }
+    description_event = {
+        "scope": scope,
+        "event": "location_description",
+        "type": "location_description",
+        "location": destination.id,
+        "message_id": description_id,
+        "text": long_description or destination.brfdes,
+    }
+    objects_event = {
+        **_room_objects_event(
+            destination,
+            state.objects or {},
+            command_id,
+            _command_message_id(command_id),
+        ),
+        "scope": scope,
+    }
+    if death_reset:
+        location_update["death_reset"] = True
+        description_event["death_reset"] = True
+        objects_event["death_reset"] = True
+    if scope == "target":
+        location_update.update({"player": player.plyrid, "room_id": destination.id})
+        description_event.update({"player": player.plyrid, "room_id": destination.id})
+        objects_event.update({"player": player.plyrid, "room_id": destination.id})
+    return [location_update, description_event, objects_event]
+
+
+def _append_hitoth_death_events(
+    state: GameState,
+    dead_player: models.PlayerModel,
+    command_id: int | None,
+    events: list[dict],
+) -> None:
+    # Legacy hitoth() sends the death text, runs initgp(), tells the old room,
+    # and re-enters room 0 in holy light. (legacy/KYRSPEL.C:303-321)
+    reset = reset_player_after_death(dead_player, state.rng.randrange)
+    _persist_player_state(state, dead_player)
+    if dead_player.plyrid == state.player.plyrid:
+        for event in events:
+            if event.get("scope") == "room":
+                event["scope"] = "nearby_room"
+                event.setdefault("room_id", reset.old_room)
+
+    death_event = _message_event(
+        "target",
+        "DIEMSG",
+        _format_message(state, "DIEMSG"),
+        command_id,
+    )
+    death_event.update(
         {
-            "scope": "target",
-            "event": "location_update",
-            "type": "location_update",
-            "player": target.plyrid,
-            "location": destination.id,
-            "description": destination.brfdes,
-            "description_id": description_id,
-            "long_description": long_description,
+            "player": dead_player.plyrid,
+            "room_id": reset.old_room,
+            "death_reset": True,
+        }
+    )
+    events.append(death_event)
+
+    events.append(
+        {
+            "scope": "nearby_room",
+            "room_id": reset.old_room,
+            "event": "room_message",
+            "type": "room_message",
+            "player": dead_player.plyrid,
+            "text": _format_message(state, "KILLED", reset.old_name),
+            "message_id": "KILLED",
             "command_id": command_id,
-            "message_id": _command_message_id(command_id),
-            "room_id": destination.id,
+            "exclude_player": dead_player.plyrid,
         },
+    )
+    events.extend(
+        _location_refresh_events(
+            state, dead_player, command_id, scope="target", death_reset=True
+        )
+    )
+    events.append(
         {
-            "scope": "target",
-            "event": "location_description",
-            "type": "location_description",
-            "player": target.plyrid,
-            "location": destination.id,
-            "message_id": description_id,
-            "text": long_description or destination.brfdes,
-            "room_id": destination.id,
+            "scope": "nearby_room",
+            "room_id": 0,
+            "event": "room_message",
+            "type": "room_message",
+            "player": dead_player.plyrid,
+            "text": f"*** {dead_player.plyrid} has just appeared in a holy light!",
+            "message_id": None,
+            "command_id": command_id,
+            "exclude_player": dead_player.plyrid,
         },
-        {
-            **_room_objects_event(
-                destination,
-                state.objects or {},
-                command_id,
-                _command_message_id(command_id),
-            ),
-            "scope": "target",
-            "player": target.plyrid,
-            "room_id": destination.id,
-        },
-    ]
+    )
 
 
 async def _handle_shove(state: GameState, args: dict) -> CommandResult:
@@ -2065,6 +2144,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     target_room_result_message_id = context.pop("target_room_result_message_id", None)
     target_room_result_text = context.pop("target_room_result_text", None)
     area_damage = context.pop("area_damage", None)
+    hitoth_target = context.pop("hitoth_target", None)
     extra_events = context.pop("extra_events", [])
     global_broadcast_message_id = context.pop("global_broadcast_message_id", None)
     room_broadcast_message_id = context.pop("room_broadcast_message_id", None)
@@ -2172,6 +2252,10 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                 "exclude_player": target_player.plyrid,
             }
         )
+    if hitoth_target == "target" and target_player and target_player.hitpts <= 0:
+        _append_hitoth_death_events(state, target_player, command_id, events)
+    elif hitoth_target == "caster" and state.player.hitpts <= 0:
+        _append_hitoth_death_events(state, state.player, command_id, events)
     if extra_events:
         for extra_event in extra_events:
             event_payload = dict(extra_event)
@@ -2306,7 +2390,6 @@ def _spell_target_failure_events(
             # Legacy chkstf backlash for targeting the dragon (legacy/KYRSPEL.C:277-285).
             damage = state.rng.randint(20, 46)
             state.player.hitpts = max(0, state.player.hitpts - damage)
-            _persist_player_state(state, state.player)
             events = [
                 _message_event(
                     "player",
@@ -2323,23 +2406,9 @@ def _spell_target_failure_events(
                 ),
             ]
             if state.player.hitpts <= 0:
-                events.append(
-                    _message_event(
-                        "player",
-                        "DIEMSG",
-                        _format_message(state, "DIEMSG"),
-                        command_id,
-                    )
-                )
-                events.append(
-                    _message_event(
-                        "room",
-                        "KILLED",
-                        _format_message(state, "KILLED", state.player.altnam),
-                        command_id,
-                        exclude_player=state.player.plyrid,
-                    )
-                )
+                _append_hitoth_death_events(state, state.player, command_id, events)
+            else:
+                _persist_player_state(state, state.player)
             return events
 
         caster_text = _format_message(state, "KSPM00", obj.name)
@@ -2380,7 +2449,25 @@ async def _apply_area_damage(
     # Legacy masshitr handling (legacy/KYRSPEL.C:400-429).
     if not state.presence or not state.player_lookup:
         return
-    occupants = await state.presence.players_in_room(state.player.gamloc)
+    origin_room = state.player.gamloc
+    occupants = await state.presence.players_in_room(origin_room)
+
+    def _origin_room_message(
+        message_id: str,
+        text: str,
+        *,
+        exclude_player: str | None = None,
+    ) -> dict:
+        event = _message_event(
+            "nearby_room",
+            message_id,
+            text,
+            command_id,
+            exclude_player=exclude_player,
+        )
+        event["room_id"] = origin_room
+        return event
+
     for occupant_id in occupants:
         if not area_damage.get("hits_self") and occupant_id == state.player.plyrid:
             continue
@@ -2404,42 +2491,43 @@ async def _apply_area_damage(
             target_text = _format_message(state, "MERCYU")
             target_event = _message_event("target", "MERCYU", target_text, command_id)
             target_event["player"] = target.plyrid
+            target_event["room_id"] = origin_room
             events.append(target_event)
 
             broadcast_text = _format_message(state, "MERCYO", target.altnam)
             events.append(
-                _message_event(
-                    "room",
+                _origin_room_message(
                     "MERCYO",
                     broadcast_text,
-                    command_id,
                     exclude_player=target.plyrid,
                 )
             )
             continue
 
         target.hitpts = max(0, target.hitpts - area_damage["damage"])
-        _persist_player_state(state, target)
 
         target_text = _format_message(state, area_damage["hit_id"])
         target_event = _message_event(
             "target", area_damage["hit_id"], target_text, command_id
         )
         target_event["player"] = target.plyrid
+        target_event["room_id"] = origin_room
         events.append(target_event)
 
         broadcast_text = _format_message(
             state, area_damage["other_id"], target.altnam
         )
         events.append(
-            _message_event(
-                "room",
+            _origin_room_message(
                 area_damage["other_id"],
                 broadcast_text,
-                command_id,
                 exclude_player=target.plyrid,
             )
         )
+        if target.hitpts <= 0:
+            _append_hitoth_death_events(state, target, command_id, events)
+        else:
+            _persist_player_state(state, target)
 
 
 def _handle_spellbook(state: GameState, args: dict) -> CommandResult:
@@ -2665,8 +2753,14 @@ def _location_message_id(location_id: int, content_mappings: dict[str, dict[str,
     return f"KRD{location_id:03d}"
 
 
-def _location_description(state: GameState, location: models.LocationModel) -> tuple[str, str | None]:
-    if state.player.flags & constants.PlayerFlag.BRFSTF:
+def _location_description(
+    state: GameState,
+    location: models.LocationModel,
+    *,
+    player: models.PlayerModel | None = None,
+) -> tuple[str, str | None]:
+    viewer = player or state.player
+    if viewer.flags & constants.PlayerFlag.BRFSTF:
         # Ported from entrgp in legacy/KYRUTIL.C, which printed the brief description when BRFSTF is set.【F:legacy/KYRUTIL.C†L236-L255】
         return None, None
 
@@ -2766,6 +2860,8 @@ def _persist_player_state(state: GameState, player: models.PlayerModel):
     )
     if not record:
         return
+    record.altnam = player.altnam
+    record.attnam = player.attnam
     record.level = player.level
     record.nmpdes = player.nmpdes
     record.hitpts = player.hitpts

@@ -24,6 +24,10 @@ from .gateway import RoomGateway
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
+from .session_state import (
+    player_model_from_record,
+    sync_active_player_state_from_db,
+)
 from .world.animation_tick_system import AnimationTickSystem, BrownieRoutine, ZarDragonRoutine
 
 logger = logging.getLogger(__name__)
@@ -254,35 +258,7 @@ async def require_active_session(
 
 
 def _player_model_from_record(record: models.Player) -> models.PlayerModel:
-    return models.PlayerModel(
-        uidnam=record.uidnam,
-        plyrid=record.plyrid,
-        altnam=record.altnam,
-        attnam=record.attnam,
-        gpobjs=record.gpobjs,
-        nmpdes=record.nmpdes,
-        modno=record.modno,
-        level=record.level,
-        gamloc=record.gamloc,
-        pgploc=record.pgploc,
-        flags=record.flags,
-        gold=record.gold,
-        npobjs=record.npobjs,
-        obvals=record.obvals,
-        nspells=record.nspells,
-        spts=record.spts,
-        hitpts=record.hitpts,
-        offspls=record.offspls,
-        defspls=record.defspls,
-        othspls=record.othspls,
-        charms=record.charms,
-        spells=record.spells,
-        gemidx=record.gemidx,
-        stones=record.stones,
-        macros=record.macros,
-        stumpi=record.stumpi,
-        spouse=record.spouse,
-    )
+    return player_model_from_record(record)
 
 
 def _player_level_caps(level: int) -> tuple[int, int]:
@@ -2030,6 +2006,10 @@ def create_app() -> FastAPI:
                                 target_id = event.get("player")
                                 if not target_id:
                                     continue
+                                if event.get("death_reset"):
+                                    sync_active_player_state_from_db(
+                                        provider.scope.app, target_id
+                                    )
                                 # Legacy msgutl2 actor messages render to usrnum before room fan-out
                                 # (legacy/KYRSPEL.C:389-396; room calls such as legacy/KYRROUS.C:847).
                                 # The web port mirrors that actor view across every active player session,
@@ -2290,10 +2270,14 @@ def create_app() -> FastAPI:
                                 envelope,
                                 exclude=excluded_sockets or None,
                             )
+                            if event.get("include_sender") and nearby_room_id != current_room:
+                                await websocket.send_json(envelope)
                     elif scope == "target":
                         target_id = event.get("player")
                         if not target_id:
                             continue
+                        if event.get("death_reset"):
+                            sync_active_player_state_from_db(provider.scope.app, target_id)
                         envelope_room = event.get("room_id", current_room)
                         envelope = {"type": "command_response", "room": envelope_room, "payload": event}
                         if meta:

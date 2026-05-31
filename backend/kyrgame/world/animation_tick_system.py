@@ -5,6 +5,7 @@ import asyncio
 from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol, Sequence
 
 from .. import constants, models
+from ..player_lifecycle import reset_player_after_death
 
 
 @dataclass(eq=True, frozen=True)
@@ -303,8 +304,7 @@ class ZarDragonRoutine:
             ),
         ]
         if player.hitpts <= 0:
-            old_name = player.altnam
-            self._reset_dead_player(player)
+            reset = self._reset_dead_player(player)
             self._player_persister(player)
             events.extend(
                 [
@@ -316,13 +316,14 @@ class ZarDragonRoutine:
                             "target_player": player.plyrid,
                             "target_message_id": "DIEMSG",
                             "target_text": self._message_formatter("DIEMSG"),
+                            "death_reset": True,
                         },
                     ),
                     AnimationTickEvent(
                         flag="zarfood",
                         room_id=room_id,
                         message_id="KILLED",
-                        message_text=self._message_formatter("KILLED", old_name),
+                        message_text=self._message_formatter("KILLED", reset.old_name),
                         payload={"exclude_player": player.plyrid},
                     ),
                     AnimationTickEvent(
@@ -335,6 +336,7 @@ class ZarDragonRoutine:
                             "target_type": "location_update",
                             "location": 0,
                             "move_player_to": 0,
+                            "death_reset": True,
                         },
                     ),
                     # Legacy hitoth() reinitializes the player, then entrgp(0, ...)
@@ -357,51 +359,8 @@ class ZarDragonRoutine:
             )
         return events
 
-    def _reset_dead_player(self, player: models.PlayerModel) -> None:
-        old_flags = int(player.flags)
-        # Legacy initgp() zeroes the gmplyr record, preserves sex as FEMALE,
-        # resets MDES/FDES level-one description state, and rerolls four
-        # birthstones before hitoth()/entrgp() place the player at room 0
-        # (legacy/KYRANDIA.C:325-356; legacy/KYRSPEL.C:312-320).
-        object.__setattr__(player, "altnam", player.plyrid)
-        object.__setattr__(player, "attnam", player.plyrid)
-        object.__setattr__(player, "gamloc", 0)
-        object.__setattr__(player, "pgploc", 0)
-        object.__setattr__(player, "nmpdes", constants.level_to_nmpdes(1))
-        object.__setattr__(player, "level", 1)
-        object.__setattr__(player, "hitpts", 4)
-        object.__setattr__(player, "spts", 2)
-        object.__setattr__(player, "gold", 0)
-        object.__setattr__(player, "gpobjs", [])
-        object.__setattr__(player, "obvals", [])
-        object.__setattr__(player, "npobjs", 0)
-        object.__setattr__(player, "spells", [])
-        object.__setattr__(player, "nspells", 0)
-        object.__setattr__(player, "offspls", 0)
-        object.__setattr__(player, "defspls", 0)
-        object.__setattr__(player, "othspls", 0)
-        object.__setattr__(player, "charms", [0] * constants.NCHARM)
-        object.__setattr__(player, "gemidx", 0)
-        object.__setattr__(
-            player,
-            "stones",
-            [
-                self._chance_picker(
-                    constants.BIRTHSTONE_MIN,
-                    constants.BIRTHSTONE_MAX + 1,
-                )
-                for _ in range(constants.BIRTHSTONE_SLOTS)
-            ],
-        )
-        object.__setattr__(player, "macros", 0)
-        object.__setattr__(player, "stumpi", 0)
-        object.__setattr__(player, "spouse", "")
-        object.__setattr__(
-            player,
-            "flags",
-            int(constants.PlayerFlag.LOADED)
-            | (old_flags & int(constants.PlayerFlag.FEMALE)),
-        )
+    def _reset_dead_player(self, player: models.PlayerModel):
+        return reset_player_after_death(player, self._chance_picker)
 
     def _attack_message_and_damage(
         self, player: models.PlayerModel, attack: str

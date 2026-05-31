@@ -52,6 +52,30 @@ class RoomPresence:
         return set(self._occupants_by_room.get(room_id, set()))
 
 
+class OrderedPresence:
+    def __init__(self, occupants: list[str]):
+        self._occupants = occupants
+
+    async def players_in_room(self, room_id: int):  # noqa: ARG002
+        return list(self._occupants)
+
+
+class FixedRng:
+    def __init__(self, *, randrange_values=(), randint_values=()):
+        self._randrange_values = list(randrange_values)
+        self._randint_values = list(randint_values)
+
+    def randrange(self, low: int, high: int) -> int:  # noqa: ARG002
+        if self._randrange_values:
+            return self._randrange_values.pop(0)
+        return low
+
+    def randint(self, low: int, high: int) -> int:  # noqa: ARG002
+        if self._randint_values:
+            return self._randint_values.pop(0)
+        return low
+
+
 @pytest.mark.anyio
 async def test_cast_requires_spell_name():
     player = _build_player(flags=int(constants.PlayerFlag.LOADED))
@@ -339,6 +363,70 @@ async def test_cast_targeting_dragon_backfires_on_caster():
 
 
 @pytest.mark.anyio
+async def test_cast_targeting_dragon_death_resets_caster_and_refreshes_room():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE),
+        altnam="Some psuedo dragon",
+        attnam="psuedo dragon",
+        level=25,
+        spts=25,
+        spells=[4],
+        nspells=1,
+        hitpts=1,
+        gamloc=7,
+        pgploc=7,
+        gold=44,
+        gpobjs=[0],
+        obvals=[10],
+        npobjs=1,
+        stones=[9, 8, 7, 6],
+    )
+    state = _build_state(player)
+    state.rng = FixedRng(randint_values=[20], randrange_values=[2, 3, 4, 5])
+    location = state.locations[state.player.gamloc]
+    dragon_id = next(obj.id for obj in state.objects.values() if obj.name == "dragon")
+    location = location.model_copy(update={"objects": [dragon_id], "nlobjs": 1})
+    state.locations[location.id] = location
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "bookworm dragon"}, state)
+
+    assert [event["message_id"] for event in result.events[:4]] == [
+        "ZMSG08",
+        "ZMSG09",
+        "DIEMSG",
+        "KILLED",
+    ]
+    assert state.player.gamloc == 0
+    assert state.player.pgploc == 0
+    assert state.player.altnam == state.player.plyrid
+    assert state.player.attnam == state.player.plyrid
+    assert state.player.flags == int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE)
+    assert state.player.level == 1
+    assert state.player.hitpts == 4
+    assert state.player.spts == 2
+    assert state.player.gold == 0
+    assert state.player.gpobjs == []
+    assert state.player.spells == []
+    assert state.player.stones == [2, 3, 4, 5]
+    assert any(
+        event.get("scope") == "target"
+        and event.get("player") == state.player.plyrid
+        and event.get("event") == "location_update"
+        and event.get("location") == 0
+        for event in result.events
+    )
+    assert any(
+        event.get("scope") == "nearby_room"
+        and event.get("room_id") == 0
+        and "appeared in a holy light" in (event.get("text") or "")
+        for event in result.events
+    )
+
+
+@pytest.mark.anyio
 async def test_cast_area_damage_spells_apply_damage_and_protection():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
@@ -385,6 +473,340 @@ async def test_cast_area_damage_spells_apply_damage_and_protection():
     assert "S06M04" in message_ids
     assert target.hitpts == 20
     assert protected.hitpts == 30
+
+
+@pytest.mark.anyio
+async def test_cast_area_damage_death_resets_each_dead_target_and_preserves_guards():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=10,
+        spts=25,
+        spells=[5],
+        nspells=1,
+        gamloc=7,
+    )
+    target_one = _build_player(
+        plyrid="target1",
+        attnam="Target One",
+        altnam="Target One",
+        gamloc=7,
+        hitpts=6,
+        level=5,
+        gold=20,
+        gpobjs=[0],
+        obvals=[10],
+        npobjs=1,
+    )
+    target_two = _build_player(
+        plyrid="target2",
+        attnam="Target Two",
+        altnam="Target Two",
+        gamloc=7,
+        hitpts=10,
+        level=5,
+        spells=[1],
+        nspells=1,
+    )
+    protected = _build_player(
+        plyrid="shielded",
+        attnam="Shielded",
+        altnam="Shielded",
+        gamloc=7,
+        hitpts=6,
+        level=5,
+    )
+    protected.charms[constants.FIRPRO] = 1
+    mercy = _build_player(
+        plyrid="mercy",
+        attnam="Mercy",
+        altnam="Mercy",
+        gamloc=7,
+        hitpts=6,
+        level=1,
+    )
+    state = _build_state(player)
+    state.rng = FixedRng(randrange_values=[2, 2, 2, 2, 3, 3, 3, 3])
+    state.presence = OrderedPresence(
+        [player.plyrid, target_one.plyrid, target_two.plyrid, protected.plyrid, mercy.plyrid]
+    )
+    players = {
+        player.plyrid: player,
+        target_one.plyrid: target_one,
+        target_two.plyrid: target_two,
+        protected.plyrid: protected,
+        mercy.plyrid: mercy,
+    }
+    state.player_lookup = players.get
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "burnup"}, state)
+
+    assert target_one.gamloc == 0
+    assert target_one.level == 1
+    assert target_one.hitpts == 4
+    assert target_one.gold == 0
+    assert target_one.gpobjs == []
+    assert target_one.stones == [2, 2, 2, 2]
+    assert target_two.gamloc == 0
+    assert target_two.level == 1
+    assert target_two.hitpts == 4
+    assert target_two.spells == []
+    assert target_two.stones == [3, 3, 3, 3]
+    assert protected.gamloc == 7
+    assert protected.hitpts == 6
+    assert mercy.gamloc == 7
+    assert mercy.hitpts == 6
+
+    death_events = [
+        event
+        for event in result.events
+        if event.get("scope") == "target" and event.get("message_id") == "DIEMSG"
+    ]
+    killed_events = [
+        event
+        for event in result.events
+        if event.get("message_id") == "KILLED" and event.get("room_id") == 7
+    ]
+    arrivals = [
+        event
+        for event in result.events
+        if event.get("room_id") == 0
+        and "appeared in a holy light" in (event.get("text") or "")
+    ]
+    assert {event["player"] for event in death_events} == {"target1", "target2"}
+    assert {event["exclude_player"] for event in killed_events} == {"target1", "target2"}
+    assert {event["exclude_player"] for event in arrivals} == {"target1", "target2"}
+
+
+@pytest.mark.anyio
+async def test_cast_area_self_death_keeps_later_room_messages_on_origin_room():
+    rose_id = next(obj.id for obj in fixtures.load_objects() if obj.name == "rose")
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[58],
+        nspells=1,
+        gamloc=7,
+        pgploc=7,
+        hitpts=1,
+        gpobjs=[rose_id],
+        obvals=[0],
+        npobjs=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="Target",
+        altnam="Target",
+        gamloc=7,
+        pgploc=7,
+        level=25,
+        hitpts=60,
+    )
+    state = _build_state(player)
+    state.rng = FixedRng(randrange_values=[2, 3, 4, 5])
+    state.presence = OrderedPresence([player.plyrid, target.plyrid])
+    players = {player.plyrid: player, target.plyrid: target}
+    state.player_lookup = players.get
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "tiltowait"}, state)
+
+    later_target_room_message = next(
+        event
+        for event in result.events
+        if event.get("message_id") == "S59M05"
+        and event.get("exclude_player") == target.plyrid
+    )
+    assert state.player.gamloc == 0
+    assert target.gamloc == 7
+    assert later_target_room_message["scope"] == "nearby_room"
+    assert later_target_room_message["room_id"] == 7
+
+
+@pytest.mark.anyio
+async def test_cast_direct_damage_death_resets_target_refreshes_room_and_persists(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        player = _build_player(
+            flags=int(constants.PlayerFlag.LOADED),
+            plyrid="caster",
+            attnam="Caster",
+            altnam="Caster",
+            level=25,
+            spts=25,
+            spells=[47],
+            nspells=1,
+            gamloc=7,
+            pgploc=7,
+        )
+        target = _build_player(
+            uidnam="target-uid",
+            plyrid="target",
+            attnam="target",
+            altnam="Target Mask",
+            gamloc=7,
+            pgploc=7,
+            hitpts=2,
+            level=5,
+            flags=int(
+                constants.PlayerFlag.LOADED
+                | constants.PlayerFlag.FEMALE
+                | constants.PlayerFlag.MARRYD
+            ),
+            gold=55,
+            gpobjs=[0, 1],
+            obvals=[10, 20],
+            npobjs=2,
+            spells=[1, 23],
+            nspells=2,
+            charms=[
+                1 if index != constants.OBJPRO else 0
+                for index in range(constants.NCHARM)
+            ],
+            gemidx=3,
+            stones=[9, 8, 7, 6],
+            macros=19,
+            stumpi=8,
+            spouse="beloved",
+        )
+        state = _build_state(player)
+        state.rng = FixedRng(randrange_values=[2, 3, 4, 5])
+        state.presence = TrackingPresence({player.plyrid, target.plyrid})
+        state.player_lookup = lambda pid: {player.plyrid: player, target.plyrid: target}.get(pid)
+        state.db_session = session
+        session.add(models.Player(**player.model_dump()))
+        session.add(models.Player(**target.model_dump()))
+        session.commit()
+
+        registry = commands.build_default_registry()
+        dispatcher = commands.CommandDispatcher(registry)
+
+        result = await dispatcher.dispatch("cast", {"raw": "pocus target"}, state)
+
+        assert any(
+            event.get("scope") == "target"
+            and event.get("player") == target.plyrid
+            and event.get("message_id") == "DIEMSG"
+            for event in result.events
+        )
+        assert any(
+            event.get("scope") == "nearby_room"
+            and event.get("room_id") == 7
+            and event.get("message_id") == "KILLED"
+            and event.get("exclude_player") == target.plyrid
+            for event in result.events
+        )
+        assert any(
+            event.get("scope") == "target"
+            and event.get("event") == "location_update"
+            and event.get("player") == target.plyrid
+            and event.get("location") == 0
+            for event in result.events
+        )
+        assert any(
+            event.get("scope") == "target"
+            and event.get("event") == "location_description"
+            and event.get("player") == target.plyrid
+            and event.get("location") == 0
+            and event.get("message_id") == "KRD000"
+            for event in result.events
+        )
+        assert any(
+            event.get("scope") == "target"
+            and event.get("event") == "room_objects"
+            and event.get("player") == target.plyrid
+            and event.get("location") == 0
+            for event in result.events
+        )
+        assert any(
+            event.get("scope") == "nearby_room"
+            and event.get("room_id") == 0
+            and event.get("exclude_player") == target.plyrid
+            and "appeared in a holy light" in (event.get("text") or "")
+            for event in result.events
+        )
+
+        assert target.uidnam == "target-uid"
+        assert target.plyrid == "target"
+        assert target.altnam == "target"
+        assert target.attnam == "target"
+        assert target.gamloc == 0
+        assert target.pgploc == 0
+        assert target.flags == int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE)
+        assert target.level == 1
+        assert target.hitpts == 4
+        assert target.spts == 2
+        assert target.gold == 0
+        assert target.gpobjs == []
+        assert target.spells == []
+        assert target.charms == [0] * constants.NCHARM
+        assert target.stones == [2, 3, 4, 5]
+
+        record = session.scalar(select(models.Player).where(models.Player.plyrid == "target"))
+        assert record is not None
+        assert record.altnam == "target"
+        assert record.attnam == "target"
+        assert record.gamloc == 0
+        assert record.pgploc == 0
+        assert record.level == 1
+        assert record.hitpts == 4
+        assert record.spts == 2
+        assert record.gold == 0
+        assert record.gpobjs == []
+        assert record.spells == []
+        assert record.charms == [0] * constants.NCHARM
+        assert record.stones == [2, 3, 4, 5]
+
+
+@pytest.mark.anyio
+async def test_cast_target_death_refresh_uses_reset_target_brief_flag():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED | constants.PlayerFlag.BRFSTF),
+        plyrid="caster",
+        attnam="Caster",
+        altnam="Caster",
+        level=25,
+        spts=25,
+        spells=[47],
+        nspells=1,
+        gamloc=7,
+        pgploc=7,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="target",
+        altnam="Target",
+        gamloc=7,
+        pgploc=7,
+        hitpts=2,
+        level=5,
+        flags=int(constants.PlayerFlag.LOADED),
+    )
+    state = _build_state(player)
+    state.rng = FixedRng(randrange_values=[2, 3, 4, 5])
+    state.presence = TrackingPresence({player.plyrid, target.plyrid})
+    state.player_lookup = lambda pid: {player.plyrid: player, target.plyrid: target}.get(pid)
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "pocus target"}, state)
+
+    description_event = next(
+        event
+        for event in result.events
+        if event.get("scope") == "target"
+        and event.get("event") == "location_description"
+        and event.get("player") == target.plyrid
+    )
+    assert description_event["message_id"] == "KRD000"
+    assert description_event["text"] == state.messages.messages["KRD000"]
 
 
 @pytest.mark.anyio
@@ -645,6 +1067,111 @@ async def test_cast_zelastone_uses_legacy_global_player_lookup_and_target_room_s
     assert result.events[4]["exclude_player"] == target.plyrid
     assert result.events[1]["scope"] == "room"
     assert result.events[1]["exclude_player"] == player.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_zelastone_target_hit_death_resets_remote_target():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=7,
+        spells=[66],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="Target Mask",
+        altnam="Target Mask",
+        gamloc=12,
+        hitpts=30,
+        level=5,
+        gold=99,
+        gpobjs=[0],
+        obvals=[10],
+        npobjs=1,
+        stones=[9, 8, 7, 6],
+    )
+    state = _build_state(player)
+    state.rng = FixedRng(randint_values=[50, 40], randrange_values=[2, 3, 4, 5])
+    state.presence = RoomPresence({7: {player.plyrid}, 12: {target.plyrid}})
+    state.player_lookup = lambda pid: (
+        player if pid == player.plyrid else target if pid == target.plyrid else None
+    )
+    state.global_player_lookup = lambda name: target if name == target.plyrid else None
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "zelastone target"}, state)
+
+    assert target.gamloc == 0
+    assert target.level == 1
+    assert target.hitpts == 4
+    assert target.gold == 0
+    assert target.gpobjs == []
+    assert target.stones == [2, 3, 4, 5]
+    assert any(
+        event.get("scope") == "target"
+        and event.get("player") == "target"
+        and event.get("message_id") == "DIEMSG"
+        for event in result.events
+    )
+    assert any(
+        event.get("scope") == "nearby_room"
+        and event.get("room_id") == 12
+        and event.get("message_id") == "KILLED"
+        and event.get("exclude_player") == "target"
+        for event in result.events
+    )
+    assert any(
+        event.get("scope") == "nearby_room"
+        and event.get("room_id") == 0
+        and event.get("exclude_player") == "target"
+        and "appeared in a holy light" in (event.get("text") or "")
+        for event in result.events
+    )
+
+
+@pytest.mark.anyio
+async def test_cast_zelastone_missing_target_death_resets_caster():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE),
+        altnam="Caster Mask",
+        attnam="Caster Mask",
+        level=25,
+        spts=25,
+        gamloc=7,
+        hitpts=20,
+        spells=[66],
+        nspells=1,
+        stones=[9, 8, 7, 6],
+    )
+    state = _build_state(player)
+    state.rng = FixedRng(randint_values=[20], randrange_values=[2, 3, 4, 5])
+    state.global_player_lookup = lambda name: None
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "zelastone nobody"}, state)
+
+    assert [event["message_id"] for event in result.events[:4]] == [
+        "S67M00",
+        "S67M01",
+        "DIEMSG",
+        "KILLED",
+    ]
+    assert state.player.gamloc == 0
+    assert state.player.level == 1
+    assert state.player.hitpts == 4
+    assert state.player.flags == int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE)
+    assert state.player.stones == [2, 3, 4, 5]
+    assert any(
+        event.get("scope") == "target"
+        and event.get("player") == state.player.plyrid
+        and event.get("event") == "location_update"
+        and event.get("location") == 0
+        for event in result.events
+    )
 
 
 @pytest.mark.anyio
