@@ -2272,6 +2272,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
             object.__setattr__(location, "objects", object_ids)
             object.__setattr__(location, "nlobjs", len(object_ids))
             _persist_location_objects(state, location_id, object_ids)
+        if location and state.player.gamloc == location_id:
             events.append(
                 _room_objects_event(
                     location,

@@ -627,6 +627,12 @@ async def test_cast_area_self_death_stops_later_old_room_damage():
     assert target.hitpts == 60
     assert self_hit_room_message["scope"] == "nearby_room"
     assert self_hit_room_message["room_id"] == 7
+    room_object_locations = [
+        event.get("location")
+        for event in result.events
+        if event.get("event") == "room_objects"
+    ]
+    assert room_object_locations == [0]
     assert not any(
         event.get("message_id") in {"S59M04", "S59M05"}
         and event.get("player") == target.plyrid
