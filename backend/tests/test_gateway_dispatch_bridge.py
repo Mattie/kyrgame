@@ -350,6 +350,103 @@ async def test_websocket_give_item_target_payload_includes_giver_name():
 
 
 @pytest.mark.anyio
+async def test_websocket_give_overflow_broadcasts_room_objects_to_all_clients():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 0})
+        watcher_session = await client.post("/auth/session", json={"player_id": "watcher", "room_id": 0})
+        room_zero = hero_session.json()["session"]["room_id"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            seer = db.scalar(select(models.Player).where(models.Player.plyrid == "seer"))
+            ruby = db.scalar(select(models.GameObject).where(models.GameObject.name == "ruby"))
+            location = db.get(models.Location, room_zero)
+            assert hero is not None
+            assert seer is not None
+            assert ruby is not None
+            assert location is not None
+
+            filler_ids = [
+                obj_id
+                for obj_id in db.scalars(
+                    select(models.GameObject.id).order_by(models.GameObject.id)
+                ).all()
+                if obj_id != ruby.id
+            ][: constants.MXPOBS]
+            assert len(filler_ids) == constants.MXPOBS
+
+            hero.gpobjs = [ruby.id]
+            hero.obvals = [0]
+            hero.npobjs = 1
+            seer.gpobjs = filler_ids
+            seer.obvals = [0] * len(filler_ids)
+            seer.npobjs = len(filler_ids)
+            location.objects = []
+            location.nlobjs = 0
+            db.commit()
+
+        app.state.location_index[room_zero] = app.state.location_index[room_zero].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+
+        hero_uri = f"ws://{host}:{port}/ws/rooms/0?token={hero_session.json()['session']['token']}"
+        seer_uri = f"ws://{host}:{port}/ws/rooms/0?token={seer_session.json()['session']['token']}"
+        watcher_uri = f"ws://{host}:{port}/ws/rooms/0?token={watcher_session.json()['session']['token']}"
+
+        async with websockets.connect(hero_uri) as hero_ws:
+            await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+            async with websockets.connect(seer_uri) as seer_ws:
+                await _recv_matching(seer_ws, lambda msg: msg.get("payload", {}).get("event") == "location_update")
+                await _recv_matching(hero_ws, lambda msg: msg.get("payload", {}).get("event") == "player_enter")
+                async with websockets.connect(watcher_uri) as watcher_ws:
+                    await _recv_matching(
+                        watcher_ws,
+                        lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                    )
+
+                    await hero_ws.send(json.dumps({"type": "command", "command": "give seer ruby"}))
+
+                    hero_objects = await _recv_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("event") == "room_objects",
+                    )
+                    seer_objects = await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("event") == "room_objects",
+                    )
+                    watcher_objects = await _recv_matching(
+                        watcher_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("event") == "room_objects",
+                    )
+
+                    payloads = [
+                        hero_objects["payload"],
+                        seer_objects["payload"],
+                        watcher_objects["payload"],
+                    ]
+                    assert {payload["location"] for payload in payloads} == {room_zero}
+                    assert payloads[0]["objects"]
+                    assert payloads[0]["objects"] == payloads[1]["objects"] == payloads[2]["objects"]
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_shove_moves_target_and_fans_out_to_destination_room():
     app = create_app()
     host = "127.0.0.1"
@@ -413,6 +510,14 @@ async def test_websocket_shove_moves_target_and_fans_out_to_destination_room():
                         and "mystic" in msg.get("payload", {}).get("occupants", []),
                     )
                     assert seer_occupants["room"] == 1
+
+                    mystic_entrant = await _recv_matching(
+                        mystic_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("event") == "player_enter"
+                        and msg.get("payload", {}).get("player") == "seer",
+                    )
+                    assert mystic_entrant["room"] == 1
 
                     mystic_arrival = await _recv_matching(
                         mystic_ws,
