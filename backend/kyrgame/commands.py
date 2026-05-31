@@ -245,7 +245,50 @@ _PICKUP_VERBS = {
 
 _SAY_VERBS = {"say", "comment", "note"}
 _YELL_VERBS = {"scream", "shout", "shriek", "yell"}
-_GIVE_VERBS = {"give", "hand", "pass"}
+_GIVE_VERBS = {"give", "hand", "pass", "toss"}
+
+SIMPLE_EMOTES = {
+    "blink": ("Blink!", "blinking %s eyes in disbelief!", False),
+    "blush": ("Blush.", "blushing and turning bright red!", False),
+    "boo": ("BOO!", "booing and yelling for the hook!", True),
+    "bow": ("Bow.", "bowing rather modestly.", False),
+    "burp": ("Urrrrp!", "belching rudely!", True),
+    "cackle": ("Cackle, cackle!", "cackling frighteningly!", True),
+    "cheer": ("Rah, rah, rah!", "cheering enthusiastically!", True),
+    "chuckle": ("Heh, heh, heh.", "chuckling under %s breath.", True),
+    "clap": ("Clap, clap.", "clapping in admiration.", False),
+    "cough": ("Ahem.", "coughing loud and harshly.", True),
+    "cry": ("Awwwww.", "crying %s little heart out.", True),
+    "dance": ("How graceful!", "dancing with soaring spirits!", False),
+    "fart": ("Yuck.", "emanating a horrible odor.", False),
+    "frown": ("Frown.", "frowning unhappily.", False),
+    "gasp": ("WOW!", "gasping in total amazement!", True),
+    "giggle": ("Giggle, giggle!", "giggling like a hyena.", True),
+    "grin": ("What a grin!", "grinning from ear to ear.", False),
+    "groan": ("Groan!", "groaning with disgust.", True),
+    "growl": ("Growl!", "growling like a rabid bear!", True),
+    "hiss": ("Hisss!", "hissing like an angry snake!", True),
+    "howl": ("Howl!", "howling like a dog in heat!", True),
+    "laugh": ("What's so funny?", "laughing %s head off!", True),
+    "lie": ("Comfortable?", "lying down comfortably.", True),
+    "moan": ("Moan!", "moaning loudly.", True),
+    "nod": ("Nod.", "nodding in agreement.", False),
+    "piss": ("If you say so.", "lifting %s leg strangely.", False),
+    "pout": ("Wasdamatta?", "pouting with tearful eyes.", True),
+    "shit": ("Find a toilet!", "grunting on %s knees.", False),
+    "shrug": ("Shrug.", "shrugging with indifference.", False),
+    "sigh": ("Sigh.", "sighing wistfully.", True),
+    "sing": ("Lalalala.", "singing a cheerful melody.", True),
+    "sit": ("Ok, now what?", "sitting down for a bit.", False),
+    "smile": ("Smile!", "smiling kindly.", False),
+    "smirk": ("Smirk.", "smirking in disdain.", False),
+    "sneeze": ("Waaacho!", "sneezing %s brains out!", False),
+    "snicker": ("Snicker, snicker.", "snickering evily.", True),
+    "sniff": ("Sniff.", "sniffling woefully.", False),
+    "sob": ("Sob!", "sobbing pitifully.", True),
+    "whistle": ("Whistle.", "whistling a faintly familiar tune.", True),
+    "yawn": ("Aaarhh.", "yawning with boredom.", True),
+}
 # Pickup verbs mirror legacy getter aliases in KYRCMDS.C (gi_cmdarr).【F:legacy/KYRCMDS.C†L117-L174】
 
 _NORMALIZE_ARTICLES = {"the", "a", "an"}
@@ -918,6 +961,13 @@ def _give_actor_prefix(state: GameState, verb: str) -> str:
     return f"{prefix}{_format_message(state, 'GMSGUTL3', verb)}"
 
 
+def _give_prefixed_message(
+    state: GameState, verb: str, message_id: str, *args: object
+) -> str:
+    body = _format_message(state, message_id, *args) or ""
+    return f"{_give_actor_prefix(state, verb)}{body}"
+
+
 def _sndutl_text(player: models.PlayerModel, template: str) -> str:
     """Format a sndutl-style broadcast line for the room."""
     # Legacy sndutl formats "*** <altnam> is <template % hisher>" for room broadcasts.
@@ -947,6 +997,667 @@ def _player_and_room_message_events(
             )
         )
     return events
+
+
+def _msgutl2_events(
+    state: GameState,
+    command_id: int | None,
+    actor_message_id: str,
+    room_message_id: str,
+    *actor_args: object,
+) -> list[dict]:
+    """Build legacy msgutl2 actor+room fan-out."""
+    # Legacy msgutl2() sends yourmsg to usrnum and othmsg(altnam) to sndoth()
+    # (legacy/KYRSPEL.C:389-396).
+    return [
+        _message_event(
+            "player",
+            actor_message_id,
+            _format_message(state, actor_message_id, *actor_args),
+            command_id,
+        ),
+        _message_event(
+            "room",
+            room_message_id,
+            _format_message(state, room_message_id, state.player.altnam),
+            command_id,
+            exclude_player=state.player.plyrid,
+        ),
+    ]
+
+
+def _find_location_object(
+    state: GameState, target: str
+) -> tuple[int, models.GameObjectModel] | tuple[None, None]:
+    location = state.locations[state.player.gamloc]
+    objects = state.objects or {}
+    object_id = _find_object_in_location(location, objects, target)
+    if object_id is None:
+        return None, None
+    obj = objects.get(object_id)
+    if obj is None:
+        return None, None
+    return object_id, obj
+
+
+async def _handle_kiss_mode(state: GameState, args: dict, mode: int) -> CommandResult:
+    command_id = args.get("command_id")
+    verb = str(args.get("verb") or "").lower()
+    target_name = (args.get("raw") or "").strip().lower()
+    objects = state.objects or {}
+
+    # Ported from kisutl() target branching in legacy/KYRCMDS.C:390-466.
+    if not target_name:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "KISUTL1",
+                _format_message(state, "KISUTL1", _upperc(verb)),
+                room_template="making strange motions.",
+            ),
+        )
+
+    inventory_index = _find_inventory_index(state.player, target_name, objects)
+    if inventory_index is not None:
+        obj = objects[state.player.gpobjs[inventory_index]]
+        actor_text = _format_message(state, "KISUTL2", verb, _object_with_article(obj))
+        room_prefix = _format_message(state, "KISUTL3", state.player.altnam) or ""
+        if mode:
+            room_body = _format_message(state, "KISUTL4", _hisher(state.player), obj.name, verb)
+            room_id = "KISUTL4"
+        else:
+            room_body = _format_message(state, "KISUTL5", verb, _hisher(state.player), obj.name)
+            room_id = "KISUTL5"
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event("player", "KISUTL2", actor_text, command_id),
+                _message_event(
+                    "room",
+                    room_id,
+                    f"{room_prefix}{room_body or ''}",
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    _, location_obj = _find_location_object(state, target_name)
+    if location_obj is not None:
+        if location_obj.name.lower() == "dryad" and mode:
+            return CommandResult(
+                state=state,
+                events=[
+                    _message_event(
+                        "player",
+                        "UKISSD",
+                        _format_message(state, "UKISSD", verb),
+                        command_id,
+                    ),
+                    _message_event(
+                        "room",
+                        "OKISSD",
+                        _format_message(
+                            state,
+                            "OKISSD",
+                            state.player.altnam,
+                            verb,
+                            _himher(state.player),
+                            verb,
+                        ),
+                        command_id,
+                        exclude_player=state.player.plyrid,
+                    ),
+                ],
+            )
+
+        actor_text = _format_message(
+            state, "KISUTL6", verb, _object_with_article(location_obj)
+        )
+        room_prefix = _format_message(state, "KISUTL7", state.player.altnam) or ""
+        location = state.locations[state.player.gamloc]
+        if mode:
+            room_body = _format_message(
+                state, "KISUTL8", location_obj.name, location.objlds, verb
+            )
+            room_id = "KISUTL8"
+        else:
+            room_body = _format_message(
+                state, "KISUTL9", verb, location_obj.name, location.objlds
+            )
+            room_id = "KISUTL9"
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event("player", "KISUTL6", actor_text, command_id),
+                _message_event(
+                    "room",
+                    room_id,
+                    f"{room_prefix}{room_body or ''}",
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    target_player = await _find_player_in_room(state, target_name)
+    if target_player:
+        if mode:
+            if target_player.plyrid == state.player.spouse and verb == "kiss":
+                return CommandResult(
+                    state=state,
+                    events=[
+                        _message_event(
+                            "player",
+                            "SKISSR",
+                            _format_message(
+                                state, "SKISSR", target_player.plyrid, _himher(target_player)
+                            ),
+                            command_id,
+                        ),
+                        {
+                            **_message_event(
+                                "target",
+                                "SKISSU",
+                                _format_message(
+                                    state,
+                                    "SKISSU",
+                                    state.player.altnam,
+                                    _hisher(state.player),
+                                ),
+                                command_id,
+                            ),
+                            "player": target_player.plyrid,
+                        },
+                        _message_event(
+                            "room",
+                            "SKISSO",
+                            _format_message(
+                                state,
+                                "SKISSO",
+                                state.player.altnam,
+                                target_player.altnam,
+                                _hisher(state.player),
+                                _himher(target_player),
+                            ),
+                            command_id,
+                            exclude_player=target_player.plyrid,
+                        ),
+                    ],
+                )
+            return CommandResult(
+                state=state,
+                events=[
+                    _message_event("player", "DONE", _format_message(state, "DONE"), command_id),
+                    {
+                        **_message_event(
+                            "target",
+                            "KISUTL10",
+                            _format_message(state, "KISUTL10", state.player.altnam, verb),
+                            command_id,
+                        ),
+                        "player": target_player.plyrid,
+                    },
+                    _message_event(
+                        "room",
+                        "KISUTL11",
+                        _format_message(
+                            state, "KISUTL11", state.player.altnam, target_player.altnam, verb
+                        ),
+                        command_id,
+                        exclude_player=target_player.plyrid,
+                    ),
+                ],
+            )
+
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event("player", "BEST", _format_message(state, "BEST"), command_id),
+                {
+                    **_message_event(
+                        "target",
+                        "KISUTL12",
+                        _format_message(
+                            state, "KISUTL12", state.player.altnam, _hisher(state.player), verb
+                        ),
+                        command_id,
+                    ),
+                    "player": target_player.plyrid,
+                },
+                _message_event(
+                    "room",
+                    "KISUTL13",
+                    _format_message(
+                        state,
+                        "KISUTL13",
+                        state.player.altnam,
+                        _hisher(state.player),
+                        verb,
+                        target_player.altnam,
+                    ),
+                    command_id,
+                    exclude_player=target_player.plyrid,
+                ),
+            ],
+        )
+
+    return CommandResult(
+        state=state,
+        events=_player_and_room_message_events(
+            state,
+            command_id,
+            "KISUTL14",
+            _format_message(state, "KISUTL14"),
+            room_template="seeing things!",
+        ),
+    )
+
+
+async def _handle_kissr1(state: GameState, args: dict) -> CommandResult:
+    return await _handle_kiss_mode(state, args, 0)
+
+
+async def _handle_kissr2(state: GameState, args: dict) -> CommandResult:
+    return await _handle_kiss_mode(state, args, 1)
+
+
+async def _handle_think(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    raw = (args.get("raw") or "").strip()
+    tokens = raw.split(maxsplit=1)
+    objects = state.objects or {}
+
+    # Ported from thinkr() in legacy/KYROBJR.C:91-119.
+    if len(tokens) == 2 and _find_inventory_index(state.player, "amulet", objects) is not None:
+        target = _find_player_globally_by_true_id(state, tokens[0])
+        if target:
+            return CommandResult(
+                state=state,
+                events=[
+                    _message_event(
+                        "player",
+                        "OBJM02",
+                        _format_message(state, "OBJM02"),
+                        command_id,
+                    ),
+                    {
+                        **_message_event(
+                            "target",
+                            None,
+                            f"A voice in your mind says: {_unquote_text(tokens[1])}",
+                            command_id,
+                        ),
+                        "player": target.plyrid,
+                        "room_id": target.gamloc,
+                    },
+                ],
+            )
+
+    if not raw:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM03",
+                _format_message(state, "OBJM03"),
+                room_template="thinking about life.",
+            ),
+        )
+
+    item_name = tokens[0].lower()
+    inventory_index = _find_inventory_index(state.player, item_name, objects)
+    if inventory_index is None:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM09",
+                _format_message(state, "OBJM09"),
+                room_template="having wild dreams.",
+            ),
+        )
+
+    object_id = state.player.gpobjs[inventory_index]
+    obj = objects.get(object_id)
+    if obj is None or "THIABL" not in obj.flags:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM04",
+                _format_message(state, "OBJM04"),
+                room_template="thinking of %s possesions.",
+            ),
+        )
+
+    try:
+        effect = _build_object_engine(state).use_object(
+            player_id=state.player.plyrid,
+            object_id=object_id,
+            room_id=state.player.gamloc,
+            action="think",
+            player=state.player,
+        )
+    except EffectError:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "OBJM04",
+                _format_message(state, "OBJM04"),
+                room_template="thinking of %s possesions.",
+            ),
+        )
+    return CommandResult(
+        state=state,
+        events=[_message_event("player", effect.message_id, effect.text, command_id)],
+    )
+
+
+def _flight_events(
+    state: GameState,
+    command_id: int | None,
+    *,
+    destination: int,
+    player_message_id: str,
+    departure_text: str,
+    arrival_text: str,
+) -> list[dict]:
+    from_room = state.player.gamloc
+    state.player.pgploc = from_room
+    state.player.gamloc = destination
+    # Ported from willof()/pegasf() remvgp+entrgp flow in legacy/KYRCMDS.C:953-969.
+    events = [
+        _message_event(
+            "player",
+            player_message_id,
+            _format_message(state, player_message_id),
+            command_id,
+        ),
+        {
+            "scope": "nearby_room",
+            "room_id": from_room,
+            "event": "room_message",
+            "type": "room_message",
+            "player": state.player.plyrid,
+            "from": from_room,
+            "to": destination,
+            "text": f"*** {state.player.altnam} has just {departure_text}!",
+            "message_id": None,
+            "command_id": command_id,
+            "exclude_player": state.player.plyrid,
+        },
+    ]
+    events.extend(
+        _build_room_transition_events(
+            state,
+            from_room=from_room,
+            to_room=destination,
+            command_id=command_id,
+            message_id=_command_message_id(command_id),
+            direction=None,
+            arrival_text=f"*** {state.player.altnam} has just {arrival_text}!",
+        )
+    )
+    _persist_player_state(state, state.player)
+    return events
+
+
+def _handle_fly(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    flags = constants.PlayerFlag(state.player.flags)
+    # Ported from flyrou() in legacy/KYRCMDS.C:919-950.
+    if flags & constants.PlayerFlag.WILLOW:
+        if state.player.gamloc == 179:
+            events = _flight_events(
+                state,
+                command_id,
+                destination=180,
+                player_message_id="WILFLY",
+                departure_text="gracefully flown across the chasm",
+                arrival_text="gracefully flown from across the chasm",
+            )
+            return CommandResult(state=state, events=events)
+        if state.player.gamloc == 180:
+            events = _flight_events(
+                state,
+                command_id,
+                destination=179,
+                player_message_id="WILFLY",
+                departure_text="gracefully flown across the chasm",
+                arrival_text="gracefully flown from across the chasm",
+            )
+            return CommandResult(state=state, events=events)
+        return CommandResult(state=state, events=_msgutl2_events(state, command_id, "UNOFLY", "ATFLY1"))
+
+    if flags & constants.PlayerFlag.PEGASU:
+        if state.player.gamloc == 22:
+            events = _flight_events(
+                state,
+                command_id,
+                destination=189,
+                player_message_id="PEGFLY",
+                departure_text="majestically flown across the sea",
+                arrival_text="majestically flown from across the sea",
+            )
+            return CommandResult(state=state, events=events)
+        if state.player.gamloc == 189:
+            events = _flight_events(
+                state,
+                command_id,
+                destination=22,
+                player_message_id="PEGFLY",
+                departure_text="majestically flown across the sea",
+                arrival_text="majestically flown from across the sea",
+            )
+            return CommandResult(state=state, events=events)
+        return CommandResult(state=state, events=_msgutl2_events(state, command_id, "UNOFLY", "ATFLY1"))
+
+    if flags & constants.PlayerFlag.PDRAGN:
+        return CommandResult(state=state, events=_msgutl2_events(state, command_id, "UNOFLY", "ATFLY1"))
+    return CommandResult(state=state, events=_msgutl2_events(state, command_id, "HUNFLY", "ATFLY1"))
+
+
+async def _set_presence_location_for_player(
+    state: GameState, player_id: str, room_id: int
+) -> None:
+    presence = state.presence
+    if presence is None:
+        return
+    set_location = getattr(presence, "set_location", None)
+    if set_location is None:
+        return
+    sessions_for_player = getattr(presence, "sessions_for_player", None)
+    if sessions_for_player is None:
+        await set_location(player_id, room_id)
+        return
+    for token in await sessions_for_player(player_id):
+        await set_location(player_id, room_id, token)
+
+
+def _target_location_events(
+    state: GameState,
+    target: models.PlayerModel,
+    command_id: int | None,
+) -> list[dict]:
+    destination = state.locations[target.gamloc]
+    description_id, long_description = _location_description(state, destination)
+    return [
+        {
+            "scope": "target",
+            "event": "location_update",
+            "type": "location_update",
+            "player": target.plyrid,
+            "location": destination.id,
+            "description": destination.brfdes,
+            "description_id": description_id,
+            "long_description": long_description,
+            "command_id": command_id,
+            "message_id": _command_message_id(command_id),
+            "room_id": destination.id,
+        },
+        {
+            "scope": "target",
+            "event": "location_description",
+            "type": "location_description",
+            "player": target.plyrid,
+            "location": destination.id,
+            "message_id": description_id,
+            "text": long_description or destination.brfdes,
+            "room_id": destination.id,
+        },
+        {
+            **_room_objects_event(
+                destination,
+                state.objects or {},
+                command_id,
+                _command_message_id(command_id),
+            ),
+            "scope": "target",
+            "player": target.plyrid,
+            "room_id": destination.id,
+        },
+    ]
+
+
+async def _handle_shove(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    raw = (args.get("raw") or "").strip()
+    tokens = raw.split()
+    # Ported from shover()/gi_shvutl() in legacy/KYRCMDS.C:800-856.
+    if len(tokens) == 1:
+        return await _handle_kiss_mode(state, {**args, "raw": tokens[0]}, 1)
+    if len(tokens) != 2:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "SHOVER3",
+                _format_message(state, "SHOVER3"),
+                room_template="having a medical emergency!",
+            ),
+        )
+
+    target_name, direction = tokens[0], tokens[1].lower()
+    target = await _find_player_in_room(state, target_name)
+    if target is None:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "SHOVER2",
+                _format_message(state, "SHOVER2", target_name),
+                room_template="seeing things.",
+            ),
+        )
+
+    field = _DIRECTION_FIELDS.get(direction)
+    current = state.locations[state.player.gamloc]
+    destination = getattr(current, field) if field else -1
+    if destination == -1 or destination not in state.locations:
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "SHOVER1",
+                _format_message(state, "SHOVER1", direction),
+                room_template="having hallucinations.",
+            ),
+        )
+
+    from_room = target.gamloc
+    from_direction = {
+        "north": "south",
+        "south": "north",
+        "east": "west",
+        "west": "east",
+    }[direction]
+    target.pgploc = from_room
+    target.gamloc = destination
+    await _set_presence_location_for_player(state, target.plyrid, destination)
+    _persist_player_state(state, target)
+
+    events: list[dict] = [
+        _message_event(
+            "player",
+            "SHVUTL1",
+            _format_message(state, "SHVUTL1", target.plyrid),
+            command_id,
+        ),
+        _message_event(
+            "room",
+            None,
+            f"*** {target.altnam} has just been shoved {direction} by {state.player.altnam}!",
+            command_id,
+            exclude_player=target.plyrid,
+        ),
+        {
+            **_message_event(
+                "target",
+                "SHVUTL2",
+                _format_message(state, "SHVUTL2", state.player.altnam, direction),
+                command_id,
+            ),
+            "player": target.plyrid,
+            "room_id": destination,
+        },
+    ]
+    events.extend(_target_location_events(state, target, command_id))
+    events.append(
+        {
+            "scope": "nearby_room",
+            "room_id": destination,
+            "event": "room_message",
+            "type": "room_message",
+            "player": target.plyrid,
+            "from": from_room,
+            "to": destination,
+            "text": f"*** {target.altnam} has just been shoved from the {from_direction}!",
+            "message_id": None,
+            "command_id": command_id,
+            "exclude_player": target.plyrid,
+        }
+    )
+    return CommandResult(state=state, events=events)
+
+
+def _handle_simple_emote(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    verb = str(args.get("verb") or "").lower()
+    raw = (args.get("raw") or "").strip()
+    you, them, speak = SIMPLE_EMOTES[verb]
+    # Ported from cmpsmp()/smputl() in legacy/KYRCMDS.C:1332-1351.
+    if speak and raw:
+        return _handle_say(state, {**args, "text": raw, "verb": verb})
+    them_text = them % _hisher(state.player) if "%s" in them else them
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event(
+                "player",
+                "SMPUTL1",
+                _format_message(state, "SMPUTL1", you),
+                command_id,
+            ),
+            _message_event(
+                "room",
+                "SMPUTL2",
+                _format_message(state, "SMPUTL2", state.player.altnam, them_text),
+                command_id,
+                exclude_player=state.player.plyrid,
+            ),
+        ],
+    )
 
 
 def _zar_animation_events_to_command_events(
@@ -2152,6 +2863,14 @@ def _hisher(player: models.PlayerModel) -> str:
     return models.possessive_pronoun(player)
 
 
+def _himher(player: models.PlayerModel) -> str:
+    return models.object_pronoun(player)
+
+
+def _upperc(text: str) -> str:
+    return text[:1].upper() + text[1:].lower()
+
+
 def _compact_system_prefix(text: str | None) -> str | None:
     if text and text.startswith("***\r\n"):
         return text.replace("***\r\n", "*** ", 1)
@@ -2800,15 +3519,15 @@ def _parse_give_args(raw: str) -> dict:
     tokens = raw.split()
     if not tokens:
         return {}
-    if len(tokens) >= 4 and tokens[1].lower() == "gold" and tokens[2].lower() == "to":
+    if len(tokens) == 4 and tokens[1].lower() == "gold" and tokens[2].lower() == "to":
         return {"gold_amount": tokens[0], "target_player": tokens[3]}
-    if len(tokens) >= 3 and tokens[2].lower() == "gold":
-        # Legacy: give <target> <amount> gold → givcrd(2,1) (KYRCMDS.C:500-501)
+    if len(tokens) == 3 and tokens[2].lower() == "gold":
+        # Legacy: give <target> <amount> gold -> givcrd(2,1) (KYRCMDS.C:500-501)
         return {"target_player": tokens[0], "gold_amount": tokens[1]}
-    if len(tokens) >= 3 and tokens[1].lower() == "to":
+    if len(tokens) == 3 and tokens[1].lower() == "to":
         return {"target_item": tokens[0], "target_player": tokens[2]}
-    if len(tokens) >= 2:
-        # Legacy: give <target> <item> → giveru(margv[1], margv[2]) (KYRCMDS.C:503-504)
+    if len(tokens) == 2:
+        # Legacy: give <target> <item> -> giveru(margv[1], margv[2]) (KYRCMDS.C:503-504)
         return {"target_player": tokens[0], "target_item": tokens[1]}
     return {}
 
@@ -2821,9 +3540,20 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
     See legacy/KYRCMDS.C:493-625.
     """
     command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
+    verb = str(args.get("verb") or "give").lower()
     target_name = (args.get("target_player") or "").strip()
     if not target_name:
-        return CommandResult(state=state, events=[_message_event("player", "GIVIT1", _format_message(state, "GIVIT1"), command_id)])
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "GIVIT1",
+                _format_message(state, "GIVIT1"),
+                room_template="fumbling around foolishly.",
+            ),
+        )
 
     gold_amount = args.get("gold_amount")
     if gold_amount is not None:
@@ -2833,12 +3563,39 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
         except ValueError:
             amount = -1
         if amount < 0:
-            return CommandResult(state=state, events=[_message_event("player", "GIVCRD1", _format_message(state, "GIVCRD1"), command_id)])
+            return CommandResult(
+                state=state,
+                events=_player_and_room_message_events(
+                    state,
+                    command_id,
+                    "GIVCRD1",
+                    _format_message(state, "GIVCRD1"),
+                    room_template="concentrating with difficulty.",
+                ),
+            )
         if amount > state.player.gold:
-            return CommandResult(state=state, events=[_message_event("player", "GIVCRD2", _format_message(state, "GIVCRD2"), command_id)])
+            return CommandResult(
+                state=state,
+                events=_player_and_room_message_events(
+                    state,
+                    command_id,
+                    "GIVCRD2",
+                    _format_message(state, "GIVCRD2"),
+                    room_template="dreaming of great wealth.",
+                ),
+            )
         target_player = await _find_player_in_room(state, target_name)
         if not target_player:
-            return CommandResult(state=state, events=[_message_event("player", "GIVCRD3", _format_message(state, "GIVCRD3"), command_id)])
+            return CommandResult(
+                state=state,
+                events=_player_and_room_message_events(
+                    state,
+                    command_id,
+                    "GIVCRD3",
+                    _format_message(state, "GIVCRD3"),
+                    room_template="looking rather puzzled",
+                ),
+            )
         state.player.gold -= amount
         target_player.gold += amount
         # Legacy giveit()/givcrd() updates both players immediately (KYRCMDS.C:537-550).
@@ -2852,23 +3609,189 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                     **_message_event("target", "GIVCRD5", _format_message(state, "GIVCRD5", state.player.altnam, amount, "" if amount == 1 else "s"), command_id),
                     "player": target_player.plyrid,
                 },
+                _message_event(
+                    "room",
+                    "GIVCRD6",
+                    _format_message(
+                        state,
+                        "GIVCRD6",
+                        state.player.altnam,
+                        target_player.altnam,
+                        amount,
+                        "" if amount == 1 else "s",
+                    ),
+                    command_id,
+                    exclude_player=target_player.plyrid,
+                ),
             ],
         )
 
     target_player = await _find_player_in_room(state, target_name)
     if not target_player:
-        return CommandResult(state=state, events=[_message_event("player", "GIVCRD3", _format_message(state, "GIVCRD3"), command_id)])
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "GIVERU1",
+                _format_message(state, "GIVERU1", _upperc(target_name)),
+                room_template="having hallucinations.",
+            ),
+        )
 
     item_name = (args.get("target_item") or "").strip().lower()
     if not item_name:
-        return CommandResult(state=state, events=[_message_event("player", "GIVIT1", _format_message(state, "GIVIT1"), command_id)])
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "GIVIT1",
+                _format_message(state, "GIVIT1"),
+                room_template="fumbling around foolishly.",
+            ),
+        )
     if target_player.plyrid == state.player.plyrid:
-        return CommandResult(state=state, events=[_message_event("player", "GIVERU2", _format_message(state, "GIVERU2"), command_id)])
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "GIVERU2",
+                _format_message(state, "GIVERU2"),
+                room_template="scratching %s rear end.",
+            ),
+        )
 
     objects = state.objects or {}
     inventory_index = _find_inventory_index(state.player, item_name, objects)
     if inventory_index is None:
-        return CommandResult(state=state, events=[_message_event("player", "GIVERU3", _format_message(state, "GIVERU3"), command_id)])
+        return CommandResult(
+            state=state,
+            events=_player_and_room_message_events(
+                state,
+                command_id,
+                "GIVERU3",
+                _format_message(state, "GIVERU3"),
+                room_template="searching %s pockets frantically!",
+            ),
+        )
+
+    location = state.locations[state.player.gamloc]
+    obj_id = state.player.gpobjs[inventory_index]
+    obj = objects[obj_id]
+    obj_display = _object_with_article(obj)
+
+    # Legacy giveru() handles a full recipient before removing the giver item
+    # (legacy/KYRCMDS.C:573-603).
+    if len(target_player.gpobjs) >= constants.MXPOBS:
+        if len(location.objects) >= constants.MXLOBS:
+            return CommandResult(
+                state=state,
+                events=_player_and_room_message_events(
+                    state,
+                    command_id,
+                    "GIVERU4",
+                    _format_message(state, "GIVERU4"),
+                    room_template="wrestling with supernatural powers!",
+                ),
+            )
+
+        if (state.rng.randrange(256) & 0x01) == 0:
+            obj_id, _ = pop_inventory_index(state.player, inventory_index)
+            updated_objects = list(location.objects) + [obj_id]
+            location = location.model_copy(
+                update={"objects": updated_objects, "nlobjs": len(updated_objects)}
+            )
+            state.locations[location.id] = location
+            _persist_location_objects(state, location.id, updated_objects)
+            _persist_player_inventory(state, state.player)
+            return CommandResult(
+                state=state,
+                events=[
+                    _message_event(
+                        "player",
+                        "GIVERU5",
+                        _format_message(state, "GIVERU5"),
+                        command_id,
+                    ),
+                    _room_objects_event(location, objects, command_id, message_id),
+                    _message_event(
+                        "room",
+                        "GIVERU6",
+                        _format_message(
+                            state,
+                            "GIVERU6",
+                            state.player.altnam,
+                            _hisher(state.player),
+                            obj.name,
+                        ),
+                        command_id,
+                        exclude_player=state.player.plyrid,
+                    ),
+                ],
+            )
+
+        value = state.player.obvals[inventory_index] if inventory_index < len(state.player.obvals) else 0
+        dropped_obj_id, _ = pop_inventory_index(target_player, 0)
+        dropped_obj = objects[dropped_obj_id]
+        pop_inventory_index(state.player, inventory_index)
+        target_player.gpobjs.append(obj_id)
+        target_player.obvals.append(value)
+        target_player.npobjs = len(target_player.gpobjs)
+        updated_objects = list(location.objects) + [dropped_obj_id]
+        location = location.model_copy(
+            update={"objects": updated_objects, "nlobjs": len(updated_objects)}
+        )
+        state.locations[location.id] = location
+        _persist_location_objects(state, location.id, updated_objects)
+        _persist_player_inventory(state, target_player)
+        _persist_player_inventory(state, state.player)
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "GIVERU7",
+                    _format_message(
+                        state,
+                        "GIVERU7",
+                        _himher(target_player),
+                        _hisher(target_player),
+                        dropped_obj.name,
+                    ),
+                    command_id,
+                ),
+                _room_objects_event(location, objects, command_id, message_id),
+                {
+                    **_message_event(
+                        "target",
+                        "GIVERU8",
+                        _give_prefixed_message(
+                            state, verb, "GIVERU8", obj_display, dropped_obj.name
+                        ),
+                        command_id,
+                    ),
+                    "player": target_player.plyrid,
+                },
+                _message_event(
+                    "room",
+                    "GIVERU9",
+                    _give_prefixed_message(
+                        state,
+                        verb,
+                        "GIVERU9",
+                        target_player.altnam,
+                        obj_display,
+                        _himher(target_player),
+                        _hisher(target_player),
+                        dropped_obj.name,
+                    ),
+                    command_id,
+                    exclude_player=target_player.plyrid,
+                ),
+            ],
+        )
 
     obj_id, value = pop_inventory_index(state.player, inventory_index)
     target_player.gpobjs.append(obj_id)
@@ -2885,11 +3808,26 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                 **_message_event(
                     "target",
                     "GIVERU10",
-                    f"{_give_actor_prefix(state, str(args.get('verb') or 'give').lower())}{_format_message(state, 'GIVERU10', _object_with_article(objects[obj_id]))}",
+                    _give_prefixed_message(
+                        state, verb, "GIVERU10", _object_with_article(objects[obj_id])
+                    ),
                     command_id,
                 ),
                 "player": target_player.plyrid,
             },
+            _message_event(
+                "room",
+                "GIVERU11",
+                _give_prefixed_message(
+                    state,
+                    verb,
+                    "GIVERU11",
+                    target_player.altnam,
+                    _object_with_article(objects[obj_id]),
+                ),
+                command_id,
+                exclude_player=target_player.plyrid,
+            ),
         ],
     )
 
@@ -2981,7 +3919,10 @@ class CommandVocabulary:
         tokens = raw.split()
         verb = tokens[0].lower()
         remainder = " ".join(tokens[1:]).strip()
-        if verb not in self.chat_aliases:
+        # Legacy cmpsmp()/smputl() delegates speaking emotes directly to speakr()
+        # without gi_bagthe()/bagprep(), so preserve post-verb text for smparr verbs.
+        # (legacy/KYRCMDS.C:1329-1353)
+        if verb not in self.chat_aliases and verb not in SIMPLE_EMOTES:
             tokens = normalize_tokens(tokens)
             remainder = " ".join(tokens[1:]).strip()
 
@@ -3278,6 +4219,77 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         ),
         _handle_spells,
     )
+    for verb in (
+        "comfort",
+        "cuddle",
+        "embrace",
+        "french",
+        "hold",
+        "love",
+        "rape",
+        "romance",
+        "squeeze",
+        "tickle",
+    ):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1 if vocabulary.commands[verb].payonl else 0,
+                required_flags=int(constants.PlayerFlag.LOADED)
+                if vocabulary.commands[verb].payonl
+                else 0,
+                failure_message_id="CMPCMD1" if vocabulary.commands[verb].payonl else None,
+            ),
+            _handle_kissr1,
+        )
+    for verb in ("hug", "kick", "kiss", "pinch", "punch", "slap", "smack", "smooch"):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1 if vocabulary.commands[verb].payonl else 0,
+                required_flags=int(constants.PlayerFlag.LOADED)
+                if vocabulary.commands[verb].payonl
+                else 0,
+                failure_message_id="CMPCMD1" if vocabulary.commands[verb].payonl else None,
+            ),
+            _handle_kissr2,
+        )
+    for verb in ("concentrate", "meditate", "think"):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            _handle_think,
+        )
+    registry.register(
+        CommandMetadata(
+            verb="fly",
+            command_id=vocabulary._lookup_command_id("fly"),
+            required_level=1,
+            required_flags=int(constants.PlayerFlag.LOADED),
+            failure_message_id="CMPCMD1",
+        ),
+        _handle_fly,
+    )
+    for verb in ("push", "shove"):
+        registry.register(
+            CommandMetadata(
+                verb=verb,
+                command_id=vocabulary._lookup_command_id(verb),
+                required_level=1,
+                required_flags=int(constants.PlayerFlag.LOADED),
+                failure_message_id="CMPCMD1",
+            ),
+            _handle_shove,
+        )
+    for verb in sorted(SIMPLE_EMOTES):
+        registry.register(CommandMetadata(verb=verb), _handle_simple_emote)
 
     for command in vocabulary.iter_commands():
         verb = command.command.lower()

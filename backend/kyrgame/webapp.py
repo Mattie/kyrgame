@@ -2304,7 +2304,32 @@ def create_app() -> FastAPI:
                                 continue
                             if target_socket.application_state != WebSocketState.CONNECTED:
                                 continue
+                            location = event.get("location")
+                            if event.get("type") == "location_update" and isinstance(location, int):
+                                await gateway.register(location, target_socket, announce=False)
+                                await provider.presence.set_location(target_id, location, token)
+                                with provider.scope.app.state.session_factory() as db:
+                                    repo = repositories.PlayerSessionRepository(db)
+                                    repo.set_room(token, location)
+                                    repo.mark_seen(token)
+                                    db.commit()
                             await target_socket.send_json(envelope)
+                            if event.get("type") == "location_update" and isinstance(location, int):
+                                occupants_event = await _room_occupants_event(
+                                    provider.presence,
+                                    target_id,
+                                    location,
+                                    state.messages,
+                                )
+                                if occupants_event:
+                                    occupants_envelope = {
+                                        "type": "command_response",
+                                        "room": location,
+                                        "payload": occupants_event,
+                                    }
+                                    if meta:
+                                        occupants_envelope["meta"] = meta
+                                    await target_socket.send_json(occupants_envelope)
                     else:
                         envelope = {"type": "command_response", "room": current_room, "payload": event}
                         if meta:

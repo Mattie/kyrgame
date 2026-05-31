@@ -8,6 +8,9 @@ The test uses the real `/auth/session` endpoint and room WebSocket command
 envelope for every level-up command. Quest items are obtained through their
 room commands before the level trigger. Dev setup is limited to room placement,
 ordinary gemstone setup, spouse state, and the deterministic truth-maze branch.
+After level 25, the test resumes the player without a room override and verifies
+that level, room, inventory, and spellbook state persist through a fresh
+WebSocket connection.
 
 | Target | Room | Command coverage | Setup / item path | Status |
 | --- | ---: | --- | --- | --- |
@@ -58,4 +61,5 @@ ordinary gemstone setup, spouse state, and the deterministic truth-maze branch.
 - For level 18, retry `seek truth` after a death branch by restoring the player
   to level 17 with the golden key.
 - Reconnect after a late-game level-up and confirm the persisted player level,
-  room, inventory, and spellbook state resume.
+  room, inventory, and spellbook state resume. Automated in
+  `backend/tests/test_solo_level_journey.py`.

@@ -39,11 +39,15 @@ class RoomGateway:
 
     async def unregister(self, room_id: int, websocket: WebSocket):
         async with self._lock:
-            if room_id in self.rooms and websocket in self.rooms[room_id]:
-                self.rooms[room_id].remove(websocket)
-                if not self.rooms[room_id]:
-                    del self.rooms[room_id]
-            self.connections.pop(websocket, None)
+            registered_room = self.connections.pop(websocket, None)
+            room_ids = {room_id}
+            if registered_room is not None:
+                room_ids.add(registered_room)
+            for target_room_id in room_ids:
+                if target_room_id in self.rooms and websocket in self.rooms[target_room_id]:
+                    self.rooms[target_room_id].remove(websocket)
+                    if not self.rooms[target_room_id]:
+                        del self.rooms[target_room_id]
 
     async def broadcast(
         self,

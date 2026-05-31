@@ -337,6 +337,34 @@ async def test_solo_level_journey_reaches_level_25_with_in_game_commands(monkeyp
                     record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
                     assert record is not None
                     assert record.level == step.target_level
+
+            with app.state.session_factory() as db:
+                record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+                assert record is not None
+                assert record.level == 25
+                assert record.gamloc == 302
+                assert record.nspells == len(record.spells)
+                expected_spell_ids = list(record.spells[: record.nspells])
+
+            resume = await client.post("/auth/session", json={"player_id": player_id})
+            resume.raise_for_status()
+            resumed = resume.json()["session"]
+            assert resumed["room_id"] == 302
+            uri = f"ws://{host}:{port}/ws/rooms/{resumed['room_id']}?token={resumed['token']}"
+            async with websockets.connect(uri) as ws:
+                location = await _recv_matching(
+                    ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                assert location["payload"]["location"] == 302
+                await ws.send(json.dumps({"type": "command", "command": "spells"}))
+                spells = await _recv_matching(
+                    ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("level") == 25,
+                )
+                assert spells["payload"]["level"] == 25
+                assert spells["payload"]["memorized_spell_ids"] == expected_spell_ids
     finally:
         server.should_exit = True
         await server_task

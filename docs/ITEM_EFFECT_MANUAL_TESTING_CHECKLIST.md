@@ -10,6 +10,12 @@ This checklist is intended for admins/testers validating recently ported object 
 - Room/context restrictions for non-portable scenery props.
 - Dragonstaff `zaritm` behavior with full Zar summon, relocation, and attack wiring.
 
+## Automated coverage
+
+- [x] Backend command/effect tests cover drinkable consumption, readable scroll/spellbook behavior, aim/point target validation, non-aimable inventory rejection, scenery/context restrictions, dragonstaff `rub`/Zar summon and attack branches, and inline event payload preservation.
+- [x] Playwright covers browser-visible `drink elixir`, `swallow potion`, `aim dagger`, `point sword`, `rub emerald`, and gemstone inline rendering inside transfer messages; backend/component coverage protects creature/Zar rendering and event payload behavior until the later frontend pass broadens visual checks.
+- [x] Package-content smoke verification regenerates `legacy/Dist/offline-content.json` from the current fixture set; timestamp-only artifact churn is left out of gameplay parity changes.
+
 ---
 
 ## Preconditions (one-time setup)

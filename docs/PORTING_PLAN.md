@@ -80,14 +80,14 @@
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
 - [x] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling. *(Response contract now includes `expires_at`/`expires_in_seconds`, `backend/tests/test_api_contract_gaps.py` covers create/validate/resume, and the navigator displays expiry plus a fresh-token reconnect action.)* [Tracker: `docs/legacy_command_porting.md`]
 
-### Complete Playable Game Parity (Next Major Effort)
+### Complete Playable Game Parity (Completed Gameplay Lane)
 
-- [ ] Complete remaining `KYRCMDS.C` command handler parity for `kissr1`, `kissr2`, `thinkr`, `flyrou`, `shover`, and the `smparr` simple-emote table. Cover direct, target, room, and failure branches with legacy message IDs and source comments where gameplay logic is ported. [Tracker: `docs/legacy_command_porting.md`]
-- [ ] Add command-registry parity coverage proving every legacy command and simple emote resolves to an implemented handler or a deliberate tracker entry, with no silent generic-stub path for gameplay verbs. [Tracker: `docs/legacy_command_porting.md`]
-- [ ] Verify browser-visible rendering for already ported commands: help, aim/point, brief/unbrief, check/count/gold/hits, drink/swallow, give/hand/pass/toss, pray, rub, yell/shout/scream/shriek, whisper, wink, and documented alias paths. [Tracker: `docs/legacy_command_porting.md`]
-- [ ] Add multiplayer client integration tests that exercise direct, target, room, nearby-room, actor-excluding, and target-excluding WebSocket fan-out using seeded fixtures and real browser rendering. [Tracker: `docs/legacy_command_porting.md`]
-- [ ] Convert the item/effect manual checklist into automated backend and Playwright scenarios for consumables, readables, weapon/aim flows, scenery restrictions, dragonstaff/Zar behavior, and creature/gem inline rendering. [Tracker: `docs/ITEM_EFFECT_MANUAL_TESTING_CHECKLIST.md`]
-- [ ] Extend solo-level and late-game regression coverage to include browser-visible reconnect/state persistence after late-game level-ups, key inventory transitions, and spellbook state changes. [Tracker: `docs/solo_level_journey_checklist.md`]
+- [x] Completed remaining `KYRCMDS.C` command handler parity for `kissr1`, `kissr2`, `thinkr`, `flyrou`, `shover`, and the `smparr` simple-emote table. Coverage now includes direct, target, room, nearby-room, movement, inventory/object, and failure branches with legacy message IDs and source comments. [Tracker: `docs/legacy_command_porting.md`]
+- [x] Added command-registry parity coverage proving every legacy command and simple emote resolves to an implemented handler or a named tracker entry, with gameplay verbs kept out of the silent generic-stub path. [Tracker: `docs/legacy_command_porting.md`]
+- [x] Verified browser-visible rendering for the gameplay command surface: help, aim/point, brief/unbrief, check/count/gold/hits, drink/swallow, give/hand/pass/toss, pray, rub, yell/shout/scream/shriek, whisper, wink, kiss/shove, fly, think, simple emotes, and documented alias paths represented in the Playwright flow. [Tracker: `docs/legacy_command_porting.md`]
+- [x] Added multiplayer client integration tests that exercise direct, target, room, nearby-room, actor-excluding, and target-excluding WebSocket fan-out using seeded fixtures and real browser rendering. [Tracker: `docs/legacy_command_porting.md`]
+- [x] Promoted item/effect checklist coverage into automated backend and targeted Playwright scenarios for consumables, readables, weapon/aim flows, scenery restrictions, dragonstaff/Zar behavior, gemstone inline rendering, and backend/component creature rendering. [Tracker: `docs/ITEM_EFFECT_MANUAL_TESTING_CHECKLIST.md`]
+- [x] Extended solo-level and late-game regression coverage to include reconnect/state persistence after late-game level-ups, key inventory transitions, and spellbook state checks. [Tracker: `docs/solo_level_journey_checklist.md`]
 
 ### Release/Ops Cleanup (Final Porting Lane)
 
@@ -95,24 +95,12 @@
 
 ## Remaining Implementation Task Plan
 
-1. **Command handler parity**
-   - Finish the remaining legacy handler families: `kissr1`, `kissr2`, `thinkr`, `flyrou`, `shover`, and `smparr`.
-   - Use `docs/legacy_command_porting.md` as the source of truth for command completion status and frontend verification.
-   - Follow 3HTDD: one Goal scenario per handler family, Steer tests for recipient split/message IDs/state changes, Unit tests only for parser or formatting edge cases.
-2. **Browser-visible multiplayer parity**
-   - Expand Playwright coverage from the current solo journey into multi-player sessions that prove direct, target, room, nearby-room, actor-excluding, and target-excluding output appears in the client.
-   - Verify already-ported commands through the browser before marking their frontend column complete.
-   - Keep WebSocket envelopes stable: `command_response`, `command_error`, `room_broadcast`, room/target/direct scopes, and location/state update payloads.
-3. **Item/effect and late-game regression coverage**
-   - Promote `docs/ITEM_EFFECT_MANUAL_TESTING_CHECKLIST.md` scenarios into automated backend and browser tests.
-   - Extend the solo level journey with late-game reconnect/state persistence checks for level, inventory, room, and spellbook state.
-   - Add follow-up gaps to the relevant tracker as soon as a manual or automated pass exposes a mismatch.
-4. **Documentation and tracker closure**
+1. **Release/Ops cleanup**
+   - Deliver Docker Compose, root Makefile targets, CI wiring, and package-content automation now that gameplay parity and browser verification are complete.
+   - Use the existing `backend/Dockerfile` as the starting point for that final workflow pass.
+2. **Documentation and tracker closure**
    - Keep `docs/PORTING_PLAN.md`, `docs/legacy_command_porting.md`, `docs/PORTING_PLAN_world_object_spell_gaps.md`, and `docs/solo_level_journey_checklist.md` aligned after each gameplay PR.
    - For every ported gameplay routine, include legacy source references and verify both C call sites and message catalog IDs.
-5. **Release/Ops cleanup**
-   - Deliver Docker Compose, root Makefile targets, CI wiring, and package-content automation after gameplay parity and browser verification are complete.
-   - Keep this final lane focused on repeatable release/dev workflow and avoid adding gameplay scope.
 
 ## Architectural Direction
 - **Data contracts:** Mirror the structs in `legacy/KYRANDIA.H` as ORM/Pydantic models (player, location, objects, spells, commands) to maintain limits and flags when validating client input and persisting state.
@@ -161,21 +149,12 @@
 - **Repositories/migrations:** SQLAlchemy models and fixture-backed repositories exist alongside Alembic scaffolding, though persistence is still in-memory for tests.
 - **Admin endpoints:** Provide secured CRUD for player records and content, reflecting `KYRSYSP.C` behaviors. Tests cover authorization and validation, and a PATCH flow clamps level-derived HP/SP, gold caps, and spouse updates for tooling parity. Admin tokens now come from environment configuration (auto-loaded from `backend/.env`, or override with `KYRGAME_ENV_FILE`; see `backend/.env.example` and `backend/ADMINISTRATION.md`).
 
-## Next Steps: Complete Playable Game Parity
-1. **Close command handler gaps**
-   - Implement the remaining `KYRCMDS.C` handler families tracked in `docs/legacy_command_porting.md`: `kissr1`, `kissr2`, `thinkr`, `flyrou`, `shover`, and `smparr`.
-   - Keep the public contract to the existing player command surface; no new HTTP API or schema is expected for this lane.
-   - Add a registry Goal test so legacy commands and simple emotes cannot drift into the generic stub path without a named tracker entry.
-2. **Verify client-visible command output**
-   - Use the existing WebSocket envelope contract: `command_response`, `command_error`, `room_broadcast`, room/target/direct scopes, and location/state updates.
-   - Add browser coverage for already-ported commands that still have unchecked frontend cells in `docs/legacy_command_porting.md`.
-   - Cover alias paths explicitly where the tracker calls them out, especially speech, pickup, give, and movement variants.
-3. **Prove multiplayer fan-out**
-   - Add two-player browser journeys for direct, target, room, nearby-room, actor-excluding, and target-excluding messages.
-   - Pair browser Goal tests with backend Steer tests for each fan-out shape so message IDs and recipients stay grounded in the legacy call sites.
-4. **Automate manual parity checks**
-   - Convert `docs/ITEM_EFFECT_MANUAL_TESTING_CHECKLIST.md` into backend and Playwright tests for item classes and Zar/dragonstaff behavior.
-   - Extend the solo level journey with browser-visible late-game reconnect checks for level, room, inventory, and spellbook state.
-5. **Release/Ops cleanup**
-   - Keep Docker Compose, Makefile targets, CI wiring, and package-content automation as the final porting lane after gameplay and browser parity are closed.
-   - Use the existing `backend/Dockerfile` as the starting point for that final workflow pass.
+## Next Steps: Release/Ops Cleanup
+1. **Compose and local workflow**
+   - Add Docker Compose orchestration for API, database, and seed/package-content flows.
+   - Add root Makefile targets for common local and CI tasks.
+2. **CI and packaging**
+   - Wire backend pytest, frontend Vitest, Playwright, and package-content smoke checks into CI.
+   - Keep `python -m kyrgame.scripts.package_content --output legacy/Dist/offline-content.json` as the release content check.
+3. **Regression maintenance**
+   - Preserve the gameplay/browser parity suites as release gates while the final ops lane lands.

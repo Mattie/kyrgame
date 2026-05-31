@@ -746,9 +746,14 @@ async def test_targeted_commands_cannot_find_invisible_players_without_see_invis
     parsed = vocabulary.parse_text(raw_command)
     result = await dispatcher.dispatch_parsed(parsed, base_state)
 
-    assert len(result.events) == 1
     assert result.events[0]["scope"] == "player"
     assert result.events[0]["message_id"] == expected_message_id
+    assert not any(event.get("scope") == "target" for event in result.events)
+    if expected_message_id == "GIVCRD3":
+        assert len(result.events) == 2
+        assert result.events[1]["text"] == "*** Hero Alt is looking rather puzzled"
+    else:
+        assert len(result.events) == 1
 
 
 @pytest.mark.anyio
