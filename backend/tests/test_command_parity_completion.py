@@ -533,17 +533,21 @@ async def test_give_recipient_full_random_drop_puts_actor_item_in_room(base_stat
     base_state.locations[location.id] = location
     base_state.rng = FixedRandom(0)
 
-    result = await dispatcher.dispatch_parsed(
-        vocabulary.parse_text("pass seer ruby"),
-        base_state,
-    )
+    parsed = vocabulary.parse_text("pass seer ruby")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
 
     location = base_state.locations[base_state.player.gamloc]
     assert item_id not in base_state.player.gpobjs
     assert item_id not in target.gpobjs
     assert item_id in location.objects
-    assert [event.get("message_id") for event in result.events] == ["GIVERU5", "GIVERU6"]
-    assert "Hero Alt just dropped her ruby by mistake" in result.events[1]["text"]
+    assert [event.get("message_id") for event in result.events] == [
+        "GIVERU5",
+        parsed.message_id,
+        "GIVERU6",
+    ]
+    assert result.events[1]["event"] == "room_objects"
+    assert result.events[1]["objects"] == [{"id": item_id, "name": "ruby"}]
+    assert "Hero Alt just dropped her ruby by mistake" in result.events[2]["text"]
 
 
 @pytest.mark.anyio
@@ -560,10 +564,8 @@ async def test_give_recipient_full_random_swap_drops_target_first_item(base_stat
     base_state.locations[location.id] = location
     base_state.rng = FixedRandom(1)
 
-    result = await dispatcher.dispatch_parsed(
-        vocabulary.parse_text("hand seer ruby"),
-        base_state,
-    )
+    parsed = vocabulary.parse_text("hand seer ruby")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
 
     location = base_state.locations[base_state.player.gamloc]
     assert item_id not in base_state.player.gpobjs
@@ -572,11 +574,16 @@ async def test_give_recipient_full_random_swap_drops_target_first_item(base_stat
     assert dropped_item_id in location.objects
     assert [event.get("message_id") for event in result.events] == [
         "GIVERU7",
+        parsed.message_id,
         "GIVERU8",
         "GIVERU9",
     ]
     assert f"drop her {dropped_name}" in result.events[0]["text"]
-    assert result.events[1]["player"] == target.plyrid
-    assert "handed you a ruby" in result.events[1]["text"]
-    assert result.events[2]["exclude_player"] == target.plyrid
-    assert "handed Seer a ruby" in result.events[2]["text"]
+    assert result.events[1]["event"] == "room_objects"
+    assert result.events[1]["objects"] == [
+        {"id": dropped_item_id, "name": dropped_name}
+    ]
+    assert result.events[2]["player"] == target.plyrid
+    assert "handed you a ruby" in result.events[2]["text"]
+    assert result.events[3]["exclude_player"] == target.plyrid
+    assert "handed Seer a ruby" in result.events[3]["text"]

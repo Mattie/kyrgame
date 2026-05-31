@@ -3540,6 +3540,7 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
     See legacy/KYRCMDS.C:493-625.
     """
     command_id = args.get("command_id")
+    message_id = args.get("message_id") or _command_message_id(command_id)
     verb = str(args.get("verb") or "give").lower()
     target_name = (args.get("target_player") or "").strip()
     if not target_name:
@@ -3714,6 +3715,7 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                         _format_message(state, "GIVERU5"),
                         command_id,
                     ),
+                    _room_objects_event(location, objects, command_id, message_id),
                     _message_event(
                         "room",
                         "GIVERU6",
@@ -3760,6 +3762,7 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                     ),
                     command_id,
                 ),
+                _room_objects_event(location, objects, command_id, message_id),
                 {
                     **_message_event(
                         "target",
