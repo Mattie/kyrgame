@@ -357,6 +357,175 @@ async def test_cooldown_prevents_spam(base_state):
 
 
 @pytest.mark.anyio
+async def test_dispatch_increments_macros_and_persists_accepted_command(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(
+            fixtures.load_commands(), fixtures.load_messages()
+        )
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        base_state.player.macros = 18
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.commit()
+        base_state.db_session = session
+
+        parsed = vocabulary.parse_text("look")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        record = session.scalar(
+            select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
+        )
+
+        assert base_state.player.macros == 19
+        assert record is not None
+        assert record.macros == 19
+
+
+@pytest.mark.anyio
+async def test_dispatch_macros_persistence_does_not_overwrite_fresher_player_record(
+    tmp_path, base_state
+):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(
+            fixtures.load_commands(), fixtures.load_messages()
+        )
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+
+        persisted_player = base_state.player.model_copy(
+            update={
+                "macros": 18,
+                "gamloc": 12,
+                "pgploc": 9,
+                "gold": 73,
+                "gpobjs": [0, 1, 2],
+                "obvals": [10, 20, 30],
+                "npobjs": 3,
+            }
+        )
+        session.add(models.Player(**persisted_player.model_dump()))
+        session.commit()
+        base_state.db_session = session
+
+        base_state.player = base_state.player.model_copy(
+            update={
+                "macros": 0,
+                "gamloc": 0,
+                "pgploc": 0,
+                "gold": 1,
+                "gpobjs": [],
+                "obvals": [],
+                "npobjs": 0,
+            }
+        )
+
+        parsed = vocabulary.parse_text("look")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        session.expire_all()
+        record = session.scalar(
+            select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
+        )
+
+        assert record is not None
+        assert record.macros == 19
+        assert record.gamloc == 12
+        assert record.pgploc == 9
+        assert record.gold == 73
+        assert record.gpobjs == [0, 1, 2]
+        assert record.obvals == [10, 20, 30]
+        assert record.npobjs == 3
+
+
+@pytest.mark.anyio
+async def test_dispatch_tired_blocks_handler(base_state):
+    called = False
+
+    def handler(state, args):  # noqa: ARG001
+        nonlocal called
+        called = True
+        return commands.CommandResult(state=state, events=[])
+
+    registry = commands.CommandRegistry()
+    registry.register(commands.CommandMetadata(verb="probe"), handler)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.player.macros = 19
+
+    result = await dispatcher.dispatch("probe", {"command_id": 88}, base_state)
+
+    assert called is False
+    assert base_state.player.macros == 19
+    assert [event["message_id"] for event in result.events] == ["TIRED"]
+    assert result.events[0]["scope"] == "player"
+    assert result.events[0]["command_id"] == 88
+
+
+@pytest.mark.parametrize(
+    "verb,args,expected_event",
+    [
+        ("inventory", {}, "inventory"),
+        ("look", {}, "location_description"),
+        ("read", {"raw": "spellbook"}, "room_message"),
+        ("spells", {}, "room_message"),
+    ],
+)
+@pytest.mark.anyio
+async def test_dispatch_allows_fatigue_bypass_for_read_only_status_command(
+    base_state, verb, args, expected_event
+):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.player.macros = 19
+
+    result = await dispatcher.dispatch(
+        verb,
+        {**args, commands.FATIGUE_BYPASS_ARG: True},
+        base_state,
+    )
+
+    assert base_state.player.macros == 19
+    assert any(event.get("event") == expected_event for event in result.events)
+    assert not any(event.get("message_id") == "TIRED" for event in result.events)
+
+
+@pytest.mark.anyio
+async def test_dispatch_rejects_fatigue_bypass_for_mutating_command(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.player.macros = 19
+
+    result = await dispatcher.dispatch(
+        "move",
+        {"direction": "north", commands.FATIGUE_BYPASS_ARG: True},
+        base_state,
+    )
+
+    assert base_state.player.gamloc == 0
+    assert [event["message_id"] for event in result.events] == ["TIRED"]
+
+
+@pytest.mark.anyio
+async def test_dispatch_error_after_parsing_increments_macros_once(base_state):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.player.gamloc = 7
+    base_state.player.macros = 18
+
+    parsed = vocabulary.parse_text("east")
+    with pytest.raises(commands.BlockedExitError):
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert base_state.player.macros == 19
+
+
+@pytest.mark.anyio
 async def test_get_moves_object_from_room_to_inventory(base_state):
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())

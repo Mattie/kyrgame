@@ -1925,7 +1925,58 @@ def create_app() -> FastAPI:
                 except commands.UnknownCommandError as exc:  # type: ignore[attr-defined]
                     parse_error = exc
 
-                if raw_tokens and provider.room_scripts:
+                fatigue_bypassed = False
+                if raw_tokens:
+                    fatigue_bypass_requested = bool(
+                        meta and meta.get(commands.FATIGUE_BYPASS_META_KEY)
+                    )
+                    if (
+                        fatigue_bypass_requested
+                        and parsed is not None
+                        and commands.can_bypass_command_fatigue(parsed.verb, parsed.args)
+                    ):
+                        # UI satellite panels may request fatigue-free refreshes for
+                        # the small read-only allowlist in commands.can_bypass_command_fatigue().
+                        # Bypassed commands go straight to the dispatcher so a room routine
+                        # cannot mutate state under a status-card refresh flag.
+                        parsed.args[commands.FATIGUE_BYPASS_ARG] = True
+                        fatigue_bypassed = True
+                    else:
+                        fatigue_result = commands.apply_command_fatigue_gate(
+                            state,
+                            getattr(parsed, "command_id", None) if parsed else None,
+                        )
+                        if fatigue_result is not None:
+                            ack_payload = {
+                                "type": "command_response",
+                                "room": current_room,
+                                "payload": {
+                                    "command_id": getattr(parsed, "command_id", None)
+                                    if parsed
+                                    else None,
+                                    "message_id": getattr(parsed, "message_id", None)
+                                    if parsed
+                                    else None,
+                                    "verb": getattr(parsed, "verb", verb) if parsed else verb,
+                                },
+                            }
+                            if meta:
+                                ack_payload["meta"] = meta
+                            await websocket.send_json(ack_payload)
+                            for event in fatigue_result.events:
+                                envelope = {
+                                    "type": "command_response",
+                                    "room": current_room,
+                                    "payload": event,
+                                }
+                                if meta:
+                                    envelope["meta"] = meta
+                                await websocket.send_json(envelope)
+                            continue
+                        if parsed is not None:
+                            parsed.args[commands.FATIGUE_CHECKED_ARG] = True
+
+                if raw_tokens and provider.room_scripts and not fatigue_bypassed:
                     # Legacy kyra() runs the room routine before the command table.【F:legacy/KYRCMDS.C†L1251-L1257】
                     handled = await provider.room_scripts.handle_command(
                         player_id,
