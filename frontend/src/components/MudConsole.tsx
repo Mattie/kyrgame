@@ -299,8 +299,12 @@ export const MudConsole = () => {
       return
     }
 
-    await navigator.clipboard.writeText(fireEffectPresetOutput)
-    setBurnPresetCopyStatus('Copied')
+    try {
+      await navigator.clipboard.writeText(fireEffectPresetOutput)
+      setBurnPresetCopyStatus('Copied')
+    } catch {
+      setBurnPresetCopyStatus('Copy failed')
+    }
   }
 
   const copyFirePalettePreset = async () => {
