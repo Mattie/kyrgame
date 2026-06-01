@@ -130,10 +130,20 @@ describe('MudConsole', () => {
     render(<MudConsole />)
 
     const style = screen.getByLabelText(/burn style/i) as HTMLSelectElement
+    const detail = screen.getByLabelText(/detail/i) as HTMLInputElement
+    const edgeFrequency = screen.getByLabelText(/edge frequency/i) as HTMLInputElement
+    const edgeAmplitude = screen.getByLabelText(/edge amplitude/i) as HTMLInputElement
+    const flickerAmount = screen.getByLabelText(/flicker amount/i) as HTMLInputElement
+    const flickerSpeed = screen.getByLabelText(/flicker speed/i) as HTMLInputElement
+    const driftSpeed = screen.getByLabelText(/drift speed/i) as HTMLInputElement
+    const charDepth = screen.getByLabelText(/char depth/i) as HTMLInputElement
+    const glowBleed = screen.getByLabelText(/glow bleed/i) as HTMLInputElement
+    const outerGlow = screen.getByLabelText(/outer glow/i) as HTMLInputElement
+    const glowRadius = screen.getByLabelText(/glow radius/i) as HTMLInputElement
+    const softness = screen.getByLabelText(/softness/i) as HTMLInputElement
     const pulseSpeed = screen.getByLabelText(/pulse speed/i) as HTMLInputElement
-    const frequency = screen.getByLabelText(/frequency/i) as HTMLInputElement
-    const amplitude = screen.getByLabelText(/amplitude/i) as HTMLInputElement
-    const accents = screen.getByLabelText(/accent curls/i) as HTMLInputElement
+    const pulseDepth = screen.getByLabelText(/pulse depth/i) as HTMLInputElement
+    const embers = screen.getByLabelText(/embers/i) as HTMLInputElement
 
     expect(style.value).toBe('path')
     expect(Array.from(style.options).map((option) => option.value)).toEqual([
@@ -141,10 +151,20 @@ describe('MudConsole', () => {
       'thresholdMask',
       'paperMask',
     ])
-    expect(Number(pulseSpeed.value)).toBe(1.1)
-    expect(Number(frequency.value)).toBe(0.6)
-    expect(Number(amplitude.value)).toBe(0.75)
-    expect(Number(accents.value)).toBe(0.65)
+    expect(Number(detail.value)).toBe(0.66)
+    expect(Number(edgeFrequency.value)).toBe(0.02)
+    expect(Number(edgeAmplitude.value)).toBe(31)
+    expect(Number(flickerAmount.value)).toBe(3.5)
+    expect(Number(flickerSpeed.value)).toBe(3)
+    expect(Number(driftSpeed.value)).toBe(1.8)
+    expect(Number(charDepth.value)).toBe(6)
+    expect(Number(glowBleed.value)).toBe(7.5)
+    expect(Number(outerGlow.value)).toBe(0.14)
+    expect(Number(glowRadius.value)).toBe(7)
+    expect(Number(softness.value)).toBe(2.6)
+    expect(Number(pulseSpeed.value)).toBe(3.2)
+    expect(Number(pulseDepth.value)).toBe(0.2)
+    expect(Number(embers.value)).toBe(0.5)
 
     fireEvent.change(style, { target: { value: 'thresholdMask' } })
     expect(screen.getByTestId('game-panel-fire-border')).toHaveAttribute(
@@ -158,9 +178,13 @@ describe('MudConsole', () => {
       'paperMask'
     )
 
-    fireEvent.change(pulseSpeed, { target: { value: '1.75' } })
-    expect(pulseSpeed.value).toBe('1.75')
-    expect(screen.getByText('1.75')).toBeInTheDocument()
+    fireEvent.change(pulseSpeed, { target: { value: '4.1' } })
+    expect(pulseSpeed.value).toBe('4.1')
+    expect(screen.getByText('4.10')).toBeInTheDocument()
+
+    fireEvent.change(detail, { target: { value: '0.72' } })
+    expect(detail.value).toBe('0.72')
+    expect(screen.getByText('0.720')).toBeInTheDocument()
   })
 
   it('renders ANSI color spans without escape codes', () => {

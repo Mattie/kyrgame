@@ -15,10 +15,20 @@ import {
 describe('CrtFireBorder', () => {
   it('uses the selected soft burn tuning defaults', () => {
     expect(defaultFireBorderTuning).toEqual({
-      pulseSpeed: 1.1,
-      frequency: 0.6,
-      amplitude: 0.75,
-      accents: 0.65,
+      charDepth: 6,
+      detail: 0.66,
+      driftSpeed: 1.8,
+      edgeAmplitude: 31,
+      edgeFrequency: 0.02,
+      embers: 0.5,
+      flickerAmount: 3.5,
+      flickerSpeed: 3,
+      glowBleed: 7.5,
+      glowRadius: 7,
+      outerGlow: 0.14,
+      pulseDepth: 0.2,
+      pulseSpeed: 3.2,
+      softness: 2.6,
     })
   })
 
@@ -50,7 +60,7 @@ describe('CrtFireBorder', () => {
     const previous = { x: 6, y: 10, nx: 0, ny: -1, seed: 11 }
     const point = { x: 10, y: 10, nx: 0, ny: -1, seed: 17 }
     const next = { x: 14, y: 10, nx: 0, ny: -1, seed: 23 }
-    const tuning = { ...defaultFireBorderTuning, accents: 1 }
+    const tuning = { ...defaultFireBorderTuning, embers: 1 }
     const first = getIntegratedFlameLickShape(previous, point, next, 0, false, tuning)
     const later = getIntegratedFlameLickShape(previous, point, next, 900, false, tuning)
 

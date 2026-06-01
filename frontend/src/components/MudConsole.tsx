@@ -70,12 +70,23 @@ const fireTuningControls: Array<{
   label: string
   min: number
   max: number
+  precision: number
   step: number
 }> = [
-  { key: 'pulseSpeed', label: 'Pulse speed', min: 0, max: 3, step: 0.05 },
-  { key: 'frequency', label: 'Frequency', min: 0.25, max: 2.75, step: 0.05 },
-  { key: 'amplitude', label: 'Amplitude', min: 0, max: 2.5, step: 0.05 },
-  { key: 'accents', label: 'Accent curls', min: 0, max: 2.5, step: 0.05 },
+  { key: 'detail', label: 'Detail (sharpness)', min: 0.1, max: 1, precision: 3, step: 0.01 },
+  { key: 'edgeFrequency', label: 'Edge frequency', min: 0.005, max: 0.06, precision: 3, step: 0.001 },
+  { key: 'edgeAmplitude', label: 'Edge amplitude', min: 0, max: 48, precision: 0, step: 1 },
+  { key: 'flickerAmount', label: 'Flicker amount', min: 0, max: 8, precision: 2, step: 0.1 },
+  { key: 'flickerSpeed', label: 'Flicker speed', min: 0, max: 6, precision: 0, step: 0.1 },
+  { key: 'driftSpeed', label: 'Drift speed', min: 0, max: 3, precision: 2, step: 0.05 },
+  { key: 'charDepth', label: 'Char depth', min: 0, max: 24, precision: 0, step: 1 },
+  { key: 'glowBleed', label: 'Glow bleed', min: 0, max: 16, precision: 2, step: 0.1 },
+  { key: 'outerGlow', label: 'Outer glow', min: 0, max: 1, precision: 3, step: 0.01 },
+  { key: 'glowRadius', label: 'Glow radius', min: 0, max: 18, precision: 0, step: 0.5 },
+  { key: 'softness', label: 'Softness', min: 0.5, max: 8, precision: 2, step: 0.1 },
+  { key: 'pulseSpeed', label: 'Pulse speed', min: 0, max: 6, precision: 2, step: 0.1 },
+  { key: 'pulseDepth', label: 'Pulse depth', min: 0, max: 1, precision: 3, step: 0.01 },
+  { key: 'embers', label: 'Embers', min: 0, max: 1, precision: 3, step: 0.01 },
 ]
 
 const fireRenderStyleLabels: Record<FireBorderRenderStyle, string> = {
@@ -329,9 +340,9 @@ export const MudConsole = () => {
           {showVfxTuning && (
             <section className="vfx-tuning-panel" aria-label="Temporary VFX tuning controls">
               <header className="vfx-tuning-header">
-                <h3>VFX tuning</h3>
+                <h3>Burn controls</h3>
                 <button type="button" onClick={resetFireVfx}>
-                  Reset
+                  Reset defaults
                 </button>
               </header>
               <div className="vfx-tuning-grid">
@@ -357,7 +368,7 @@ export const MudConsole = () => {
                     <label key={control.key} className="vfx-tuning-control">
                       <span>
                         {control.label}
-                        <output>{value.toFixed(2)}</output>
+                        <span className="vfx-tuning-value">{value.toFixed(control.precision)}</span>
                       </span>
                       <input
                         type="range"

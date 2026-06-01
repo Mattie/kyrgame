@@ -9,10 +9,20 @@ export type EdgePoint = {
 }
 
 export type FireBorderTuning = {
+  charDepth: number
+  detail: number
+  driftSpeed: number
+  edgeAmplitude: number
+  edgeFrequency: number
+  embers: number
+  flickerAmount: number
+  flickerSpeed: number
+  glowBleed: number
+  glowRadius: number
+  outerGlow: number
+  pulseDepth: number
   pulseSpeed: number
-  frequency: number
-  amplitude: number
-  accents: number
+  softness: number
 }
 
 export const fireBorderAccentStyles = ['curls', 'flameLicks'] as const
@@ -22,10 +32,20 @@ export const fireBorderRenderStyles = ['path', 'thresholdMask', 'paperMask'] as 
 export type FireBorderRenderStyle = (typeof fireBorderRenderStyles)[number]
 
 export const defaultFireBorderTuning: FireBorderTuning = {
-  pulseSpeed: 1.1,
-  frequency: 0.6,
-  amplitude: 0.75,
-  accents: 0.65,
+  charDepth: 6,
+  detail: 0.66,
+  driftSpeed: 1.8,
+  edgeAmplitude: 31,
+  edgeFrequency: 0.02,
+  embers: 0.5,
+  flickerAmount: 3.5,
+  flickerSpeed: 3,
+  glowBleed: 7.5,
+  glowRadius: 7,
+  outerGlow: 0.14,
+  pulseDepth: 0.2,
+  pulseSpeed: 3.2,
+  softness: 2.6,
 }
 
 export const defaultFireBorderAccentStyle: FireBorderAccentStyle = 'flameLicks'
@@ -55,6 +75,17 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 const lerp = (start: number, end: number, amount: number) => start + (end - start) * amount
 
 const smoothstep = (value: number) => value * value * (3 - 2 * value)
+
+const getPathFrequency = (tuning: FireBorderTuning) =>
+  clamp((tuning.edgeFrequency / 0.02) * 0.6, 0.25, 2.75)
+
+const getPathAmplitude = (tuning: FireBorderTuning) =>
+  clamp((tuning.edgeAmplitude / 31) * 0.75, 0, 2.5)
+
+const getPathAccentAmount = (tuning: FireBorderTuning) => clamp(tuning.embers * 1.3, 0, 2.5)
+
+const getPathPulseSpeed = (tuning: FireBorderTuning) =>
+  clamp((tuning.pulseSpeed / 3.2) * 1.1, 0, 3)
 
 export type ThresholdBurnZone = 'transparent' | 'glow' | 'char' | 'fill'
 
@@ -183,8 +214,8 @@ const edgeWave = (
   staticMode: boolean,
   tuning: FireBorderTuning
 ) => {
-  const t = staticMode ? 0 : time * tuning.pulseSpeed
-  const frequency = tuning.frequency
+  const t = staticMode ? 0 : time * getPathPulseSpeed(tuning)
+  const frequency = getPathFrequency(tuning)
   const broad = Math.sin(seed * 0.071 * frequency + t * 0.0014)
   const lick = Math.sin(seed * 0.183 * frequency - t * 0.0021)
   const spark = Math.sin(seed * 0.713 * frequency + t * 0.0037)
@@ -203,11 +234,13 @@ const addPoint = (
   tuning: FireBorderTuning
 ) => {
   const seed = x * 0.73 + y * 1.29 + points.length * 19.17
-  const tunedStrength = strength * tuning.amplitude
+  const amplitude = getPathAmplitude(tuning)
+  const accents = getPathAccentAmount(tuning)
+  const tunedStrength = strength * amplitude
   const deckle = (random01(seed) - 0.5) * tunedStrength * 0.72
   const shimmer = edgeWave(seed, time, staticMode, tuning) * tunedStrength
   const tangent =
-    edgeWave(seed + 41, time * 0.7, staticMode, tuning) * tunedStrength * 0.18 * tuning.accents
+    edgeWave(seed + 41, time * 0.7, staticMode, tuning) * tunedStrength * 0.18 * accents
   points.push({
     x: x + nx * (deckle + shimmer) + -ny * tangent,
     y: y + ny * (deckle + shimmer) + nx * tangent,
@@ -232,8 +265,9 @@ const buildEdgePath = (
   const top = inset
   const right = width - inset
   const bottom = height - inset
-  const step = Math.max(4, 12 - tuning.frequency * 4)
-  const arcStep = Math.PI / Math.max(18, 18 + tuning.frequency * 13)
+  const frequency = getPathFrequency(tuning)
+  const step = Math.max(4, 12 - frequency * 4)
+  const arcStep = Math.PI / Math.max(18, 18 + frequency * 13)
   const r = Math.min(radius, (right - left) / 2, (bottom - top) / 2)
 
   for (let x = left + r; x <= right - r; x += step) {
@@ -353,9 +387,12 @@ export const getIntegratedFlameLickShape = (
   tuning: FireBorderTuning
 ): IntegratedFlameLickShape => {
   const chance = random01(point.seed + 173)
+  const accents = getPathAccentAmount(tuning)
+  const amplitude = getPathAmplitude(tuning)
+  const pulseSpeed = getPathPulseSpeed(tuning)
   const envelope = staticMode
     ? 0.72
-    : Math.max(0, Math.sin(time * 0.0025 * tuning.pulseSpeed + point.seed * 0.31) * 0.5 + 0.5)
+    : Math.max(0, Math.sin(time * 0.0025 * pulseSpeed + point.seed * 0.31) * 0.5 + 0.5)
   const tangentX = -point.ny
   const tangentY = point.nx
   const wave = edgeWave(point.seed + 67, time, staticMode, tuning)
@@ -363,7 +400,7 @@ export const getIntegratedFlameLickShape = (
   const baseEnd = midpoint(point, next)
   const anchor = midpoint(baseStart, baseEnd)
   const length =
-    (5 + chance * 12) * (0.55 + tuning.accents * 0.5) * tuning.amplitude * (0.16 + envelope * 0.84)
+    (5 + chance * 12) * (0.55 + accents * 0.5) * amplitude * (0.16 + envelope * 0.84)
   const width = Math.max(0.9, length * (0.14 + chance * 0.04))
   const tip = {
     x: anchor.x + point.nx * length + tangentX * wave * length * 0.38,
@@ -427,18 +464,20 @@ const drawEmbers = (
 ) => {
   context.save()
   context.globalCompositeOperation = 'screen'
-  const sampleEvery = Math.max(1, Math.floor(points.length / (28 + tuning.accents * 18)))
+  const accents = getPathAccentAmount(tuning)
+  const pulseSpeed = getPathPulseSpeed(tuning)
+  const sampleEvery = Math.max(1, Math.floor(points.length / (28 + accents * 18)))
 
   for (let index = 0; index < points.length; index += sampleEvery) {
     const point = points[index]
     const chance = random01(point.seed + 77)
-    if (chance < 0.9 - tuning.accents * 0.08) continue
+    if (chance < 0.9 - accents * 0.08) continue
 
     const drift = edgeWave(point.seed + 9, time, staticMode, tuning)
     const pulse = staticMode
       ? 0.3
-      : 0.2 + Math.sin(time * 0.003 * tuning.pulseSpeed + point.seed) * 0.08
-    const radius = (0.4 + chance * 0.8) * (0.75 + tuning.accents * 0.25)
+      : 0.2 + Math.sin(time * 0.003 * pulseSpeed + point.seed) * 0.08
+    const radius = (0.4 + chance * 0.8) * (0.75 + accents * 0.25)
     const x = point.x - point.nx * (3 + drift * 4)
     const y = point.y - point.ny * (3 + drift * 4)
     const gradient = context.createRadialGradient(x, y, 0, x, y, radius * 3.5)
@@ -462,13 +501,15 @@ const drawAccentCurls = (
   staticMode: boolean,
   tuning: FireBorderTuning
 ) => {
-  if (tuning.accents <= 0.05) return
+  const accents = getPathAccentAmount(tuning)
+  const amplitude = getPathAmplitude(tuning)
+  if (accents <= 0.05) return
 
   context.save()
   context.globalCompositeOperation = 'screen'
   context.lineCap = 'round'
   context.lineJoin = 'round'
-  const count = Math.floor(8 + tuning.accents * 18)
+  const count = Math.floor(8 + accents * 18)
   const spacing = Math.max(1, Math.floor(points.length / count))
 
   for (let index = 0; index < points.length; index += spacing) {
@@ -477,7 +518,7 @@ const drawAccentCurls = (
     if (chance < 0.58) continue
 
     const curl = edgeWave(point.seed + 55, time, staticMode, tuning)
-    const length = (8 + chance * 18) * tuning.accents * tuning.amplitude
+    const length = (8 + chance * 18) * accents * amplitude
     const tangentX = -point.ny
     const tangentY = point.nx
     const startX = point.x - point.nx * 2
@@ -487,10 +528,10 @@ const drawAccentCurls = (
     const endX = startX - point.nx * length * 0.35 - tangentX * curl * length * 0.55
     const endY = startY - point.ny * length * 0.35 - tangentY * curl * length * 0.55
 
-    context.strokeStyle = `rgba(255, 169, 61, ${0.05 + tuning.accents * 0.07})`
-    context.lineWidth = 0.65 + tuning.accents * 0.45
+    context.strokeStyle = `rgba(255, 169, 61, ${0.05 + accents * 0.07})`
+    context.lineWidth = 0.65 + accents * 0.45
     context.shadowColor = 'rgba(255, 121, 31, 0.26)'
-    context.shadowBlur = 6 + tuning.accents * 5
+    context.shadowBlur = 6 + accents * 5
     context.beginPath()
     context.moveTo(startX, startY)
     context.quadraticCurveTo(controlX, controlY, endX, endY)
@@ -507,13 +548,14 @@ const drawFlameLicks = (
   staticMode: boolean,
   tuning: FireBorderTuning
 ) => {
-  if (tuning.accents <= 0.05) return
+  const accents = getPathAccentAmount(tuning)
+  if (accents <= 0.05) return
 
   context.save()
   context.globalCompositeOperation = 'screen'
   context.lineCap = 'round'
   context.lineJoin = 'round'
-  const count = Math.floor(10 + tuning.accents * 16)
+  const count = Math.floor(10 + accents * 16)
   const spacing = Math.max(1, Math.floor(points.length / count))
 
   for (let index = 0; index < points.length; index += spacing) {
@@ -537,7 +579,7 @@ const drawFlameLicks = (
 
     context.fillStyle = glow
     context.shadowColor = `rgba(255, 113, 18, ${0.1 + shape.opacity * 0.16})`
-    context.shadowBlur = 5 + tuning.accents * 7
+    context.shadowBlur = 5 + accents * 7
     context.beginPath()
     context.moveTo(shape.baseStart.x, shape.baseStart.y)
     context.bezierCurveTo(
@@ -560,8 +602,8 @@ const drawFlameLicks = (
     context.fill()
 
     context.strokeStyle = `rgba(255, 232, 157, ${0.08 + shape.opacity * 0.18})`
-    context.lineWidth = 0.35 + tuning.accents * 0.32
-    context.shadowBlur = 3 + tuning.accents * 4
+    context.lineWidth = 0.35 + accents * 0.32
+    context.shadowBlur = 3 + accents * 4
     context.beginPath()
     context.moveTo(point.x, point.y)
     context.quadraticCurveTo(shape.leftShoulder.x, shape.leftShoulder.y, shape.tip.x, shape.tip.y)
@@ -722,7 +764,7 @@ const getThresholdMaskCache = (
   height: number,
   tuning: FireBorderTuning
 ): ThresholdMaskCache | null => {
-  const frequencyBucket = Math.round(tuning.frequency * 20)
+  const frequencyBucket = Math.round((tuning.edgeFrequency / 0.02) * 12)
   const { maskHeight, maskWidth } = getThresholdMaskDimensions(width, height)
   const key = `${Math.round(width)}x${Math.round(height)}:${maskWidth}x${maskHeight}:${frequencyBucket}`
   const cached = thresholdMaskCaches.get(key)
@@ -764,15 +806,19 @@ const renderThresholdMaskBorder = (
     noise,
   } = cache
   const data = imageData.data
-  const edgeSpan = 16 + tuning.amplitude * 7
-  const outerFeather = 7 + tuning.amplitude * 2
+  const amplitude = getPathAmplitude(tuning)
+  const accents = getPathAccentAmount(tuning)
+  const pulseSpeed = getPathPulseSpeed(tuning)
+  const frequency = getPathFrequency(tuning)
+  const edgeSpan = 16 + amplitude * 7
+  const outerFeather = 7 + amplitude * 2
   const threshold =
     0.37 +
-    (staticMode ? 0 : Math.sin(time * 0.0013 * tuning.pulseSpeed) * 0.018)
-  const driftX = staticMode ? 0 : Math.floor(time * 0.008 * tuning.pulseSpeed)
-  const driftY = staticMode ? 0 : Math.floor(time * 0.005 * tuning.pulseSpeed)
-  const noiseStrength = 0.24 + tuning.frequency * 0.045 + tuning.accents * 0.018
-  const movingNoiseStrength = 0.08 + tuning.accents * 0.02
+    (staticMode ? 0 : Math.sin(time * 0.0013 * pulseSpeed) * tuning.pulseDepth * 0.09)
+  const driftX = staticMode ? 0 : Math.floor(time * 0.008 * tuning.driftSpeed)
+  const driftY = staticMode ? 0 : Math.floor(time * 0.005 * tuning.driftSpeed)
+  const noiseStrength = 0.24 + frequency * 0.045 + accents * 0.018
+  const movingNoiseStrength = 0.08 + accents * 0.02
 
   for (let y = 0; y < maskHeight; y += 1) {
     const shiftedY = ((y + driftY) % maskHeight + maskHeight) % maskHeight
@@ -795,7 +841,7 @@ const renderThresholdMaskBorder = (
       const edgeProgress = clamp01((depth + outerFeather) / edgeSpan)
       const shimmer = staticMode
         ? 0
-        : Math.sin(time * 0.0022 * tuning.pulseSpeed + noise[index] * TAU) * 0.016
+        : Math.sin(time * 0.0022 * pulseSpeed + noise[index] * TAU) * 0.016
       const noiseValue = clamp01(
         edgeProgress +
           (noise[index] - 0.5) * noiseStrength +
@@ -813,7 +859,7 @@ const renderThresholdMaskBorder = (
       }
 
       const variation = noise[index] - 0.5
-      const glowBoost = band.zone === 'glow' ? 1 + tuning.accents * 0.08 : 1
+      const glowBoost = band.zone === 'glow' ? 1 + accents * 0.08 : 1
       const alphaScale = band.zone === 'fill' ? 0.88 + edgeProgress * 0.12 : glowBoost
 
       data[dataIndex] = clamp(band.red + variation * 22, 0, 255)
@@ -830,7 +876,7 @@ const renderThresholdMaskBorder = (
   context.globalCompositeOperation = 'source-over'
   context.drawImage(cache.canvas, 0, 0, width, height)
   context.globalCompositeOperation = 'screen'
-  context.filter = `blur(${2.4 + tuning.accents * 0.7}px)`
+  context.filter = `blur(${2.4 + tuning.glowRadius * 0.1}px)`
   context.globalAlpha = 0.42
   context.drawImage(cache.canvas, 0, 0, width, height)
   context.filter = 'none'
@@ -861,14 +907,15 @@ const renderBurningPaperMaskBorder = (
     noise,
   } = cache
   const data = imageData.data
-  const edgeAmp = 12 + tuning.amplitude * 12
-  const flickAmp = 1.8 + tuning.frequency * 1.7 + tuning.accents * 0.75
-  const charDepth = 6 + tuning.accents * 4.5
-  const glowOut = 3.2 + tuning.accents * 0.9
-  const driftX = staticMode ? 0 : Math.floor(time * 0.0045 * tuning.pulseSpeed)
-  const driftY = staticMode ? 0 : Math.floor(time * 0.013 * tuning.pulseSpeed)
-  const shimmerX = staticMode ? 0 : Math.floor(time * 0.028 * tuning.pulseSpeed)
-  const shimmerY = staticMode ? 0 : Math.floor(-time * 0.021 * tuning.pulseSpeed)
+  const edgeAmp = tuning.edgeAmplitude
+  const flickAmp = tuning.flickerAmount
+  const charDepth = tuning.charDepth
+  const glowOut = tuning.glowBleed
+  const driftX = staticMode ? 0 : Math.floor(time * 0.0045 * tuning.driftSpeed)
+  const driftY = staticMode ? 0 : Math.floor(time * 0.013 * tuning.driftSpeed)
+  const shimmerX = staticMode ? 0 : Math.floor(time * 0.028 * tuning.flickerSpeed)
+  const shimmerY = staticMode ? 0 : Math.floor(-time * 0.021 * tuning.flickerSpeed)
+  const softnessScale = Math.max(0.2, tuning.softness / 2.6)
   const farVoidCutoff = glowOut + edgeAmp + flickAmp + 3
   const deepPaperCutoff = -(charDepth + edgeAmp + flickAmp + 18)
 
@@ -891,7 +938,7 @@ const renderBurningPaperMaskBorder = (
       }
 
       if (outerDistance < deepPaperCutoff) {
-        const parchmentVariation = localTexture * 18
+        const parchmentVariation = localTexture * 18 * tuning.detail
         data[dataIndex] = clamp(PAPER_BASE_COLOR[0] + parchmentVariation, 0, 255)
         data[dataIndex + 1] = clamp(PAPER_BASE_COLOR[1] + parchmentVariation * 0.8, 0, 255)
         data[dataIndex + 2] = clamp(PAPER_BASE_COLOR[2] + parchmentVariation * 0.55, 0, 255)
@@ -903,8 +950,14 @@ const renderBurningPaperMaskBorder = (
       const shimmeredX = ((x + shimmerX) % maskWidth + maskWidth) % maskWidth
       const bigNoise = noise[driftedY * maskWidth + driftedX] - 0.5
       const fastNoise = noise[shimmeredY * maskWidth + shimmeredX] - 0.5
-      const edgeValue = outerDistance + bigNoise * edgeAmp * 2 + fastNoise * flickAmp * 2
-      const shade = getBurningPaperShade(edgeValue, { charDepth, glowOut })
+      const pulse =
+        staticMode
+          ? 0
+          : Math.sin(time * 0.0015 * tuning.pulseSpeed + localTexture * TAU) *
+            tuning.pulseDepth *
+            edgeAmp
+      const edgeValue = outerDistance + bigNoise * edgeAmp * 2 + fastNoise * flickAmp * 2 + pulse
+      const shade = getBurningPaperShade(edgeValue / softnessScale, { charDepth, glowOut })
 
       if (shade.zone === 'transparent') {
         data[dataIndex] = 0
@@ -916,7 +969,7 @@ const renderBurningPaperMaskBorder = (
 
       const textureAmount = shade.zone === 'paper' ? 18 : 8
       const texture = localTexture * textureAmount
-      const emberBoost = shade.zone === 'lip' || shade.zone === 'flame' ? tuning.accents * 5 : 0
+      const emberBoost = shade.zone === 'lip' || shade.zone === 'flame' ? tuning.embers * 6 : 0
 
       data[dataIndex] = clamp(shade.red + texture + emberBoost, 0, 255)
       data[dataIndex + 1] = clamp(shade.green + texture * 0.75 + emberBoost * 0.4, 0, 255)
@@ -931,8 +984,8 @@ const renderBurningPaperMaskBorder = (
   context.imageSmoothingEnabled = true
   context.clearRect(0, 0, width, height)
   context.globalCompositeOperation = 'screen'
-  context.filter = `blur(${3.5 + tuning.accents * 0.65}px)`
-  context.globalAlpha = 0.34
+  context.filter = `blur(${tuning.glowRadius}px)`
+  context.globalAlpha = tuning.outerGlow
   context.drawImage(cache.canvas, 0, 0, width, height)
   context.filter = 'none'
   context.globalAlpha = 1
