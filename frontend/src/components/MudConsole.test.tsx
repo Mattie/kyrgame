@@ -129,15 +129,23 @@ describe('MudConsole', () => {
 
     render(<MudConsole />)
 
+    const style = screen.getByLabelText(/burn style/i) as HTMLSelectElement
     const pulseSpeed = screen.getByLabelText(/pulse speed/i) as HTMLInputElement
     const frequency = screen.getByLabelText(/frequency/i) as HTMLInputElement
     const amplitude = screen.getByLabelText(/amplitude/i) as HTMLInputElement
     const accents = screen.getByLabelText(/accent curls/i) as HTMLInputElement
 
+    expect(style.value).toBe('path')
     expect(Number(pulseSpeed.value)).toBe(1.1)
     expect(Number(frequency.value)).toBe(0.6)
     expect(Number(amplitude.value)).toBe(0.75)
     expect(Number(accents.value)).toBe(0.65)
+
+    fireEvent.change(style, { target: { value: 'thresholdMask' } })
+    expect(screen.getByTestId('game-panel-fire-border')).toHaveAttribute(
+      'data-render-style',
+      'thresholdMask'
+    )
 
     fireEvent.change(pulseSpeed, { target: { value: '1.75' } })
     expect(pulseSpeed.value).toBe('1.75')

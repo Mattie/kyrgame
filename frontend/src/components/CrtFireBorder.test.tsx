@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import {
   defaultFireBorderAccentStyle,
+  defaultFireBorderRenderStyle,
   defaultFireBorderTuning,
   fireBorderAccentStyles,
+  fireBorderRenderStyles,
   getFireBorderFrameIntervalMs,
   getIntegratedFlameLickShape,
+  getThresholdBurnBand,
 } from './CrtFireBorder'
 
 describe('CrtFireBorder', () => {
@@ -21,6 +24,18 @@ describe('CrtFireBorder', () => {
   it('defaults to flame licks while keeping the previous curl style selectable', () => {
     expect(defaultFireBorderAccentStyle).toBe('flameLicks')
     expect(fireBorderAccentStyles).toEqual(['curls', 'flameLicks'])
+  })
+
+  it('keeps the current path renderer as default while exposing the threshold mask variant', () => {
+    expect(defaultFireBorderRenderStyle).toBe('path')
+    expect(fireBorderRenderStyles).toEqual(['path', 'thresholdMask'])
+  })
+
+  it('classifies threshold burn bands around the animated edge', () => {
+    expect(getThresholdBurnBand(0.2, 0.35).zone).toBe('transparent')
+    expect(getThresholdBurnBand(0.36, 0.35).zone).toBe('glow')
+    expect(getThresholdBurnBand(0.42, 0.35).zone).toBe('char')
+    expect(getThresholdBurnBand(0.6, 0.35).zone).toBe('fill')
   })
 
   it('anchors flame licks into neighboring edge points while fading over time', () => {

@@ -13,8 +13,11 @@ import {
 } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
 import {
+  defaultFireBorderRenderStyle,
   defaultFireBorderTuning,
+  FireBorderRenderStyle,
   FireBorderTuning,
+  fireBorderRenderStyles,
   GamePanelFireBorder,
 } from './CrtFireBorder'
 
@@ -75,6 +78,11 @@ const fireTuningControls: Array<{
   { key: 'accents', label: 'Accent curls', min: 0, max: 2.5, step: 0.05 },
 ]
 
+const fireRenderStyleLabels: Record<FireBorderRenderStyle, string> = {
+  path: 'Current path',
+  thresholdMask: 'Noise threshold',
+}
+
 const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   if (payload === undefined || payload === null) return null
   if (typeof payload === 'object' && 'event' in payload) {
@@ -101,6 +109,8 @@ export const MudConsole = () => {
   } = useNavigator()
   const [input, setInput] = useState('')
   const [navMode, setNavMode] = useState(false)
+  const [fireRenderStyle, setFireRenderStyle] =
+    useState<FireBorderRenderStyle>(defaultFireBorderRenderStyle)
   const [fireTuning, setFireTuning] = useState<FireBorderTuning>(defaultFireBorderTuning)
   const showVfxTuning =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
@@ -149,6 +159,11 @@ export const MudConsole = () => {
 
   const updateFireTuning = (key: keyof FireBorderTuning, value: number) => {
     setFireTuning((current) => ({ ...current, [key]: value }))
+  }
+
+  const resetFireVfx = () => {
+    setFireRenderStyle(defaultFireBorderRenderStyle)
+    setFireTuning(defaultFireBorderTuning)
   }
 
   const bannerLines = useMemo(() => {
@@ -208,7 +223,7 @@ export const MudConsole = () => {
 
   return (
     <section className="mud-shell">
-      <GamePanelFireBorder tuning={fireTuning} />
+      <GamePanelFireBorder renderStyle={fireRenderStyle} tuning={fireTuning} />
       <div className="mud-grid" data-testid="mud-grid">
         <div className="mud-window">
           <header className="mud-header">
@@ -314,11 +329,27 @@ export const MudConsole = () => {
             <section className="vfx-tuning-panel" aria-label="Temporary VFX tuning controls">
               <header className="vfx-tuning-header">
                 <h3>VFX tuning</h3>
-                <button type="button" onClick={() => setFireTuning(defaultFireBorderTuning)}>
+                <button type="button" onClick={resetFireVfx}>
                   Reset
                 </button>
               </header>
               <div className="vfx-tuning-grid">
+                <label className="vfx-tuning-control">
+                  <span>Burn style</span>
+                  <select
+                    aria-label="Burn style"
+                    value={fireRenderStyle}
+                    onChange={(event) =>
+                      setFireRenderStyle(event.currentTarget.value as FireBorderRenderStyle)
+                    }
+                  >
+                    {fireBorderRenderStyles.map((style) => (
+                      <option key={style} value={style}>
+                        {fireRenderStyleLabels[style]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 {fireTuningControls.map((control) => {
                   const value = fireTuning[control.key]
                   return (

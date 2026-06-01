@@ -661,6 +661,10 @@ p {
   mix-blend-mode: screen;
 }
 
+.game-panel-fire-border[data-render-style='thresholdMask'] {
+  mix-blend-mode: normal;
+}
+
 .mud-header {
   display: flex;
   justify-content: space-between;
@@ -965,6 +969,22 @@ p {
 .vfx-tuning-control input[type='range'] {
   width: 100%;
   accent-color: #f3c77a;
+}
+
+.vfx-tuning-control select {
+  width: 100%;
+  border: 1px solid rgba(255, 199, 113, 0.36);
+  border-radius: 8px;
+  background: rgba(255, 199, 113, 0.1);
+  color: #ffd69a;
+  font-family: 'DM Mono', 'Segoe UI', sans-serif;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.vfx-tuning-control select:focus-visible {
+  outline: 2px solid rgba(255, 214, 154, 0.72);
+  outline-offset: 2px;
 }
 .hud-panel {
   background: linear-gradient(180deg, rgba(10, 24, 29, 0.92), rgba(6, 12, 20, 0.95));

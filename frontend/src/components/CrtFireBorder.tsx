@@ -18,6 +18,9 @@ export type FireBorderTuning = {
 export const fireBorderAccentStyles = ['curls', 'flameLicks'] as const
 export type FireBorderAccentStyle = (typeof fireBorderAccentStyles)[number]
 
+export const fireBorderRenderStyles = ['path', 'thresholdMask'] as const
+export type FireBorderRenderStyle = (typeof fireBorderRenderStyles)[number]
+
 export const defaultFireBorderTuning: FireBorderTuning = {
   pulseSpeed: 1.1,
   frequency: 0.6,
@@ -26,6 +29,7 @@ export const defaultFireBorderTuning: FireBorderTuning = {
 }
 
 export const defaultFireBorderAccentStyle: FireBorderAccentStyle = 'flameLicks'
+export const defaultFireBorderRenderStyle: FireBorderRenderStyle = 'path'
 
 const TAU = Math.PI * 2
 const MOBILE_VIEWPORT_WIDTH = 720
@@ -43,6 +47,43 @@ export const getFireBorderFrameIntervalMs = ({
 const fract = (value: number) => value - Math.floor(value)
 
 const random01 = (seed: number) => fract(Math.sin(seed * 12.9898) * 43758.5453)
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+const lerp = (start: number, end: number, amount: number) => start + (end - start) * amount
+
+const smoothstep = (value: number) => value * value * (3 - 2 * value)
+
+export type ThresholdBurnZone = 'transparent' | 'glow' | 'char' | 'fill'
+
+export type ThresholdBurnBand = {
+  alpha: number
+  blue: number
+  green: number
+  red: number
+  zone: ThresholdBurnZone
+}
+
+const GLOW_BAND_WIDTH = 0.035
+const CHAR_BAND_WIDTH = 0.13
+
+export const getThresholdBurnBand = (
+  noiseValue: number,
+  threshold: number
+): ThresholdBurnBand => {
+  if (noiseValue < threshold) {
+    return { alpha: 0, blue: 0, green: 0, red: 0, zone: 'transparent' }
+  }
+  if (noiseValue < threshold + GLOW_BAND_WIDTH) {
+    return { alpha: 230, blue: 118, green: 224, red: 255, zone: 'glow' }
+  }
+  if (noiseValue < threshold + CHAR_BAND_WIDTH) {
+    return { alpha: 235, blue: 10, green: 31, red: 64, zone: 'char' }
+  }
+  return { alpha: 245, blue: 24, green: 16, red: 8, zone: 'fill' }
+}
 
 type Point2D = {
   x: number
@@ -476,6 +517,256 @@ const drawFlameLicks = (
   context.restore()
 }
 
+type ThresholdMaskCache = {
+  canvas: HTMLCanvasElement
+  context: CanvasRenderingContext2D
+  edgeDepth: Float32Array
+  imageData: ImageData
+  maskHeight: number
+  maskWidth: number
+  noise: Float32Array
+  sourceHeight: number
+  sourceWidth: number
+}
+
+const thresholdMaskCaches = new Map<string, ThresholdMaskCache>()
+const THRESHOLD_MASK_SCALE = 0.42
+const THRESHOLD_MASK_MAX_SIZE = 420
+const THRESHOLD_MASK_MIN_SIZE = 72
+const THRESHOLD_EDGE_INSET = 9
+
+const valueNoise2d = (x: number, y: number, seed: number) => {
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const fx = smoothstep(fract(x))
+  const fy = smoothstep(fract(y))
+  const seedOffset = seed * 37.13
+  const topLeft = random01(x0 * 127.1 + y0 * 311.7 + seedOffset)
+  const topRight = random01((x0 + 1) * 127.1 + y0 * 311.7 + seedOffset)
+  const bottomLeft = random01(x0 * 127.1 + (y0 + 1) * 311.7 + seedOffset)
+  const bottomRight = random01((x0 + 1) * 127.1 + (y0 + 1) * 311.7 + seedOffset)
+
+  return lerp(lerp(topLeft, topRight, fx), lerp(bottomLeft, bottomRight, fx), fy)
+}
+
+const fractalValueNoise2d = (x: number, y: number, seed: number) => {
+  let amplitude = 0.56
+  let frequency = 1
+  let total = 0
+  let normalizer = 0
+
+  for (let octave = 0; octave < 4; octave += 1) {
+    total += valueNoise2d(x * frequency, y * frequency, seed + octave * 19.37) * amplitude
+    normalizer += amplitude
+    amplitude *= 0.52
+    frequency *= 2.08
+  }
+
+  return total / normalizer
+}
+
+const roundedRectSignedDistance = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  inset: number,
+  radius: number
+) => {
+  const halfWidth = Math.max(0, width / 2 - inset - radius)
+  const halfHeight = Math.max(0, height / 2 - inset - radius)
+  const dx = Math.abs(x - width / 2) - halfWidth
+  const dy = Math.abs(y - height / 2) - halfHeight
+  const outsideDistance = Math.hypot(Math.max(dx, 0), Math.max(dy, 0))
+  const insideDistance = Math.min(Math.max(dx, dy), 0)
+
+  return outsideDistance + insideDistance - radius
+}
+
+const getThresholdMaskDimensions = (width: number, height: number) => {
+  const longestSide = Math.max(width, height)
+  const scale = Math.min(THRESHOLD_MASK_SCALE, THRESHOLD_MASK_MAX_SIZE / longestSide)
+
+  return {
+    maskHeight: Math.max(THRESHOLD_MASK_MIN_SIZE, Math.round(height * scale)),
+    maskWidth: Math.max(THRESHOLD_MASK_MIN_SIZE, Math.round(width * scale)),
+  }
+}
+
+const createThresholdMaskCache = (
+  width: number,
+  height: number,
+  frequencyBucket: number
+): ThresholdMaskCache | null => {
+  const { maskHeight, maskWidth } = getThresholdMaskDimensions(width, height)
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d', { alpha: true })
+
+  if (!context) return null
+
+  canvas.width = maskWidth
+  canvas.height = maskHeight
+
+  const imageData = context.createImageData(maskWidth, maskHeight)
+  const noise = new Float32Array(maskWidth * maskHeight)
+  const edgeDepth = new Float32Array(maskWidth * maskHeight)
+  const radius = Math.min(20, width / 9, height / 9)
+  const noiseScale = 0.038 + frequencyBucket * 0.0016
+  const panelSeed = width * 0.137 + height * 0.233 + frequencyBucket * 3.17
+
+  for (let y = 0; y < maskHeight; y += 1) {
+    for (let x = 0; x < maskWidth; x += 1) {
+      const index = y * maskWidth + x
+      const sourceX = (x / Math.max(1, maskWidth - 1)) * width
+      const sourceY = (y / Math.max(1, maskHeight - 1)) * height
+      const distance = roundedRectSignedDistance(
+        sourceX,
+        sourceY,
+        width,
+        height,
+        THRESHOLD_EDGE_INSET,
+        radius
+      )
+
+      edgeDepth[index] = -distance
+      noise[index] = fractalValueNoise2d(x * noiseScale, y * noiseScale, panelSeed)
+    }
+  }
+
+  return {
+    canvas,
+    context,
+    edgeDepth,
+    imageData,
+    maskHeight,
+    maskWidth,
+    noise,
+    sourceHeight: height,
+    sourceWidth: width,
+  }
+}
+
+const getThresholdMaskCache = (
+  width: number,
+  height: number,
+  tuning: FireBorderTuning
+): ThresholdMaskCache | null => {
+  const frequencyBucket = Math.round(tuning.frequency * 20)
+  const { maskHeight, maskWidth } = getThresholdMaskDimensions(width, height)
+  const key = `${Math.round(width)}x${Math.round(height)}:${maskWidth}x${maskHeight}:${frequencyBucket}`
+  const cached = thresholdMaskCaches.get(key)
+
+  if (cached) return cached
+
+  const cache = createThresholdMaskCache(width, height, frequencyBucket)
+  if (!cache) return null
+
+  thresholdMaskCaches.set(key, cache)
+  if (thresholdMaskCaches.size > 12) {
+    const [oldestKey] = thresholdMaskCaches.keys()
+    thresholdMaskCaches.delete(oldestKey)
+  }
+
+  return cache
+}
+
+const renderThresholdMaskBorder = (
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  time: number,
+  staticMode: boolean,
+  tuning: FireBorderTuning
+) => {
+  context.clearRect(0, 0, width, height)
+  if (width < 80 || height < 80) return
+
+  const cache = getThresholdMaskCache(width, height, tuning)
+  if (!cache) return
+
+  const {
+    context: maskContext,
+    edgeDepth,
+    imageData,
+    maskHeight,
+    maskWidth,
+    noise,
+  } = cache
+  const data = imageData.data
+  const edgeSpan = 16 + tuning.amplitude * 7
+  const outerFeather = 7 + tuning.amplitude * 2
+  const threshold =
+    0.37 +
+    (staticMode ? 0 : Math.sin(time * 0.0013 * tuning.pulseSpeed) * 0.018)
+  const driftX = staticMode ? 0 : Math.floor(time * 0.008 * tuning.pulseSpeed)
+  const driftY = staticMode ? 0 : Math.floor(time * 0.005 * tuning.pulseSpeed)
+  const noiseStrength = 0.24 + tuning.frequency * 0.045 + tuning.accents * 0.018
+  const movingNoiseStrength = 0.08 + tuning.accents * 0.02
+
+  for (let y = 0; y < maskHeight; y += 1) {
+    const shiftedY = ((y + driftY) % maskHeight + maskHeight) % maskHeight
+
+    for (let x = 0; x < maskWidth; x += 1) {
+      const index = y * maskWidth + x
+      const dataIndex = index * 4
+      const depth = edgeDepth[index]
+
+      if (depth < -outerFeather) {
+        data[dataIndex] = 0
+        data[dataIndex + 1] = 0
+        data[dataIndex + 2] = 0
+        data[dataIndex + 3] = 0
+        continue
+      }
+
+      const shiftedX = ((x + driftX) % maskWidth + maskWidth) % maskWidth
+      const shiftedNoise = noise[shiftedY * maskWidth + shiftedX]
+      const edgeProgress = clamp01((depth + outerFeather) / edgeSpan)
+      const shimmer = staticMode
+        ? 0
+        : Math.sin(time * 0.0022 * tuning.pulseSpeed + noise[index] * TAU) * 0.016
+      const noiseValue = clamp01(
+        edgeProgress +
+          (noise[index] - 0.5) * noiseStrength +
+          (shiftedNoise - 0.5) * movingNoiseStrength +
+          shimmer
+      )
+      const band = getThresholdBurnBand(noiseValue, threshold)
+
+      if (band.zone === 'transparent') {
+        data[dataIndex] = 0
+        data[dataIndex + 1] = 0
+        data[dataIndex + 2] = 0
+        data[dataIndex + 3] = 0
+        continue
+      }
+
+      const variation = noise[index] - 0.5
+      const glowBoost = band.zone === 'glow' ? 1 + tuning.accents * 0.08 : 1
+      const alphaScale = band.zone === 'fill' ? 0.88 + edgeProgress * 0.12 : glowBoost
+
+      data[dataIndex] = clamp(band.red + variation * 22, 0, 255)
+      data[dataIndex + 1] = clamp(band.green + variation * 18, 0, 255)
+      data[dataIndex + 2] = clamp(band.blue + variation * 10, 0, 255)
+      data[dataIndex + 3] = clamp(band.alpha * alphaScale, 0, 255)
+    }
+  }
+
+  maskContext.putImageData(imageData, 0, 0)
+
+  context.save()
+  context.imageSmoothingEnabled = true
+  context.globalCompositeOperation = 'source-over'
+  context.drawImage(cache.canvas, 0, 0, width, height)
+  context.globalCompositeOperation = 'screen'
+  context.filter = `blur(${2.4 + tuning.accents * 0.7}px)`
+  context.globalAlpha = 0.42
+  context.drawImage(cache.canvas, 0, 0, width, height)
+  context.filter = 'none'
+  context.globalAlpha = 1
+  context.restore()
+}
+
 const renderBorder = (
   context: CanvasRenderingContext2D,
   width: number,
@@ -483,10 +774,16 @@ const renderBorder = (
   time: number,
   staticMode: boolean,
   tuning: FireBorderTuning,
-  accentStyle: FireBorderAccentStyle
+  accentStyle: FireBorderAccentStyle,
+  renderStyle: FireBorderRenderStyle
 ) => {
   context.clearRect(0, 0, width, height)
   if (width < 80 || height < 80) return
+
+  if (renderStyle === 'thresholdMask') {
+    renderThresholdMaskBorder(context, width, height, time, staticMode, tuning)
+    return
+  }
 
   const inset = 9
   const radius = Math.min(20, width / 9, height / 9)
@@ -515,18 +812,25 @@ const renderBorder = (
 
 export const GamePanelFireBorder = ({
   accentStyle = defaultFireBorderAccentStyle,
+  renderStyle = defaultFireBorderRenderStyle,
   tuning = defaultFireBorderTuning,
 }: {
   accentStyle?: FireBorderAccentStyle
+  renderStyle?: FireBorderRenderStyle
   tuning?: FireBorderTuning
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const accentStyleRef = useRef(accentStyle)
+  const renderStyleRef = useRef(renderStyle)
   const tuningRef = useRef(tuning)
 
   useEffect(() => {
     accentStyleRef.current = accentStyle
   }, [accentStyle])
+
+  useEffect(() => {
+    renderStyleRef.current = renderStyle
+  }, [renderStyle])
 
   useEffect(() => {
     tuningRef.current = tuning
@@ -576,7 +880,8 @@ export const GamePanelFireBorder = ({
         time,
         reducedMotion.matches,
         tuningRef.current,
-        accentStyleRef.current
+        accentStyleRef.current,
+        renderStyleRef.current
       )
     }
 
@@ -625,6 +930,7 @@ export const GamePanelFireBorder = ({
     <canvas
       aria-hidden="true"
       className="game-panel-fire-border"
+      data-render-style={renderStyle}
       data-testid="game-panel-fire-border"
       ref={canvasRef}
     />
