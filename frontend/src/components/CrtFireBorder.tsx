@@ -1383,6 +1383,9 @@ export const GamePanelFireBorder = ({
   const paletteRgbRef = useRef(getFireBorderPaletteRgb(palette))
   const renderStyleRef = useRef(renderStyle)
   const tuningRef = useRef(tuning)
+  const drawRef = useRef<((time: number) => void) | null>(null)
+  const reducedMotionRef = useRef(false)
+  const didMountRef = useRef(false)
 
   useEffect(() => {
     accentStyleRef.current = accentStyle
@@ -1454,6 +1457,7 @@ export const GamePanelFireBorder = ({
         invertedRef.current
       )
     }
+    drawRef.current = draw
 
     const animate = (time: number) => {
       if (
@@ -1470,6 +1474,7 @@ export const GamePanelFireBorder = ({
     const start = () => {
       window.cancelAnimationFrame(animationFrame)
       lastRenderTime = Number.NEGATIVE_INFINITY
+      reducedMotionRef.current = reducedMotion.matches
       resizeCanvas()
       if (reducedMotion.matches || document.visibilityState === 'hidden') {
         draw(0)
@@ -1490,11 +1495,20 @@ export const GamePanelFireBorder = ({
     return () => {
       window.cancelAnimationFrame(animationFrame)
       observer.disconnect()
+      drawRef.current = null
+      reducedMotionRef.current = false
       reducedMotion.removeEventListener('change', start)
       coarsePointer.removeEventListener('change', start)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [])
+
+  useEffect(() => {
+    if (didMountRef.current && reducedMotionRef.current) {
+      drawRef.current?.(0)
+    }
+    didMountRef.current = true
+  }, [accentStyle, inverted, palette, renderStyle, tuning])
 
   return (
     <canvas

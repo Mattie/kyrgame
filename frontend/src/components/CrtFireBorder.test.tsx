@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render } from '@testing-library/react'
 
 import {
   defaultFireBorderAccentStyle,
@@ -7,6 +8,7 @@ import {
   defaultFireBorderPalette,
   defaultFireBorderRenderStyle,
   defaultFireBorderTuning,
+  GamePanelFireBorder,
   fireBorderEffectPresets,
   fireBorderAccentStyles,
   fireBorderPalettePresets,
@@ -19,7 +21,65 @@ import {
   getThresholdBurnBand,
 } from './CrtFireBorder'
 
+const mockContext = {
+  clearRect: vi.fn(),
+  setTransform: vi.fn(),
+}
+const originalMatchMedia = window.matchMedia
+
+class MockResizeObserver {
+  observe = vi.fn()
+  disconnect = vi.fn()
+
+  constructor(callback: ResizeObserverCallback) {
+    void callback
+  }
+}
+
 describe('CrtFireBorder', () => {
+  beforeEach(() => {
+    mockContext.clearRect.mockReset()
+    mockContext.setTransform.mockReset()
+
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1))
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockContext as never)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      bottom: 50,
+      height: 50,
+      left: 0,
+      right: 50,
+      top: 0,
+      width: 50,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect)
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn((query: string) => ({
+        addEventListener: vi.fn(),
+        addListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        removeEventListener: vi.fn(),
+        removeListener: vi.fn(),
+      })),
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: originalMatchMedia,
+    })
+  })
+
   it('uses the selected soft burn tuning defaults', () => {
     expect(defaultFireBorderTuning).toEqual({
       charDepth: 8,
@@ -165,5 +225,19 @@ describe('CrtFireBorder', () => {
     expect(
       Math.round(getFireBorderFrameIntervalMs({ coarsePointer: false, viewportWidth: 640 }))
     ).toBe(33)
+  })
+
+  it('redraws reduced-motion fire borders when tuning changes', () => {
+    const { rerender } = render(<GamePanelFireBorder />)
+
+    expect(mockContext.clearRect).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <GamePanelFireBorder
+        tuning={{ ...defaultFireBorderTuning, embers: defaultFireBorderTuning.embers + 0.1 }}
+      />
+    )
+
+    expect(mockContext.clearRect).toHaveBeenCalledTimes(2)
   })
 })
