@@ -1632,6 +1632,343 @@ async def test_websocket_tiltowait_global_and_room_messages_reach_visible_client
 
 
 @pytest.mark.anyio
+async def test_websocket_macros_fatigue_blocks_command_until_spell_tick_reset(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 0}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                assert hero is not None
+                hero.macros = 18
+                hero.flags |= int(constants.PlayerFlag.LOADED)
+                db.commit()
+
+            uri = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+            async with websockets.connect(uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                    == "location_description",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_objects",
+                )
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "look"}))
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("verb") == "look",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("event") == "location_description",
+                )
+
+                with app.state.session_factory() as db:
+                    hero = db.scalar(
+                        select(models.Player).where(models.Player.plyrid == "hero")
+                    )
+                    assert hero is not None
+                    assert hero.macros == 19
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "look"}))
+                tired = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "TIRED",
+                )
+
+                assert tired["payload"]["scope"] == "player"
+                await _assert_no_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                    == "location_description",
+                    timeout=0.2,
+                )
+                with app.state.session_factory() as db:
+                    hero = db.scalar(
+                        select(models.Player).where(models.Player.plyrid == "hero")
+                    )
+                    assert hero is not None
+                    assert hero.macros == 19
+
+                app.state.spell_tick_system.tick()
+                await asyncio.sleep(0.6)
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "look"}))
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("verb") == "look",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("event") == "location_description",
+                )
+                with app.state.session_factory() as db:
+                    hero = db.scalar(
+                        select(models.Player).where(models.Player.plyrid == "hero")
+                    )
+                    assert hero is not None
+                    assert hero.macros == 1
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_fatigue_gate_blocks_room_script_before_mutation(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 34}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                assert hero is not None
+                hero.macros = 19
+                hero.flags |= int(constants.PlayerFlag.LOADED)
+                db.commit()
+
+            script_calls = []
+
+            async def fake_handle_command(*args, **kwargs):
+                script_calls.append((args, kwargs))
+                return True
+
+            app.state.room_scripts.handle_command = fake_handle_command
+
+            uri = f"ws://{host}:{port}/ws/rooms/34?token={hero_token}"
+            async with websockets.connect(uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                    == "location_description",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_objects",
+                )
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "anything"}))
+                tired = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "TIRED",
+                )
+
+                assert tired["payload"]["scope"] == "player"
+                assert script_calls == []
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_fatigue_bypass_allows_status_refresh_without_increment(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 0}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                assert hero is not None
+                hero.macros = 19
+                hero.flags |= int(constants.PlayerFlag.LOADED)
+                db.commit()
+
+            uri = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+            async with websockets.connect(uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                    == "location_description",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_objects",
+                )
+
+                await hero_ws.send(
+                    json.dumps(
+                        {
+                            "type": "command",
+                            "command": "look",
+                            "meta": {
+                                "silent": True,
+                                "status_card": "description",
+                                "fatigue_bypass": True,
+                            },
+                        }
+                    )
+                )
+                description = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("event") == "location_description",
+                )
+
+                assert description["meta"]["fatigue_bypass"] is True
+                await _assert_no_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("message_id") == "TIRED",
+                    timeout=0.2,
+                )
+                with app.state.session_factory() as db:
+                    hero = db.scalar(
+                        select(models.Player).where(models.Player.plyrid == "hero")
+                    )
+                    assert hero is not None
+                    assert hero.macros == 19
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_fatigue_bypass_rejected_for_mutating_command(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 0}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                assert hero is not None
+                hero.macros = 19
+                hero.flags |= int(constants.PlayerFlag.LOADED)
+                hero.gamloc = 0
+                hero.pgploc = 0
+                db.commit()
+
+            uri = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+            async with websockets.connect(uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                    == "location_description",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_objects",
+                )
+
+                await hero_ws.send(
+                    json.dumps(
+                        {
+                            "type": "command",
+                            "command": "north",
+                            "meta": {
+                                "silent": True,
+                                "status_card": "description",
+                                "fatigue_bypass": True,
+                            },
+                        }
+                    )
+                )
+                tired = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "TIRED",
+                )
+
+                assert tired["payload"]["scope"] == "player"
+                with app.state.session_factory() as db:
+                    hero = db.scalar(
+                        select(models.Player).where(models.Player.plyrid == "hero")
+                    )
+                    assert hero is not None
+                    assert hero.gamloc == 0
+                    assert hero.macros == 19
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_zar_death_refreshes_target_room_and_arrival_witness(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")

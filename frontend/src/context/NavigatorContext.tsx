@@ -169,6 +169,17 @@ export type AdminElfTriggerResponse = {
 
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 
+type SendCommandOptions = {
+  silent?: boolean
+  skipLog?: boolean
+  // Requests the backend's read-only fatigue bypass for satellite/status refreshes.
+  // The server honors this only for its documented allowlist, so callers can safely
+  // use it for panels like inventory, room description, and spells while gameplay
+  // actions still pass through the legacy macros gate.
+  fatigueBypass?: boolean
+  meta?: Record<string, unknown>
+}
+
 type NavigatorContextValue = {
   apiBaseUrl: string
   session: SessionRecord | null
@@ -186,10 +197,7 @@ type NavigatorContextValue = {
   triggerElf: (playerId: string, roomId: number) => Promise<AdminElfTriggerResponse>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
-  sendCommand: (
-    command: string,
-    options?: { silent?: boolean; skipLog?: boolean; meta?: Record<string, unknown> }
-  ) => void
+  sendCommand: (command: string, options?: SendCommandOptions) => void
 }
 
 const NavigatorContext = createContext<NavigatorContextValue | undefined>(undefined)
@@ -859,7 +867,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   )
 
   const sendCommand = useCallback(
-    (command: string, options?: { silent?: boolean; skipLog?: boolean; meta?: Record<string, unknown> }) => {
+    (command: string, options?: SendCommandOptions) => {
       const trimmed = command.trim()
       if (trimmed === '') return
       if (!socketRef.current) {
@@ -875,6 +883,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       const meta = {
         ...(options?.meta ?? {}),
         ...(isSilent ? { silent: true } : {}),
+        ...(options?.fatigueBypass ? { fatigue_bypass: true } : {}),
       }
 
       if (!skipLog) {

@@ -13,6 +13,8 @@ The navigator UI currently builds its HUD opportunistically from recent activity
 1. **Navigator transport**
    - Add a `silent` metadata flag to outbound WebSocket commands; echo that metadata on acknowledgments and downstream events so the client can suppress logging for silent refreshes.
    - Expose a `sendCommand` option for silent dispatch without adding a command entry to the activity log.
+   - For status panels that reissue read-only commands such as `inv`, plain `look`, `look spellbook`, `read spellbook`, or `spells`, set `fatigueBypass: true` so the client sends `meta.fatigue_bypass=true`.
+   - The backend accepts `meta.fatigue_bypass` only for a small documented read-only allowlist in `kyrgame.commands.can_bypass_command_fatigue`; new verbs should be added there only after confirming they have no room routine dependency, room/target fan-out, or gameplay mutation.
    - Preserve the existing command acknowledgment payload shape for compatibility while layering metadata on the envelope.
 
 2. **Status card model**
@@ -38,7 +40,8 @@ The navigator UI currently builds its HUD opportunistically from recent activity
 
 ## Implementation Summary (post-implementation)
 - Added WebSocket metadata echoing for `silent`/`status_card` flags in `backend/kyrgame/webapp.py` so HUD refresh traffic can be filtered out of the activity log while still updating card state.
-- Expanded `NavigatorContext.sendCommand` to accept `{ silent, skipLog, meta }`, forward metadata on the wire, and mark silent responses as hidden entries for HUD processing.
+- Expanded `NavigatorContext.sendCommand` to accept `{ silent, skipLog, fatigueBypass, meta }`, forward metadata on the wire, and mark silent responses as hidden entries for HUD processing.
+- Added a backend fatigue-bypass contract for read-only status refreshes: clients send `meta.fatigue_bypass=true`, and the server only honors it for the allowlisted status verbs documented in `kyrgame.commands.can_bypass_command_fatigue`.
 - Refactored `MudConsole` HUD into discrete status cards (inventory, spellbook, description, hitpoints/effects) with per-card auto-refresh toggles defaulting to on once the card activates. Cards render only after a relevant command response arrives.
 - Added silent auto-refresh scheduling after every manual command and on a 5-second interval while connected, reusing the card’s command verb and tagging requests with `status_card` metadata for traceability.
 - Inventory cards now render the exact server response text (with GemstoneText styling), keeping the heading lowercase to mirror the command verb.

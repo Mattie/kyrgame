@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Protocol, Set
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from . import constants, fixtures, models, repositories, room_spoilers
 from .effects import EffectError, ObjectEffectEngine, SpellEffectEngine
@@ -117,6 +117,18 @@ class CommandResult:
     events: List[dict] = field(default_factory=list)
 
 
+FATIGUE_CHECKED_ARG = "_fatigue_checked"
+FATIGUE_BYPASS_ARG = "_fatigue_bypass"
+FATIGUE_BYPASS_META_KEY = "fatigue_bypass"
+_PAY_ONLY_ARG = "_pay_only"
+
+_FATIGUE_BYPASS_STATUS_VERBS = frozenset(
+    {"?", "check", "count", "gold", "help", "hits", "inventory", "spells"}
+)
+_FATIGUE_BYPASS_LOOK_VERBS = frozenset({"examine", "look", "read", "see"})
+_FATIGUE_BYPASS_LOOK_TARGETS = frozenset({"", "brief", "spellbook"})
+
+
 class CommandRegistry:
     def __init__(self):
         self._commands: Dict[str, RegisteredCommand] = {}
@@ -140,10 +152,6 @@ class CommandDispatcher:
         self.clock = clock or time.monotonic
 
     async def dispatch_parsed(self, parsed: "ParsedCommand", state: GameState) -> CommandResult:
-        if parsed.pay_only and not state.player.flags & constants.PlayerFlag.LOADED:
-            raise FlagRequirementError(
-                "Command requires a live player", message_id="CMPCMD1"
-            )
         return await self.dispatch(
             parsed.verb,
             {
@@ -151,6 +159,7 @@ class CommandDispatcher:
                 "command_id": parsed.command_id,
                 "message_id": parsed.message_id,
                 "verb": parsed.verb,
+                _PAY_ONLY_ARG: parsed.pay_only,
             },
             state,
         )
@@ -161,13 +170,34 @@ class CommandDispatcher:
             raise UnknownCommandError(verb)
 
         metadata = entry.metadata
+        command_id = args.get("command_id")
+        fatigue_checked = bool(args.get(FATIGUE_CHECKED_ARG))
+        fatigue_bypass_requested = bool(args.get(FATIGUE_BYPASS_ARG))
+        fatigue_bypassed = fatigue_bypass_requested and can_bypass_command_fatigue(
+            verb, args
+        )
+        pay_only = bool(args.get(_PAY_ONLY_ARG))
+        handler_args = dict(args)
+        handler_args.pop(FATIGUE_CHECKED_ARG, None)
+        handler_args.pop(FATIGUE_BYPASS_ARG, None)
+        handler_args.pop(_PAY_ONLY_ARG, None)
+
+        if not fatigue_checked and not fatigue_bypassed:
+            fatigue_result = apply_command_fatigue_gate(state, command_id)
+            if fatigue_result is not None:
+                return fatigue_result
+
+        if pay_only and not state.player.flags & constants.PlayerFlag.LOADED:
+            raise FlagRequirementError(
+                "Command requires a live player", message_id="CMPCMD1"
+            )
         self._validate_requirements(metadata, state)
 
         now = self.clock()
         if metadata.cooldown_seconds:
             self._validate_cooldown(verb, metadata, state, now)
 
-        result = entry.handler(state, args)
+        result = entry.handler(state, handler_args)
         if asyncio.iscoroutine(result):
             result = await result
 
@@ -319,6 +349,99 @@ def _command_message_id(command_id: int | None) -> str | None:
     if command_id is None:
         return None
     return f"CMD{command_id:03d}"
+
+
+def can_bypass_command_fatigue(verb: str, args: dict | None = None) -> bool:
+    """Return whether a UI refresh command may skip the legacy fatigue gate.
+
+    This is intentionally a small allowlist for read-only satellite UI refreshes.
+    The WebSocket contract is `meta.fatigue_bypass=true`, and direct callers may
+    pass `FATIGUE_BYPASS_ARG`. Add entries here only when the command has no room
+    routine dependency, no room/target fan-out, and no state mutation beyond the
+    usual session bookkeeping. Mutating commands must keep paying the legacy
+    `macros` cost from KYRANDIA.C:300-307.
+    """
+
+    normalized_verb = (verb or "").strip().lower()
+    command_args = args or {}
+    if normalized_verb in _FATIGUE_BYPASS_STATUS_VERBS:
+        return True
+    if normalized_verb not in _FATIGUE_BYPASS_LOOK_VERBS:
+        return False
+
+    target = str(command_args.get("raw") or command_args.get("target") or "")
+    normalized_target = target.strip().lower()
+    if normalized_verb == "read":
+        # Legacy reader() delegates `read spellbook` back into looker()/seesbk().
+        # Keep this bypass as narrow as that non-mutating alias. See legacy/KYRCMDS.C:1035-1057.
+        return normalized_target == "spellbook"
+    return normalized_target in _FATIGUE_BYPASS_LOOK_TARGETS
+
+
+def apply_command_fatigue_gate(
+    state: GameState, command_id: int | None = None
+) -> CommandResult | None:
+    """Apply the legacy command fatigue counter before command execution."""
+
+    # Legacy kyrand() case 7 lets commands run until macros reaches 19; the
+    # 20th accepted command emits TIRED and skips kyra(). See legacy/KYRANDIA.C:300-307.
+    if not _increment_player_macros(state):
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "TIRED",
+                    _format_message(state, "TIRED"),
+                    command_id,
+                )
+            ],
+        )
+    return None
+
+
+def _increment_player_macros(state: GameState) -> bool:
+    if not state.db_session:
+        if state.player.macros >= 19:
+            return False
+        state.player.macros += 1
+        return True
+
+    result = state.db_session.execute(
+        update(models.Player)
+        .where(models.Player.plyrid == state.player.plyrid)
+        .where(models.Player.macros < 19)
+        .values(macros=models.Player.macros + 1)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount:
+        state.db_session.commit()
+        refreshed = _refresh_player_macros_from_record(state)
+        if refreshed is None:
+            state.player.macros += 1
+        return True
+
+    refreshed = _refresh_player_macros_from_record(state)
+    if refreshed is None:
+        if state.player.macros >= 19:
+            return False
+        state.player.macros += 1
+        return True
+    return False
+
+
+def _refresh_player_macros_from_record(state: GameState) -> int | None:
+    if not state.db_session:
+        return None
+    record = state.db_session.scalar(
+        select(models.Player)
+        .where(models.Player.plyrid == state.player.plyrid)
+        .execution_options(populate_existing=True)
+    )
+    if record is not None:
+        state.player.macros = record.macros
+        return record.macros
+    return None
 
 
 def _arrival_text(direction: str) -> str:

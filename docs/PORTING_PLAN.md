@@ -92,7 +92,7 @@
 ### Legacy Gameplay Support Gaps
 
 - [x] Shared `hitoth()` death handling for all spell/self/area damage paths, including reset, room fan-out, active-session relocation, and DB persistence.
-- [ ] Legacy `macros` fatigue gate from `kyrand()` case 7: increment per accepted command, emit `TIRED` on the 20th command before tick reset.
+- [x] Legacy `macros` fatigue gate from `kyrand()` case 7: increment per accepted command, emit `TIRED` on the 20th command before tick reset, with an allowlisted read-only UI refresh bypass for satellite status panels.
 - [ ] First-login player-ID lifecycle parity: 3-9 letters, duplicate rejection, `Sysop` reservation, `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, and intro text surfaces.
 - [ ] In-game `x` exit parity: emit `EXIKYR`, broadcast sparkling-light departure, deactivate session/presence, and persist player state.
 - [ ] Frontend rendering for lifecycle/intro/exit messages through the existing console/session UI.
@@ -104,8 +104,8 @@
 ## Remaining Implementation Task Plan
 
 1. **Legacy gameplay support gaps**
-   - Next meaty gameplay target: port the `macros` fatigue gate from `kyrand()` case 7 through the command dispatch boundary, with Goal coverage proving the 20th accepted command emits `TIRED` and the spell tick reset clears the counter.
-   - Follow with first-login player-ID lifecycle parity, in-game `x` exit parity, and frontend rendering for intro/exit/lifecycle messages.
+   - Next meaty gameplay target: first-login player-ID lifecycle parity, including 3-9 letter validation, duplicate rejection, `Sysop` reservation, `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, and intro text surfaces.
+   - Follow with in-game `x` exit parity and frontend rendering for intro/exit/lifecycle messages.
 2. **Documentation and tracker closure**
    - Keep `docs/PORTING_PLAN.md`, `docs/legacy_command_porting.md`, `docs/PORTING_PLAN_world_object_spell_gaps.md`, and `docs/solo_level_journey_checklist.md` aligned after each gameplay PR.
    - For every ported gameplay routine, include legacy source references and verify both C call sites and message catalog IDs.
@@ -158,10 +158,8 @@
 - **Admin endpoints:** Provide secured CRUD for player records and content, reflecting `KYRSYSP.C` behaviors. Tests cover authorization and validation, and a PATCH flow clamps level-derived HP/SP, gold caps, and spouse updates for tooling parity. Admin tokens now come from environment configuration (auto-loaded from `backend/.env`, or override with `KYRGAME_ENV_FILE`; see `backend/.env.example` and `backend/ADMINISTRATION.md`).
 
 ## Next Steps: Legacy Gameplay Support
-1. **Macros fatigue gate**
-   - Port `kyrand()` case 7 command-count fatigue: increment `macros` on accepted commands, emit `TIRED` on the 20th command, and rely on the spell tick reset to clear the counter.
-2. **Player lifecycle parity**
+1. **Player lifecycle parity**
    - Add first-login player-ID validation/reservation messaging and intro surfaces.
    - Add the in-game `x` exit path with `EXIKYR`, sparkling-light room fan-out, session deactivation, presence cleanup, and persisted player state.
-3. **Frontend lifecycle surfaces**
+2. **Frontend lifecycle surfaces**
    - Verify intro, fatigue, death-reset, and exit messages render cleanly through the existing console/session UI.

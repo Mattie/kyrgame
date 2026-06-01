@@ -282,6 +282,9 @@ async def test_solo_level_journey_reaches_level_25_with_in_game_commands(monkeyp
                     assert record is not None
                     assert record.level == step.target_level - 1
                     _set_level(record, step.target_level - 1)
+                    # This journey compresses many legacy play sessions into one test loop;
+                    # splrtk() would clear command fatigue between these level beats.
+                    record.macros = 0
                     if step.setup:
                         step.setup(record)
                     db.commit()
