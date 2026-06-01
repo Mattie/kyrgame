@@ -13,10 +13,16 @@ import {
 } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
 import {
+  defaultFireBorderEffectPreset,
+  defaultFireBorderInverted,
+  defaultFireBorderPalette,
   defaultFireBorderRenderStyle,
   defaultFireBorderTuning,
+  FireBorderPalette,
   FireBorderRenderStyle,
   FireBorderTuning,
+  fireBorderEffectPresets,
+  fireBorderPalettePresets,
   fireBorderRenderStyles,
   GamePanelFireBorder,
 } from './CrtFireBorder'
@@ -73,20 +79,20 @@ const fireTuningControls: Array<{
   precision: number
   step: number
 }> = [
-  { key: 'detail', label: 'Detail (sharpness)', min: 0.1, max: 1, precision: 3, step: 0.01 },
-  { key: 'edgeFrequency', label: 'Edge frequency', min: 0.005, max: 0.06, precision: 3, step: 0.001 },
-  { key: 'edgeAmplitude', label: 'Edge amplitude', min: 0, max: 48, precision: 0, step: 1 },
-  { key: 'flickerAmount', label: 'Flicker amount', min: 0, max: 8, precision: 2, step: 0.1 },
-  { key: 'flickerSpeed', label: 'Flicker speed', min: 0, max: 6, precision: 0, step: 0.1 },
-  { key: 'driftSpeed', label: 'Drift speed', min: 0, max: 3, precision: 2, step: 0.05 },
-  { key: 'charDepth', label: 'Char depth', min: 0, max: 24, precision: 0, step: 1 },
-  { key: 'glowBleed', label: 'Glow bleed', min: 0, max: 16, precision: 2, step: 0.1 },
-  { key: 'outerGlow', label: 'Outer glow', min: 0, max: 1, precision: 3, step: 0.01 },
-  { key: 'glowRadius', label: 'Glow radius', min: 0, max: 18, precision: 0, step: 0.5 },
-  { key: 'softness', label: 'Softness', min: 0.5, max: 8, precision: 2, step: 0.1 },
+  { key: 'detail', label: 'Detail (sharpness)', min: 0.3, max: 1, precision: 3, step: 0.01 },
+  { key: 'edgeFrequency', label: 'Edge frequency', min: 0.006, max: 0.05, precision: 3, step: 0.001 },
+  { key: 'edgeAmplitude', label: 'Edge amplitude', min: 2, max: 50, precision: 0, step: 1 },
+  { key: 'flickerAmount', label: 'Flicker amount', min: 0, max: 20, precision: 2, step: 0.5 },
+  { key: 'flickerSpeed', label: 'Flicker speed', min: 0, max: 4, precision: 2, step: 0.05 },
+  { key: 'driftSpeed', label: 'Drift speed', min: 0, max: 2, precision: 2, step: 0.02 },
+  { key: 'charDepth', label: 'Char depth', min: 6, max: 44, precision: 0, step: 1 },
+  { key: 'glowBleed', label: 'Glow bleed', min: 1, max: 16, precision: 2, step: 0.5 },
+  { key: 'outerGlow', label: 'Outer glow', min: 0, max: 1.2, precision: 3, step: 0.02 },
+  { key: 'glowRadius', label: 'Glow radius', min: 0, max: 24, precision: 0, step: 1 },
+  { key: 'softness', label: 'Softness', min: 0, max: 6, precision: 2, step: 0.2 },
   { key: 'pulseSpeed', label: 'Pulse speed', min: 0, max: 6, precision: 2, step: 0.1 },
-  { key: 'pulseDepth', label: 'Pulse depth', min: 0, max: 1, precision: 3, step: 0.01 },
-  { key: 'embers', label: 'Embers', min: 0, max: 1, precision: 3, step: 0.01 },
+  { key: 'pulseDepth', label: 'Pulse depth', min: 0, max: 0.6, precision: 3, step: 0.02 },
+  { key: 'embers', label: 'Embers', min: 0, max: 2, precision: 3, step: 0.05 },
 ]
 
 const fireRenderStyleLabels: Record<FireBorderRenderStyle, string> = {
@@ -94,6 +100,22 @@ const fireRenderStyleLabels: Record<FireBorderRenderStyle, string> = {
   path: 'Current path',
   thresholdMask: 'Noise threshold',
 }
+
+const firePaletteControls: Array<{
+  key: keyof FireBorderPalette
+  label: string
+}> = [
+  { key: 'paper', label: 'Parchment' },
+  { key: 'char', label: 'Char' },
+  { key: 'flame', label: 'Flame core' },
+  { key: 'deep', label: 'Flame deep' },
+  { key: 'lip', label: 'Hot lip' },
+  { key: 'emberBright', label: 'Ember bright' },
+  { key: 'emberDim', label: 'Ember fade' },
+  { key: 'void', label: 'Backdrop' },
+]
+
+const isHexColor = (value: string) => /^#[0-9a-fA-F]{6}$/.test(value)
 
 const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   if (payload === undefined || payload === null) return null
@@ -121,9 +143,19 @@ export const MudConsole = () => {
   } = useNavigator()
   const [input, setInput] = useState('')
   const [navMode, setNavMode] = useState(false)
+  const [fireEffectPresetId, setFireEffectPresetId] = useState(defaultFireBorderEffectPreset.id)
   const [fireRenderStyle, setFireRenderStyle] =
     useState<FireBorderRenderStyle>(defaultFireBorderRenderStyle)
   const [fireTuning, setFireTuning] = useState<FireBorderTuning>(defaultFireBorderTuning)
+  const [isFireBorderInverted, setIsFireBorderInverted] = useState(defaultFireBorderInverted)
+  const [firePalettePresetId, setFirePalettePresetId] = useState(fireBorderPalettePresets[0].id)
+  const [firePalette, setFirePalette] = useState<FireBorderPalette>(defaultFireBorderPalette)
+  const [firePaletteDraft, setFirePaletteDraft] =
+    useState<FireBorderPalette>(defaultFireBorderPalette)
+  const [isVfxTuningCollapsed, setIsVfxTuningCollapsed] = useState(false)
+  const [isVfxPaletteCollapsed, setIsVfxPaletteCollapsed] = useState(false)
+  const [burnPresetCopyStatus, setBurnPresetCopyStatus] = useState('')
+  const [paletteCopyStatus, setPaletteCopyStatus] = useState('')
   const showVfxTuning =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
   const logRef = useRef<HTMLDivElement | null>(null)
@@ -169,13 +201,116 @@ export const MudConsole = () => {
 
   const compassLabel = navMode ? 'Navigation mode active' : 'Toggle navigation mode'
 
+  const markCustomFireEffect = () => {
+    setFireEffectPresetId('custom')
+    setBurnPresetCopyStatus('')
+  }
+
+  const markCustomFirePalette = () => {
+    setFirePalettePresetId('custom')
+    setPaletteCopyStatus('')
+  }
+
+  const applyFireEffectPreset = (presetId: string) => {
+    const preset = fireBorderEffectPresets.find((entry) => entry.id === presetId)
+    if (!preset) {
+      setFireEffectPresetId('custom')
+      setBurnPresetCopyStatus('')
+      return
+    }
+
+    setFireEffectPresetId(preset.id)
+    setFireRenderStyle(preset.renderStyle)
+    setFireTuning(preset.tuning)
+    setIsFireBorderInverted(preset.inverted)
+    setBurnPresetCopyStatus('')
+  }
+
+  const applyFirePalettePreset = (presetId: string) => {
+    const preset = fireBorderPalettePresets.find((entry) => entry.id === presetId)
+    if (!preset) {
+      markCustomFirePalette()
+      return
+    }
+
+    const nextPalette = { ...preset.palette }
+    setFirePalettePresetId(preset.id)
+    setFirePalette(nextPalette)
+    setFirePaletteDraft(nextPalette)
+    setPaletteCopyStatus('')
+  }
+
   const updateFireTuning = (key: keyof FireBorderTuning, value: number) => {
+    markCustomFireEffect()
     setFireTuning((current) => ({ ...current, [key]: value }))
+  }
+
+  const updateFirePalette = (key: keyof FireBorderPalette, value: string) => {
+    const normalized = value.toLowerCase()
+    markCustomFirePalette()
+    setFirePalette((current) => ({ ...current, [key]: normalized }))
+    setFirePaletteDraft((current) => ({ ...current, [key]: normalized }))
+  }
+
+  const updateFirePaletteDraft = (key: keyof FireBorderPalette, value: string) => {
+    const normalized = value.trim().toLowerCase()
+    markCustomFirePalette()
+    setFirePaletteDraft((current) => ({ ...current, [key]: normalized }))
+    if (isHexColor(normalized)) {
+      setFirePalette((current) => ({ ...current, [key]: normalized }))
+    }
   }
 
   const resetFireVfx = () => {
     setFireRenderStyle(defaultFireBorderRenderStyle)
     setFireTuning(defaultFireBorderTuning)
+    setIsFireBorderInverted(defaultFireBorderInverted)
+    setFireEffectPresetId(defaultFireBorderEffectPreset.id)
+    setBurnPresetCopyStatus('')
+  }
+
+  const resetFirePalette = () => {
+    applyFirePalettePreset(fireBorderPalettePresets[0].id)
+    setPaletteCopyStatus('')
+  }
+
+  const fireEffectPresetOutput = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          inverted: isFireBorderInverted,
+          renderStyle: fireRenderStyle,
+          tuning: fireTuning,
+        },
+        null,
+        2
+      ),
+    [fireRenderStyle, fireTuning, isFireBorderInverted]
+  )
+
+  const firePalettePresetOutput = useMemo(
+    () => JSON.stringify(firePalette, null, 2),
+    [firePalette]
+  )
+
+  const copyFireEffectPreset = async () => {
+    if (!navigator.clipboard) {
+      setBurnPresetCopyStatus('Clipboard unavailable')
+      return
+    }
+
+    await navigator.clipboard.writeText(fireEffectPresetOutput)
+    setBurnPresetCopyStatus('Copied')
+  }
+
+  const copyFirePalettePreset = async () => {
+    if (!navigator.clipboard) {
+      setPaletteCopyStatus('Clipboard unavailable')
+      return
+    }
+
+    await navigator.clipboard.writeText(firePalettePresetOutput)
+    setPaletteCopyStatus('Copied')
   }
 
   const bannerLines = useMemo(() => {
@@ -235,7 +370,12 @@ export const MudConsole = () => {
 
   return (
     <section className="mud-shell">
-      <GamePanelFireBorder renderStyle={fireRenderStyle} tuning={fireTuning} />
+      <GamePanelFireBorder
+        inverted={isFireBorderInverted}
+        palette={firePalette}
+        renderStyle={fireRenderStyle}
+        tuning={fireTuning}
+      />
       <div className="mud-grid" data-testid="mud-grid">
         <div className="mud-window">
           <header className="mud-header">
@@ -338,53 +478,205 @@ export const MudConsole = () => {
               : 'Enter a command to interact. Click the compass for WASD navigation.'}
           </p>
           {showVfxTuning && (
-            <section className="vfx-tuning-panel" aria-label="Temporary VFX tuning controls">
-              <header className="vfx-tuning-header">
-                <h3>Burn controls</h3>
-                <button type="button" onClick={resetFireVfx}>
-                  Reset defaults
-                </button>
-              </header>
-              <div className="vfx-tuning-grid">
-                <label className="vfx-tuning-control">
-                  <span>Burn style</span>
-                  <select
-                    aria-label="Burn style"
-                    value={fireRenderStyle}
-                    onChange={(event) =>
-                      setFireRenderStyle(event.currentTarget.value as FireBorderRenderStyle)
+            <>
+              <section
+                className={`vfx-tuning-panel ${isVfxTuningCollapsed ? 'collapsed' : ''}`}
+                aria-label="Temporary VFX tuning controls"
+              >
+                <header className="vfx-tuning-header">
+                  <h3>Burn controls</h3>
+                  <button
+                    type="button"
+                    aria-controls="vfx-tuning-body"
+                    aria-expanded={!isVfxTuningCollapsed}
+                    aria-label={
+                      isVfxTuningCollapsed ? 'Expand burn controls' : 'Minimize burn controls'
                     }
+                    className="vfx-tuning-collapse"
+                    onClick={() => setIsVfxTuningCollapsed((current) => !current)}
                   >
-                    {fireBorderRenderStyles.map((style) => (
-                      <option key={style} value={style}>
-                        {fireRenderStyleLabels[style]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {fireTuningControls.map((control) => {
-                  const value = fireTuning[control.key]
-                  return (
-                    <label key={control.key} className="vfx-tuning-control">
-                      <span>
-                        {control.label}
-                        <span className="vfx-tuning-value">{value.toFixed(control.precision)}</span>
-                      </span>
-                      <input
-                        type="range"
-                        min={control.min}
-                        max={control.max}
-                        step={control.step}
-                        value={value}
-                        onChange={(event) =>
-                          updateFireTuning(control.key, Number(event.currentTarget.value))
-                        }
-                      />
+                    {isVfxTuningCollapsed ? '+' : '-'}
+                  </button>
+                </header>
+                <div id="vfx-tuning-body" hidden={isVfxTuningCollapsed}>
+                  <div className="vfx-tuning-grid">
+                    <label className="vfx-tuning-control">
+                      <span>Burn preset</span>
+                      <select
+                        aria-label="Burn preset"
+                        value={fireEffectPresetId}
+                        onChange={(event) => applyFireEffectPreset(event.currentTarget.value)}
+                      >
+                        {fireBorderEffectPresets.map((preset) => (
+                          <option key={preset.id} value={preset.id}>
+                            {preset.label}
+                          </option>
+                        ))}
+                        <option value="custom">Custom</option>
+                      </select>
                     </label>
-                  )
-                })}
-              </div>
-            </section>
+                    <label className="vfx-tuning-control">
+                      <span>Burn style</span>
+                      <select
+                        aria-label="Burn style"
+                        value={fireRenderStyle}
+                        onChange={(event) => {
+                          markCustomFireEffect()
+                          setFireRenderStyle(event.currentTarget.value as FireBorderRenderStyle)
+                        }}
+                      >
+                        {fireBorderRenderStyles.map((style) => (
+                          <option key={style} value={style}>
+                            {fireRenderStyleLabels[style]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="vfx-tuning-checkbox">
+                      <input
+                        type="checkbox"
+                        aria-label="Invert burn edge"
+                        checked={isFireBorderInverted}
+                        onChange={(event) => {
+                          markCustomFireEffect()
+                          setIsFireBorderInverted(event.currentTarget.checked)
+                        }}
+                      />
+                      <span>Invert burn edge</span>
+                    </label>
+                    {fireTuningControls.map((control) => {
+                      const value = fireTuning[control.key]
+                      return (
+                        <label key={control.key} className="vfx-tuning-control">
+                          <span>
+                            {control.label}
+                            <span className="vfx-tuning-value">
+                              {value.toFixed(control.precision)}
+                            </span>
+                          </span>
+                          <input
+                            type="range"
+                            min={control.min}
+                            max={control.max}
+                            step={control.step}
+                            value={value}
+                            onChange={(event) =>
+                              updateFireTuning(control.key, Number(event.currentTarget.value))
+                            }
+                          />
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <label className="vfx-palette-output">
+                    <span>Burn preset output</span>
+                    <textarea
+                      aria-label="Burn preset output"
+                      readOnly
+                      rows={9}
+                      value={fireEffectPresetOutput}
+                    />
+                  </label>
+                  <div className="vfx-palette-actions">
+                    <button type="button" onClick={copyFireEffectPreset}>
+                      Copy burn preset
+                    </button>
+                    <button type="button" onClick={resetFireVfx}>
+                      Reset defaults
+                    </button>
+                  </div>
+                  {burnPresetCopyStatus && <p className="vfx-copy-status">{burnPresetCopyStatus}</p>}
+                </div>
+              </section>
+              <section
+                className={`vfx-palette-panel ${isVfxPaletteCollapsed ? 'collapsed' : ''}`}
+                aria-label="Temporary VFX palette controls"
+              >
+                <header className="vfx-tuning-header">
+                  <h3>Palette</h3>
+                  <button
+                    type="button"
+                    aria-controls="vfx-palette-body"
+                    aria-expanded={!isVfxPaletteCollapsed}
+                    aria-label={
+                      isVfxPaletteCollapsed ? 'Expand palette controls' : 'Minimize palette controls'
+                    }
+                    className="vfx-tuning-collapse"
+                    onClick={() => setIsVfxPaletteCollapsed((current) => !current)}
+                  >
+                    {isVfxPaletteCollapsed ? '+' : '-'}
+                  </button>
+                </header>
+                <div id="vfx-palette-body" hidden={isVfxPaletteCollapsed}>
+                  <div className="vfx-palette-grid">
+                    <label className="vfx-tuning-control">
+                      <span>Palette preset</span>
+                      <select
+                        aria-label="Palette preset"
+                        value={firePalettePresetId}
+                        onChange={(event) => applyFirePalettePreset(event.currentTarget.value)}
+                      >
+                        {fireBorderPalettePresets.map((preset) => (
+                          <option key={preset.id} value={preset.id}>
+                            {preset.label}
+                          </option>
+                        ))}
+                        <option value="custom">Custom</option>
+                      </select>
+                    </label>
+                    {firePaletteControls.map((control) => {
+                      const value = firePalette[control.key]
+                      const draftValue = firePaletteDraft[control.key]
+                      return (
+                        <label key={control.key} className="vfx-palette-control">
+                          <span>
+                            {control.label}
+                            <span className="vfx-tuning-value">{value}</span>
+                          </span>
+                          <span className="vfx-palette-inputs">
+                            <input
+                              type="color"
+                              aria-label={`Palette ${control.label} swatch`}
+                              value={value}
+                              onChange={(event) =>
+                                updateFirePalette(control.key, event.currentTarget.value)
+                              }
+                            />
+                            <input
+                              type="text"
+                              aria-label={`Palette ${control.label} hex`}
+                              spellCheck={false}
+                              value={draftValue}
+                              onChange={(event) =>
+                                updateFirePaletteDraft(control.key, event.currentTarget.value)
+                              }
+                            />
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <label className="vfx-palette-output">
+                    <span>Palette preset output</span>
+                    <textarea
+                      aria-label="Palette preset output"
+                      readOnly
+                      rows={8}
+                      value={firePalettePresetOutput}
+                    />
+                  </label>
+                  <div className="vfx-palette-actions">
+                    <button type="button" onClick={copyFirePalettePreset}>
+                      Copy preset
+                    </button>
+                    <button type="button" onClick={resetFirePalette}>
+                      Reset palette
+                    </button>
+                  </div>
+                  {paletteCopyStatus && <p className="vfx-copy-status">{paletteCopyStatus}</p>}
+                </div>
+              </section>
+            </>
           )}
         </div>
       </div>

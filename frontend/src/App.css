@@ -918,12 +918,39 @@ p {
   backdrop-filter: blur(8px);
 }
 
+.vfx-palette-panel {
+  position: absolute;
+  left: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 5;
+  width: min(340px, calc(100% - 2.5rem));
+  max-height: min(82vh, 760px);
+  overflow: auto;
+  padding: 0.8rem;
+  border: 1px solid rgba(255, 199, 113, 0.38);
+  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(9, 16, 25, 0.94), rgba(21, 17, 13, 0.9));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 216, 148, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.vfx-tuning-panel.collapsed,
+.vfx-palette-panel.collapsed {
+  width: min(220px, calc(100% - 2.5rem));
+  overflow: hidden;
+}
+
 .vfx-tuning-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 0.65rem;
+}
+
+.vfx-tuning-panel.collapsed .vfx-tuning-header,
+.vfx-palette-panel.collapsed .vfx-tuning-header {
+  margin-bottom: 0;
 }
 
 .vfx-tuning-header h3 {
@@ -934,7 +961,8 @@ p {
   text-transform: uppercase;
 }
 
-.vfx-tuning-header button {
+.vfx-tuning-collapse,
+.vfx-tuning-reset {
   border: 1px solid rgba(255, 199, 113, 0.36);
   border-radius: 8px;
   background: rgba(255, 199, 113, 0.12);
@@ -943,6 +971,15 @@ p {
   font: inherit;
   font-size: 0.75rem;
   padding: 0.25rem 0.55rem;
+}
+
+.vfx-tuning-collapse {
+  min-width: 2rem;
+}
+
+.vfx-tuning-reset {
+  margin-top: 0.72rem;
+  width: 100%;
 }
 
 .vfx-tuning-grid {
@@ -974,6 +1011,20 @@ p {
   accent-color: #f3c77a;
 }
 
+.vfx-tuning-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #e9f3ff;
+  font-size: 0.78rem;
+}
+
+.vfx-tuning-checkbox input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #f3c77a;
+}
+
 .vfx-tuning-control select {
   width: 100%;
   border: 1px solid rgba(255, 199, 113, 0.36);
@@ -988,6 +1039,107 @@ p {
 .vfx-tuning-control select:focus-visible {
   outline: 2px solid rgba(255, 214, 154, 0.72);
   outline-offset: 2px;
+}
+
+.vfx-palette-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.vfx-palette-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8.5rem;
+  align-items: center;
+  gap: 0.65rem;
+  color: #e9f3ff;
+  font-size: 0.78rem;
+}
+
+.vfx-palette-control span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.vfx-palette-inputs {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.vfx-palette-control input[type='color'] {
+  width: 2.5rem;
+  height: 1.65rem;
+  padding: 0;
+  border: 1px solid rgba(255, 199, 113, 0.36);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.vfx-palette-control input[type='text'] {
+  min-width: 0;
+  border: 1px solid rgba(255, 199, 113, 0.28);
+  border-radius: 6px;
+  background: rgba(3, 7, 12, 0.68);
+  color: #ffd69a;
+  font-family: 'DM Mono', 'Segoe UI', sans-serif;
+  font-size: 0.72rem;
+  padding: 0.32rem 0.4rem;
+}
+
+.vfx-palette-output {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.7rem;
+  color: #e9f3ff;
+  font-size: 0.78rem;
+}
+
+.vfx-palette-output textarea {
+  min-height: 8rem;
+  resize: vertical;
+  border: 1px solid rgba(255, 199, 113, 0.28);
+  border-radius: 8px;
+  background: rgba(3, 7, 12, 0.72);
+  color: #ffd69a;
+  font-family: 'DM Mono', 'Segoe UI', sans-serif;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  padding: 0.55rem;
+}
+
+.vfx-palette-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.vfx-palette-actions button {
+  border: 1px solid rgba(255, 199, 113, 0.36);
+  border-radius: 8px;
+  background: rgba(255, 199, 113, 0.12);
+  color: #ffd69a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.vfx-copy-status {
+  margin: 0.45rem 0 0;
+  color: #ffd69a;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 760px) {
+  .vfx-palette-panel {
+    left: 1rem;
+    bottom: 5rem;
+  }
 }
 .hud-panel {
   background: linear-gradient(180deg, rgba(10, 24, 29, 0.92), rgba(6, 12, 20, 0.95));

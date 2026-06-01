@@ -31,7 +31,133 @@ export type FireBorderAccentStyle = (typeof fireBorderAccentStyles)[number]
 export const fireBorderRenderStyles = ['path', 'thresholdMask', 'paperMask'] as const
 export type FireBorderRenderStyle = (typeof fireBorderRenderStyles)[number]
 
-export const defaultFireBorderTuning: FireBorderTuning = {
+export type FireBorderPalette = {
+  char: string
+  deep: string
+  emberBright: string
+  emberDim: string
+  flame: string
+  lip: string
+  paper: string
+  void: string
+}
+
+type FireBorderRgb = readonly [number, number, number]
+
+export type FireBorderPaletteRgb = {
+  [Key in keyof FireBorderPalette]: FireBorderRgb
+}
+
+export type FireBorderPalettePreset = {
+  id: string
+  label: string
+  palette: FireBorderPalette
+}
+
+export type FireBorderEffectPreset = {
+  id: string
+  inverted: boolean
+  label: string
+  renderStyle: FireBorderRenderStyle
+  tuning: FireBorderTuning
+}
+
+export const defaultFireBorderPalette: FireBorderPalette = {
+  char: '#743502',
+  deep: '#e48686',
+  emberBright: '#d294a9',
+  emberDim: '#2a1dcc',
+  flame: '#dfb801',
+  lip: '#e3e2de',
+  paper: '#010101',
+  void: '#160f09',
+}
+
+export const fireBorderPalettePresets: FireBorderPalettePreset[] = [
+  {
+    id: 'myPalette',
+    label: 'My palette',
+    palette: defaultFireBorderPalette,
+  },
+  {
+    id: 'violetGreen',
+    label: 'Violet green',
+    palette: {
+      char: '#67225b',
+      deep: '#16ac34',
+      emberBright: '#e4becb',
+      emberDim: '#2a1dcc',
+      flame: '#edb407',
+      lip: '#f7f7f7',
+      paper: '#000000',
+      void: '#050505',
+    },
+  },
+  {
+    id: 'violetRed',
+    label: 'Violet red',
+    palette: {
+      char: '#67225b',
+      deep: '#ac1616',
+      emberBright: '#e4becb',
+      emberDim: '#2a1dcc',
+      flame: '#ece483',
+      lip: '#f7f7f7',
+      paper: '#000000',
+      void: '#050505',
+    },
+  },
+  {
+    id: 'blueLip',
+    label: 'Blue lip',
+    palette: {
+      char: '#67225b',
+      deep: '#ac1616',
+      emberBright: '#e4becb',
+      emberDim: '#2a1dcc',
+      flame: '#ece483',
+      lip: '#052cf0',
+      paper: '#000000',
+      void: '#050505',
+    },
+  },
+]
+
+const tunedBurningPaperTuning: FireBorderTuning = {
+  charDepth: 8,
+  detail: 0.64,
+  driftSpeed: 0.06,
+  edgeAmplitude: 7,
+  edgeFrequency: 0.012,
+  embers: 1.45,
+  flickerAmount: 4.5,
+  flickerSpeed: 1,
+  glowBleed: 3,
+  glowRadius: 2,
+  outerGlow: 0.14,
+  pulseDepth: 0.1,
+  pulseSpeed: 0.7,
+  softness: 1.2,
+}
+
+const calmSmolderTuning: FireBorderTuning = {
+  charDepth: 8,
+  detail: 0.66,
+  driftSpeed: 0.14,
+  edgeAmplitude: 9,
+  edgeFrequency: 0.02,
+  embers: 0.5,
+  flickerAmount: 3.5,
+  flickerSpeed: 0.45,
+  glowBleed: 1,
+  glowRadius: 0,
+  outerGlow: 0,
+  pulseDepth: 0,
+  pulseSpeed: 0,
+  softness: 2.6,
+}
+
+const wildGlowTuning: FireBorderTuning = {
   charDepth: 6,
   detail: 0.66,
   driftSpeed: 1.8,
@@ -48,8 +174,36 @@ export const defaultFireBorderTuning: FireBorderTuning = {
   softness: 2.6,
 }
 
+export const fireBorderEffectPresets: FireBorderEffectPreset[] = [
+  {
+    id: 'burningPaperTuned',
+    inverted: false,
+    label: 'Burning paper tuned',
+    renderStyle: 'paperMask',
+    tuning: tunedBurningPaperTuning,
+  },
+  {
+    id: 'calmSmolder',
+    inverted: false,
+    label: 'Calm smolder',
+    renderStyle: 'paperMask',
+    tuning: calmSmolderTuning,
+  },
+  {
+    id: 'wildGlow',
+    inverted: false,
+    label: 'Wild glow',
+    renderStyle: 'paperMask',
+    tuning: wildGlowTuning,
+  },
+]
+
+export const defaultFireBorderEffectPreset = fireBorderEffectPresets[0]
+export const defaultFireBorderTuning: FireBorderTuning = defaultFireBorderEffectPreset.tuning
+export const defaultFireBorderInverted = defaultFireBorderEffectPreset.inverted
 export const defaultFireBorderAccentStyle: FireBorderAccentStyle = 'flameLicks'
-export const defaultFireBorderRenderStyle: FireBorderRenderStyle = 'path'
+export const defaultFireBorderRenderStyle: FireBorderRenderStyle =
+  defaultFireBorderEffectPreset.renderStyle
 
 const TAU = Math.PI * 2
 const MOBILE_VIEWPORT_WIDTH = 720
@@ -76,6 +230,31 @@ const lerp = (start: number, end: number, amount: number) => start + (end - star
 
 const smoothstep = (value: number) => value * value * (3 - 2 * value)
 
+const hexToRgb = (hex: string): FireBorderRgb => {
+  const normalized = hex.replace('#', '')
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16),
+    Number.parseInt(normalized.slice(2, 4), 16),
+    Number.parseInt(normalized.slice(4, 6), 16),
+  ]
+}
+
+export const getFireBorderPaletteRgb = (
+  palette: FireBorderPalette = defaultFireBorderPalette
+): FireBorderPaletteRgb => ({
+  char: hexToRgb(palette.char),
+  deep: hexToRgb(palette.deep),
+  emberBright: hexToRgb(palette.emberBright),
+  emberDim: hexToRgb(palette.emberDim),
+  flame: hexToRgb(palette.flame),
+  lip: hexToRgb(palette.lip),
+  paper: hexToRgb(palette.paper),
+  void: hexToRgb(palette.void),
+})
+
+const defaultFireBorderPaletteRgb = getFireBorderPaletteRgb()
+const PAPER_EMBER_MAX_PARTICLES = 220
+
 const getPathFrequency = (tuning: FireBorderTuning) =>
   clamp((tuning.edgeFrequency / 0.02) * 0.6, 0.25, 2.75)
 
@@ -86,6 +265,9 @@ const getPathAccentAmount = (tuning: FireBorderTuning) => clamp(tuning.embers * 
 
 const getPathPulseSpeed = (tuning: FireBorderTuning) =>
   clamp((tuning.pulseSpeed / 3.2) * 1.1, 0, 3)
+
+export const getPaperEmberParticleCount = (tuning: FireBorderTuning) =>
+  Math.round(clamp(tuning.embers, 0, 2) * (PAPER_EMBER_MAX_PARTICLES / 2))
 
 export type ThresholdBurnZone = 'transparent' | 'glow' | 'char' | 'fill'
 
@@ -129,14 +311,14 @@ export type BurningPaperShade = {
 type BurningPaperShadeConfig = {
   charDepth: number
   glowOut: number
+  palette?: FireBorderPaletteRgb
 }
 
-const PAPER_BASE_COLOR = [216, 195, 154] as const
 const HOT_LIP_DEPTH = 1.5
 
 export const getBurningPaperShade = (
   edgeValue: number,
-  { charDepth, glowOut }: BurningPaperShadeConfig
+  { charDepth, glowOut, palette = defaultFireBorderPaletteRgb }: BurningPaperShadeConfig
 ): BurningPaperShade => {
   if (edgeValue > glowOut) {
     return { alpha: 0, blue: 0, green: 0, red: 0, zone: 'transparent' }
@@ -146,9 +328,9 @@ export const getBurningPaperShade = (
     const outwardFade = Math.max(0, 1 - Math.max(edgeValue, 0) / glowOut)
     return {
       alpha: Math.round(214 * outwardFade * outwardFade),
-      blue: 205,
-      green: 245,
-      red: 255,
+      blue: palette.lip[2],
+      green: palette.lip[1],
+      red: palette.lip[0],
       zone: 'lip',
     }
   }
@@ -156,23 +338,23 @@ export const getBurningPaperShade = (
   const depth = -edgeValue
   if (depth < charDepth) {
     const gradient = clamp01((depth - HOT_LIP_DEPTH) / (charDepth - HOT_LIP_DEPTH))
-    if (gradient < 0.45) {
-      const amount = gradient / 0.45
+    if (gradient < 0.5) {
+      const amount = gradient / 0.5
       return {
         alpha: 184,
-        blue: Math.round(lerp(116, 36, amount)),
-        green: Math.round(lerp(224, 156, amount)),
-        red: 255,
+        blue: Math.round(lerp(palette.flame[2], palette.deep[2], amount)),
+        green: Math.round(lerp(palette.flame[1], palette.deep[1], amount)),
+        red: Math.round(lerp(palette.flame[0], palette.deep[0], amount)),
         zone: 'flame',
       }
     }
 
-    const amount = (gradient - 0.45) / 0.55
+    const amount = (gradient - 0.5) / 0.5
     return {
       alpha: 216,
-      blue: Math.round(lerp(32, 18, amount)),
-      green: Math.round(lerp(92, 34, amount)),
-      red: Math.round(lerp(174, 70, amount)),
+      blue: Math.round(lerp(palette.deep[2], palette.char[2], amount)),
+      green: Math.round(lerp(palette.deep[1], palette.char[1], amount)),
+      red: Math.round(lerp(palette.deep[0], palette.char[0], amount)),
       zone: 'char',
     }
   }
@@ -180,9 +362,9 @@ export const getBurningPaperShade = (
   const scorch = Math.max(0, 1 - (depth - charDepth) / 18)
   return {
     alpha: 226,
-    blue: Math.round(lerp(PAPER_BASE_COLOR[2], 24, scorch)),
-    green: Math.round(lerp(PAPER_BASE_COLOR[1], 36, scorch)),
-    red: Math.round(lerp(PAPER_BASE_COLOR[0], 66, scorch)),
+    blue: Math.round(lerp(palette.paper[2], palette.char[2], scorch)),
+    green: Math.round(lerp(palette.paper[1], palette.char[1], scorch)),
+    red: Math.round(lerp(palette.paper[0], palette.char[0], scorch)),
     zone: 'paper',
   }
 }
@@ -644,8 +826,9 @@ type ThresholdMaskCache = {
 
 const thresholdMaskCaches = new Map<string, ThresholdMaskCache>()
 const THRESHOLD_MASK_SCALE = 0.42
-const THRESHOLD_MASK_MAX_SIZE = 420
+const THRESHOLD_MASK_MAX_SIZE = 560
 const THRESHOLD_MASK_MIN_SIZE = 72
+const THRESHOLD_MASK_MIN_DETAIL = 0.3
 const THRESHOLD_EDGE_INSET = 9
 
 const valueNoise2d = (x: number, y: number, seed: number) => {
@@ -696,9 +879,14 @@ const roundedRectSignedDistance = (
   return outsideDistance + insideDistance - radius
 }
 
-const getThresholdMaskDimensions = (width: number, height: number) => {
+export const getThresholdMaskDimensions = (
+  width: number,
+  height: number,
+  detail = THRESHOLD_MASK_SCALE
+) => {
   const longestSide = Math.max(width, height)
-  const scale = Math.min(THRESHOLD_MASK_SCALE, THRESHOLD_MASK_MAX_SIZE / longestSide)
+  const requestedScale = clamp(detail, THRESHOLD_MASK_MIN_DETAIL, 1)
+  const scale = Math.min(requestedScale, THRESHOLD_MASK_MAX_SIZE / longestSide)
 
   return {
     maskHeight: Math.max(THRESHOLD_MASK_MIN_SIZE, Math.round(height * scale)),
@@ -709,9 +897,10 @@ const getThresholdMaskDimensions = (width: number, height: number) => {
 const createThresholdMaskCache = (
   width: number,
   height: number,
-  frequencyBucket: number
+  frequencyBucket: number,
+  detail: number
 ): ThresholdMaskCache | null => {
-  const { maskHeight, maskWidth } = getThresholdMaskDimensions(width, height)
+  const { maskHeight, maskWidth } = getThresholdMaskDimensions(width, height, detail)
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d', { alpha: true })
 
@@ -765,13 +954,14 @@ const getThresholdMaskCache = (
   tuning: FireBorderTuning
 ): ThresholdMaskCache | null => {
   const frequencyBucket = Math.round((tuning.edgeFrequency / 0.02) * 12)
-  const { maskHeight, maskWidth } = getThresholdMaskDimensions(width, height)
-  const key = `${Math.round(width)}x${Math.round(height)}:${maskWidth}x${maskHeight}:${frequencyBucket}`
+  const detailBucket = Math.round(clamp(tuning.detail, THRESHOLD_MASK_MIN_DETAIL, 1) * 100)
+  const { maskHeight, maskWidth } = getThresholdMaskDimensions(width, height, tuning.detail)
+  const key = `${Math.round(width)}x${Math.round(height)}:${maskWidth}x${maskHeight}:${frequencyBucket}:${detailBucket}`
   const cached = thresholdMaskCaches.get(key)
 
   if (cached) return cached
 
-  const cache = createThresholdMaskCache(width, height, frequencyBucket)
+  const cache = createThresholdMaskCache(width, height, frequencyBucket, tuning.detail)
   if (!cache) return null
 
   thresholdMaskCaches.set(key, cache)
@@ -884,13 +1074,104 @@ const renderThresholdMaskBorder = (
   context.restore()
 }
 
+const drawPaperEmbers = (
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  time: number,
+  staticMode: boolean,
+  tuning: FireBorderTuning,
+  palette: FireBorderPaletteRgb
+) => {
+  const count = getPaperEmberParticleCount(tuning)
+  if (count <= 0) return
+
+  const margin = tuning.edgeAmplitude + tuning.glowBleed + 2
+  const left = margin
+  const top = margin
+  const right = width - margin
+  const bottom = height - margin
+  if (right <= left || bottom <= top) return
+
+  const seconds = staticMode ? 13.7 : time * 0.001
+  const intensity = clamp(tuning.embers / 1.4, 0, 1)
+
+  context.save()
+  context.globalCompositeOperation = 'screen'
+
+  for (let index = 0; index < count; index += 1) {
+    const seed = index * 19.918 + width * 0.017 + height * 0.031
+    const side = Math.floor(random01(seed + 1) * 4)
+    const along = random01(seed + 2)
+    const cycle = 1.35 + random01(seed + 3) * 1.7
+    const phase = fract(seconds / cycle + random01(seed + 4))
+    const life = Math.sin(phase * Math.PI)
+    const opacity = life * life * intensity * (0.3 + random01(seed + 5) * 0.55)
+    if (opacity < 0.02) continue
+
+    let x = left + (right - left) * along
+    let y = top
+    let nx = 0
+    let ny = -1
+    let tx = 1
+    let ty = 0
+
+    if (side === 1) {
+      x = right
+      y = top + (bottom - top) * along
+      nx = 1
+      ny = 0
+      tx = 0
+      ty = 1
+    } else if (side === 2) {
+      x = left + (right - left) * along
+      y = bottom
+      nx = 0
+      ny = 1
+      tx = 1
+      ty = 0
+    } else if (side === 3) {
+      x = left
+      y = top + (bottom - top) * along
+      nx = -1
+      ny = 0
+      tx = 0
+      ty = 1
+    }
+
+    const outward = phase * (5 + random01(seed + 6) * 22)
+    const lift = phase * (14 + random01(seed + 7) * 42)
+    const tangent = (random01(seed + 8) - 0.5) * phase * 22
+    x += nx * outward + tx * tangent
+    y += ny * outward + ty * tangent - lift
+
+    const color = [
+      lerp(palette.emberDim[0], palette.emberBright[0], life),
+      lerp(palette.emberDim[1], palette.emberBright[1], life),
+      lerp(palette.emberDim[2], palette.emberBright[2], life),
+    ]
+    const size = (0.45 + random01(seed + 9) * 1.55) * (0.35 + life)
+
+    context.fillStyle = `rgba(${Math.round(color[0])}, ${Math.round(color[1])}, ${Math.round(
+      color[2]
+    )}, ${opacity.toFixed(3)})`
+    context.beginPath()
+    context.arc(x, y, size, 0, TAU)
+    context.fill()
+  }
+
+  context.restore()
+}
+
 const renderBurningPaperMaskBorder = (
   context: CanvasRenderingContext2D,
   width: number,
   height: number,
   time: number,
   staticMode: boolean,
-  tuning: FireBorderTuning
+  tuning: FireBorderTuning,
+  palette: FireBorderPaletteRgb,
+  inverted: boolean
 ) => {
   context.clearRect(0, 0, width, height)
   if (width < 80 || height < 80) return
@@ -939,9 +1220,9 @@ const renderBurningPaperMaskBorder = (
 
       if (outerDistance < deepPaperCutoff) {
         const parchmentVariation = localTexture * 18 * tuning.detail
-        data[dataIndex] = clamp(PAPER_BASE_COLOR[0] + parchmentVariation, 0, 255)
-        data[dataIndex + 1] = clamp(PAPER_BASE_COLOR[1] + parchmentVariation * 0.8, 0, 255)
-        data[dataIndex + 2] = clamp(PAPER_BASE_COLOR[2] + parchmentVariation * 0.55, 0, 255)
+        data[dataIndex] = clamp(palette.paper[0] + parchmentVariation, 0, 255)
+        data[dataIndex + 1] = clamp(palette.paper[1] + parchmentVariation * 0.8, 0, 255)
+        data[dataIndex + 2] = clamp(palette.paper[2] + parchmentVariation * 0.55, 0, 255)
         data[dataIndex + 3] = 232
         continue
       }
@@ -957,9 +1238,22 @@ const renderBurningPaperMaskBorder = (
             tuning.pulseDepth *
             edgeAmp
       const edgeValue = outerDistance + bigNoise * edgeAmp * 2 + fastNoise * flickAmp * 2 + pulse
-      const shade = getBurningPaperShade(edgeValue / softnessScale, { charDepth, glowOut })
+      const shade = getBurningPaperShade((inverted ? -edgeValue : edgeValue) / softnessScale, {
+        charDepth,
+        glowOut,
+        palette,
+      })
 
       if (shade.zone === 'transparent') {
+        if (inverted && outerDistance <= 0) {
+          const parchmentVariation = localTexture * 18 * tuning.detail
+          data[dataIndex] = clamp(palette.paper[0] + parchmentVariation, 0, 255)
+          data[dataIndex + 1] = clamp(palette.paper[1] + parchmentVariation * 0.8, 0, 255)
+          data[dataIndex + 2] = clamp(palette.paper[2] + parchmentVariation * 0.55, 0, 255)
+          data[dataIndex + 3] = 232
+          continue
+        }
+
         data[dataIndex] = 0
         data[dataIndex + 1] = 0
         data[dataIndex + 2] = 0
@@ -967,13 +1261,34 @@ const renderBurningPaperMaskBorder = (
         continue
       }
 
+      if (inverted && outerDistance > 0 && shade.zone === 'paper') {
+        const fade = clamp01(1 - outerDistance / farVoidCutoff)
+        data[dataIndex] = clamp(palette.char[0] + localTexture * 16, 0, 255)
+        data[dataIndex + 1] = clamp(palette.char[1] + localTexture * 10, 0, 255)
+        data[dataIndex + 2] = clamp(palette.char[2] + localTexture * 8, 0, 255)
+        data[dataIndex + 3] = Math.round(206 * fade)
+        continue
+      }
+
       const textureAmount = shade.zone === 'paper' ? 18 : 8
       const texture = localTexture * textureAmount
-      const emberBoost = shade.zone === 'lip' || shade.zone === 'flame' ? tuning.embers * 6 : 0
+      const emberAmount = shade.zone === 'lip' || shade.zone === 'flame' ? tuning.embers * 0.08 : 0
 
-      data[dataIndex] = clamp(shade.red + texture + emberBoost, 0, 255)
-      data[dataIndex + 1] = clamp(shade.green + texture * 0.75 + emberBoost * 0.4, 0, 255)
-      data[dataIndex + 2] = clamp(shade.blue + texture * 0.45, 0, 255)
+      data[dataIndex] = clamp(
+        lerp(shade.red + texture, palette.emberBright[0], emberAmount),
+        0,
+        255
+      )
+      data[dataIndex + 1] = clamp(
+        lerp(shade.green + texture * 0.75, palette.emberBright[1], emberAmount),
+        0,
+        255
+      )
+      data[dataIndex + 2] = clamp(
+        lerp(shade.blue + texture * 0.45, palette.emberBright[2], emberAmount),
+        0,
+        255
+      )
       data[dataIndex + 3] = shade.alpha
     }
   }
@@ -983,14 +1298,19 @@ const renderBurningPaperMaskBorder = (
   context.save()
   context.imageSmoothingEnabled = true
   context.clearRect(0, 0, width, height)
-  context.globalCompositeOperation = 'screen'
-  context.filter = `blur(${tuning.glowRadius}px)`
-  context.globalAlpha = tuning.outerGlow
-  context.drawImage(cache.canvas, 0, 0, width, height)
+  if (tuning.outerGlow > 0 && tuning.glowRadius > 0) {
+    context.globalCompositeOperation = 'screen'
+    context.filter = `blur(${tuning.glowRadius}px)`
+    context.globalAlpha = tuning.outerGlow
+    context.drawImage(cache.canvas, 0, 0, width, height)
+  }
   context.filter = 'none'
   context.globalAlpha = 1
   context.globalCompositeOperation = 'source-over'
+  context.filter = tuning.softness > 0 ? `blur(${tuning.softness}px)` : 'none'
   context.drawImage(cache.canvas, 0, 0, width, height)
+  context.filter = 'none'
+  drawPaperEmbers(context, width, height, time, staticMode, tuning, palette)
   context.restore()
 }
 
@@ -1002,7 +1322,9 @@ const renderBorder = (
   staticMode: boolean,
   tuning: FireBorderTuning,
   accentStyle: FireBorderAccentStyle,
-  renderStyle: FireBorderRenderStyle
+  renderStyle: FireBorderRenderStyle,
+  palette: FireBorderPaletteRgb,
+  inverted: boolean
 ) => {
   context.clearRect(0, 0, width, height)
   if (width < 80 || height < 80) return
@@ -1013,7 +1335,7 @@ const renderBorder = (
   }
 
   if (renderStyle === 'paperMask') {
-    renderBurningPaperMaskBorder(context, width, height, time, staticMode, tuning)
+    renderBurningPaperMaskBorder(context, width, height, time, staticMode, tuning, palette, inverted)
     return
   }
 
@@ -1044,15 +1366,21 @@ const renderBorder = (
 
 export const GamePanelFireBorder = ({
   accentStyle = defaultFireBorderAccentStyle,
+  inverted = defaultFireBorderInverted,
+  palette = defaultFireBorderPalette,
   renderStyle = defaultFireBorderRenderStyle,
   tuning = defaultFireBorderTuning,
 }: {
   accentStyle?: FireBorderAccentStyle
+  inverted?: boolean
+  palette?: FireBorderPalette
   renderStyle?: FireBorderRenderStyle
   tuning?: FireBorderTuning
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const accentStyleRef = useRef(accentStyle)
+  const invertedRef = useRef(inverted)
+  const paletteRgbRef = useRef(getFireBorderPaletteRgb(palette))
   const renderStyleRef = useRef(renderStyle)
   const tuningRef = useRef(tuning)
 
@@ -1063,6 +1391,14 @@ export const GamePanelFireBorder = ({
   useEffect(() => {
     renderStyleRef.current = renderStyle
   }, [renderStyle])
+
+  useEffect(() => {
+    invertedRef.current = inverted
+  }, [inverted])
+
+  useEffect(() => {
+    paletteRgbRef.current = getFireBorderPaletteRgb(palette)
+  }, [palette])
 
   useEffect(() => {
     tuningRef.current = tuning
@@ -1113,7 +1449,9 @@ export const GamePanelFireBorder = ({
         reducedMotion.matches,
         tuningRef.current,
         accentStyleRef.current,
-        renderStyleRef.current
+        renderStyleRef.current,
+        paletteRgbRef.current,
+        invertedRef.current
       )
     }
 
@@ -1162,6 +1500,7 @@ export const GamePanelFireBorder = ({
     <canvas
       aria-hidden="true"
       className="game-panel-fire-border"
+      data-inverted={inverted ? 'true' : 'false'}
       data-render-style={renderStyle}
       data-testid="game-panel-fire-border"
       ref={canvasRef}
