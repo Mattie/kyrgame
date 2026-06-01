@@ -313,8 +313,12 @@ export const MudConsole = () => {
       return
     }
 
-    await navigator.clipboard.writeText(firePalettePresetOutput)
-    setPaletteCopyStatus('Copied')
+    try {
+      await navigator.clipboard.writeText(firePalettePresetOutput)
+      setPaletteCopyStatus('Copied')
+    } catch {
+      setPaletteCopyStatus('Copy failed')
+    }
   }
 
   const bannerLines = useMemo(() => {
