@@ -12,6 +12,11 @@ import {
   useNavigator,
 } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
+import {
+  defaultFireBorderTuning,
+  FireBorderTuning,
+  GamePanelFireBorder,
+} from './CrtFireBorder'
 
 const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
 
@@ -57,6 +62,18 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
   s: 'south',
   d: 'east',
 }
+const fireTuningControls: Array<{
+  key: keyof FireBorderTuning
+  label: string
+  min: number
+  max: number
+  step: number
+}> = [
+  { key: 'pulseSpeed', label: 'Pulse speed', min: 0, max: 3, step: 0.05 },
+  { key: 'frequency', label: 'Frequency', min: 0.25, max: 2.75, step: 0.05 },
+  { key: 'amplitude', label: 'Amplitude', min: 0, max: 2.5, step: 0.05 },
+  { key: 'accents', label: 'Accent curls', min: 0, max: 2.5, step: 0.05 },
+]
 
 const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   if (payload === undefined || payload === null) return null
@@ -84,6 +101,9 @@ export const MudConsole = () => {
   } = useNavigator()
   const [input, setInput] = useState('')
   const [navMode, setNavMode] = useState(false)
+  const [fireTuning, setFireTuning] = useState<FireBorderTuning>(defaultFireBorderTuning)
+  const showVfxTuning =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
   const logRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
@@ -126,6 +146,10 @@ export const MudConsole = () => {
   }
 
   const compassLabel = navMode ? 'Navigation mode active' : 'Toggle navigation mode'
+
+  const updateFireTuning = (key: keyof FireBorderTuning, value: number) => {
+    setFireTuning((current) => ({ ...current, [key]: value }))
+  }
 
   const bannerLines = useMemo(() => {
     if (!session) {
@@ -184,6 +208,7 @@ export const MudConsole = () => {
 
   return (
     <section className="mud-shell">
+      <GamePanelFireBorder tuning={fireTuning} />
       <div className="mud-grid" data-testid="mud-grid">
         <div className="mud-window">
           <header className="mud-header">
@@ -285,6 +310,39 @@ export const MudConsole = () => {
               ? 'Navigation mode: WASD sends movement (click the prompt to exit).'
               : 'Enter a command to interact. Click the compass for WASD navigation.'}
           </p>
+          {showVfxTuning && (
+            <section className="vfx-tuning-panel" aria-label="Temporary VFX tuning controls">
+              <header className="vfx-tuning-header">
+                <h3>VFX tuning</h3>
+                <button type="button" onClick={() => setFireTuning(defaultFireBorderTuning)}>
+                  Reset
+                </button>
+              </header>
+              <div className="vfx-tuning-grid">
+                {fireTuningControls.map((control) => {
+                  const value = fireTuning[control.key]
+                  return (
+                    <label key={control.key} className="vfx-tuning-control">
+                      <span>
+                        {control.label}
+                        <output>{value.toFixed(2)}</output>
+                      </span>
+                      <input
+                        type="range"
+                        min={control.min}
+                        max={control.max}
+                        step={control.step}
+                        value={value}
+                        onChange={(event) =>
+                          updateFireTuning(control.key, Number(event.currentTarget.value))
+                        }
+                      />
+                    </label>
+                  )
+                })}
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </section>

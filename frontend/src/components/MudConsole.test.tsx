@@ -93,6 +93,7 @@ describe('MudConsole', () => {
         },
       },
     ]
+    window.history.replaceState(null, '', '/')
   })
 
   it('does not render debug payload JSON in the MUD console', () => {
@@ -101,6 +102,46 @@ describe('MudConsole', () => {
     expect(screen.getAllByText('sdfgs vs is here.').length).toBeGreaterThan(0)
     expect(screen.queryByText(/"scope":"player"/)).toBeNull()
     expect(screen.queryByText(/room_occupants.*KUTM11/)).toBeNull()
+  })
+
+  it('wraps the outer game shell with a decorative fire border canvas', () => {
+    const { container } = render(<MudConsole />)
+
+    const frame = container.querySelector<HTMLElement>('.mud-shell')
+    const crt = container.querySelector<HTMLElement>('.crt')
+    const border = screen.getByTestId('game-panel-fire-border')
+
+    expect(frame).toContainElement(crt)
+    expect(frame).toContainElement(border)
+    expect(border).toHaveAttribute('aria-hidden', 'true')
+    expect(border.tagName.toLowerCase()).toBe('canvas')
+  })
+
+  it('hides temporary VFX tuning controls by default', () => {
+    render(<MudConsole />)
+
+    expect(screen.queryByLabelText(/temporary vfx tuning controls/i)).toBeNull()
+    expect(screen.queryByLabelText(/pulse speed/i)).toBeNull()
+  })
+
+  it('renders temporary VFX tuning controls with live values when enabled by query', () => {
+    window.history.replaceState(null, '', '/?vfxtune=anything')
+
+    render(<MudConsole />)
+
+    const pulseSpeed = screen.getByLabelText(/pulse speed/i) as HTMLInputElement
+    const frequency = screen.getByLabelText(/frequency/i) as HTMLInputElement
+    const amplitude = screen.getByLabelText(/amplitude/i) as HTMLInputElement
+    const accents = screen.getByLabelText(/accent curls/i) as HTMLInputElement
+
+    expect(Number(pulseSpeed.value)).toBe(1.1)
+    expect(Number(frequency.value)).toBe(0.6)
+    expect(Number(amplitude.value)).toBe(0.75)
+    expect(Number(accents.value)).toBe(0.65)
+
+    fireEvent.change(pulseSpeed, { target: { value: '1.75' } })
+    expect(pulseSpeed.value).toBe('1.75')
+    expect(screen.getByText('1.75')).toBeInTheDocument()
   })
 
   it('renders ANSI color spans without escape codes', () => {
