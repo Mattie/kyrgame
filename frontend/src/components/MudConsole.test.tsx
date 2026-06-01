@@ -136,6 +136,11 @@ describe('MudConsole', () => {
     const accents = screen.getByLabelText(/accent curls/i) as HTMLInputElement
 
     expect(style.value).toBe('path')
+    expect(Array.from(style.options).map((option) => option.value)).toEqual([
+      'path',
+      'thresholdMask',
+      'paperMask',
+    ])
     expect(Number(pulseSpeed.value)).toBe(1.1)
     expect(Number(frequency.value)).toBe(0.6)
     expect(Number(amplitude.value)).toBe(0.75)
@@ -145,6 +150,12 @@ describe('MudConsole', () => {
     expect(screen.getByTestId('game-panel-fire-border')).toHaveAttribute(
       'data-render-style',
       'thresholdMask'
+    )
+
+    fireEvent.change(style, { target: { value: 'paperMask' } })
+    expect(screen.getByTestId('game-panel-fire-border')).toHaveAttribute(
+      'data-render-style',
+      'paperMask'
     )
 
     fireEvent.change(pulseSpeed, { target: { value: '1.75' } })

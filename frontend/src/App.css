@@ -661,7 +661,8 @@ p {
   mix-blend-mode: screen;
 }
 
-.game-panel-fire-border[data-render-style='thresholdMask'] {
+.game-panel-fire-border[data-render-style='thresholdMask'],
+.game-panel-fire-border[data-render-style='paperMask'] {
   mix-blend-mode: normal;
 }
 

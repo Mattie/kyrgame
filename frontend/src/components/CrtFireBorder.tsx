@@ -18,7 +18,7 @@ export type FireBorderTuning = {
 export const fireBorderAccentStyles = ['curls', 'flameLicks'] as const
 export type FireBorderAccentStyle = (typeof fireBorderAccentStyles)[number]
 
-export const fireBorderRenderStyles = ['path', 'thresholdMask'] as const
+export const fireBorderRenderStyles = ['path', 'thresholdMask', 'paperMask'] as const
 export type FireBorderRenderStyle = (typeof fireBorderRenderStyles)[number]
 
 export const defaultFireBorderTuning: FireBorderTuning = {
@@ -83,6 +83,77 @@ export const getThresholdBurnBand = (
     return { alpha: 235, blue: 10, green: 31, red: 64, zone: 'char' }
   }
   return { alpha: 245, blue: 24, green: 16, red: 8, zone: 'fill' }
+}
+
+export type BurningPaperZone = 'transparent' | 'lip' | 'flame' | 'char' | 'paper'
+
+export type BurningPaperShade = {
+  alpha: number
+  blue: number
+  green: number
+  red: number
+  zone: BurningPaperZone
+}
+
+type BurningPaperShadeConfig = {
+  charDepth: number
+  glowOut: number
+}
+
+const PAPER_BASE_COLOR = [216, 195, 154] as const
+const HOT_LIP_DEPTH = 1.5
+
+export const getBurningPaperShade = (
+  edgeValue: number,
+  { charDepth, glowOut }: BurningPaperShadeConfig
+): BurningPaperShade => {
+  if (edgeValue > glowOut) {
+    return { alpha: 0, blue: 0, green: 0, red: 0, zone: 'transparent' }
+  }
+
+  if (edgeValue > -HOT_LIP_DEPTH) {
+    const outwardFade = Math.max(0, 1 - Math.max(edgeValue, 0) / glowOut)
+    return {
+      alpha: Math.round(214 * outwardFade * outwardFade),
+      blue: 205,
+      green: 245,
+      red: 255,
+      zone: 'lip',
+    }
+  }
+
+  const depth = -edgeValue
+  if (depth < charDepth) {
+    const gradient = clamp01((depth - HOT_LIP_DEPTH) / (charDepth - HOT_LIP_DEPTH))
+    if (gradient < 0.45) {
+      const amount = gradient / 0.45
+      return {
+        alpha: 184,
+        blue: Math.round(lerp(116, 36, amount)),
+        green: Math.round(lerp(224, 156, amount)),
+        red: 255,
+        zone: 'flame',
+      }
+    }
+
+    const amount = (gradient - 0.45) / 0.55
+    return {
+      alpha: 216,
+      blue: Math.round(lerp(32, 18, amount)),
+      green: Math.round(lerp(92, 34, amount)),
+      red: Math.round(lerp(174, 70, amount)),
+      zone: 'char',
+    }
+  }
+
+  const scorch = Math.max(0, 1 - (depth - charDepth) / 18)
+  return {
+    alpha: 226,
+    blue: Math.round(lerp(PAPER_BASE_COLOR[2], 24, scorch)),
+    green: Math.round(lerp(PAPER_BASE_COLOR[1], 36, scorch)),
+    red: Math.round(lerp(PAPER_BASE_COLOR[0], 66, scorch)),
+    zone: 'paper',
+  }
 }
 
 type Point2D = {
@@ -767,6 +838,109 @@ const renderThresholdMaskBorder = (
   context.restore()
 }
 
+const renderBurningPaperMaskBorder = (
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  time: number,
+  staticMode: boolean,
+  tuning: FireBorderTuning
+) => {
+  context.clearRect(0, 0, width, height)
+  if (width < 80 || height < 80) return
+
+  const cache = getThresholdMaskCache(width, height, tuning)
+  if (!cache) return
+
+  const {
+    context: maskContext,
+    edgeDepth,
+    imageData,
+    maskHeight,
+    maskWidth,
+    noise,
+  } = cache
+  const data = imageData.data
+  const edgeAmp = 12 + tuning.amplitude * 12
+  const flickAmp = 1.8 + tuning.frequency * 1.7 + tuning.accents * 0.75
+  const charDepth = 6 + tuning.accents * 4.5
+  const glowOut = 3.2 + tuning.accents * 0.9
+  const driftX = staticMode ? 0 : Math.floor(time * 0.0045 * tuning.pulseSpeed)
+  const driftY = staticMode ? 0 : Math.floor(time * 0.013 * tuning.pulseSpeed)
+  const shimmerX = staticMode ? 0 : Math.floor(time * 0.028 * tuning.pulseSpeed)
+  const shimmerY = staticMode ? 0 : Math.floor(-time * 0.021 * tuning.pulseSpeed)
+  const farVoidCutoff = glowOut + edgeAmp + flickAmp + 3
+  const deepPaperCutoff = -(charDepth + edgeAmp + flickAmp + 18)
+
+  for (let y = 0; y < maskHeight; y += 1) {
+    const driftedY = ((y + driftY) % maskHeight + maskHeight) % maskHeight
+    const shimmeredY = ((y + shimmerY) % maskHeight + maskHeight) % maskHeight
+
+    for (let x = 0; x < maskWidth; x += 1) {
+      const index = y * maskWidth + x
+      const dataIndex = index * 4
+      const outerDistance = -edgeDepth[index]
+      const localTexture = noise[index] - 0.5
+
+      if (outerDistance > farVoidCutoff) {
+        data[dataIndex] = 0
+        data[dataIndex + 1] = 0
+        data[dataIndex + 2] = 0
+        data[dataIndex + 3] = 0
+        continue
+      }
+
+      if (outerDistance < deepPaperCutoff) {
+        const parchmentVariation = localTexture * 18
+        data[dataIndex] = clamp(PAPER_BASE_COLOR[0] + parchmentVariation, 0, 255)
+        data[dataIndex + 1] = clamp(PAPER_BASE_COLOR[1] + parchmentVariation * 0.8, 0, 255)
+        data[dataIndex + 2] = clamp(PAPER_BASE_COLOR[2] + parchmentVariation * 0.55, 0, 255)
+        data[dataIndex + 3] = 232
+        continue
+      }
+
+      const driftedX = ((x + driftX) % maskWidth + maskWidth) % maskWidth
+      const shimmeredX = ((x + shimmerX) % maskWidth + maskWidth) % maskWidth
+      const bigNoise = noise[driftedY * maskWidth + driftedX] - 0.5
+      const fastNoise = noise[shimmeredY * maskWidth + shimmeredX] - 0.5
+      const edgeValue = outerDistance + bigNoise * edgeAmp * 2 + fastNoise * flickAmp * 2
+      const shade = getBurningPaperShade(edgeValue, { charDepth, glowOut })
+
+      if (shade.zone === 'transparent') {
+        data[dataIndex] = 0
+        data[dataIndex + 1] = 0
+        data[dataIndex + 2] = 0
+        data[dataIndex + 3] = 0
+        continue
+      }
+
+      const textureAmount = shade.zone === 'paper' ? 18 : 8
+      const texture = localTexture * textureAmount
+      const emberBoost = shade.zone === 'lip' || shade.zone === 'flame' ? tuning.accents * 5 : 0
+
+      data[dataIndex] = clamp(shade.red + texture + emberBoost, 0, 255)
+      data[dataIndex + 1] = clamp(shade.green + texture * 0.75 + emberBoost * 0.4, 0, 255)
+      data[dataIndex + 2] = clamp(shade.blue + texture * 0.45, 0, 255)
+      data[dataIndex + 3] = shade.alpha
+    }
+  }
+
+  maskContext.putImageData(imageData, 0, 0)
+
+  context.save()
+  context.imageSmoothingEnabled = true
+  context.clearRect(0, 0, width, height)
+  context.globalCompositeOperation = 'screen'
+  context.filter = `blur(${3.5 + tuning.accents * 0.65}px)`
+  context.globalAlpha = 0.34
+  context.drawImage(cache.canvas, 0, 0, width, height)
+  context.filter = 'none'
+  context.globalAlpha = 1
+  context.globalCompositeOperation = 'source-over'
+  context.drawImage(cache.canvas, 0, 0, width, height)
+  context.restore()
+}
+
 const renderBorder = (
   context: CanvasRenderingContext2D,
   width: number,
@@ -782,6 +956,11 @@ const renderBorder = (
 
   if (renderStyle === 'thresholdMask') {
     renderThresholdMaskBorder(context, width, height, time, staticMode, tuning)
+    return
+  }
+
+  if (renderStyle === 'paperMask') {
+    renderBurningPaperMaskBorder(context, width, height, time, staticMode, tuning)
     return
   }
 

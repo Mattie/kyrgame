@@ -6,6 +6,7 @@ import {
   defaultFireBorderTuning,
   fireBorderAccentStyles,
   fireBorderRenderStyles,
+  getBurningPaperShade,
   getFireBorderFrameIntervalMs,
   getIntegratedFlameLickShape,
   getThresholdBurnBand,
@@ -28,7 +29,7 @@ describe('CrtFireBorder', () => {
 
   it('keeps the current path renderer as default while exposing the threshold mask variant', () => {
     expect(defaultFireBorderRenderStyle).toBe('path')
-    expect(fireBorderRenderStyles).toEqual(['path', 'thresholdMask'])
+    expect(fireBorderRenderStyles).toEqual(['path', 'thresholdMask', 'paperMask'])
   })
 
   it('classifies threshold burn bands around the animated edge', () => {
@@ -36,6 +37,13 @@ describe('CrtFireBorder', () => {
     expect(getThresholdBurnBand(0.36, 0.35).zone).toBe('glow')
     expect(getThresholdBurnBand(0.42, 0.35).zone).toBe('char')
     expect(getThresholdBurnBand(0.6, 0.35).zone).toBe('fill')
+  })
+
+  it('shades the burning paper mask from void to paper through a hot lip', () => {
+    expect(getBurningPaperShade(7, { charDepth: 18, glowOut: 5 }).zone).toBe('transparent')
+    expect(getBurningPaperShade(0, { charDepth: 18, glowOut: 5 }).zone).toBe('lip')
+    expect(getBurningPaperShade(-5, { charDepth: 18, glowOut: 5 }).zone).toBe('flame')
+    expect(getBurningPaperShade(-42, { charDepth: 18, glowOut: 5 }).zone).toBe('paper')
   })
 
   it('anchors flame licks into neighboring edge points while fading over time', () => {

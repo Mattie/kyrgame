@@ -79,6 +79,7 @@ const fireTuningControls: Array<{
 ]
 
 const fireRenderStyleLabels: Record<FireBorderRenderStyle, string> = {
+  paperMask: 'Burning paper',
   path: 'Current path',
   thresholdMask: 'Noise threshold',
 }
