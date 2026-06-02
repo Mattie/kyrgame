@@ -39,4 +39,29 @@ describe('GemstoneText', () => {
       color: ruby!.lightColor,
     })
   })
+
+  it('renders known player names with wizard emoji and violet styling', () => {
+    render(
+      <GemstoneText
+        text="Merlin greets Morgana while Zar watches."
+        playerVisuals={{
+          Merlin: {
+            emoji: '🧙‍♂️',
+            className: 'player-wizard',
+            color: '#a78bfa',
+          },
+          Morgana: {
+            emoji: '🧙‍♀️',
+            className: 'player-wizard',
+            color: '#a78bfa',
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('🧙‍♂️ Merlin')).toHaveClass('player-wizard')
+    expect(screen.getByText('🧙‍♀️ Morgana')).toHaveClass('player-wizard')
+    expect(screen.getByText('🐲 Zar')).toHaveClass('creature-dragon')
+    expect(screen.getByText('🧙‍♂️ Merlin')).toHaveStyle({ color: '#a78bfa' })
+  })
 })

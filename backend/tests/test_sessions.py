@@ -6,7 +6,7 @@ import httpx
 import pytest
 import uvicorn
 import websockets
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from kyrgame import constants, models
 from kyrgame.webapp import create_app, _websocket_command_rate_limiter
@@ -70,6 +70,185 @@ async def test_session_creation_first_login_and_recovery():
 
 
 @pytest.mark.anyio
+async def test_explicit_first_login_claim_returns_legacy_intro_messages_and_initgp_state():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            create_resp = await client.post(
+                "/auth/session",
+                json={"player_id": "mERLin", "room_id": 12, "create_player": True},
+            )
+            assert create_resp.status_code == 201
+            created = create_resp.json()["session"]
+
+            assert created["player_id"] == "Merlin"
+            assert created["room_id"] == 0
+            assert created["first_login"] is True
+            assert created["player_flags"] == int(constants.PlayerFlag.LOADED)
+            assert [
+                message["message_id"] for message in created["lifecycle_messages"]
+            ] == ["GOODPD", "INTROA", "INTROB", "INTROC", "INTROD"]
+            assert '"Merlin"' in created["lifecycle_messages"][0]["text"]
+
+        db = app.state.session_factory()
+        try:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "Merlin"))
+            assert player is not None
+            assert player.uidnam == "Merlin"
+            assert player.altnam == "Merlin"
+            assert player.attnam == "Merlin"
+            assert player.gamloc == 0
+            assert player.pgploc == 0
+            assert player.level == 1
+            assert player.hitpts == 4
+            assert player.spts == 2
+            assert player.gold == 0
+            assert player.gpobjs == []
+            assert player.spells == []
+            assert player.flags == int(constants.PlayerFlag.LOADED)
+        finally:
+            db.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("player_id", ["ab", "toolongname", "merlin7", "bad name"])
+async def test_explicit_first_login_rejects_bad_player_ids_with_legacy_messages(player_id):
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/auth/session", json={"player_id": player_id, "create_player": True}
+            )
+
+            assert response.status_code == 422
+            detail = response.json()["detail"]
+            assert detail["message_ids"] == ["BADPID", "B4PLA2"]
+            assert [message["message_id"] for message in detail["messages"]] == [
+                "BADPID",
+                "B4PLA2",
+            ]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("player_id", ["ab", "toolongname", "merlin7", "bad name"])
+async def test_default_first_login_rejects_bad_player_ids_with_legacy_messages(player_id):
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/auth/session", json={"player_id": player_id})
+
+            assert response.status_code == 422
+            detail = response.json()["detail"]
+            assert detail["message_ids"] == ["BADPID", "B4PLA2"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("player_id", ["Sysop", "Zar", "dragon", "dryad", "elf", "brownie"])
+async def test_explicit_first_login_rejects_reserved_player_ids_with_legacy_messages(player_id):
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/auth/session", json={"player_id": player_id, "create_player": True}
+            )
+
+            assert response.status_code == 409
+            detail = response.json()["detail"]
+            assert detail["message_ids"] == ["NTGOOD", "B4PLA2"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("player_id", ["Sysop", "Zar", "dragon", "dryad", "elf", "brownie"])
+async def test_default_first_login_rejects_reserved_player_ids_with_legacy_messages(player_id):
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/auth/session", json={"player_id": player_id})
+
+            assert response.status_code == 409
+            detail = response.json()["detail"]
+            assert detail["message_ids"] == ["NTGOOD", "B4PLA2"]
+
+
+@pytest.mark.anyio
+async def test_explicit_first_login_rejects_duplicate_claims_but_existing_login_still_works():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            first = await client.post(
+                "/auth/session", json={"player_id": "Merlin", "create_player": True}
+            )
+            assert first.status_code == 201
+
+            duplicate = await client.post(
+                "/auth/session", json={"player_id": "Merlin", "create_player": True}
+            )
+            assert duplicate.status_code == 409
+            assert duplicate.json()["detail"]["message_ids"] == ["NTGOOD", "B4PLA2"]
+
+            returning = await client.post("/auth/session", json={"player_id": "Merlin"})
+            assert returning.status_code == 201
+            assert returning.json()["session"]["first_login"] is False
+
+
+@pytest.mark.anyio
+async def test_explicit_first_login_claim_lock_covers_session_commit():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.session_replacement_lock = asyncio.Lock()
+        await app.state.session_replacement_lock.acquire()
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            first_task = asyncio.create_task(
+                client.post(
+                    "/auth/session",
+                    json={"player_id": "Merlin", "create_player": True},
+                )
+            )
+            await _wait_until(
+                lambda: len(app.state.session_replacement_lock._waiters or []) == 1
+            )
+            second_task = asyncio.create_task(
+                client.post(
+                    "/auth/session",
+                    json={"player_id": "Merlin", "create_player": True},
+                )
+            )
+            await asyncio.sleep(0)
+            app.state.session_replacement_lock.release()
+
+            first, second = await asyncio.gather(first_task, second_task)
+
+            assert sorted([first.status_code, second.status_code]) == [201, 409]
+            duplicate = second if second.status_code == 409 else first
+            assert duplicate.json()["detail"]["message_ids"] == ["NTGOOD", "B4PLA2"]
+
+        db = app.state.session_factory()
+        try:
+            player_count = db.scalar(
+                select(func.count())
+                .select_from(models.Player)
+                .where(func.lower(models.Player.plyrid) == "merlin")
+            )
+            assert player_count == 1
+        finally:
+            db.close()
+
+
+@pytest.mark.anyio
 async def test_concurrent_login_policy_and_logout():
     app = create_app()
     transport = httpx.ASGITransport(app=app)
@@ -108,24 +287,25 @@ async def test_concurrent_login_policy_and_logout():
 
 
 @pytest.mark.anyio
-async def test_long_alias_login_reuses_canonical_player_record():
+async def test_case_variant_login_reuses_existing_player_record():
     app = create_app()
     transport = httpx.ASGITransport(app=app)
-    alias = "Test2dsfdsdf"
-    canonical = alias[: constants.ALSSIZ]
 
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            first = await client.post("/auth/session", json={"player_id": alias, "room_id": 7})
+            first = await client.post(
+                "/auth/session", json={"player_id": "Merlin", "create_player": True}
+            )
             assert first.status_code == 201
             first_session = first.json()["session"]
-            assert first_session["player_id"] == canonical
+            assert first_session["player_id"] == "Merlin"
             assert first_session["first_login"] is True
 
-            second = await client.post("/auth/session", json={"player_id": alias, "room_id": 7})
+            second = await client.post("/auth/session", json={"player_id": "merlin", "room_id": 7})
             assert second.status_code == 201
             second_session = second.json()["session"]
-            assert second_session["player_id"] == canonical
+            assert second_session["player_id"] == "Merlin"
+            assert second_session["room_id"] == 7
             assert second_session["first_login"] is False
             assert second_session["replaced_sessions"] == 1
 
@@ -137,10 +317,10 @@ async def test_long_alias_login_reuses_canonical_player_record():
         db = app.state.session_factory()
         try:
             players = db.scalars(
-                select(models.Player).where(models.Player.plyrid == canonical)
+                select(models.Player).where(func.lower(models.Player.plyrid) == "merlin")
             ).all()
             assert len(players) == 1
-            assert players[0].uidnam == alias
+            assert players[0].uidnam == "Merlin"
         finally:
             db.close()
 
@@ -321,8 +501,8 @@ async def test_session_creation_rate_limiting():
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Create sessions until rate limit is hit (limit is 5 per second)
             responses = []
-            for i in range(7):
-                resp = await client.post("/auth/session", json={"player_id": f"user{i}"})
+            for player_id in ["usera", "userb", "userc", "userd", "usere", "userf", "userg"]:
+                resp = await client.post("/auth/session", json={"player_id": player_id})
                 responses.append(resp)
             
             # First 5 should succeed, subsequent should be rate limited

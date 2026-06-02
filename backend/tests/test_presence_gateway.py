@@ -8,9 +8,34 @@ import uvicorn
 import websockets
 from starlette.websockets import WebSocketState
 
+from kyrgame import constants, fixtures
 from kyrgame.gateway import RoomGateway
 from kyrgame.presence import PresenceService
-from kyrgame.webapp import create_app
+from kyrgame.webapp import _room_occupants_event, create_app
+
+
+@pytest.mark.anyio
+async def test_room_occupants_event_includes_player_flags_for_ui_styling():
+    presence = PresenceService()
+    await presence.set_location("Hero", 0, "hero-token")
+    await presence.set_location("Merlin", 0, "merlin-token")
+
+    event = await _room_occupants_event(
+        presence,
+        "Merlin",
+        0,
+        fixtures.load_message_bundle(),
+        {"Hero": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE)},
+    )
+
+    assert event is not None
+    assert event["occupants"] == ["Hero"]
+    assert event["occupant_details"] == [
+        {
+            "player_id": "Hero",
+            "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE),
+        }
+    ]
 
 
 class DummyWebSocket:

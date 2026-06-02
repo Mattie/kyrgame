@@ -732,6 +732,7 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
                         room_text,
                         command_id,
                         exclude_player=target_player.plyrid,
+                        exclude_players=_sndbt2_excluded_players(state, target_player),
                     ),
                 ],
             )
@@ -757,7 +758,13 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
                     _format_message(state, message_id) or "You cannot pick that up",
                     command_id,
                 ),
-                _message_event("room", "GETLOC5", room_text, command_id),
+                _message_event(
+                    "room",
+                    "GETLOC5",
+                    room_text,
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
             ],
         )
 
@@ -784,6 +791,7 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
                     state, "GETLOC7", state.player.altnam, obj.name, location.objlds
                 ),
                 command_id,
+                exclude_player=state.player.plyrid,
             ),
             {
                 "scope": "player",
@@ -889,6 +897,7 @@ async def _handle_get_from_player(
                     room_text,
                     command_id,
                     exclude_player=target_player.plyrid,
+                    exclude_players=_sndbt2_excluded_players(state, target_player),
                 ),
             ],
         )
@@ -919,6 +928,7 @@ async def _handle_get_from_player(
                 room_text,
                 command_id,
                 exclude_player=target_player.plyrid,
+                exclude_players=_sndbt2_excluded_players(state, target_player),
             ),
         ],
     )
@@ -1061,6 +1071,7 @@ def _message_event(
     command_id: int | None,
     *,
     exclude_player: str | None = None,
+    exclude_players: list[str] | None = None,
 ) -> dict:
     event = {
         "scope": scope,
@@ -1072,7 +1083,15 @@ def _message_event(
     }
     if exclude_player:
         event["exclude_player"] = exclude_player
+    if exclude_players:
+        event["exclude_players"] = list(dict.fromkeys(exclude_players))
     return event
+
+
+def _sndbt2_excluded_players(
+    state: GameState, target_player: models.PlayerModel
+) -> list[str]:
+    return [state.player.plyrid, target_player.plyrid]
 
 
 def _give_actor_prefix(state: GameState, verb: str) -> str:
@@ -1308,6 +1327,7 @@ async def _handle_kiss_mode(state: GameState, args: dict, mode: int) -> CommandR
                             ),
                             command_id,
                             exclude_player=target_player.plyrid,
+                            exclude_players=_sndbt2_excluded_players(state, target_player),
                         ),
                     ],
                 )
@@ -1332,6 +1352,7 @@ async def _handle_kiss_mode(state: GameState, args: dict, mode: int) -> CommandR
                         ),
                         command_id,
                         exclude_player=target_player.plyrid,
+                        exclude_players=_sndbt2_excluded_players(state, target_player),
                     ),
                 ],
             )
@@ -1364,6 +1385,7 @@ async def _handle_kiss_mode(state: GameState, args: dict, mode: int) -> CommandR
                     ),
                     command_id,
                     exclude_player=target_player.plyrid,
+                    exclude_players=_sndbt2_excluded_players(state, target_player),
                 ),
             ],
         )
@@ -1802,6 +1824,7 @@ async def _handle_shove(state: GameState, args: dict) -> CommandResult:
             f"*** {target.altnam} has just been shoved {direction} by {state.player.altnam}!",
             command_id,
             exclude_player=target.plyrid,
+            exclude_players=_sndbt2_excluded_players(state, target),
         ),
         {
             **_message_event(
@@ -2449,6 +2472,9 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                     dropped.get("broadcast"),
                     command_id,
                     exclude_player=target_player.plyrid if target_player else state.player.plyrid,
+                    exclude_players=_sndbt2_excluded_players(state, target_player)
+                    if target_player
+                    else [state.player.plyrid],
                 )
             )
 
@@ -2781,7 +2807,15 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
                 obj.name,
                 location.objlds,
             )
-            events.append(_message_event("room", "LOOKER1", looker_text, command_id))
+            events.append(
+                _message_event(
+                    "room",
+                    "LOOKER1",
+                    looker_text,
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                )
+            )
             return CommandResult(state=state, events=events)
 
         inventory_index = _find_inventory_index(state.player, target, objects)
@@ -2798,7 +2832,15 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
                 _hisher(state.player),
                 obj.name,
             )
-            events.append(_message_event("room", "LOOKER2", looker_text, command_id))
+            events.append(
+                _message_event(
+                    "room",
+                    "LOOKER2",
+                    looker_text,
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                )
+            )
             return CommandResult(state=state, events=events)
 
         target_player = None
@@ -2863,6 +2905,7 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
                     looker4_text,
                     command_id,
                     exclude_player=target_player.plyrid,
+                    exclude_players=_sndbt2_excluded_players(state, target_player),
                 )
             )
             return CommandResult(state=state, events=events)
@@ -3659,7 +3702,14 @@ async def _handle_whisper(state: GameState, args: dict) -> CommandResult:
                 "player": target_player.plyrid,
             },
             _message_event("player", "WHISPR2", _format_message(state, "WHISPR2", target_player.plyrid), command_id),
-            _message_event("room", "WHISPR3", _format_message(state, "WHISPR3", state.player.altnam, target_player.altnam), command_id, exclude_player=target_player.plyrid),
+            _message_event(
+                "room",
+                "WHISPR3",
+                _format_message(state, "WHISPR3", state.player.altnam, target_player.altnam),
+                command_id,
+                exclude_player=target_player.plyrid,
+                exclude_players=_sndbt2_excluded_players(state, target_player),
+            ),
         ],
     )
 
@@ -3879,6 +3929,7 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                     ),
                     command_id,
                     exclude_player=target_player.plyrid,
+                    exclude_players=_sndbt2_excluded_players(state, target_player),
                 ),
             ],
         )
@@ -4060,6 +4111,7 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                     ),
                     command_id,
                     exclude_player=target_player.plyrid,
+                    exclude_players=_sndbt2_excluded_players(state, target_player),
                 ),
             ],
         )
@@ -4098,6 +4150,7 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                 ),
                 command_id,
                 exclude_player=target_player.plyrid,
+                exclude_players=_sndbt2_excluded_players(state, target_player),
             ),
         ],
     )
@@ -4122,7 +4175,14 @@ async def _handle_wink(state: GameState, args: dict) -> CommandResult:
         events=[
             _message_event("player", "WINKER2", _format_message(state, "WINKER2"), command_id),
             {**_message_event("target", "WINKER3", _format_message(state, "WINKER3", state.player.altnam), command_id), "player": target_player.plyrid},
-            _message_event("room", "WINKER4", _format_message(state, "WINKER4", state.player.altnam, target_player.altnam), command_id, exclude_player=target_player.plyrid),
+            _message_event(
+                "room",
+                "WINKER4",
+                _format_message(state, "WINKER4", state.player.altnam, target_player.altnam),
+                command_id,
+                exclude_player=target_player.plyrid,
+                exclude_players=_sndbt2_excluded_players(state, target_player),
+            ),
         ],
     )
 

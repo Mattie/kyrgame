@@ -2,6 +2,12 @@ import { ReactNode } from 'react'
 
 import { gemstonePalette, getGemstoneVisual } from '../data/gemstonePalette'
 
+export type PlayerVisual = {
+  emoji: string
+  className: string
+  color: string
+}
+
 const creaturePalette: Record<
   string,
   { emoji: string; className: string; color: string }
@@ -19,12 +25,29 @@ const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$
  * Parses text and renders legacy named things with emoji and color styling.
  * Matches names case-insensitively and replaces whole-word hits with styled spans.
  */
-export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
+export const GemstoneText = ({
+  text,
+  playerVisuals = {},
+}: {
+  text: string
+  playerVisuals?: Record<string, PlayerVisual>
+}): JSX.Element => {
   const gemstoneNames = Object.keys(gemstonePalette)
   const creatureNames = Object.keys(creaturePalette)
-  const inlineNames = [...gemstoneNames, ...creatureNames]
+  const playerEntries = Object.entries(playerVisuals)
+  const playerVisualsByName = Object.fromEntries(
+    playerEntries.map(([name, visual]) => [name.toLowerCase(), visual])
+  )
+  const playerNames = playerEntries.map(([name]) => name)
+  // Live Player-IDs are matched first; the backend reserves creature names
+  // so "dragon" and "dryad" remain unambiguous in console text.
+  const inlineNames = [...playerNames, ...gemstoneNames, ...creatureNames]
     .map(escapeRegex)
     .sort((left, right) => right.length - left.length)
+
+  if (inlineNames.length === 0) {
+    return <>{text}</>
+  }
 
   const pattern = new RegExp(`\\b(${inlineNames.join('|')})\\b`, 'gi')
 
@@ -41,32 +64,45 @@ export const GemstoneText = ({ text }: { text: string }): JSX.Element => {
       parts.push(text.slice(lastIndex, matchIndex))
     }
 
-    const visual = getGemstoneVisual(matchedText)
+    const playerVisual = playerVisualsByName[matchedText.toLowerCase()]
 
-    if (visual) {
+    if (playerVisual) {
       parts.push(
         <span
-          key={`gem-${matchIndex}`}
-          style={{ color: visual.lightColor }}
-          className="gemstone-inline"
+          key={`player-${matchIndex}`}
+          className={`player-inline ${playerVisual.className}`}
+          style={{ color: playerVisual.color }}
         >
-          {visual.emoji} {matchedText}
+          {playerVisual.emoji} {matchedText}
         </span>
       )
     } else {
-      const creatureVisual = creaturePalette[matchedText.toLowerCase()]
-      if (creatureVisual) {
+      const visual = getGemstoneVisual(matchedText)
+      if (visual) {
         parts.push(
           <span
-            key={`creature-${matchIndex}`}
-            className={`creature-inline ${creatureVisual.className}`}
-            style={{ color: creatureVisual.color }}
+            key={`gem-${matchIndex}`}
+            style={{ color: visual.lightColor }}
+            className="gemstone-inline"
           >
-            {creatureVisual.emoji} {matchedText}
+            {visual.emoji} {matchedText}
           </span>
         )
       } else {
-        parts.push(matchedText)
+        const creatureVisual = creaturePalette[matchedText.toLowerCase()]
+        if (creatureVisual) {
+          parts.push(
+            <span
+              key={`creature-${matchIndex}`}
+              className={`creature-inline ${creatureVisual.className}`}
+              style={{ color: creatureVisual.color }}
+            >
+              {creatureVisual.emoji} {matchedText}
+            </span>
+          )
+        } else {
+          parts.push(matchedText)
+        }
       }
     }
 

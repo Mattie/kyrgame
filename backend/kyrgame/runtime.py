@@ -529,8 +529,11 @@ async def bootstrap_app(app: FastAPI):
             return
 
         exclude_player = event_payload.get("exclude_player")
+        exclude_players = set(event_payload.get("exclude_players") or [])
         if exclude_player:
-            for token in await app.state.presence.sessions_for_player(exclude_player):
+            exclude_players.add(exclude_player)
+        for exclude_player_id in exclude_players:
+            for token in await app.state.presence.sessions_for_player(exclude_player_id):
                 target_socket = app.state.session_connections.get(token)
                 if not target_socket:
                     continue

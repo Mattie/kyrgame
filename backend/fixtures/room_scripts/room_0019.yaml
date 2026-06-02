@@ -12,11 +12,7 @@ triggers:
         message_id: SAYOUCH
         text: "...Ouch!"
       - type: message
-        scope: broadcast
-        message_id: SAYOUCH
-        text: "...Ouch!"
-      - type: message
-        scope: broadcast
+        scope: broadcast_others
         text: "*** %s is burning in the flaming thicket!"
         format: [player_id]
       - type: damage

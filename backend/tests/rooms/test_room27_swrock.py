@@ -64,6 +64,10 @@ def _broadcast_texts(engine: RoomScriptEngine) -> list[str]:
     ]
 
 
+def _broadcast_payloads(engine: RoomScriptEngine) -> list[dict]:
+    return [event for event in engine.pending_events if event.get("scope") == "room"]
+
+
 @pytest.mark.anyio
 async def test_prayer_increments_rock_counter(engine, player):
     handled = await engine.handle_command(
@@ -75,9 +79,11 @@ async def test_prayer_increments_rock_counter(engine, player):
 
     direct_texts = _direct_texts(engine, player.plyrid)
     broadcast_texts = _broadcast_texts(engine)
+    broadcast_payloads = _broadcast_payloads(engine)
 
     assert "Your prayers are heard." in direct_texts[0]
     assert "mists around the rock" in broadcast_texts[0]
+    assert broadcast_payloads[0].get("include_sender") is True
 
 
 @pytest.mark.anyio
@@ -105,10 +111,16 @@ async def test_drop_sword_on_rock_requires_prior_prayer(engine, player):
 
     direct_texts = _direct_texts(engine, player.plyrid)
     broadcast_texts = _broadcast_texts(engine)
+    broadcast_payloads = _broadcast_payloads(engine)
 
     messages = fixtures.load_messages().messages
     assert messages["ROCK00"] in direct_texts
     assert messages["ROCK01"] % player.plyrid in broadcast_texts
+    assert any(
+        payload.get("message_id") == "ROCK01"
+        and payload.get("exclude_player") == player.plyrid
+        for payload in broadcast_payloads
+    )
 
 
 @pytest.mark.anyio

@@ -24,7 +24,7 @@ triggers:
             scope: direct
             message_id: NOHAVE
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: NOROSE
             format: [player_altnam]
   - verbs: [offer]

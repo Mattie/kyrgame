@@ -16,6 +16,7 @@ const navigatorState: any = {
   },
   currentRoom: 0,
   occupants: [],
+  playerVisuals: {},
   activity: [
     {
       id: 'test-entry',
@@ -76,6 +77,7 @@ describe('MudConsole', () => {
     }
     navigatorState.currentRoom = 0
     navigatorState.occupants = []
+    navigatorState.playerVisuals = {}
     navigatorState.connectionStatus = 'connected'
     navigatorState.activity = [
       {
@@ -348,6 +350,41 @@ describe('MudConsole', () => {
     expect(dryadLine.querySelector('.creature-dryad')).toHaveStyle({
       color: 'rgb(154, 205, 50)',
     })
+  })
+
+  it('renders known player names with wizard styling in console text', () => {
+    navigatorState.playerVisuals = {
+      Merlin: {
+        emoji: '🧙‍♂️',
+        className: 'player-wizard',
+        color: '#a78bfa',
+      },
+      Morgana: {
+        emoji: '🧙‍♀️',
+        className: 'player-wizard',
+        color: '#a78bfa',
+      },
+    }
+    navigatorState.activity = [
+      {
+        id: 'players-entry',
+        type: 'command_response',
+        summary: 'Merlin and Morgana are here.',
+        payload: {
+          scope: 'player',
+          event: 'room_occupants',
+          type: 'room_occupants',
+          location: 0,
+          occupants: ['Merlin', 'Morgana'],
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    const line = getConsoleLine('🧙‍♂️ Merlin and 🧙‍♀️ Morgana are here.')
+    expect(line.querySelectorAll('.player-wizard')).toHaveLength(2)
+    expect(line.querySelector('.player-wizard')).toHaveStyle({ color: '#a78bfa' })
   })
 
   it('renders status command output in the CRT without status sidebars or auto-refresh', () => {

@@ -20,7 +20,7 @@ triggers:
                 scope: direct
                 message_id: PINEC0
               - type: message
-                scope: broadcast
+                scope: broadcast_others
                 message_id: PINEC1
                 format: [player_altnam]
             else:
@@ -28,7 +28,7 @@ triggers:
                 scope: direct
                 message_id: PINEC2
               - type: message
-                scope: broadcast
+                scope: broadcast_others
                 message_id: PINEC3
                 format: [player_altnam]
         on_failure:
@@ -36,6 +36,6 @@ triggers:
             scope: direct
             message_id: PINEC2
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: PINEC3
             format: [player_altnam]

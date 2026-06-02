@@ -98,12 +98,16 @@ async def test_willow_routine_matches_legacy_prompts():
     assert messages.messages["LVL200"] in direct_texts
 
     broadcast_texts = [
-        msg.get("payload", {}).get("text")
+        msg.get("payload", {})
         for msg in gateway.messages
         if msg.get("payload", {}).get("scope") == "broadcast"
         and "text" in msg.get("payload", {})
     ]
-    assert messages.messages["GETLVL"] % player.altnam in broadcast_texts
+    assert any(
+        payload.get("text") == messages.messages["GETLVL"] % player.altnam
+        and payload.get("exclude_player") == "hero"
+        for payload in broadcast_texts
+    )
 
     rogue_texts = [
         msg.get("payload", {}).get("text")
@@ -177,7 +181,13 @@ async def test_temple_room_schedules_prayer_prompt_and_prayer_command():
         if msg.get("payload", {}).get("scope") == "direct"
         and msg.get("payload", {}).get("player") == "acolyte"
     ]
-    assert messages.messages["PRAYER"] in blessings
+    assert messages.messages["TMPRAY"] in blessings
+    assert any(
+        msg.get("payload", {}).get("text")
+        == "*** acolyte is praying to the Goddess Tashanna."
+        and msg.get("payload", {}).get("exclude_player") == "acolyte"
+        for msg in gateway.messages
+    )
 
     assert not engine.get_room_state(7).timers
 
@@ -388,6 +398,125 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
     assert messages.messages["MAGF05"] in direct_texts
 
     assert not engine.get_room_state(38).timers
+
+
+@pytest.mark.anyio
+async def test_temple_default_offering_uses_actor_excluding_room_message():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"gpobjs": [0], "obvals": [0], "npobjs": 1}, deep=True
+    )
+    engine.get_room_state(7).flags["chantd"] = 5
+
+    handled = await engine.handle_command(
+        "hero", 7, command="put", args=["ruby"], player=player
+    )
+
+    assert handled is True
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "OFFER0"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("message_id") == "OFFER1"
+        and payload.get("exclude_player") == "hero"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_temple_prayer_uses_sndutl_actor_excluding_room_message():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player()
+
+    handled = await engine.handle_command("hero", 7, command="pray", player=player)
+
+    assert handled is True
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "TMPRAY"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("text")
+        == f"*** {player.altnam} is praying to the Goddess Tashanna."
+        and payload.get("exclude_player") == "hero"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_spring_rose_pickup_uses_actor_excluding_room_message():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player()
+
+    handled = await engine.handle_command(
+        "hero", 32, command="get", args=["rose"], player=player
+    )
+
+    assert handled is True
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("message_id") == "GROSE2"
+        and payload.get("exclude_player") == "hero"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_donation_messages_exclude_actor_from_room_text():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+
+    handled = await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
+
+    assert handled is True
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("message_id") == "MAGF07"
+        and payload.get("exclude_player") == "hero"
+        for payload in payloads
+    )
 
 
 @pytest.mark.anyio

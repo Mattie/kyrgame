@@ -136,6 +136,7 @@ export const MudConsole = () => {
     connectionStatus,
     currentRoom,
     occupants,
+    playerVisuals,
     sendCommand,
     sendMove,
     session,
@@ -390,7 +391,13 @@ export const MudConsole = () => {
             <div>
               <p className="eyebrow">Kyrandia Line Interface</p>
               <h2 aria-hidden>{location?.brfdes ?? 'Awaiting world data'}</h2>
-              <p className="muted">{session ? `Player ${session.playerId}` : 'No session yet'}</p>
+              <p className="muted">
+                {session ? (
+                  <AnsiText text={`Player ${session.playerId}`} playerVisuals={playerVisuals} />
+                ) : (
+                  'No session yet'
+                )}
+              </p>
             </div>
             <div className={`connection-pill ${connectionStatus}`}>
               {connectionStatus}
@@ -402,7 +409,7 @@ export const MudConsole = () => {
             <div className="crt-lines">
               {bannerLines.map((line, index) => (
                 <p key={line + index} className="crt-line muted">
-                  {line}
+                  <AnsiText text={line} playerVisuals={playerVisuals} />
                 </p>
               ))}
               {visibleEntries.map((entry) => {
@@ -442,12 +449,12 @@ export const MudConsole = () => {
                           &gt;
                         </span>
                       )}
-                      <AnsiText text={entry.summary} />
+                      <AnsiText text={entry.summary} playerVisuals={playerVisuals} />
                       {payloadText && <span className="payload-inline">{payloadText}</span>}
                     </p>
                     {legacyLines?.map((line, index) => (
                       <p key={`${entry.id}-extra-${index}`} className={`crt-line ${entry.type} detail`}>
-                        <AnsiText text={line} />
+                        <AnsiText text={line} playerVisuals={playerVisuals} />
                       </p>
                     ))}
                   </div>

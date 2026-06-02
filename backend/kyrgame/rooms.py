@@ -324,14 +324,13 @@ async def _willow_on_command(
         blessed = context.state.flags.setdefault("willow_blessed", set())
         if player_id not in blessed:
             blessed.add(player_id)
-        await context.direct(
-            player_id, "room_message", text=catalog["LVL200"], message_id="LVL200"
-        )
-        await context.broadcast(
+        await context.direct_and_others(
+            player_id,
             "room_message",
-            text=catalog["GETLVL"] % display_name,
-            player=player_id,
-            message_id="GETLVL",
+            direct_text=catalog["LVL200"],
+            others_text=catalog["GETLVL"] % display_name,
+            direct_message_id="LVL200",
+            others_message_id="GETLVL",
         )
         return True
 
@@ -433,12 +432,14 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     return await level_gate(9, "LVL9M0", "LVL9M1")
                 if offered == 21:
                     return await level_gate(10, "LV10M0", "LVL9M1")
-                # Default offering response
-                await context.direct(player_id, "room_message", 
-                                   text=messages.messages.get("OFFER0", "The altar accepts your offering."))
-                await context.broadcast("room_message",
-                                      text=messages.messages.get("OFFER1", "") % display_name,
-                                      player=player_id)
+                await context.direct_and_others(
+                    player_id,
+                    "room_message",
+                    direct_text=messages.messages.get("OFFER0", ""),
+                    others_text=messages.messages.get("OFFER1", "") % display_name,
+                    direct_message_id="OFFER0",
+                    others_message_id="OFFER1",
+                )
                 return True
         
         # Legacy: CHANT TASHANNA command
@@ -457,10 +458,13 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         
         # Legacy: PRAY/MEDITATE commands
         if verb in {"pray", "meditate"}:
-            text = messages.messages.get("PRAYER", "...You whisper a quiet prayer...")
-            await context.direct(player_id, "room_message", text=text)
-            await context.broadcast(
-                "room_message", text=text, player=player_id, message_id="PRAYER"
+            await context.direct_and_others(
+                player_id,
+                "room_message",
+                direct_text=messages.messages.get("TMPRAY", ""),
+                others_text=f"*** {display_name} is praying to the Goddess Tashanna.",
+                direct_message_id="TMPRAY",
+                others_message_id=None,
             )
             return True
 
@@ -499,11 +503,15 @@ def _spring_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         if verb in {"get", "take", "pick"} and args and args[0].lower() == "rose":
             # Note: Legacy checks npobjs >= MXPOBS for inventory full
             # Simplified here without inventory check
-            await context.direct(player_id, "room_message",
-                               text=messages.messages.get("GROSE1", "You pick a beautiful rose."))
-            await context.broadcast("room_message",
-                                  text=messages.messages.get("GROSE2", "") % player_id,
-                                  player=player_id)
+            display_name = player.altnam if player is not None else player_id
+            await context.direct_and_others(
+                player_id,
+                "room_message",
+                direct_text=messages.messages.get("GROSE1", ""),
+                others_text=messages.messages.get("GROSE2", "") % display_name,
+                direct_message_id="GROSE1",
+                others_message_id="GROSE2",
+            )
             return True
         
         return False
@@ -552,19 +560,23 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             if scroll_count >= 3:
                 state.flags["scroll_count"] = 0
                 # Legacy spawns scroll (object 35) at random location
-                await context.direct(player_id, "room_message", text=messages.messages["MAGF00"])
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages["MAGF01"] % player_id,
-                    player=player_id,
+                    direct_text=messages.messages["MAGF00"],
+                    others_text=messages.messages["MAGF01"] % player_id,
+                    direct_message_id="MAGF00",
+                    others_message_id="MAGF01",
                 )
             else:
                 state.flags["scroll_count"] = scroll_count
-                await context.direct(player_id, "room_message", text=messages.messages["MAGF04"])
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages["MAGF07"] % player_id,
-                    player=player_id,
+                    direct_text=messages.messages["MAGF04"],
+                    others_text=messages.messages["MAGF07"] % player_id,
+                    direct_message_id="MAGF04",
+                    others_message_id="MAGF07",
                 )
             return True
 
@@ -576,30 +588,34 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             if shard_count >= 6:
                 state.flags["shard_count"] = 0
                 # Legacy gives player object 16
-                await context.direct(player_id, "room_message", text=messages.messages["MAGF05"])
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages["MAGF03"] % player_id,
-                    player=player_id,
+                    direct_text=messages.messages["MAGF05"],
+                    others_text=messages.messages["MAGF03"] % player_id,
+                    direct_message_id="MAGF05",
+                    others_message_id="MAGF03",
                 )
             else:
                 state.flags["shard_count"] = shard_count
-                await context.direct(player_id, "room_message", text=messages.messages["MAGF06"])
-                await context.broadcast(
+                await context.direct_and_others(
+                    player_id,
                     "room_message",
-                    text=messages.messages["MAGF03"] % player_id,
-                    player=player_id,
+                    direct_text=messages.messages["MAGF06"],
+                    others_text=messages.messages["MAGF03"] % player_id,
+                    direct_message_id="MAGF06",
+                    others_message_id="MAGF03",
                 )
             return True
 
         # Default case for other objects
-        await context.direct(
-            player_id, "room_message", text=messages.messages.get("MAGF02", "")
-        )
-        await context.broadcast(
+        await context.direct_and_others(
+            player_id,
             "room_message",
-            text=messages.messages.get("MAGF03", "") % player_id,
-            player=player_id,
+            direct_text=messages.messages.get("MAGF02", ""),
+            others_text=messages.messages.get("MAGF03", "") % player_id,
+            direct_message_id="MAGF02",
+            others_message_id="MAGF03",
         )
         return True
 
