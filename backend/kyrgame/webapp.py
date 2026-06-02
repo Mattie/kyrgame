@@ -1045,8 +1045,13 @@ async def start_session(
         request.app.state.player_claim_lock = asyncio.Lock()
 
     lifecycle_messages: list[dict[str, str]] = []
-    if payload.create_player:
-        async with request.app.state.player_claim_lock:
+    player_claim_lock = request.app.state.player_claim_lock
+    player_claim_lock_acquired = False
+
+    try:
+        if payload.create_player:
+            await player_claim_lock.acquire()
+            player_claim_lock_acquired = True
             try:
                 canonical_player_id = _canonical_first_login_player_id(payload.player_id)
             except ValueError:
@@ -1057,62 +1062,78 @@ async def start_session(
                 )
             _ensure_first_login_player_id_available(db, request, canonical_player_id)
             player = _persist_first_login_player(db, canonical_player_id, template)
-        first_login = True
-        lifecycle_messages = _first_login_lifecycle_messages(
-            request.app.state.fixture_cache["messages"], player.plyrid
-        )
-    else:
-        player = _find_player_record(db, payload.player_id)
-        first_login = False
-        if player is None:
-            try:
-                compat_player_id = _validated_compat_first_login_player_id(payload.player_id)
-            except ValueError:
-                raise _legacy_auth_error(
-                    request,
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    message_ids=["BADPID", "B4PLA2"],
-                )
-            async with request.app.state.player_claim_lock:
-                _ensure_first_login_player_id_available(db, request, compat_player_id)
-                player = _persist_player_from_template(
-                    db, compat_player_id, template, payload.room_id
-                )
             first_login = True
-        elif payload.room_id is not None:
-            player.gamloc = payload.room_id
-            player.pgploc = payload.room_id
+            lifecycle_messages = _first_login_lifecycle_messages(
+                request.app.state.fixture_cache["messages"], player.plyrid
+            )
+        else:
+            player = _find_player_record(db, payload.player_id)
+            first_login = False
+            if player is None:
+                try:
+                    compat_player_id = _validated_compat_first_login_player_id(payload.player_id)
+                except ValueError:
+                    raise _legacy_auth_error(
+                        request,
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        message_ids=["BADPID", "B4PLA2"],
+                    )
+                await player_claim_lock.acquire()
+                player_claim_lock_acquired = True
+                player = _find_player_record(db, compat_player_id)
+                if player is None:
+                    _ensure_first_login_player_id_available(db, request, compat_player_id)
+                    player = _persist_player_from_template(
+                        db, compat_player_id, template, payload.room_id
+                    )
+                    first_login = True
+                elif payload.room_id is not None:
+                    player.gamloc = payload.room_id
+                    player.pgploc = payload.room_id
+            elif payload.room_id is not None:
+                player.gamloc = payload.room_id
+                player.pgploc = payload.room_id
 
-    room_id = player.gamloc
+        room_id = player.gamloc
 
-    replaced_tokens: list[str] = []
-    session_record: models.PlayerSession | None = None
-    resumed = False
-    status_code = status.HTTP_201_CREATED
+        replaced_tokens: list[str] = []
+        session_record: models.PlayerSession | None = None
+        resumed = False
+        status_code = status.HTTP_201_CREATED
 
-    if payload.resume_token:
-        existing = repo.get_by_token(payload.resume_token)
-        if not existing or existing.player_id != player.id:
-            raise HTTPException(status_code=404, detail="Session not found or expired")
-        repo.mark_seen(payload.resume_token)
-        db.commit()
-        room_id = existing.room_id
-        token = existing.session_token
-        session_record = existing
-        resumed = True
-        status_code = status.HTTP_200_OK
-    else:
-        # One active game session is allowed per player. A fresh login replaces
-        # any existing session for that same player, while other player accounts
-        # remain unaffected.
-        if not hasattr(request.app.state, 'session_replacement_lock'):
-            request.app.state.session_replacement_lock = asyncio.Lock()
-
-        async with request.app.state.session_replacement_lock:
-            replaced_tokens = repo.deactivate_all(player.id)
-            token = secrets.token_urlsafe(24)
-            session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+        if payload.resume_token:
+            existing = repo.get_by_token(payload.resume_token)
+            if not existing or existing.player_id != player.id:
+                raise HTTPException(status_code=404, detail="Session not found or expired")
+            repo.mark_seen(payload.resume_token)
             db.commit()
+            if player_claim_lock_acquired:
+                player_claim_lock.release()
+                player_claim_lock_acquired = False
+            room_id = existing.room_id
+            token = existing.session_token
+            session_record = existing
+            resumed = True
+            status_code = status.HTTP_200_OK
+        else:
+            # One active game session is allowed per player. A fresh login replaces
+            # any existing session for that same player, while other player accounts
+            # remain unaffected.
+            if not hasattr(request.app.state, 'session_replacement_lock'):
+                request.app.state.session_replacement_lock = asyncio.Lock()
+
+            async with request.app.state.session_replacement_lock:
+                replaced_tokens = repo.deactivate_all(player.id)
+                token = secrets.token_urlsafe(24)
+                session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+                db.commit()
+            if player_claim_lock_acquired:
+                player_claim_lock.release()
+                player_claim_lock_acquired = False
+    except Exception:
+        if player_claim_lock_acquired:
+            player_claim_lock.release()
+        raise
 
     if session_record is None:
         raise HTTPException(status_code=500, detail="Session creation failed")

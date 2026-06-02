@@ -204,6 +204,51 @@ async def test_explicit_first_login_rejects_duplicate_claims_but_existing_login_
 
 
 @pytest.mark.anyio
+async def test_explicit_first_login_claim_lock_covers_session_commit():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.session_replacement_lock = asyncio.Lock()
+        await app.state.session_replacement_lock.acquire()
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            first_task = asyncio.create_task(
+                client.post(
+                    "/auth/session",
+                    json={"player_id": "Merlin", "create_player": True},
+                )
+            )
+            await _wait_until(
+                lambda: len(app.state.session_replacement_lock._waiters or []) == 1
+            )
+            second_task = asyncio.create_task(
+                client.post(
+                    "/auth/session",
+                    json={"player_id": "Merlin", "create_player": True},
+                )
+            )
+            await asyncio.sleep(0)
+            app.state.session_replacement_lock.release()
+
+            first, second = await asyncio.gather(first_task, second_task)
+
+            assert sorted([first.status_code, second.status_code]) == [201, 409]
+            duplicate = second if second.status_code == 409 else first
+            assert duplicate.json()["detail"]["message_ids"] == ["NTGOOD", "B4PLA2"]
+
+        db = app.state.session_factory()
+        try:
+            player_count = db.scalar(
+                select(func.count())
+                .select_from(models.Player)
+                .where(func.lower(models.Player.plyrid) == "merlin")
+            )
+            assert player_count == 1
+        finally:
+            db.close()
+
+
+@pytest.mark.anyio
 async def test_concurrent_login_policy_and_logout():
     app = create_app()
     transport = httpx.ASGITransport(app=app)
