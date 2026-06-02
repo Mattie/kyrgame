@@ -93,6 +93,7 @@ describe('MudConsole', () => {
         },
       },
     ]
+    window.history.replaceState(null, '', '/')
   })
 
   it('does not render debug payload JSON in the MUD console', () => {
@@ -101,6 +102,192 @@ describe('MudConsole', () => {
     expect(screen.getAllByText('sdfgs vs is here.').length).toBeGreaterThan(0)
     expect(screen.queryByText(/"scope":"player"/)).toBeNull()
     expect(screen.queryByText(/room_occupants.*KUTM11/)).toBeNull()
+  })
+
+  it('wraps the outer game shell with a decorative fire border canvas', () => {
+    const { container } = render(<MudConsole />)
+
+    const frame = container.querySelector<HTMLElement>('.mud-shell')
+    const crt = container.querySelector<HTMLElement>('.crt')
+    const border = screen.getByTestId('game-panel-fire-border')
+
+    expect(frame).toContainElement(crt)
+    expect(frame).toContainElement(border)
+    expect(border).toHaveAttribute('aria-hidden', 'true')
+    expect(border.tagName.toLowerCase()).toBe('canvas')
+  })
+
+  it('hides temporary VFX tuning controls by default', () => {
+    render(<MudConsole />)
+
+    expect(screen.queryByLabelText(/temporary vfx tuning controls/i)).toBeNull()
+    expect(screen.queryByLabelText(/temporary vfx palette controls/i)).toBeNull()
+    expect(screen.queryByLabelText(/pulse speed/i)).toBeNull()
+  })
+
+  it('renders temporary VFX tuning controls with live values when enabled by query', () => {
+    window.history.replaceState(null, '', '/?vfxtune=anything')
+
+    render(<MudConsole />)
+
+    const preset = screen.getByLabelText(/^burn preset$/i) as HTMLSelectElement
+    const style = screen.getByLabelText(/burn style/i) as HTMLSelectElement
+    const inverted = screen.getByLabelText(/invert burn edge/i) as HTMLInputElement
+    const detail = screen.getByLabelText(/detail/i) as HTMLInputElement
+    const edgeFrequency = screen.getByLabelText(/edge frequency/i) as HTMLInputElement
+    const edgeAmplitude = screen.getByLabelText(/edge amplitude/i) as HTMLInputElement
+    const flickerAmount = screen.getByLabelText(/flicker amount/i) as HTMLInputElement
+    const flickerSpeed = screen.getByLabelText(/flicker speed/i) as HTMLInputElement
+    const driftSpeed = screen.getByLabelText(/drift speed/i) as HTMLInputElement
+    const charDepth = screen.getByLabelText(/char depth/i) as HTMLInputElement
+    const glowBleed = screen.getByLabelText(/glow bleed/i) as HTMLInputElement
+    const outerGlow = screen.getByLabelText(/outer glow/i) as HTMLInputElement
+    const glowRadius = screen.getByLabelText(/glow radius/i) as HTMLInputElement
+    const softness = screen.getByLabelText(/softness/i) as HTMLInputElement
+    const pulseSpeed = screen.getByLabelText(/pulse speed/i) as HTMLInputElement
+    const pulseDepth = screen.getByLabelText(/pulse depth/i) as HTMLInputElement
+    const embers = screen.getByLabelText(/embers/i) as HTMLInputElement
+    const output = screen.getByLabelText(/burn preset output/i) as HTMLTextAreaElement
+
+    expect(preset.value).toBe('burningPaperTuned')
+    expect(style.value).toBe('paperMask')
+    expect(inverted.checked).toBe(false)
+    expect(Array.from(style.options).map((option) => option.value)).toEqual([
+      'path',
+      'thresholdMask',
+      'paperMask',
+    ])
+    expect(Number(detail.value)).toBe(0.64)
+    expect(Number(edgeFrequency.value)).toBe(0.012)
+    expect(Number(edgeAmplitude.value)).toBe(7)
+    expect(Number(flickerAmount.value)).toBe(4.5)
+    expect(Number(flickerSpeed.value)).toBe(1)
+    expect(Number(driftSpeed.value)).toBe(0.06)
+    expect(Number(charDepth.value)).toBe(8)
+    expect(Number(glowBleed.value)).toBe(3)
+    expect(Number(outerGlow.value)).toBe(0.14)
+    expect(Number(glowRadius.value)).toBe(2)
+    expect(Number(softness.value)).toBe(1.2)
+    expect(Number(pulseSpeed.value)).toBe(0.7)
+    expect(Number(pulseDepth.value)).toBe(0.1)
+    expect(Number(embers.value)).toBe(1.45)
+    expect(detail.min).toBe('0.3')
+    expect(flickerSpeed.step).toBe('0.05')
+    expect(driftSpeed.step).toBe('0.02')
+    expect(screen.getByText('1.00')).toBeInTheDocument()
+    expect(output.value).toContain('"renderStyle": "paperMask"')
+    expect(output.value).toContain('"inverted": false')
+    expect(output.value).toContain('"flickerAmount": 4.5')
+
+    fireEvent.change(style, { target: { value: 'thresholdMask' } })
+    expect(screen.getByTestId('game-panel-fire-border')).toHaveAttribute(
+      'data-render-style',
+      'thresholdMask'
+    )
+
+    fireEvent.change(style, { target: { value: 'paperMask' } })
+    expect(screen.getByTestId('game-panel-fire-border')).toHaveAttribute(
+      'data-render-style',
+      'paperMask'
+    )
+
+    fireEvent.change(pulseSpeed, { target: { value: '4.1' } })
+    expect(pulseSpeed.value).toBe('4.1')
+    expect(screen.getByText('4.10')).toBeInTheDocument()
+
+    fireEvent.change(detail, { target: { value: '0.72' } })
+    expect(detail.value).toBe('0.72')
+    expect(screen.getByText('0.720')).toBeInTheDocument()
+
+    fireEvent.click(inverted)
+    expect(inverted.checked).toBe(true)
+    expect(screen.getByTestId('game-panel-fire-border')).toHaveAttribute(
+      'data-inverted',
+      'true'
+    )
+    expect(output.value).toContain('"inverted": true')
+  })
+
+  it('renders a temporary palette creator with editable preset output when enabled', () => {
+    window.history.replaceState(null, '', '/?vfxtune=anything')
+
+    render(<MudConsole />)
+
+    const preset = screen.getByLabelText(/^palette preset$/i) as HTMLSelectElement
+    const flame = screen.getByLabelText(/palette flame core hex/i) as HTMLInputElement
+    const output = screen.getByLabelText(/palette preset output/i) as HTMLTextAreaElement
+
+    expect(screen.getByLabelText(/temporary vfx palette controls/i)).toBeInTheDocument()
+    expect(preset.value).toBe('myPalette')
+    expect(flame.value).toBe('#dfb801')
+    expect(output.value).toContain('"flame": "#dfb801"')
+    expect(output.value).toContain('"lip": "#e3e2de"')
+
+    fireEvent.change(preset, { target: { value: 'violetGreen' } })
+
+    expect(preset.value).toBe('violetGreen')
+    expect(flame.value).toBe('#edb407')
+    expect(output.value).toContain('"deep": "#16ac34"')
+
+    fireEvent.change(flame, { target: { value: '#ffcc33' } })
+
+    expect(flame.value).toBe('#ffcc33')
+    expect(preset.value).toBe('custom')
+    expect(screen.getByText('#ffcc33')).toBeInTheDocument()
+    expect(output.value).toContain('"flame": "#ffcc33"')
+  })
+
+  it('collapses and expands the temporary VFX tuning panel when enabled', () => {
+    window.history.replaceState(null, '', '/?vfxtune=anything')
+
+    render(<MudConsole />)
+
+    const minimize = screen.getByRole('button', { name: /minimize burn controls/i })
+    const body = document.getElementById('vfx-tuning-body')
+    expect(minimize).toHaveAttribute('aria-expanded', 'true')
+    expect(body).not.toHaveAttribute('hidden')
+    expect(screen.getByLabelText(/pulse speed/i)).toBeInTheDocument()
+
+    fireEvent.click(minimize)
+
+    const expand = screen.getByRole('button', { name: /expand burn controls/i })
+    expect(expand).toHaveAttribute('aria-expanded', 'false')
+    expect(body).toHaveAttribute('hidden')
+
+    fireEvent.click(expand)
+
+    expect(screen.getByRole('button', { name: /minimize burn controls/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    expect(body).not.toHaveAttribute('hidden')
+    expect(screen.getByLabelText(/pulse speed/i)).toBeInTheDocument()
+  })
+
+  it('collapses and expands the temporary VFX palette panel when enabled', () => {
+    window.history.replaceState(null, '', '/?vfxtune=anything')
+
+    render(<MudConsole />)
+
+    const minimize = screen.getByRole('button', { name: /minimize palette controls/i })
+    const body = document.getElementById('vfx-palette-body')
+    expect(minimize).toHaveAttribute('aria-expanded', 'true')
+    expect(body).not.toHaveAttribute('hidden')
+    expect(screen.getByLabelText(/palette flame core hex/i)).toBeInTheDocument()
+
+    fireEvent.click(minimize)
+
+    const expand = screen.getByRole('button', { name: /expand palette controls/i })
+    expect(expand).toHaveAttribute('aria-expanded', 'false')
+    expect(body).toHaveAttribute('hidden')
+
+    fireEvent.click(expand)
+
+    expect(screen.getByRole('button', { name: /minimize palette controls/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    expect(body).not.toHaveAttribute('hidden')
   })
 
   it('renders ANSI color spans without escape codes', () => {
