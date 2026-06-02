@@ -279,18 +279,26 @@ async def test_admin_player_routes_resolve_original_uid_alias(monkeypatch):
 
     app = create_app()
     transport = httpx.ASGITransport(app=app)
-    alias = "Test2dsfdsdf"
-    canonical = alias[: constants.ALSSIZ]
+    alias = "Testaccountid"
+    canonical = "Tester"
 
     async with app.router.lifespan_context(app):
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            session_resp = await client.post(
-                "/auth/session",
-                json={"player_id": alias, "room_id": 7},
+        db = app.state.session_factory()
+        try:
+            player = fixtures.build_player().model_copy(
+                update={
+                    "uidnam": alias,
+                    "plyrid": canonical,
+                    "altnam": canonical,
+                    "attnam": canonical,
+                }
             )
-            assert session_resp.status_code == 201
-            assert session_resp.json()["session"]["player_id"] == canonical
+            db.add(models.Player(**player.model_dump()))
+            db.commit()
+        finally:
+            db.close()
 
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             alias_fetch = await client.get(
                 f"/admin/players/{alias}",
                 headers=_auth("player-token"),

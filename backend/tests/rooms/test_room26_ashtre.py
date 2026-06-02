@@ -62,6 +62,10 @@ def _broadcast_texts(engine: RoomScriptEngine) -> list[str]:
     ]
 
 
+def _broadcast_payloads(engine: RoomScriptEngine) -> list[dict]:
+    return [event for event in engine.pending_events if event.get("scope") == "room"]
+
+
 @pytest.mark.anyio
 async def test_cry_at_ashes_spawns_shard_when_space(engine, player):
     handled = await engine.handle_command(
@@ -76,10 +80,16 @@ async def test_cry_at_ashes_spawns_shard_when_space(engine, player):
 
     direct_texts = _direct_texts(engine, player.plyrid)
     broadcast_texts = _broadcast_texts(engine)
+    broadcast_payloads = _broadcast_payloads(engine)
 
     messages = fixtures.load_messages().messages
     assert messages["ASHM00"] in direct_texts
     assert messages["ASHM01"] in broadcast_texts
+    assert any(
+        payload.get("message_id") == "ASHM01"
+        and payload.get("exclude_player") == player.plyrid
+        for payload in broadcast_payloads
+    )
 
 
 @pytest.mark.anyio
@@ -98,7 +108,13 @@ async def test_cry_at_trees_respects_room_capacity(engine, player):
 
     direct_texts = _direct_texts(engine, player.plyrid)
     broadcast_texts = _broadcast_texts(engine)
+    broadcast_payloads = _broadcast_payloads(engine)
 
     messages = fixtures.load_messages().messages
-    assert messages["ASHM02"] in direct_texts
+    assert messages["ASHM02"] not in direct_texts
     assert messages["ASHM02"] in broadcast_texts
+    assert any(
+        payload.get("message_id") == "ASHM02"
+        and payload.get("include_sender") is True
+        for payload in broadcast_payloads
+    )

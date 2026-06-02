@@ -520,6 +520,15 @@ p {
   font-weight: 700;
 }
 
+.player-inline {
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.player-wizard {
+  color: #a78bfa;
+}
+
 .creature-dragon {
   color: #ff6b5f;
 }

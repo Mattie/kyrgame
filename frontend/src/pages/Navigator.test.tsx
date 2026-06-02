@@ -264,6 +264,133 @@ describe('Navigator flow', () => {
     ).toBeGreaterThan(0)
   })
 
+  it('claims a new Player-ID and renders legacy intro lifecycle messages', async () => {
+    const firstLoginMessages = {
+      ...messages,
+      GETALS:
+        'Since this is your first time entering Kyrandia (Fantasy-world), you must pick a 3-9 character Player-ID for yourself.',
+      GOODPD:
+        'Good!  You will now be known as "Merlin" throughout Kyrandia (Fantasy World).\r\n\r\nPress ENTER to begin',
+      INTROA: 'Welcome, brave and adventurous one.\r\n\r\nPress ENTER to continue',
+      INTROB: 'Here is how to play.\r\n\r\nPress ENTER to continue',
+      INTROC: 'Spells are magic cast by players.\r\n\r\nPress ENTER to continue',
+      INTROD: 'Enjoy the magic, mystery, and mirth of Kyrandia, Fantasy World of Legends!',
+    }
+    const roomZeroLocations = [
+      {
+        id: 0,
+        brfdes: 'at the edge of Kyrandia',
+        objlds: 'nearby',
+        objects: [],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
+      ...locations,
+    ]
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.includes('/auth/session')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'created',
+            session: {
+              token: 'new-player-token',
+              player_id: 'Merlin',
+              room_id: 0,
+              first_login: true,
+              player_flags: 1,
+              lifecycle_messages: [
+                { message_id: 'GOODPD', text: firstLoginMessages.GOODPD },
+                { message_id: 'INTROA', text: firstLoginMessages.INTROA },
+                { message_id: 'INTROB', text: firstLoginMessages.INTROB },
+                { message_id: 'INTROC', text: firstLoginMessages.INTROC },
+                { message_id: 'INTROD', text: firstLoginMessages.INTROD },
+              ],
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => roomZeroLocations,
+        } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ messages: firstLoginMessages }),
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    expect(screen.queryByText(/Since this is your first time entering Kyrandia/i)).not.toBeInTheDocument()
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'Merlin')
+      await user.type(screen.getByLabelText(/room id/i), '12')
+      await user.click(screen.getByRole('checkbox', { name: /claim new player-id/i }))
+      expect(screen.getByLabelText(/room id/i)).toBeDisabled()
+      expect(screen.getByText(/Since this is your first time entering Kyrandia/i)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /claim player-id/i }))
+    })
+
+    const authCall = fetchMock.mock.calls.find(([input]) => String(input).includes('/auth/session'))
+    const sessionRequest = JSON.parse(String((authCall?.[1] as RequestInit)?.body))
+    expect(sessionRequest).toEqual({
+      player_id: 'Merlin',
+      create_player: true,
+    })
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    expect(socket.url).toContain('/rooms/0?token=new-player-token')
+    expect(
+      screen.getByText((_, element) =>
+        Boolean(
+          element?.classList.contains('crt-line') &&
+            element.textContent?.includes('Good!  You will now be known as "') &&
+            element.textContent?.includes('Merlin')
+        )
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText((_, element) =>
+        Boolean(
+          element?.classList.contains('crt-line') &&
+            element.textContent?.includes('Welcome, brave and adventurous one')
+        )
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText((_, element) =>
+        Boolean(
+          element?.classList.contains('crt-line') &&
+            element.textContent?.includes('Enjoy the magic, mystery, and mirth')
+        )
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText((_, element) =>
+        Boolean(
+          element?.classList.contains('crt-line') &&
+            element.textContent === 'Player 🧙‍♂️ Merlin connected.'
+        )
+      )
+    ).toBeInTheDocument()
+  })
+
   it('shows session expiration metadata and reconnects with a fresh token after close', async () => {
     const fetchMock = vi.spyOn(global, 'fetch')
     const responses = [
@@ -442,11 +569,53 @@ describe('Navigator flow', () => {
           exclude_player: 'hero',
         },
       })
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          text: '*** Buddy notices Hero and steps aside.',
+          exclude_players: ['hero', 'buddy'],
+        },
+      })
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          scope: 'direct',
+          event: 'room_message',
+          type: 'room_message',
+          text: 'Only Buddy should see this private temple response.',
+          player: 'buddy',
+        },
+      })
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          scope: 'direct',
+          event: 'room_message',
+          type: 'room_message',
+          text: 'Only Hero should see this private temple response.',
+          player: 'hero',
+        },
+      })
     })
 
     await waitFor(() =>
       expect(screen.queryByText(/concentrating with sincere determination/i)).toBeNull()
     )
+    expect(screen.queryByText(/notices Hero and steps aside/i)).toBeNull()
+    expect(screen.queryByText(/Only Buddy should see this private temple response/i)).toBeNull()
+    expect(
+      screen.getByText((_, element) =>
+        Boolean(
+          element?.classList.contains('summary') &&
+            element.textContent?.includes('Only Hero should see this private temple response.')
+        )
+      )
+    ).toBeInTheDocument()
   })
 
   it('updates world room objects when room_broadcast delivers room_objects event (gem spawn)', async () => {

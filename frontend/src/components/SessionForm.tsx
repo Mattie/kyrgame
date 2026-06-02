@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react'
 
 import { isDevEnvironment } from '../config/devMode'
 import { useNavigator } from '../context/NavigatorContext'
+import { AnsiText } from './AnsiText'
 
 const storageKeys = {
   playerId: 'kyrgame.navigator.playerId',
@@ -9,6 +10,9 @@ const storageKeys = {
   adminSession: 'kyrgame.navigator.adminSession',
   adminToken: 'kyrgame.navigator.adminToken',
 }
+
+const fallbackLegacyPlayerIdPrompt =
+  '\u001b[0m\r\n\r\n\u001b[1;32mSince this is your first time entering Kyrandia (Fantasy-world), you\r\nmust pick a 3-9 character Player-ID for yourself.  This is what you will\r\nbe known as throughout the game.\r\n\r\n\u001b[36mPlease enter your Player-ID: '
 
 const formatTokenTtl = (seconds?: number | null) => {
   if (seconds === undefined || seconds === null) return null
@@ -32,6 +36,8 @@ export const SessionForm = () => {
   const [roomId, setRoomId] = useState('')
   const [adminTokenInput, setAdminTokenInput] = useState('')
   const [joinAsAdmin, setJoinAsAdmin] = useState(false)
+  const [claimNewPlayer, setClaimNewPlayer] = useState(false)
+  const [legacyPlayerIdPrompt, setLegacyPlayerIdPrompt] = useState(fallbackLegacyPlayerIdPrompt)
   const [submitting, setSubmitting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
 
@@ -58,6 +64,30 @@ export const SessionForm = () => {
       localStorage.removeItem(storageKeys.adminToken)
     }
   }, [])
+
+  useEffect(() => {
+    if (!claimNewPlayer) return
+
+    let cancelled = false
+    const loadPrompt = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/i18n/en-US/messages`)
+        if (!response.ok) return
+        const payload = await response.json()
+        const prompt = payload?.messages?.GETALS
+        if (!cancelled && typeof prompt === 'string' && prompt.trim() !== '') {
+          setLegacyPlayerIdPrompt(prompt)
+        }
+      } catch {
+        // Keep the catalog-matching fallback if the public message bundle is unavailable.
+      }
+    }
+
+    void loadPrompt()
+    return () => {
+      cancelled = true
+    }
+  }, [apiBaseUrl, claimNewPlayer])
 
   const persistPlayerId = (nextValue: string) => {
     if (nextValue.trim() === '') {
@@ -98,18 +128,22 @@ export const SessionForm = () => {
     event.preventDefault()
     setSubmitting(true)
     try {
-      const parsedRoom = roomId.trim() === '' ? null : Number(roomId)
+      const parsedRoom = claimNewPlayer || roomId.trim() === '' ? null : Number(roomId)
       const trimmedPlayerId = playerId.trim()
       const trimmedAdminToken = adminTokenInput.trim()
 
       setAdminToken(joinAsAdmin ? trimmedAdminToken || null : null)
       persistPlayerId(trimmedPlayerId)
-      persistRoomId(roomId)
+      if (!claimNewPlayer) {
+        persistRoomId(roomId)
+      }
       persistAdminSession(joinAsAdmin)
       if (joinAsAdmin) {
         persistAdminToken(trimmedAdminToken)
       }
-      await startSession(playerId.trim(), Number.isNaN(parsedRoom) ? null : parsedRoom)
+      await startSession(trimmedPlayerId, Number.isNaN(parsedRoom) ? null : parsedRoom, {
+        createPlayer: claimNewPlayer,
+      })
     } finally {
       setSubmitting(false)
     }
@@ -175,14 +209,35 @@ export const SessionForm = () => {
                 id="room-id"
                 name="room-id"
                 value={roomId}
+                disabled={claimNewPlayer}
                 onChange={(event) => {
                   const nextValue = event.target.value
                   setRoomId(nextValue)
                   persistRoomId(nextValue)
                 }}
               />
-              <p className="field-hint">Leave blank to use the player’s current room.</p>
+              <p className="field-hint">
+                {claimNewPlayer
+                  ? 'New Player-IDs always enter Kyrandia at the willow tree.'
+                  : "Leave blank to use the player's current room."}
+              </p>
             </div>
+
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                name="claim-new-player"
+                checked={claimNewPlayer}
+                onChange={(event) => setClaimNewPlayer(event.target.checked)}
+              />
+              Claim new Player-ID
+            </label>
+
+            {claimNewPlayer && (
+              <p className="field-hint">
+                <AnsiText text={legacyPlayerIdPrompt} />
+              </p>
+            )}
 
             <label className="checkbox">
               <input
@@ -219,14 +274,18 @@ export const SessionForm = () => {
             </div>
 
             <button type="submit" disabled={submitting || playerId.trim() === ''}>
-              {submitting ? 'Requesting…' : 'Start session'}
+              {submitting ? 'Requesting...' : claimNewPlayer ? 'Claim Player-ID' : 'Start session'}
             </button>
           </form>
           <p className={`status ${connectionStatus}`}>
             Connection: {connectionStatus}
           </p>
           {tokenTtl && <p className="status">Token expires in {tokenTtl}</p>}
-          {error && <p className="status error">{error}</p>}
+          {error && (
+            <p className="status error">
+              <AnsiText text={error} />
+            </p>
+          )}
           {session && connectionStatus === 'disconnected' && (
             <button type="button" onClick={handleReconnect} disabled={submitting}>
               Reconnect session

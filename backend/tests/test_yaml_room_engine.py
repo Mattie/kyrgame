@@ -1154,10 +1154,35 @@ def test_wingam_riddle_levels_up(room_engine, base_player):
     assert player.level == 25
 
     direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
-    broadcast_texts = [evt["text"] for evt in result.events if evt["scope"] == "broadcast"]
+    broadcast_events = [evt for evt in result.events if evt["scope"] == "broadcast"]
+    broadcast_texts = [evt["text"] for evt in broadcast_events]
     global_texts = [evt["text"] for evt in result.events if evt["scope"] == "global"]
     assert room_engine.messages.messages["YOUWIN"] in direct_texts
-    assert room_engine.messages.messages["SHEWON"] % player.altnam in global_texts
+    assert room_engine.messages.messages["SHEWON"] % player.altnam in broadcast_texts
+    assert all(evt.get("exclude_player") == player.plyrid for evt in broadcast_events)
+    assert global_texts == []
+
+
+def test_thicket_walk_keeps_ouch_private_and_broadcasts_burning_to_others(
+    room_engine, base_player
+):
+    result = room_engine.handle(
+        player=base_player,
+        room_id=19,
+        command="walk",
+        args=["thicket"],
+    )
+
+    assert result.handled is True
+
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    broadcast_events = [evt for evt in result.events if evt["scope"] == "broadcast"]
+    broadcast_texts = [evt["text"] for evt in broadcast_events]
+
+    assert "...Ouch!" in direct_texts
+    assert "...Ouch!" not in broadcast_texts
+    assert any("burning in the flaming thicket" in text for text in broadcast_texts)
+    assert all(evt.get("exclude_player") == base_player.plyrid for evt in broadcast_events)
 
 
 def test_wingam_riddle_falls_through_when_zar_is_away(room_engine, base_player):

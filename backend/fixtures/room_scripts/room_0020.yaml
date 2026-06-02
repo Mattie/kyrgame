@@ -20,7 +20,7 @@ triggers:
                 scope: direct
                 message_id: RUBY00
               - type: message
-                scope: broadcast
+                scope: broadcast_others
                 message_id: RUBY01
                 format: [player_id]
             else:
@@ -28,7 +28,7 @@ triggers:
                 scope: direct
                 message_id: RUBY02
               - type: message
-                scope: broadcast
+                scope: broadcast_others
                 message_id: RUBY03
                 format: [player_id]
               - type: damage
@@ -38,7 +38,7 @@ triggers:
             scope: direct
             message_id: RUBY02
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: RUBY03
             format: [player_id]
           - type: damage

@@ -54,6 +54,8 @@ async def test_look_room_object_emits_description_and_looker1():
     message_ids = {event.get("message_id") for event in result.events}
     assert f"KID{obj_id:03d}" in message_ids
     assert "LOOKER1" in message_ids
+    room_event = next(event for event in result.events if event.get("message_id") == "LOOKER1")
+    assert room_event.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio
@@ -75,6 +77,8 @@ async def test_look_inventory_object_emits_description_and_looker2():
     message_ids = {event.get("message_id") for event in result.events}
     assert f"KID{obj_id:03d}" in message_ids
     assert "LOOKER2" in message_ids
+    room_event = next(event for event in result.events if event.get("message_id") == "LOOKER2")
+    assert room_event.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio
@@ -103,6 +107,8 @@ async def test_look_player_emits_description_inventory_and_room_broadcasts():
     message_ids = {event.get("message_id") for event in result.events}
     assert "LOOKER3" in message_ids
     assert "LOOKER4" in message_ids
+    room_event = next(event for event in result.events if event.get("message_id") == "LOOKER4")
+    assert room_event.get("exclude_players") == [player.plyrid, other.plyrid]
 
 
 @pytest.mark.anyio

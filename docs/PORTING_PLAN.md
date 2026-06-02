@@ -72,6 +72,7 @@
 - [x] Verified `saywhat` (spl051) OBJPRO/empty-spellbook failures and msgutl3-style broadcasts with targeted cast coverage in tests.
 - [x] Prioritized room routine handling ahead of command registry dispatch to mirror `kyra()` flow in `KYRCMDS.C`.
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
+- [x] Audited room broadcast recipient splits against legacy `msgutl2`/`sndoth`/`sndbt2`/`sndloc`, aligning Python room routines, YAML room scripts, command room events, and frontend filtering for actor-excluding, target-excluding, and sender-inclusive cases.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).
 - [x] Normalize non-chat command tokenization to strip articles/prepositions per `GAMUTILS.C` (`gi_bagthe`/`bagprep`).
@@ -93,7 +94,7 @@
 
 - [x] Shared `hitoth()` death handling for all spell/self/area damage paths, including reset, room fan-out, active-session relocation, and DB persistence.
 - [x] Legacy `macros` fatigue gate from `kyrand()` case 7: increment per accepted command, emit `TIRED` on the 20th command before tick reset, with an allowlisted read-only UI refresh bypass for satellite status panels.
-- [ ] First-login player-ID lifecycle parity: 3-9 letters, duplicate rejection, `Sysop` reservation, `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, and intro text surfaces.
+- [x] First-login player-ID lifecycle parity: 3-9 letters, duplicate rejection, `Sysop` plus visible entity-name reservation (`Zar`, `dragon`, `dryad`, `elf`, `brownie`), `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, intro text surfaces, initgp-style player initialization, and wizard player-name UI styling.
 - [ ] In-game `x` exit parity: emit `EXIKYR`, broadcast sparkling-light departure, deactivate session/presence, and persist player state.
 - [ ] Frontend rendering for lifecycle/intro/exit messages through the existing console/session UI.
 
@@ -104,8 +105,8 @@
 ## Remaining Implementation Task Plan
 
 1. **Legacy gameplay support gaps**
-   - Next meaty gameplay target: first-login player-ID lifecycle parity, including 3-9 letter validation, duplicate rejection, `Sysop` reservation, `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, and intro text surfaces.
-   - Follow with in-game `x` exit parity and frontend rendering for intro/exit/lifecycle messages.
+   - Next meaty gameplay target: in-game `x` exit parity with `EXIKYR`, sparkling-light room fan-out, session deactivation, presence cleanup, and persisted player state.
+   - Follow with a focused frontend pass for any lifecycle/exit message surfaces not already covered by intro, fatigue, death-reset, and command transcript rendering.
 2. **Documentation and tracker closure**
    - Keep `docs/PORTING_PLAN.md`, `docs/legacy_command_porting.md`, `docs/PORTING_PLAN_world_object_spell_gaps.md`, and `docs/solo_level_journey_checklist.md` aligned after each gameplay PR.
    - For every ported gameplay routine, include legacy source references and verify both C call sites and message catalog IDs.
@@ -159,7 +160,6 @@
 
 ## Next Steps: Legacy Gameplay Support
 1. **Player lifecycle parity**
-   - Add first-login player-ID validation/reservation messaging and intro surfaces.
    - Add the in-game `x` exit path with `EXIKYR`, sparkling-light room fan-out, session deactivation, presence cleanup, and persisted player state.
 2. **Frontend lifecycle surfaces**
-   - Verify intro, fatigue, death-reset, and exit messages render cleanly through the existing console/session UI.
+   - Verify exit messages render cleanly through the existing console/session UI after the `x` path lands.

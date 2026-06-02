@@ -146,12 +146,15 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
   {
     "player_id": "hero",
     "resume_token": "...",
-    "room_id": 7
+    "room_id": 7,
+    "create_player": false
   }
   ```
 
 - **Responses:**
   - `201 Created` for new sessions, `200 OK` when resuming with `resume_token`.
+  - Set `create_player: true` for the explicit first-login Player-ID claim flow. The backend applies the legacy `KYRANDIA.C` case 1 rules: 3-9 letters, duplicate rejection, `Sysop` reservation, and visible entity-name reservation for `Zar`, `dragon`, `dryad`, `elf`, and `brownie`. Explicit claims always enter at room 0, matching the legacy intro-to-`entrgp(0, ...)` handoff; any submitted `room_id` is ignored for that claim.
+  - Compatibility first-logins without `create_player` still create a missing valid player for existing tools/tests, but they run through the same legacy invalid/reserved-name checks before insertion.
   - Envelope:
 
     ```json
@@ -161,23 +164,32 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
         "token": "<bearer-token>",
         "player_id": "hero",
         "room_id": 7,
+        "expires_at": "2026-06-01T12:00:00+00:00",
+        "expires_in_seconds": 3600,
         "first_login": true,
         "resumed": false,
-        "replaced_sessions": 0
+        "replaced_sessions": 0,
+        "player_flags": 1,
+        "lifecycle_messages": [
+          { "message_id": "GOODPD", "text": "..." },
+          { "message_id": "INTROA", "text": "..." },
+          { "message_id": "INTROB", "text": "..." },
+          { "message_id": "INTROC", "text": "..." },
+          { "message_id": "INTROD", "text": "..." }
+        ]
       }
     }
     ```
 
     When resuming, `status` becomes `recovered`, `resumed` is `true`, and `first_login` is `false`.
     A fresh login for the same `player_id` replaces any existing active game session for that player.
+    Bad explicit first-login names return `422` with legacy `BADPID` and `B4PLA2` messages; duplicate or reserved names return `409` with `NTGOOD` and `B4PLA2`.
 
 ```bash
 curl -X POST http://localhost:8000/auth/session \
   -H 'Content-Type: application/json' \
   -d '{"player_id": "hero", "room_id": 7}'
 ```
-
-> TODO: The repository tracks `expires_at`/`last_seen` for session tokens, but those fields are not yet surfaced in the HTTP response. A contract test guards the gap until the API is updated.
 
 **Validate an active session**
 
@@ -192,9 +204,13 @@ curl -X POST http://localhost:8000/auth/session \
       "token": "<bearer-token>",
       "player_id": "hero",
       "room_id": 7,
+      "expires_at": "2026-06-01T12:00:00+00:00",
+      "expires_in_seconds": 3600,
       "first_login": false,
       "resumed": false,
-      "replaced_sessions": 0
+      "replaced_sessions": 0,
+      "player_flags": 1,
+      "lifecycle_messages": []
     }
   }
   ```

@@ -30,7 +30,7 @@ triggers:
             scope: direct
             message_id: BUYM02
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: BUYM03
             format: [player_altnam, player_pronoun_poss, player_altnam]
         insufficient:
@@ -38,7 +38,7 @@ triggers:
             scope: direct
             message_id: BUYM00
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: BUYM01
             format: [player_altnam, player_pronoun_obj]
         missing:
@@ -46,6 +46,6 @@ triggers:
             scope: direct
             message_id: BUYM04
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: BUYM01
             format: [player_altnam, player_pronoun_obj]

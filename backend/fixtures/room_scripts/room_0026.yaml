@@ -11,7 +11,7 @@ triggers:
         scope: direct
         message_id: ASHM00
       - type: message
-        scope: broadcast
+        scope: broadcast_others
         message_id: ASHM01
       - type: conditional
         conditions:
@@ -20,9 +20,9 @@ triggers:
           - type: add_room_object
             object: shard
         else:
-          - type: message
-            scope: direct
-            message_id: ASHM02
+          # Legacy prfmsg(ASHM02); sndloc(gamloc) sends one ASHM02 buffer
+          # to everyone in the room, including the actor. (legacy/KYRROUS.C:720-721)
           - type: message
             scope: broadcast
             message_id: ASHM02
+            include_sender: true

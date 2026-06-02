@@ -18,12 +18,12 @@ triggers:
         target_level: 25
         level_up: true
         on_success:
-          # Legacy shocst() announces globally; model with a global message for SHEWON. (legacy/KYRROUS.C:1414-1416)
+          # Legacy shocst() announces externally, then msgutl2(YOUWIN, SHEWON). (legacy/KYRROUS.C:1414-1416)
           - type: message
             scope: direct
             message_id: YOUWIN
           - type: message
-            scope: global
+            scope: broadcast_others
             message_id: SHEWON
             format: [player_altnam]
         on_too_high:

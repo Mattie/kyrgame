@@ -1,5 +1,5 @@
 from kyrgame import constants, fixtures
-from kyrgame.player_lifecycle import reset_player_after_death
+from kyrgame.player_lifecycle import initialize_player_for_first_login, reset_player_after_death
 
 
 def test_reset_player_after_death_matches_legacy_initgp_state():
@@ -72,6 +72,45 @@ def test_reset_player_after_death_matches_legacy_initgp_state():
     assert player.charms == [0] * constants.NCHARM
     assert player.gemidx == 0
     assert player.stones == [2, 3, 4, 5]
+    assert player.macros == 0
+    assert player.stumpi == 0
+    assert player.spouse == ""
+
+
+def test_initialize_player_for_first_login_matches_legacy_initgp_state():
+    player = fixtures.build_player()
+    birthstones = iter([1, 4, 7, 10])
+
+    initialize_player_for_first_login(
+        player,
+        player_id="Merlin",
+        uidnam="Merlin",
+        birthstone_picker=lambda low, high: next(birthstones),
+    )
+
+    assert player.uidnam == "Merlin"
+    assert player.plyrid == "Merlin"
+    assert player.altnam == "Merlin"
+    assert player.attnam == "Merlin"
+    assert player.gamloc == 0
+    assert player.pgploc == 0
+    assert player.nmpdes == constants.level_to_nmpdes(1)
+    assert player.flags == int(constants.PlayerFlag.LOADED)
+    assert player.level == 1
+    assert player.hitpts == 4
+    assert player.spts == 2
+    assert player.gold == 0
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert player.nspells == 0
+    assert player.spells == []
+    assert player.offspls == 0
+    assert player.defspls == 0
+    assert player.othspls == 0
+    assert player.charms == [0] * constants.NCHARM
+    assert player.gemidx == 0
+    assert player.stones == [1, 4, 7, 10]
     assert player.macros == 0
     assert player.stumpi == 0
     assert player.spouse == ""

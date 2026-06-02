@@ -14,6 +14,7 @@ triggers:
       - type: message
         scope: broadcast
         text: "*** The mists around the rock begin to swirl magically!"
+        include_sender: true
       - type: increment_room_state
         key: rockpr
   - verbs: [drop, insert, put, stick, thrust]
@@ -34,7 +35,7 @@ triggers:
             scope: direct
             message_id: ROCK00
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: ROCK01
             format: [player_id]
         else:
@@ -42,6 +43,6 @@ triggers:
             scope: direct
             message_id: ROCK02
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: ROCK01
             format: [player_id]

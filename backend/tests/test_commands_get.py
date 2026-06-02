@@ -116,7 +116,8 @@ async def test_get_pickup_emits_room_broadcast_getloc7():
     result = await dispatcher.dispatch("get", {"target": obj_name}, state)
 
     room_events = [event for event in result.events if event.get("scope") == "room"]
-    assert any(event.get("message_id") == "GETLOC7" for event in room_events)
+    room_event = next(event for event in room_events if event.get("message_id") == "GETLOC7")
+    assert room_event.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio
@@ -137,7 +138,8 @@ async def test_get_non_pickup_emits_room_broadcast_getloc5():
     result = await dispatcher.dispatch("get", {"target": non_pickup.name}, state)
 
     room_events = [event for event in result.events if event.get("scope") == "room"]
-    assert any(event.get("message_id") == "GETLOC5" for event in room_events)
+    room_event = next(event for event in room_events if event.get("message_id") == "GETLOC5")
+    assert room_event.get("exclude_player") == player.plyrid
 
 
 @pytest.mark.anyio
@@ -163,6 +165,7 @@ async def test_get_player_target_emits_room_broadcast_excluding_target():
     assert {"GETLOC1", "GETLOC2", "GETLOC3"}.issubset(message_ids)
     room_event = next(event for event in result.events if event.get("message_id") == "GETLOC3")
     assert room_event.get("exclude_player") == other.plyrid
+    assert room_event.get("exclude_players") == [player.plyrid, other.plyrid]
 
 
 @pytest.mark.anyio

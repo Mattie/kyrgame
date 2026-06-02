@@ -426,6 +426,8 @@ class YamlRoomEngine:
                     "exclude_player": player.plyrid if scope == "broadcast_others" else None,
                 }
             )
+            if "include_sender" in action:
+                events[-1]["include_sender"] = bool(action["include_sender"])
             return
 
         has_direct = message_id is not None or text is not None

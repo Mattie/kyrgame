@@ -41,6 +41,13 @@ export type SessionRecord = {
   roomId: number
   expiresAt?: string | null
   expiresInSeconds?: number | null
+  playerFlags?: number | null
+}
+
+export type PlayerVisual = {
+  emoji: string
+  className: string
+  color: string
 }
 
 export type WorldData = {
@@ -186,10 +193,15 @@ type NavigatorContextValue = {
   world: WorldData | null
   currentRoom: number | null
   occupants: string[]
+  playerVisuals: Record<string, PlayerVisual>
   activity: ActivityEntry[]
   connectionStatus: ConnectionStatus
   error: string | null
-  startSession: (playerId: string, roomId?: number | null) => Promise<void>
+  startSession: (
+    playerId: string,
+    roomId?: number | null,
+    options?: { createPlayer?: boolean }
+  ) => Promise<void>
   adminToken: string | null
   setAdminToken: (token: string | null) => void
   fetchAdminPlayer: (playerId: string) => Promise<AdminPlayerRecord>
@@ -235,6 +247,20 @@ const LEGACY_ROOM_PRESENCE_LINES = [
 
 const normalizePlayerName = (name?: string | null) => (name ?? '').trim().toLowerCase()
 const normalizeObjectName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+const PLAYER_FLAG_FEMALE = 0x00000002
+const PLAYER_WIZARD_COLOR = '#a78bfa'
+
+// Player-name styling is derived only from backend player flags carried on
+// session, entrance, and occupant events. That keeps the visual treatment a
+// client concern while preserving raw legacy message text and payload shapes.
+const playerVisualFromFlags = (flags?: number | null): PlayerVisual => ({
+  emoji:
+    flags !== undefined && flags !== null && (flags & PLAYER_FLAG_FEMALE)
+      ? '🧙‍♀️'
+      : '🧙‍♂️',
+  className: 'player-wizard',
+  color: PLAYER_WIZARD_COLOR,
+})
 
 const formatVisibleRoomObjectsLine = (
   location: LocationRecord | null,
@@ -331,6 +357,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [occupants, setOccupants] = useState<string[]>([])
+  const [playerVisuals, setPlayerVisuals] = useState<Record<string, PlayerVisual>>({})
   const [adminToken, setAdminToken] = useState<string | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const worldRef = useRef<WorldData | null>(null)
@@ -357,6 +384,27 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     occupantsRef.current = unique
     setOccupants(unique)
   }, [])
+
+  const mergePlayerVisuals = useCallback(
+    (
+      entries:
+        | Array<{ player_id?: string; player?: string; flags?: number | null }>
+        | null
+        | undefined
+    ) => {
+      if (!entries || entries.length === 0) return
+      setPlayerVisuals((prev) => {
+        const next = { ...prev }
+        entries.forEach((entry) => {
+          const playerId = (entry.player_id ?? entry.player ?? '').trim()
+          if (!playerId) return
+          next[playerId] = playerVisualFromFlags(entry.flags)
+        })
+        return next
+      })
+    },
+    []
+  )
 
   const handleRoomChange = useCallback(
     (roomId: number | null, _origin: string) => {
@@ -386,10 +434,20 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           const payload = message.payload ?? {}
 
           const excludedPlayer = payload.exclude_player ?? payload.excludePlayer
+          const excludedPlayers = payload.exclude_players ?? payload.excludePlayers
           const currentPlayerId = sessionRef.current?.playerId ?? session?.playerId ?? null
+          const currentPlayerName = normalizePlayerName(currentPlayerId)
+          const directPlayer = payload.player ?? payload.player_id ?? payload.playerId
           if (
-            excludedPlayer &&
-            normalizePlayerName(excludedPlayer) === normalizePlayerName(currentPlayerId)
+            (payload.scope === 'direct' &&
+              directPlayer &&
+              normalizePlayerName(directPlayer) !== currentPlayerName) ||
+            (excludedPlayer && normalizePlayerName(excludedPlayer) === currentPlayerName) ||
+            (Array.isArray(excludedPlayers) &&
+              excludedPlayers.some(
+                (player) =>
+                  typeof player === 'string' && normalizePlayerName(player) === currentPlayerName
+              ))
           ) {
             break
           }
@@ -405,6 +463,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             payload.event === 'room_message' && resolvedRoomMessageText
               ? { ...payload, text: resolvedRoomMessageText }
               : payload
+
+          if (normalizedPayload.player && typeof normalizedPayload.player_flags === 'number') {
+            mergePlayerVisuals([
+              {
+                player: normalizedPayload.player,
+                flags: normalizedPayload.player_flags,
+              },
+            ])
+          }
 
           // Handle chat events
           if (
@@ -501,6 +568,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             const occupants = Array.isArray(message.payload?.occupants)
               ? (message.payload?.occupants as string[]).filter(Boolean)
               : []
+            const occupantDetails = Array.isArray(message.payload?.occupant_details)
+              ? (message.payload?.occupant_details as Array<{ player_id?: string; flags?: number | null }>)
+              : []
+            mergePlayerVisuals(occupantDetails)
             updateOccupants(occupants)
             summary =
               message.payload?.text ??
@@ -636,7 +707,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           break
       }
     },
-    [appendActivity, currentRoom, handleRoomChange, session?.playerId, updateOccupants]
+    [
+      appendActivity,
+      currentRoom,
+      handleRoomChange,
+      mergePlayerVisuals,
+      session?.playerId,
+      updateOccupants,
+    ]
   )
 
   const connectWebSocket = useCallback(
@@ -683,6 +761,27 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       throw new Error(detail || `Request failed: ${response.status}`)
     }
     return response.json()
+  }, [])
+
+  const parseSessionError = useCallback(async (response: Response) => {
+    const contentType = response.headers?.get?.('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      try {
+        const payload = await response.json()
+        const messages = Array.isArray(payload?.detail?.messages)
+          ? payload.detail.messages
+          : []
+        const text = messages
+          .map((message: { text?: string }) => message.text)
+          .filter(Boolean)
+          .join('\n')
+        if (text) return text
+        if (typeof payload?.detail === 'string') return payload.detail
+      } catch {
+        // Fall back to plain text below for non-conforming error responses.
+      }
+    }
+    return response.text()
   }, [])
 
   const loadWorldData = useCallback(async () => {
@@ -801,14 +900,22 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   )
 
   const startSession = useCallback(
-    async (playerId: string, roomId?: number | null) => {
+    async (
+      playerId: string,
+      roomId?: number | null,
+      options?: { createPlayer?: boolean }
+    ) => {
       setConnectionStatus('connecting')
       setError(null)
       setActivity([])
+      setPlayerVisuals({})
       resetSocket()
       try {
         const payload: Record<string, string | number | boolean | null | undefined> = {
           player_id: playerId,
+        }
+        if (options?.createPlayer) {
+          payload.create_player = true
         }
         if (roomId !== undefined && roomId !== null && !Number.isNaN(roomId)) {
           payload.room_id = roomId
@@ -819,11 +926,13 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           body: JSON.stringify(payload),
         })
         if (!response.ok) {
-          const detail = await response.text()
+          const detail = await parseSessionError(response)
           throw new Error(detail || 'Unable to start session')
         }
         const data = await response.json()
         const sessionPayload = data.session
+        const playerFlags =
+          typeof sessionPayload.player_flags === 'number' ? sessionPayload.player_flags : null
         const record: SessionRecord = {
           token: sessionPayload.token,
           playerId: sessionPayload.player_id,
@@ -833,13 +942,34 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             typeof sessionPayload.expires_in_seconds === 'number'
               ? sessionPayload.expires_in_seconds
               : null,
+          playerFlags,
         }
         setSession(record)
+        setPlayerVisuals({
+          [record.playerId]: playerVisualFromFlags(playerFlags),
+        })
         setCurrentRoom(record.roomId)
         updateOccupants([])
         // Load world data first and wait for it to complete before connecting WebSocket
         // worldRef.current is set immediately by loadWorldData, so messages will be available
         await loadWorldData()
+        const lifecycleMessages = Array.isArray(sessionPayload.lifecycle_messages)
+          ? sessionPayload.lifecycle_messages
+          : []
+        lifecycleMessages.forEach((message: { message_id?: string; text?: string }) => {
+          appendActivity({
+            type: 'command_response',
+            room: record.roomId,
+            summary: message.text ?? message.message_id ?? 'lifecycle_message',
+            payload: {
+              scope: 'player',
+              event: 'lifecycle_message',
+              type: 'lifecycle_message',
+              message_id: message.message_id,
+              text: message.text,
+            },
+          })
+        })
         connectWebSocket(record.token, record.roomId)
       } catch (err) {
         setConnectionStatus('error')
@@ -847,7 +977,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         throw err
       }
     },
-    [apiBaseUrl, connectWebSocket, loadWorldData, resetSocket, updateOccupants]
+    [
+      apiBaseUrl,
+      appendActivity,
+      connectWebSocket,
+      loadWorldData,
+      parseSessionError,
+      resetSocket,
+      updateOccupants,
+    ]
   )
 
   const sendMove = useCallback(
@@ -909,6 +1047,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       world,
       currentRoom,
       occupants,
+      playerVisuals,
       activity,
       connectionStatus,
       error,
@@ -933,6 +1072,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       fetchAdminMobs,
       fetchAdminPlayer,
       occupants,
+      playerVisuals,
       setAdminToken,
       sendMove,
       sendCommand,

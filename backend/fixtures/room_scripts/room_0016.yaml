@@ -15,7 +15,7 @@ triggers:
             scope: direct
             message_id: FEAR01
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: FEAR02
             format: [player_altnam]
         on_too_high:
@@ -23,7 +23,7 @@ triggers:
             scope: direct
             message_id: LVLM00
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: LVLM01
             format: [player_altnam]
         on_too_low:
@@ -31,6 +31,6 @@ triggers:
             scope: direct
             message_id: LVLM02
           - type: message
-            scope: broadcast
+            scope: broadcast_others
             message_id: LVLM03
             format: [player_altnam]

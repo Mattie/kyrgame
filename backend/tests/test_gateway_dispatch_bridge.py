@@ -543,7 +543,7 @@ async def test_websocket_look_uses_persisted_altnam_for_looker3():
         await asyncio.sleep(0.05)
 
     async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
-        viewer_id = "looker3"
+        viewer_id = "looker"
         target_id = "target"
         viewer_session = await client.post("/auth/session", json={"player_id": viewer_id, "room_id": 0})
         viewer_token = viewer_session.json()["session"]["token"]

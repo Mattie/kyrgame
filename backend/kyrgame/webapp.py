@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -13,14 +14,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
 from . import commands, constants, fixtures, models, repositories
 from .env import load_env_file
 from .gateway import RoomGateway
+from .player_lifecycle import initialize_player_for_first_login
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
@@ -35,6 +37,12 @@ DEFAULT_WS_COMMAND_RATE_LIMIT_MAX_EVENTS = 2
 DEFAULT_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS = 0.5
 WS_COMMAND_RATE_LIMIT_MAX_EVENTS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS"
 WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS"
+GAME_VERSION = "7.20"
+# Legacy case 1 explicitly reserves Sysop and rejects duplicate Player-IDs
+# (legacy/KYRANDIA.C:260-264). The added creature names protect the visible
+# NPC/object namespace now that the browser decorates those names inline.
+RESERVED_PLAYER_IDS = frozenset({"sysop", "zar", "dragon", "dryad", "elf", "brownie"})
+PLAYER_ID_PATTERN = re.compile(r"^[A-Za-z]{3,9}$")
 
 
 class LogoResponse(BaseModel):
@@ -46,6 +54,12 @@ class SessionRequest(BaseModel):
     player_id: str
     resume_token: str | None = None
     room_id: int | None = None
+    create_player: bool = False
+
+
+class LifecycleMessage(BaseModel):
+    message_id: str
+    text: str
 
 
 class SessionData(BaseModel):
@@ -57,6 +71,8 @@ class SessionData(BaseModel):
     first_login: bool = False
     resumed: bool = False
     replaced_sessions: int = 0
+    player_flags: int = 0
+    lifecycle_messages: list[LifecycleMessage] = Field(default_factory=list)
 
 
 class SessionResponse(BaseModel):
@@ -793,8 +809,29 @@ def _persist_player_from_template(
     return player
 
 
+def _persist_first_login_player(
+    db: OrmSession, player_id: str, template: models.PlayerModel
+) -> models.Player:
+    player_model = template.model_copy(deep=True)
+    initialize_player_for_first_login(
+        player_model,
+        player_id=player_id,
+        uidnam=player_id[: constants.UIDSIZ],
+        birthstone_picker=lambda low, high: low + secrets.randbelow(high - low),
+        room_id=0,
+    )
+    player = models.Player(**player_model.model_dump())
+    db.add(player)
+    db.flush([player])
+    return player
+
+
 def _find_player_record(db: OrmSession, player_id: str) -> models.Player | None:
     record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+    if record is not None:
+        return record
+
+    record = _find_player_record_casefold(db, player_id)
     if record is not None:
         return record
 
@@ -807,6 +844,86 @@ def _find_player_record(db: OrmSession, player_id: str) -> models.Player | None:
     if canonical_id != player_id:
         return db.scalar(select(models.Player).where(models.Player.plyrid == canonical_id))
     return None
+
+
+def _find_player_record_casefold(db: OrmSession, player_id: str) -> models.Player | None:
+    return db.scalar(
+        select(models.Player).where(func.lower(models.Player.plyrid) == player_id.lower())
+    )
+
+
+def _canonical_first_login_player_id(raw_player_id: str) -> str:
+    trimmed = raw_player_id.strip()
+    if not PLAYER_ID_PATTERN.fullmatch(trimmed):
+        raise ValueError("bad_player_id")
+    return trimmed.lower().capitalize()
+
+
+def _validated_compat_first_login_player_id(raw_player_id: str) -> str:
+    trimmed = raw_player_id.strip()
+    if not PLAYER_ID_PATTERN.fullmatch(trimmed):
+        raise ValueError("bad_player_id")
+    return trimmed
+
+
+def _legacy_message_entry(
+    messages: models.MessageBundleModel, message_id: str, *args: object
+) -> dict[str, str]:
+    text = messages.messages.get(message_id, "")
+    if args:
+        try:
+            text = text % args
+        except TypeError:
+            pass
+    return {"message_id": message_id, "text": text}
+
+
+def _legacy_auth_error(
+    request: Request,
+    *,
+    status_code: int,
+    message_ids: list[str],
+) -> HTTPException:
+    messages = request.app.state.fixture_cache["messages"]
+    return HTTPException(
+        status_code=status_code,
+        detail={
+            "message_ids": message_ids,
+            "messages": [_legacy_message_entry(messages, message_id) for message_id in message_ids],
+        },
+    )
+
+
+def _ensure_first_login_player_id_available(
+    db: OrmSession, request: Request, player_id: str
+) -> None:
+    if player_id.lower() in RESERVED_PLAYER_IDS or _find_player_record_casefold(db, player_id):
+        raise _legacy_auth_error(
+            request,
+            status_code=status.HTTP_409_CONFLICT,
+            message_ids=["NTGOOD", "B4PLA2"],
+        )
+
+
+def _first_login_lifecycle_messages(
+    messages: models.MessageBundleModel, player_id: str
+) -> list[dict[str, str]]:
+    return [
+        _legacy_message_entry(messages, "GOODPD", player_id),
+        _legacy_message_entry(messages, "INTROA"),
+        _legacy_message_entry(messages, "INTROB"),
+        _legacy_message_entry(messages, "INTROC"),
+        _legacy_message_entry(messages, "INTROD", GAME_VERSION),
+    ]
+
+
+def _active_player_flags(app: FastAPI) -> dict[str, int]:
+    flags: dict[str, int] = {}
+    for player in getattr(app.state, "active_players", {}).values():
+        flags[player.plyrid] = int(player.flags)
+    for player in _active_player_sessions(app).values():
+        flags[player.plyrid] = int(player.flags)
+    return flags
 
 
 def _env_int(name: str, *, default: int, minimum: int) -> int:
@@ -862,6 +979,7 @@ def _session_payload(
     first_login: bool = False,
     resumed: bool = False,
     replaced_sessions: int = 0,
+    lifecycle_messages: list[dict[str, str]] | None = None,
 ):
     expires_at = _as_utc(session_record.expires_at)
     now = datetime.now(timezone.utc)
@@ -874,6 +992,8 @@ def _session_payload(
         "first_login": first_login,
         "resumed": resumed,
         "replaced_sessions": replaced_sessions,
+        "player_flags": int(player.flags),
+        "lifecycle_messages": lifecycle_messages or [],
     }
 
 
@@ -921,17 +1041,49 @@ async def start_session(
     
     template = request.app.state.fixture_cache["player_template"]
     repo = repositories.PlayerSessionRepository(db)
+    if not hasattr(request.app.state, 'player_claim_lock'):
+        request.app.state.player_claim_lock = asyncio.Lock()
 
-    player = _find_player_record(db, payload.player_id)
-    first_login = False
-    if player is None:
-        player = _persist_player_from_template(db, payload.player_id, template, payload.room_id)
+    lifecycle_messages: list[dict[str, str]] = []
+    if payload.create_player:
+        async with request.app.state.player_claim_lock:
+            try:
+                canonical_player_id = _canonical_first_login_player_id(payload.player_id)
+            except ValueError:
+                raise _legacy_auth_error(
+                    request,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    message_ids=["BADPID", "B4PLA2"],
+                )
+            _ensure_first_login_player_id_available(db, request, canonical_player_id)
+            player = _persist_first_login_player(db, canonical_player_id, template)
         first_login = True
-    elif payload.room_id is not None:
-        player.gamloc = payload.room_id
-        player.pgploc = payload.room_id
+        lifecycle_messages = _first_login_lifecycle_messages(
+            request.app.state.fixture_cache["messages"], player.plyrid
+        )
+    else:
+        player = _find_player_record(db, payload.player_id)
+        first_login = False
+        if player is None:
+            try:
+                compat_player_id = _validated_compat_first_login_player_id(payload.player_id)
+            except ValueError:
+                raise _legacy_auth_error(
+                    request,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    message_ids=["BADPID", "B4PLA2"],
+                )
+            async with request.app.state.player_claim_lock:
+                _ensure_first_login_player_id_available(db, request, compat_player_id)
+                player = _persist_player_from_template(
+                    db, compat_player_id, template, payload.room_id
+                )
+            first_login = True
+        elif payload.room_id is not None:
+            player.gamloc = payload.room_id
+            player.pgploc = payload.room_id
 
-    room_id = payload.room_id if payload.room_id is not None else player.gamloc
+    room_id = player.gamloc
 
     replaced_tokens: list[str] = []
     session_record: models.PlayerSession | None = None
@@ -980,6 +1132,7 @@ async def start_session(
             first_login=first_login,
             resumed=resumed,
             replaced_sessions=len(replaced_tokens),
+            lifecycle_messages=lifecycle_messages,
         ),
     }
     return JSONResponse(content=body, status_code=status_code)
@@ -1427,6 +1580,7 @@ async def _room_occupants_event(
     player_id: str,
     room_id: int,
     messages: models.MessageBundleModel | None,
+    player_flags_by_id: dict[str, int] | None = None,
 ):
     occupants = await presence.players_in_room(room_id)
     others = sorted(occupant for occupant in occupants if occupant != player_id)
@@ -1440,12 +1594,16 @@ async def _room_occupants_event(
         "type": "room_occupants",
         "location": room_id,
         "occupants": others,
+        "occupant_details": [
+            {"player_id": occupant, "flags": int((player_flags_by_id or {}).get(occupant, 0))}
+            for occupant in others
+        ],
         "text": text,
         "message_id": message_id,
     }
 
 
-def _entrance_room_message(player_id: str, room_id: int) -> dict:
+def _entrance_room_message(player_id: str, room_id: int, player_flags: int | None = None) -> dict:
     """Legacy-style entrance broadcast when a player appears in a room.
 
     Mirrors ``entrgp`` in ``KYRUTIL.C`` when a player logs in or is placed into
@@ -1461,6 +1619,7 @@ def _entrance_room_message(player_id: str, room_id: int) -> dict:
         "to": room_id,
         "direction": None,
         "text": f"*** {player_id} has just appeared in a cloud of mists!",
+        "player_flags": player_flags,
         "message_id": None,
         "command_id": None,
     }
@@ -1624,7 +1783,11 @@ def create_app() -> FastAPI:
                 {
                     "type": "room_broadcast",
                     "room": current_room,
-                    "payload": {"event": "player_enter", "player": player_id},
+                    "payload": {
+                        "event": "player_enter",
+                        "player": player_id,
+                        "player_flags": int(player.flags),
+                    },
                 },
             )
             await provider.gateway.broadcast(
@@ -1632,12 +1795,18 @@ def create_app() -> FastAPI:
                 {
                     "type": "room_broadcast",
                     "room": current_room,
-                    "payload": _entrance_room_message(player_id, current_room),
+                    "payload": _entrance_room_message(
+                        player_id, current_room, int(player.flags)
+                    ),
                 },
             )
 
             occupant_event = await _room_occupants_event(
-                provider.presence, player_id, current_room, provider.message_bundles.get("en-US")
+                provider.presence,
+                player_id,
+                current_room,
+                provider.message_bundles.get("en-US"),
+                _active_player_flags(provider.scope.app),
             )
             if occupant_event:
                 await provider.gateway.broadcast(
@@ -1823,7 +1992,11 @@ def create_app() -> FastAPI:
                 }
             )
         occupants_event = await _room_occupants_event(
-            provider.presence, player_id, current_room, state.messages
+            provider.presence,
+            player_id,
+            current_room,
+            state.messages,
+            _active_player_flags(provider.scope.app),
         )
         if location is not None:
             await websocket.send_json(
@@ -1849,7 +2022,11 @@ def create_app() -> FastAPI:
             {
                 "type": "room_broadcast",
                 "room": current_room,
-                "payload": {"event": "player_enter", "player": player_id},
+                "payload": {
+                    "event": "player_enter",
+                    "player": player_id,
+                    "player_flags": int(player_state.flags),
+                },
             },
             sender=websocket,
         )
@@ -1858,7 +2035,7 @@ def create_app() -> FastAPI:
             {
                 "type": "room_broadcast",
                 "room": current_room,
-                "payload": _entrance_room_message(player_id, current_room),
+                "payload": _entrance_room_message(player_id, current_room, int(player_state.flags)),
             },
             sender=websocket,
         )
@@ -2030,10 +2207,13 @@ def create_app() -> FastAPI:
                                 if meta:
                                     envelope["meta"] = meta
                                 excluded_player = event.get("exclude_player")
-                                excluded_sockets = set()
+                                excluded_players = set(event.get("exclude_players") or [])
                                 if excluded_player:
+                                    excluded_players.add(excluded_player)
+                                excluded_sockets = set()
+                                for excluded_player_id in excluded_players:
                                     for token in await provider.presence.sessions_for_player(
-                                        excluded_player
+                                        excluded_player_id
                                     ):
                                         target_socket = session_connections.get(token)
                                         if target_socket:
@@ -2169,7 +2349,11 @@ def create_app() -> FastAPI:
                                     )
 
                                 occupant_event = await _room_occupants_event(
-                                    provider.presence, player_id, current_room, state.messages
+                                    provider.presence,
+                                    player_id,
+                                    current_room,
+                                    state.messages,
+                                    _active_player_flags(provider.scope.app),
                                 )
                                 if occupant_event:
                                     await websocket.send_json(
@@ -2249,7 +2433,11 @@ def create_app() -> FastAPI:
                         db.commit()
                     current_room = target_room
                     occupant_event = await _room_occupants_event(
-                        provider.presence, player_id, current_room, state.messages
+                        provider.presence,
+                        player_id,
+                        current_room,
+                        state.messages,
+                        _active_player_flags(provider.scope.app),
                     )
 
                 if occupant_event:
@@ -2276,10 +2464,13 @@ def create_app() -> FastAPI:
                         if meta:
                             envelope["meta"] = meta
                         excluded_player = event.get("exclude_player")
-                        excluded_sockets = set()
+                        excluded_players = set(event.get("exclude_players") or [])
                         if excluded_player:
+                            excluded_players.add(excluded_player)
+                        excluded_sockets = set()
+                        for excluded_player_id in excluded_players:
                             for token in await provider.presence.sessions_for_player(
-                                excluded_player
+                                excluded_player_id
                             ):
                                 target_socket = session_connections.get(token)
                                 if target_socket:
@@ -2308,10 +2499,13 @@ def create_app() -> FastAPI:
                             if meta:
                                 envelope["meta"] = meta
                             excluded_player = event.get("exclude_player")
-                            excluded_sockets = set()
+                            excluded_players = set(event.get("exclude_players") or [])
                             if excluded_player:
+                                excluded_players.add(excluded_player)
+                            excluded_sockets = set()
+                            for excluded_player_id in excluded_players:
                                 for token in await provider.presence.sessions_for_player(
-                                    excluded_player
+                                    excluded_player_id
                                 ):
                                     target_socket = session_connections.get(token)
                                     if target_socket:
@@ -2355,6 +2549,7 @@ def create_app() -> FastAPI:
                                     target_id,
                                     location,
                                     state.messages,
+                                    _active_player_flags(provider.scope.app),
                                 )
                                 if occupants_event:
                                     occupants_envelope = {
