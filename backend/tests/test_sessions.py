@@ -165,6 +165,80 @@ async def test_explicit_first_login_advances_intro_one_enter_at_a_time():
 
 
 @pytest.mark.anyio
+async def test_explicit_first_login_relogin_preserves_pending_lifecycle():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            create_resp = await client.post(
+                "/auth/session",
+                json={"player_id": "Merlin", "create_player": True},
+            )
+            assert create_resp.status_code == 201
+            session = create_resp.json()["session"]
+            token = session["token"]
+
+            intro_relogin = await client.post(
+                "/auth/session",
+                json={"player_id": "Merlin", "room_id": 12},
+            )
+            assert intro_relogin.status_code == 201
+            intro_session = intro_relogin.json()["session"]
+            assert intro_session["replaced_sessions"] == 1
+            assert intro_session["room_id"] == 0
+            assert intro_session["lifecycle"] == {
+                "state": "first_login_intro",
+                "step": 2,
+            }
+            assert [
+                message["message_id"] for message in intro_session["lifecycle_messages"]
+            ] == ["GOODPD"]
+            assert '"Merlin"' in intro_session["lifecycle_messages"][0]["text"]
+            assert "Merlin" not in await app.state.presence.players_in_room(0)
+
+            replaced_token = intro_session["token"]
+            assert replaced_token != token
+            advance = await client.post(
+                "/auth/session/lifecycle/advance",
+                headers={"Authorization": f"Bearer {replaced_token}"},
+                json={"input": ""},
+            )
+            assert advance.status_code == 200
+            assert [
+                message["message_id"]
+                for message in advance.json()["session"]["lifecycle_messages"]
+            ] == ["INTROA"]
+
+            for _ in range(4):
+                ready = await client.post(
+                    "/auth/session/lifecycle/advance",
+                    headers={"Authorization": f"Bearer {replaced_token}"},
+                    json={"input": ""},
+                )
+                assert ready.status_code == 200
+            ready_session = ready.json()["session"]
+            assert ready_session["lifecycle"] == {
+                "state": "first_login_entry",
+                "step": 6,
+            }
+
+            entry_relogin = await client.post(
+                "/auth/session",
+                json={"player_id": "Merlin", "room_id": 12},
+            )
+            assert entry_relogin.status_code == 201
+            entry_session = entry_relogin.json()["session"]
+            assert entry_session["room_id"] == 0
+            assert entry_session["lifecycle"] == {
+                "state": "first_login_entry",
+                "step": 6,
+            }
+            assert entry_session["lifecycle_messages"] == []
+            assert "Merlin" not in await app.state.presence.players_in_room(0)
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("player_id", ["ab", "toolongname", "merlin7", "bad name"])
 async def test_explicit_first_login_rejects_bad_player_ids_with_legacy_messages(player_id):
     app = create_app()
@@ -357,14 +431,37 @@ async def test_case_variant_login_reuses_existing_player_record():
             assert second.status_code == 201
             second_session = second.json()["session"]
             assert second_session["player_id"] == "Merlin"
-            assert second_session["room_id"] == 7
+            assert second_session["room_id"] == 0
             assert second_session["first_login"] is False
             assert second_session["replaced_sessions"] == 1
+            assert second_session["lifecycle"] == {
+                "state": "first_login_intro",
+                "step": 2,
+            }
 
             old_validation = await client.get(
                 "/auth/session", headers={"Authorization": f"Bearer {first_session['token']}"}
             )
             assert old_validation.status_code == 401
+
+            token = second_session["token"]
+            for _ in range(5):
+                advance = await client.post(
+                    "/auth/session/lifecycle/advance",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"input": ""},
+                )
+                assert advance.status_code == 200
+
+            third = await client.post("/auth/session", json={"player_id": "merlin", "room_id": 7})
+            assert third.status_code == 201
+            third_session = third.json()["session"]
+            assert third_session["player_id"] == "Merlin"
+            assert third_session["room_id"] == 0
+            assert third_session["lifecycle"] == {
+                "state": "first_login_entry",
+                "step": 6,
+            }
 
         db = app.state.session_factory()
         try:

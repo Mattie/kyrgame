@@ -46,6 +46,9 @@ PLAYER_ID_PATTERN = re.compile(r"^[A-Za-z]{3,9}$")
 FIRST_LOGIN_INTRO_STATE = "first_login_intro"
 FIRST_LOGIN_ENTRY_STATE = "first_login_entry"
 FIRST_LOGIN_ENTRY_STEP = 6
+FIRST_LOGIN_PENDING_STATES = frozenset(
+    {FIRST_LOGIN_INTRO_STATE, FIRST_LOGIN_ENTRY_STATE}
+)
 # Legacy kyrand() cases 2-5 emit one intro page per submitted line.
 # See legacy/KYRANDIA.C:276-293 and legacy/Dist/ELWKYRM.MSG:25-28.
 FIRST_LOGIN_INTRO_MESSAGES = {
@@ -934,6 +937,22 @@ def _first_login_lifecycle_messages(
     ]
 
 
+def _current_first_login_lifecycle_messages(
+    messages: models.MessageBundleModel,
+    player_id: str,
+    lifecycle_state: str | None,
+    lifecycle_step: int | None,
+) -> list[dict[str, str]]:
+    if lifecycle_state != FIRST_LOGIN_INTRO_STATE:
+        return []
+    if lifecycle_step == 2:
+        return _first_login_lifecycle_messages(messages, player_id)
+    message_id = FIRST_LOGIN_INTRO_MESSAGES.get((lifecycle_step or 2) - 1)
+    if message_id:
+        return [_intro_lifecycle_message(messages, message_id)]
+    return []
+
+
 def _lifecycle_payload(session_record: models.PlayerSession) -> dict[str, object] | None:
     if not session_record.lifecycle_state:
         return None
@@ -1162,6 +1181,27 @@ async def start_session(
                 request.app.state.session_replacement_lock = asyncio.Lock()
 
             async with request.app.state.session_replacement_lock:
+                active_sessions = repo.list_active(player.id)
+                pending_lifecycle = next(
+                    (
+                        active_session
+                        for active_session in active_sessions
+                        if active_session.lifecycle_state in FIRST_LOGIN_PENDING_STATES
+                    ),
+                    None,
+                )
+                if pending_lifecycle is not None and lifecycle_state is None:
+                    lifecycle_state = pending_lifecycle.lifecycle_state
+                    lifecycle_step = pending_lifecycle.lifecycle_step
+                    room_id = pending_lifecycle.room_id
+                    player.gamloc = room_id
+                    player.pgploc = room_id
+                    lifecycle_messages = _current_first_login_lifecycle_messages(
+                        request.app.state.fixture_cache["messages"],
+                        player.plyrid,
+                        lifecycle_state,
+                        lifecycle_step,
+                    )
                 replaced_tokens = repo.deactivate_all(player.id)
                 token = secrets.token_urlsafe(24)
                 session_record = repo.create_session(
@@ -1187,7 +1227,7 @@ async def start_session(
         # Commit happened inside the lock, now clean up old connections
         await _disconnect_sessions(request.app, replaced_tokens)
 
-    if session_record.lifecycle_state != FIRST_LOGIN_INTRO_STATE:
+    if session_record.lifecycle_state not in FIRST_LOGIN_PENDING_STATES:
         await request.app.state.presence.set_location(player.plyrid, room_id, token)
 
     body = {
