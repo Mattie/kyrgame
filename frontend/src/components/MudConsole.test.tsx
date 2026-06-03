@@ -149,7 +149,7 @@ describe('MudConsole', () => {
       {
         id: 'stream-entry-one',
         type: 'command_response',
-        summary: 'ABCD',
+        summary: '\u001b[32mABCD\u001b[0m',
         payload: null,
       },
       {

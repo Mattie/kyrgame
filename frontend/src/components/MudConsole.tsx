@@ -14,6 +14,7 @@ import {
   useNavigator,
 } from '../context/NavigatorContext'
 import { getConsoleStreamConfig } from '../config/consoleStream'
+import { stripAnsiSgrSequences } from '../utils/ansi'
 import { AnsiText } from './AnsiText'
 import { ModemLineWriter } from './ModemLineWriter'
 import {
@@ -95,7 +96,8 @@ const SCREEN_READER_STREAM_HISTORY_LIMIT = 20
 
 const formatConsoleLineForAnnouncement = (line: ConsoleLine): string =>
   [line.promptSymbol ? 'Command.' : null, line.text, line.payloadText]
-    .filter((part): part is string => Boolean(part && part.trim()))
+    .map((part) => (part ? stripAnsiSgrSequences(part).trim() : ''))
+    .filter((part): part is string => Boolean(part))
     .join(' ')
     .trim()
 

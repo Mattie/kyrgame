@@ -11,7 +11,7 @@ export const DEFAULT_CONSOLE_STREAM_CONFIG = {
   charsPerTick: 500,
 }
 
-const LOCAL_STORAGE_KEY = 'kyr.console.modem'
+const LOCAL_STORAGE_KEY = 'kyrgame.console.modem'
 const MODEM_QUERY_PARAM = 'modem'
 const BAUD_QUERY_PARAM = 'modemBaud'
 const CHARS_PER_TICK_QUERY_PARAM = 'modemCharsPerTick'
@@ -27,8 +27,10 @@ const parseBoolean = (value: string | null): boolean | undefined => {
 const parsePositiveInteger = (value: string | null): number | undefined => {
   if (!value) return undefined
   const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined
-  return Math.floor(parsed)
+  if (!Number.isFinite(parsed)) return undefined
+  const integer = Math.floor(parsed)
+  if (integer <= 0) return undefined
+  return integer
 }
 
 const getWindowSearchParams = () => {

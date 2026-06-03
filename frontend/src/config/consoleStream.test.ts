@@ -39,7 +39,7 @@ describe('getConsoleStreamConfig', () => {
   })
 
   it('falls back to localStorage for enabled state when no query override is provided', async () => {
-    localStorage.setItem('kyr.console.modem', 'off')
+    localStorage.setItem('kyrgame.console.modem', 'off')
     setLocation('http://localhost/?foo=bar')
     const { getConsoleStreamConfig } = await import('./consoleStream')
 
@@ -52,10 +52,22 @@ describe('getConsoleStreamConfig', () => {
   })
 
   it('lets query param modem=off override localStorage on', async () => {
-    localStorage.setItem('kyr.console.modem', 'on')
+    localStorage.setItem('kyrgame.console.modem', 'on')
     setLocation('http://localhost/?modem=off')
     const { getConsoleStreamConfig } = await import('./consoleStream')
 
     expect(getConsoleStreamConfig().enabled).toBe(false)
+  })
+
+  it('ignores speed overrides that floor to zero', async () => {
+    setLocation('http://localhost/?modemBaud=0.5&modemCharsPerTick=0.5')
+    const { getConsoleStreamConfig } = await import('./consoleStream')
+
+    expect(getConsoleStreamConfig()).toEqual({
+      enabled: true,
+      baud: 20000,
+      charsPerSecond: 2000,
+      charsPerTick: 500,
+    })
   })
 })
