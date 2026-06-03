@@ -1,5 +1,7 @@
 import {
+  CSSProperties,
   FormEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -11,7 +13,10 @@ import {
   formatLegacyRoomObjectLines,
   useNavigator,
 } from '../context/NavigatorContext'
+import { getConsoleStreamConfig } from '../config/consoleStream'
+import { stripAnsiSgrSequences } from '../utils/ansi'
 import { AnsiText } from './AnsiText'
+import { ModemLineWriter } from './ModemLineWriter'
 import {
   defaultFireBorderEffectPreset,
   defaultFireBorderInverted,
@@ -71,6 +76,31 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
   s: 'south',
   d: 'east',
 }
+const CONSOLE_BOTTOM_THRESHOLD_PX = 24
+
+type ConsoleLine = {
+  id: string
+  text: string
+  className: string
+  style?: CSSProperties
+  promptSymbol?: boolean
+  payloadText?: string
+}
+
+type ScreenReaderConsoleLine = {
+  id: string
+  text: string
+}
+
+const SCREEN_READER_STREAM_HISTORY_LIMIT = 20
+
+const formatConsoleLineForAnnouncement = (line: ConsoleLine): string =>
+  [line.promptSymbol ? 'Command.' : null, line.text, line.payloadText]
+    .map((part) => (part ? stripAnsiSgrSequences(part).trim() : ''))
+    .filter((part): part is string => Boolean(part))
+    .join(' ')
+    .trim()
+
 const fireTuningControls: Array<{
   key: keyof FireBorderTuning
   label: string
@@ -157,25 +187,66 @@ export const MudConsole = () => {
   const [isVfxPaletteCollapsed, setIsVfxPaletteCollapsed] = useState(false)
   const [burnPresetCopyStatus, setBurnPresetCopyStatus] = useState('')
   const [paletteCopyStatus, setPaletteCopyStatus] = useState('')
+  const [streamConfig] = useState(() => getConsoleStreamConfig())
+  const [streamQueueIds, setStreamQueueIds] = useState<string[]>([])
+  const [completedStreamLineIds, setCompletedStreamLineIds] = useState<Set<string>>(() => new Set())
+  const [screenReaderStreamLines, setScreenReaderStreamLines] = useState<
+    ScreenReaderConsoleLine[]
+  >([])
+  const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false)
   const showVfxTuning =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
   const logRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const isConsoleFollowingRef = useRef(true)
 
   const location = useMemo(() => {
     if (!world || currentRoom === null) return null
     return world.locations.find((loc) => loc.id === currentRoom) ?? null
   }, [currentRoom, world])
 
-  useEffect(() => {
+  const isConsoleNearBottom = useCallback((node: HTMLDivElement) => {
+    return node.scrollHeight - node.scrollTop - node.clientHeight <= CONSOLE_BOTTOM_THRESHOLD_PX
+  }, [])
+
+  const scrollConsoleToBottom = useCallback(() => {
     const node = logRef.current
     if (!node) return
+    isConsoleFollowingRef.current = true
     if (typeof node.scrollTo === 'function') {
       node.scrollTo({ top: node.scrollHeight })
     } else {
       node.scrollTop = node.scrollHeight
     }
-  }, [activity])
+    setHasNewOutputBelow(false)
+  }, [])
+
+  const handleConsoleOutputProgress = useCallback(() => {
+    const node = logRef.current
+    if (!node) return
+    if (isConsoleFollowingRef.current || isConsoleNearBottom(node)) {
+      scrollConsoleToBottom()
+      return
+    }
+    setHasNewOutputBelow(true)
+  }, [isConsoleNearBottom, scrollConsoleToBottom])
+
+  useEffect(() => {
+    const node = logRef.current
+    if (!node) return
+
+    const handleScroll = () => {
+      const isNearBottom = isConsoleNearBottom(node)
+      isConsoleFollowingRef.current = isNearBottom
+      if (isNearBottom) {
+        setHasNewOutputBelow(false)
+      }
+    }
+
+    node.addEventListener('scroll', handleScroll)
+    handleScroll()
+    return () => node.removeEventListener('scroll', handleScroll)
+  }, [isConsoleNearBottom])
 
   useEffect(() => {
     if (!navMode) return
@@ -377,6 +448,175 @@ export const MudConsole = () => {
     [entriesToRender]
   )
 
+  const consoleLines = useMemo<ConsoleLine[]>(() => {
+    const lines: ConsoleLine[] = []
+
+    bannerLines.forEach((line, index) => {
+      lines.push({
+        id: `banner-${index}-${line}`,
+        text: line,
+        className: 'crt-line muted',
+      })
+    })
+
+    visibleEntries.forEach((entry) => {
+      const payloadText = formatPayload(entry.payload)
+      const legacyLines =
+        entry.extraLines ??
+        formatLegacyRoomLines(
+          entry,
+          world,
+          currentRoom,
+          occupants,
+          session?.playerId ?? null
+        )
+
+      const isUserCommand =
+        entry.type === 'command_response' &&
+        typeof entry.payload === 'object' &&
+        entry.payload !== null &&
+        'verb' in entry.payload &&
+        !('event' in entry.payload)
+
+      const isUnimplemented =
+        entry.type === 'command_response' &&
+        typeof entry.payload === 'object' &&
+        entry.payload !== null &&
+        'event' in entry.payload &&
+        entry.payload.event === 'unimplemented'
+
+      lines.push({
+        id: entry.id,
+        text: entry.summary,
+        className: `crt-line ${entry.type}`,
+        style: isUnimplemented ? { fontStyle: 'italic' } : undefined,
+        promptSymbol: isUserCommand,
+        payloadText: payloadText ?? undefined,
+      })
+
+      legacyLines?.forEach((line, lineIndex) => {
+        lines.push({
+          id: `${entry.id}-extra-${lineIndex}`,
+          text: line,
+          className: `crt-line ${entry.type} detail`,
+        })
+      })
+    })
+
+    return lines
+  }, [bannerLines, currentRoom, occupants, session?.playerId, visibleEntries, world])
+
+  const consoleLineIds = useMemo(() => consoleLines.map((line) => line.id), [consoleLines])
+
+  useEffect(() => {
+    const currentLineIds = new Set(consoleLineIds)
+
+    setStreamQueueIds((current) => {
+      const previousQueueIds = new Set(current)
+      const next = current.filter((id) => currentLineIds.has(id))
+      const nextQueueIds = new Set(next)
+
+      consoleLineIds.forEach((id) => {
+        if (!previousQueueIds.has(id) && !nextQueueIds.has(id)) {
+          next.push(id)
+          nextQueueIds.add(id)
+        }
+      })
+
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current
+      }
+      return next
+    })
+
+    setCompletedStreamLineIds((current) => {
+      let changed = false
+      const next = new Set<string>()
+      current.forEach((id) => {
+        if (currentLineIds.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      })
+      return changed ? next : current
+    })
+  }, [consoleLineIds])
+
+  const activeStreamLineId = useMemo(
+    () => streamQueueIds.find((id) => !completedStreamLineIds.has(id)) ?? null,
+    [completedStreamLineIds, streamQueueIds]
+  )
+
+  const handleLineDone = (lineId: string) => {
+    const completedLine = consoleLines.find((line) => line.id === lineId)
+
+    setCompletedStreamLineIds((current) => {
+      if (current.has(lineId)) return current
+      const next = new Set(current)
+      next.add(lineId)
+      return next
+    })
+
+    if (!streamConfig.enabled || !completedLine) return
+
+    const announcement = formatConsoleLineForAnnouncement(completedLine)
+    if (!announcement) return
+
+    setScreenReaderStreamLines((current) => {
+      if (current.some((line) => line.id === lineId)) return current
+      return [...current, { id: lineId, text: announcement }].slice(
+        -SCREEN_READER_STREAM_HISTORY_LIMIT
+      )
+    })
+  }
+
+  useEffect(() => {
+    handleConsoleOutputProgress()
+  }, [activeStreamLineId, consoleLines, handleConsoleOutputProgress])
+
+  const renderLine = (line: ConsoleLine) => {
+    const isStreamComplete = completedStreamLineIds.has(line.id)
+
+    if (!streamConfig.enabled || isStreamComplete) {
+      return (
+        <p key={line.id} className={line.className} style={line.style}>
+          {line.promptSymbol ? (
+            <span className="prompt-symbol" aria-hidden>
+              &gt;
+            </span>
+          ) : null}
+          <AnsiText text={line.text} playerVisuals={playerVisuals} />
+          {line.payloadText && <span className="payload-inline">{line.payloadText}</span>}
+        </p>
+      )
+    }
+
+    if (line.id === activeStreamLineId) {
+      return (
+        <p key={line.id} className={line.className} style={line.style}>
+          {line.promptSymbol ? (
+            <span className="prompt-symbol" aria-hidden>
+              &gt;
+            </span>
+          ) : null}
+          <ModemLineWriter
+            text={line.text}
+            enabled
+            charsPerSecond={streamConfig.charsPerSecond}
+            charsPerTick={streamConfig.charsPerTick}
+            onProgress={handleConsoleOutputProgress}
+            onDone={() => handleLineDone(line.id)}
+            playerVisuals={playerVisuals}
+          />
+          {line.payloadText && <span className="payload-inline">{line.payloadText}</span>}
+        </p>
+      )
+    }
+
+    return null
+  }
+
   return (
     <section className="mud-shell">
       <GamePanelFireBorder
@@ -404,64 +644,36 @@ export const MudConsole = () => {
             </div>
           </header>
 
-          <div className="crt" ref={logRef} aria-live="polite">
+          <div className="crt" ref={logRef} aria-live={streamConfig.enabled ? 'off' : 'polite'}>
             <div className="crt-glow" />
             <div className="crt-lines">
-              {bannerLines.map((line, index) => (
-                <p key={line + index} className="crt-line muted">
-                  <AnsiText text={line} playerVisuals={playerVisuals} />
-                </p>
-              ))}
-              {visibleEntries.map((entry) => {
-                const payloadText = formatPayload(entry.payload)
-                const legacyLines =
-                  entry.extraLines ??
-                  formatLegacyRoomLines(
-                    entry,
-                    world,
-                    currentRoom,
-                    occupants,
-                    session?.playerId ?? null
-                  )
-
-                const isUserCommand =
-                  entry.type === 'command_response' &&
-                  typeof entry.payload === 'object' &&
-                  entry.payload !== null &&
-                  'verb' in entry.payload &&
-                  !('event' in entry.payload)
-
-                const isUnimplemented =
-                  entry.type === 'command_response' &&
-                  typeof entry.payload === 'object' &&
-                  entry.payload !== null &&
-                  'event' in entry.payload &&
-                  entry.payload.event === 'unimplemented'
-
-                return (
-                  <div key={entry.id} className="crt-entry">
-                    <p
-                      className={`crt-line ${entry.type}`}
-                      style={isUnimplemented ? { fontStyle: 'italic' } : undefined}
-                    >
-                      {isUserCommand && (
-                        <span className="prompt-symbol" aria-hidden>
-                          &gt;
-                        </span>
-                      )}
-                      <AnsiText text={entry.summary} playerVisuals={playerVisuals} />
-                      {payloadText && <span className="payload-inline">{payloadText}</span>}
-                    </p>
-                    {legacyLines?.map((line, index) => (
-                      <p key={`${entry.id}-extra-${index}`} className={`crt-line ${entry.type} detail`}>
-                        <AnsiText text={line} playerVisuals={playerVisuals} />
-                      </p>
-                    ))}
-                  </div>
-                )
-              })}
+              {consoleLines.map((line) => renderLine(line))}
             </div>
+            {hasNewOutputBelow && (
+              <button
+                type="button"
+                className="crt-new-output"
+                aria-label="Scroll to latest console output"
+                onClick={scrollConsoleToBottom}
+              >
+                <span aria-hidden>v</span>
+                New output below
+              </button>
+            )}
           </div>
+
+          {streamConfig.enabled && (
+            <div
+              className="sr-only"
+              aria-live="polite"
+              aria-atomic="false"
+              data-testid="console-stream-announcements"
+            >
+              {screenReaderStreamLines.map((line) => (
+                <p key={line.id}>{line.text}</p>
+              ))}
+            </div>
+          )}
 
           <form className="prompt-row" onSubmit={handleSubmit}>
             <button

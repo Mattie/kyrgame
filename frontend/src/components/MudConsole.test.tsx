@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 
 import { MudConsole } from './MudConsole'
@@ -64,10 +64,47 @@ const getConsoleLineContaining = (...textParts: string[]) =>
     )
   )
 
+const setConsoleScrollMetrics = (
+  element: HTMLElement,
+  metrics: { clientHeight: number; scrollHeight: number; scrollTop: number }
+) => {
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: metrics.clientHeight,
+  })
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: metrics.scrollHeight,
+  })
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    writable: true,
+    value: metrics.scrollTop,
+  })
+}
+
+const installConsoleScrollTo = (element: HTMLElement) => {
+  const scrollTo = vi.fn((options?: ScrollToOptions) => {
+    if (!options || typeof options !== 'object') return
+    Object.defineProperty(element, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: Number(options.top ?? 0),
+    })
+  })
+  Object.defineProperty(element, 'scrollTo', {
+    configurable: true,
+    writable: true,
+    value: scrollTo,
+  })
+  return scrollTo
+}
+
 describe('MudConsole', () => {
   beforeEach(() => {
     mockSendCommand.mockReset()
     mockSendMove.mockReset()
+    localStorage.clear()
     navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
     navigatorState.world = {
       locations: [{ id: 0, brfdes: 'A dark forest surrounds you in all directions.' }],
@@ -95,7 +132,203 @@ describe('MudConsole', () => {
         },
       },
     ]
-    window.history.replaceState(null, '', '/')
+    window.history.replaceState(null, '', '/?modem=off')
+  })
+
+  it('streams one console line at a time when modem mode is enabled', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'stream-entry-one',
+        type: 'command_response',
+        summary: '\u001b[32mABCD\u001b[0m',
+        payload: null,
+      },
+      {
+        id: 'stream-entry-two',
+        type: 'command_response',
+        summary: 'WXYZ',
+        payload: null,
+      },
+    ]
+
+    const { container } = render(<MudConsole />)
+    const streamAnnouncements = screen.getByTestId('console-stream-announcements')
+    const announcedLines = () =>
+      Array.from(streamAnnouncements.querySelectorAll('p')).map((line) => line.textContent)
+
+    expect(container.querySelector('.crt')).toHaveAttribute('aria-live', 'off')
+    expect(streamAnnouncements).toHaveAttribute('aria-live', 'polite')
+    expect(announcedLines()).toEqual([])
+    expect(screen.queryByText('Connect to begin exploring the world of Kyrandia.')).toBeNull()
+    expect(screen.queryByText('ABCD')).toBeNull()
+    expect(screen.queryByText('WXYZ')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(
+      screen.getAllByText('Connect to begin exploring the world of Kyrandia.').length
+    ).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual(['Connect to begin exploring the world of Kyrandia.'])
+    expect(screen.queryByText('ABCD')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(screen.getAllByText('ABCD').length).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual([
+      'Connect to begin exploring the world of Kyrandia.',
+      'ABCD',
+    ])
+    expect(screen.queryByText('WXYZ')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(screen.getAllByText('WXYZ').length).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual([
+      'Connect to begin exploring the world of Kyrandia.',
+      'ABCD',
+      'WXYZ',
+    ])
+
+    vi.useRealTimers()
+  })
+
+  it('continues the active stream line when new prefix lines appear', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'stream-entry-one',
+        type: 'command_response',
+        summary: 'ABCD',
+        payload: null,
+      },
+    ]
+
+    const { rerender } = render(<MudConsole />)
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(
+      screen.getAllByText('Connect to begin exploring the world of Kyrandia.').length
+    ).toBeGreaterThan(0)
+    expect(screen.queryByText('ABCD')).toBeNull()
+
+    navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
+    navigatorState.world = {
+      locations: [{ id: 0, brfdes: 'A dark forest surrounds you in all directions.' }],
+      objects: [],
+      commands: [],
+      messages: {},
+    }
+    navigatorState.currentRoom = 0
+    rerender(<MudConsole />)
+
+    act(() => vi.advanceTimersByTime(100))
+
+    expect(screen.getAllByText('ABCD').length).toBeGreaterThan(0)
+    expect(() => getConsoleLine('A dark forest surrounds you in all directions.')).toThrow()
+
+    vi.useRealTimers()
+  })
+
+  it('keeps the console pinned to the bottom while modem text streams', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'stream-scroll-entry',
+        type: 'command_response',
+        summary: 'ABCD',
+        payload: null,
+      },
+    ]
+
+    const { container } = render(<MudConsole />)
+    const consoleElement = container.querySelector<HTMLElement>('.crt') as HTMLElement
+    const scrollTo = installConsoleScrollTo(consoleElement)
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 300,
+      scrollTop: 200,
+    })
+    fireEvent.scroll(consoleElement)
+
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 340,
+      scrollTop: 200,
+    })
+    act(() => vi.advanceTimersByTime(100))
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 340 })
+    expect(screen.queryByRole('button', { name: /scroll to latest console output/i })).toBeNull()
+
+    vi.useRealTimers()
+  })
+
+  it('shows a latest-output control instead of scrolling when reading older output', () => {
+    navigatorState.activity = [
+      {
+        id: 'scroll-lock-entry-one',
+        type: 'command_response',
+        summary: 'Earlier line.',
+        payload: null,
+      },
+    ]
+
+    const { container, rerender } = render(<MudConsole />)
+    const consoleElement = container.querySelector<HTMLElement>('.crt') as HTMLElement
+    const scrollTo = installConsoleScrollTo(consoleElement)
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 300,
+      scrollTop: 80,
+    })
+    fireEvent.scroll(consoleElement)
+
+    navigatorState.activity = [
+      ...navigatorState.activity,
+      {
+        id: 'scroll-lock-entry-two',
+        type: 'command_response',
+        summary: 'Newer line.',
+        payload: null,
+      },
+    ]
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 420,
+      scrollTop: 80,
+    })
+    rerender(<MudConsole />)
+
+    expect(scrollTo).not.toHaveBeenCalled()
+    const latestOutput = screen.getByRole('button', { name: /scroll to latest console output/i })
+    expect(latestOutput).toBeInTheDocument()
+
+    fireEvent.click(latestOutput)
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 420 })
+    expect(screen.queryByRole('button', { name: /scroll to latest console output/i })).toBeNull()
   })
 
   it('does not render debug payload JSON in the MUD console', () => {
