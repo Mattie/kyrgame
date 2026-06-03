@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 
 import { MudConsole } from './MudConsole'
 
 const mockSendCommand = vi.fn()
 const mockSendMove = vi.fn()
+const mockAdvanceLifecycle = vi.fn()
 const navigatorState: any = {
   apiBaseUrl: 'http://example.test',
   session: { token: 'token', playerId: 'Hero', roomId: 0 },
@@ -39,6 +40,7 @@ const navigatorState: any = {
   adminToken: null,
   setAdminToken: vi.fn(),
   applyAdminUpdate: vi.fn(),
+  advanceLifecycle: mockAdvanceLifecycle,
   sendMove: mockSendMove,
   sendCommand: mockSendCommand,
 }
@@ -64,10 +66,48 @@ const getConsoleLineContaining = (...textParts: string[]) =>
     )
   )
 
+const setConsoleScrollMetrics = (
+  element: HTMLElement,
+  metrics: { clientHeight: number; scrollHeight: number; scrollTop: number }
+) => {
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: metrics.clientHeight,
+  })
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: metrics.scrollHeight,
+  })
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    writable: true,
+    value: metrics.scrollTop,
+  })
+}
+
+const installConsoleScrollTo = (element: HTMLElement) => {
+  const scrollTo = vi.fn((options?: ScrollToOptions) => {
+    if (!options || typeof options !== 'object') return
+    Object.defineProperty(element, 'scrollTop', {
+      configurable: true,
+      writable: true,
+      value: Number(options.top ?? 0),
+    })
+  })
+  Object.defineProperty(element, 'scrollTo', {
+    configurable: true,
+    writable: true,
+    value: scrollTo,
+  })
+  return scrollTo
+}
+
 describe('MudConsole', () => {
   beforeEach(() => {
     mockSendCommand.mockReset()
     mockSendMove.mockReset()
+    mockAdvanceLifecycle.mockReset()
+    localStorage.clear()
     navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
     navigatorState.world = {
       locations: [{ id: 0, brfdes: 'A dark forest surrounds you in all directions.' }],
@@ -95,7 +135,256 @@ describe('MudConsole', () => {
         },
       },
     ]
-    window.history.replaceState(null, '', '/')
+    window.history.replaceState(null, '', '/?modem=off')
+  })
+
+  it('keeps the MUD header compact for terminal rows', () => {
+    const { container } = render(<MudConsole />)
+
+    const header = container.querySelector<HTMLElement>('.mud-header')
+    expect(header).toBeInTheDocument()
+    expect(header?.querySelector('.eyebrow')).toBeNull()
+    expect(header?.querySelector('h2')).toBeNull()
+    expect(screen.queryByText('Kyrandia Line Interface')).toBeNull()
+    expect(header).toHaveTextContent('Player Hero')
+    expect(header).toHaveTextContent('connected')
+  })
+
+  it('renders text instantly when modem stream is disabled', () => {
+    window.history.replaceState(null, '', '/?modem=off')
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+    navigatorState.activity = [
+      {
+        id: 'stream-off-entry',
+        type: 'command_response',
+        summary: 'This line should appear immediately.',
+        payload: null,
+      },
+    ]
+
+    render(<MudConsole />)
+
+    expect(screen.getByText('This line should appear immediately.')).toBeInTheDocument()
+  })
+
+  it('streams one console line at a time when modem mode is enabled', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(null, '', '/?modem=on&modemBaud=100&modemCharsPerTick=2')
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+    navigatorState.activity = [
+      {
+        id: 'stream-entry-one',
+        type: 'command_response',
+        summary: 'ABCD',
+        payload: null,
+      },
+      {
+        id: 'stream-entry-two',
+        type: 'command_response',
+        summary: 'WXYZ',
+        payload: null,
+      },
+    ]
+
+    render(<MudConsole />)
+
+    expect(screen.queryByText('AB')).toBeNull()
+    expect(screen.queryByText('ABCD')).toBeNull()
+    expect(screen.queryByText('WX')).toBeNull()
+    expect(screen.queryByText('WXYZ')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.getByText('AB')).toBeInTheDocument()
+    expect(screen.queryByText('ABCD')).toBeNull()
+    expect(screen.queryByText('WXYZ')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.getByText('ABCD')).toBeInTheDocument()
+    expect(screen.queryByText('WX')).toBeNull()
+    expect(screen.queryByText('WXYZ')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.getByText('WX')).toBeInTheDocument()
+    expect(screen.queryByText('WXYZ')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(200))
+    expect(screen.getByText('WXYZ')).toBeInTheDocument()
+
+    vi.useRealTimers()
+  })
+
+  it('keeps the console pinned to the bottom while modem text streams', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(null, '', '/?modem=on&modemBaud=100&modemCharsPerTick=2')
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+    navigatorState.activity = [
+      {
+        id: 'stream-scroll-entry',
+        type: 'command_response',
+        summary: 'ABCD',
+        payload: null,
+      },
+    ]
+
+    const { container } = render(<MudConsole />)
+    const consoleElement = container.querySelector<HTMLElement>('.crt') as HTMLElement
+    const scrollTo = installConsoleScrollTo(consoleElement)
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 300,
+      scrollTop: 200,
+    })
+    fireEvent.scroll(consoleElement)
+
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 340,
+      scrollTop: 200,
+    })
+    act(() => vi.advanceTimersByTime(200))
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 340 })
+    expect(screen.queryByRole('button', { name: /scroll to latest console output/i })).toBeNull()
+
+    vi.useRealTimers()
+  })
+
+  it('shows a latest-output control instead of scrolling when the user is reading older output', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+    navigatorState.activity = [
+      {
+        id: 'scroll-lock-entry-one',
+        type: 'command_response',
+        summary: 'Earlier line.',
+        payload: null,
+      },
+    ]
+
+    const { container, rerender } = render(<MudConsole />)
+    const consoleElement = container.querySelector<HTMLElement>('.crt') as HTMLElement
+    const scrollTo = installConsoleScrollTo(consoleElement)
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 300,
+      scrollTop: 80,
+    })
+    fireEvent.scroll(consoleElement)
+
+    navigatorState.activity = [
+      ...navigatorState.activity,
+      {
+        id: 'scroll-lock-entry-two',
+        type: 'command_response',
+        summary: 'Newer line.',
+        payload: null,
+      },
+    ]
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 420,
+      scrollTop: 80,
+    })
+    rerender(<MudConsole />)
+
+    expect(scrollTo).not.toHaveBeenCalled()
+    const latestOutput = screen.getByRole('button', { name: /scroll to latest console output/i })
+    expect(latestOutput).toBeInTheDocument()
+
+    fireEvent.click(latestOutput)
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 420 })
+    expect(screen.queryByRole('button', { name: /scroll to latest console output/i })).toBeNull()
+  })
+
+  it('uses blank ENTER to advance first-login lifecycle pages', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+    expect(screen.queryByText('A dark forest surrounds you in all directions.')).toBeNull()
+    expect(screen.queryByText('Player Hero connected.')).toBeNull()
+  })
+
+  it('uses standalone ENTER to advance first-login lifecycle pages', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+
+    render(<MudConsole />)
+
+    fireEvent.keyDown(window, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
+  it('consumes typed commands as lifecycle advancement before room entry', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
+  it('uses prompt ENTER to submit typed lifecycle input without a normal command', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
+    expect(mockSendCommand).not.toHaveBeenCalled()
   })
 
   it('does not render debug payload JSON in the MUD console', () => {

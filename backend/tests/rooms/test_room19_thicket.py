@@ -70,12 +70,12 @@ async def test_walk_thicket_surfaces_pain_even_without_inventory(engine, player,
     await engine.handle_command(player.plyrid, 19, command="walk", args=["thicket"])
     await asyncio.sleep(0.01)
 
-    room_texts = [
+    target_texts = [
         event.get("text")
         for event in engine.pending_events
-        if event.get("scope") == "room"
+        if event.get("scope") == "target"
     ]
-    assert any("...Ouch" in text for text in room_texts)
+    assert any("...Ouch" in text for text in target_texts)
 
 
 @pytest.mark.anyio

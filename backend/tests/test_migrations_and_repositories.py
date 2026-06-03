@@ -83,6 +83,12 @@ def test_player_and_content_column_lengths_match_existing_contracts(migrated_eng
     assert player_columns["attnam"]["type"].length == 30
     assert player_columns["spouse"]["type"].length == 14
 
+    session_columns = {
+        column["name"]: column for column in inspector.get_columns("player_sessions")
+    }
+    assert session_columns["lifecycle_state"]["type"].length == 32
+    assert session_columns["lifecycle_step"]["type"].python_type is int
+
 
 def test_inventory_repository_upserts_by_slot(seeded_session):
     player_id = seeded_session.scalar(select(models.Player.id))

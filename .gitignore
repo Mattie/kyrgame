@@ -497,4 +497,7 @@ env/
 /local-examples/
 /screenshots/
 
+# Local scratch notes
+/TODO_local.md
+
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c,c++

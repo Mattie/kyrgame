@@ -89,8 +89,12 @@ async def test_explicit_first_login_claim_returns_legacy_intro_messages_and_init
             assert created["player_flags"] == int(constants.PlayerFlag.LOADED)
             assert [
                 message["message_id"] for message in created["lifecycle_messages"]
-            ] == ["GOODPD", "INTROA", "INTROB", "INTROC", "INTROD"]
+            ] == ["GOODPD"]
             assert '"Merlin"' in created["lifecycle_messages"][0]["text"]
+            assert created["lifecycle"] == {
+                "state": "first_login_intro",
+                "step": 2,
+            }
 
         db = app.state.session_factory()
         try:
@@ -110,6 +114,54 @@ async def test_explicit_first_login_claim_returns_legacy_intro_messages_and_init
             assert player.flags == int(constants.PlayerFlag.LOADED)
         finally:
             db.close()
+
+
+@pytest.mark.anyio
+async def test_explicit_first_login_advances_intro_one_enter_at_a_time():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            create_resp = await client.post(
+                "/auth/session",
+                json={"player_id": "mERLin", "create_player": True},
+            )
+            assert create_resp.status_code == 201
+            session = create_resp.json()["session"]
+            token = session["token"]
+
+            expected_pages = [
+                ("INTROA", {"state": "first_login_intro", "step": 3}),
+                ("INTROB", {"state": "first_login_intro", "step": 4}),
+                ("INTROC", {"state": "first_login_intro", "step": 5}),
+                ("INTROD", {"state": "first_login_intro", "step": 6}),
+            ]
+            for message_id, lifecycle in expected_pages:
+                advance = await client.post(
+                    "/auth/session/lifecycle/advance",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={"input": ""},
+                )
+                assert advance.status_code == 200
+                advanced = advance.json()["session"]
+                assert [
+                    message["message_id"] for message in advanced["lifecycle_messages"]
+                ] == [message_id]
+                assert advanced["lifecycle"] == lifecycle
+
+            ready = await client.post(
+                "/auth/session/lifecycle/advance",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"input": ""},
+            )
+            assert ready.status_code == 200
+            ready_session = ready.json()["session"]
+            assert ready_session["lifecycle_messages"] == []
+            assert ready_session["lifecycle"] == {
+                "state": "first_login_entry",
+                "step": 6,
+            }
 
 
 @pytest.mark.anyio
@@ -388,6 +440,77 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_explicit_first_login_blocks_room_socket_until_intro_finishes_and_enters_in_flash():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            witness_resp = await client.post(
+                "/auth/session", json={"player_id": "seer", "room_id": 0}
+            )
+            witness_session = witness_resp.json()["session"]
+            witness_uri = (
+                f"ws://{host}:{port}/ws/rooms/0?token={witness_session['token']}"
+            )
+
+            async with websockets.connect(witness_uri) as witness_ws:
+                await _receive_initial_room_payloads(witness_ws)
+
+                create_resp = await client.post(
+                    "/auth/session",
+                    json={"player_id": "Merlin", "create_player": True},
+                )
+                session_data = create_resp.json()["session"]
+                token = session_data["token"]
+                gated_uri = f"ws://{host}:{port}/ws/rooms/0?token={token}"
+
+                with pytest.raises(websockets.InvalidStatusCode):
+                    async with websockets.connect(gated_uri):
+                        pass
+
+                for _ in range(5):
+                    advance = await client.post(
+                        "/auth/session/lifecycle/advance",
+                        headers={"Authorization": f"Bearer {token}"},
+                        json={"input": ""},
+                    )
+                    assert advance.status_code == 200
+
+                async with websockets.connect(gated_uri) as player_ws:
+                    welcome = json.loads(await asyncio.wait_for(player_ws.recv(), timeout=1))
+                    assert welcome["type"] == "room_welcome"
+
+                    seen_flash = False
+                    for _ in range(4):
+                        message = json.loads(await asyncio.wait_for(witness_ws.recv(), timeout=1))
+                        payload = message.get("payload", {})
+                        if (
+                            message.get("type") == "room_broadcast"
+                            and payload.get("event") == "room_message"
+                            and "appeared in a flash" in payload.get("text", "")
+                        ):
+                            seen_flash = True
+                            break
+                    assert seen_flash
+
+                validate = await client.get(
+                    "/auth/session", headers={"Authorization": f"Bearer {token}"}
+                )
+                assert validate.json()["session"]["lifecycle"] is None
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio

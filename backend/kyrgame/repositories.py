@@ -15,13 +15,21 @@ class PlayerSessionRepository:
         self.session = session
 
     def create_session(
-        self, player_id: int, session_token: str, room_id: int, expiration_hours: int = DEFAULT_SESSION_EXPIRATION_HOURS
+        self,
+        player_id: int,
+        session_token: str,
+        room_id: int,
+        expiration_hours: int = DEFAULT_SESSION_EXPIRATION_HOURS,
+        lifecycle_state: str | None = None,
+        lifecycle_step: int | None = None,
     ):
         now = datetime.now(timezone.utc)
         player_session = models.PlayerSession(
             player_id=player_id,
             session_token=session_token,
             room_id=room_id,
+            lifecycle_state=lifecycle_state,
+            lifecycle_step=lifecycle_step,
             last_seen=now,
             expires_at=now + timedelta(hours=expiration_hours),
         )
@@ -91,6 +99,18 @@ class PlayerSessionRepository:
         player_session = self.get_by_token(session_token, active_only=False)
         if player_session:
             player_session.room_id = room_id
+        return player_session
+
+    def set_lifecycle(
+        self,
+        session_token: str,
+        lifecycle_state: str | None,
+        lifecycle_step: int | None,
+    ):
+        player_session = self.get_by_token(session_token, active_only=False)
+        if player_session:
+            player_session.lifecycle_state = lifecycle_state
+            player_session.lifecycle_step = lifecycle_step
         return player_session
 
 

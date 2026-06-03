@@ -167,6 +167,61 @@ describe('Navigator flow', () => {
     vi.restoreAllMocks()
     MockWebSocket.instances.length = 0
     localStorage.clear()
+    window.history.replaceState(null, '', '/?modem=off')
+  })
+
+  it('starts with mobile controls drawer open before login', () => {
+    render(<App />)
+
+    expect(screen.getByRole('main')).toHaveClass('controls-open')
+    const toggle = screen.getByRole('button', { name: /hide controls/i })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('complementary', { name: /session and admin controls/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+  })
+
+  it('closes the mobile controls drawer after login and can reopen it', async () => {
+    let responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(() => {
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances.length).toBe(1))
+    await waitFor(() => expect(screen.getByRole('main')).toHaveClass('controls-closed'))
+    const toggle = screen.getByRole('button', { name: /show controls/i })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(toggle)
+
+    expect(screen.getByRole('main')).toHaveClass('controls-open')
+    expect(screen.getByRole('button', { name: /hide controls/i })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
   })
 
   it('creates a session, caches world data, and streams room activity', async () => {
@@ -264,7 +319,7 @@ describe('Navigator flow', () => {
     ).toBeGreaterThan(0)
   })
 
-  it('claims a new Player-ID and renders legacy intro lifecycle messages', async () => {
+  it('claims a new Player-ID and advances legacy intro lifecycle messages with ENTER', async () => {
     const firstLoginMessages = {
       ...messages,
       GETALS:
@@ -276,6 +331,29 @@ describe('Navigator flow', () => {
       INTROC: 'Spells are magic cast by players.\r\n\r\nPress ENTER to continue',
       INTROD: 'Enjoy the magic, mystery, and mirth of Kyrandia, Fantasy World of Legends!',
     }
+    const lifecyclePages = [
+      {
+        lifecycle: { state: 'first_login_intro', step: 3 },
+        lifecycle_messages: [{ message_id: 'INTROA', text: firstLoginMessages.INTROA }],
+      },
+      {
+        lifecycle: { state: 'first_login_intro', step: 4 },
+        lifecycle_messages: [{ message_id: 'INTROB', text: firstLoginMessages.INTROB }],
+      },
+      {
+        lifecycle: { state: 'first_login_intro', step: 5 },
+        lifecycle_messages: [{ message_id: 'INTROC', text: firstLoginMessages.INTROC }],
+      },
+      {
+        lifecycle: { state: 'first_login_intro', step: 6 },
+        lifecycle_messages: [{ message_id: 'INTROD', text: firstLoginMessages.INTROD }],
+      },
+      {
+        lifecycle: { state: 'first_login_entry', step: 6 },
+        lifecycle_messages: [],
+      },
+    ]
+    let advanceIndex = 0
     const roomZeroLocations = [
       {
         id: 0,
@@ -291,6 +369,24 @@ describe('Navigator flow', () => {
     ]
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input) => {
       const url = String(input)
+      if (url.includes('/auth/session/lifecycle/advance')) {
+        const page = lifecyclePages[advanceIndex++]
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'advanced',
+            session: {
+              token: 'new-player-token',
+              player_id: 'Merlin',
+              room_id: 0,
+              first_login: true,
+              player_flags: 1,
+              lifecycle: page.lifecycle,
+              lifecycle_messages: page.lifecycle_messages,
+            },
+          }),
+        } as unknown as Response)
+      }
       if (url.includes('/auth/session')) {
         return Promise.resolve({
           ok: true,
@@ -302,12 +398,9 @@ describe('Navigator flow', () => {
               room_id: 0,
               first_login: true,
               player_flags: 1,
+              lifecycle: { state: 'first_login_intro', step: 2 },
               lifecycle_messages: [
                 { message_id: 'GOODPD', text: firstLoginMessages.GOODPD },
-                { message_id: 'INTROA', text: firstLoginMessages.INTROA },
-                { message_id: 'INTROB', text: firstLoginMessages.INTROB },
-                { message_id: 'INTROC', text: firstLoginMessages.INTROC },
-                { message_id: 'INTROD', text: firstLoginMessages.INTROD },
               ],
             },
           }),
@@ -354,8 +447,7 @@ describe('Navigator flow', () => {
       player_id: 'Merlin',
       create_player: true,
     })
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    expect(socket.url).toContain('/rooms/0?token=new-player-token')
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(0))
     expect(
       screen.getByText((_, element) =>
         Boolean(
@@ -365,22 +457,72 @@ describe('Navigator flow', () => {
         )
       )
     ).toBeInTheDocument()
+    expect(screen.queryByText(/at the edge of Kyrandia/i)).not.toBeInTheDocument()
     expect(
-      screen.getByText((_, element) =>
+      screen.queryByText((_, element) =>
         Boolean(
           element?.classList.contains('crt-line') &&
-            element.textContent?.includes('Welcome, brave and adventurous one')
+            element.textContent?.includes('Player') &&
+            element.textContent?.includes('Merlin connected.')
         )
       )
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText((_, element) =>
-        Boolean(
-          element?.classList.contains('crt-line') &&
-            element.textContent?.includes('Enjoy the magic, mystery, and mirth')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Welcome, brave and adventurous one/i)).not.toBeInTheDocument()
+
+    const commandInput = screen.getByLabelText(/command input/i)
+    fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
+    await waitFor(() => {
+      expect(
+        screen.getByText((_, element) =>
+          Boolean(
+            element?.classList.contains('crt-line') &&
+              element.textContent?.includes('Welcome, brave and adventurous one')
+          )
         )
-      )
-    ).toBeInTheDocument()
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/Here is how to play/i)).not.toBeInTheDocument()
+
+    fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
+    await waitFor(() => {
+      expect(
+        screen.getByText((_, element) =>
+          Boolean(
+            element?.classList.contains('crt-line') &&
+              element.textContent?.includes('Here is how to play')
+          )
+        )
+      ).toBeInTheDocument()
+    })
+
+    fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
+    await waitFor(() => {
+      expect(
+        screen.getByText((_, element) =>
+          Boolean(
+            element?.classList.contains('crt-line') &&
+              element.textContent?.includes('Spells are magic cast by players')
+          )
+        )
+      ).toBeInTheDocument()
+    })
+
+    fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
+    await waitFor(() => {
+      expect(
+        screen.getByText((_, element) =>
+          Boolean(
+            element?.classList.contains('crt-line') &&
+              element.textContent?.includes('Enjoy the magic, mystery, and mirth')
+          )
+        )
+      ).toBeInTheDocument()
+    })
+
+    fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    const socket = MockWebSocket.instances[0]
+    expect(socket.url).toContain('/rooms/0?token=new-player-token')
     expect(
       screen.getByText((_, element) =>
         Boolean(

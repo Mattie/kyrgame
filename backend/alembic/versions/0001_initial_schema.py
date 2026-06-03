@@ -110,6 +110,8 @@ def upgrade():
         sa.Column("session_token", sa.String(length=128), nullable=False),
         sa.Column("room_id", sa.Integer(), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("lifecycle_state", sa.String(length=32), nullable=True),
+        sa.Column("lifecycle_step", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("last_seen", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), server_default=sa.text("datetime('now', '+1 day')"), nullable=False),

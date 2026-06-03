@@ -43,6 +43,17 @@ GAME_VERSION = "7.20"
 # NPC/object namespace now that the browser decorates those names inline.
 RESERVED_PLAYER_IDS = frozenset({"sysop", "zar", "dragon", "dryad", "elf", "brownie"})
 PLAYER_ID_PATTERN = re.compile(r"^[A-Za-z]{3,9}$")
+FIRST_LOGIN_INTRO_STATE = "first_login_intro"
+FIRST_LOGIN_ENTRY_STATE = "first_login_entry"
+FIRST_LOGIN_ENTRY_STEP = 6
+# Legacy kyrand() cases 2-5 emit one intro page per submitted line.
+# See legacy/KYRANDIA.C:276-293 and legacy/KYRANDIA.MSG:25-28.
+FIRST_LOGIN_INTRO_MESSAGES = {
+    2: "INTROA",
+    3: "INTROB",
+    4: "INTROC",
+    5: "INTROD",
+}
 
 
 class LogoResponse(BaseModel):
@@ -57,9 +68,18 @@ class SessionRequest(BaseModel):
     create_player: bool = False
 
 
+class LifecycleAdvanceRequest(BaseModel):
+    input: str = ""
+
+
 class LifecycleMessage(BaseModel):
     message_id: str
     text: str
+
+
+class SessionLifecycle(BaseModel):
+    state: str
+    step: int | None = None
 
 
 class SessionData(BaseModel):
@@ -72,6 +92,7 @@ class SessionData(BaseModel):
     resumed: bool = False
     replaced_sessions: int = 0
     player_flags: int = 0
+    lifecycle: SessionLifecycle | None = None
     lifecycle_messages: list[LifecycleMessage] = Field(default_factory=list)
 
 
@@ -910,11 +931,24 @@ def _first_login_lifecycle_messages(
 ) -> list[dict[str, str]]:
     return [
         _legacy_message_entry(messages, "GOODPD", player_id),
-        _legacy_message_entry(messages, "INTROA"),
-        _legacy_message_entry(messages, "INTROB"),
-        _legacy_message_entry(messages, "INTROC"),
-        _legacy_message_entry(messages, "INTROD", GAME_VERSION),
     ]
+
+
+def _lifecycle_payload(session_record: models.PlayerSession) -> dict[str, object] | None:
+    if not session_record.lifecycle_state:
+        return None
+    return {
+        "state": session_record.lifecycle_state,
+        "step": session_record.lifecycle_step,
+    }
+
+
+def _intro_lifecycle_message(
+    messages: models.MessageBundleModel, message_id: str
+) -> dict[str, str]:
+    if message_id == "INTROD":
+        return _legacy_message_entry(messages, message_id, GAME_VERSION)
+    return _legacy_message_entry(messages, message_id)
 
 
 def _active_player_flags(app: FastAPI) -> dict[str, int]:
@@ -993,6 +1027,7 @@ def _session_payload(
         "resumed": resumed,
         "replaced_sessions": replaced_sessions,
         "player_flags": int(player.flags),
+        "lifecycle": _lifecycle_payload(session_record),
         "lifecycle_messages": lifecycle_messages or [],
     }
 
@@ -1045,6 +1080,8 @@ async def start_session(
         request.app.state.player_claim_lock = asyncio.Lock()
 
     lifecycle_messages: list[dict[str, str]] = []
+    lifecycle_state: str | None = None
+    lifecycle_step: int | None = None
     player_claim_lock = request.app.state.player_claim_lock
     player_claim_lock_acquired = False
 
@@ -1066,6 +1103,8 @@ async def start_session(
             lifecycle_messages = _first_login_lifecycle_messages(
                 request.app.state.fixture_cache["messages"], player.plyrid
             )
+            lifecycle_state = FIRST_LOGIN_INTRO_STATE
+            lifecycle_step = 2
         else:
             player = _find_player_record(db, payload.player_id)
             first_login = False
@@ -1125,7 +1164,13 @@ async def start_session(
             async with request.app.state.session_replacement_lock:
                 replaced_tokens = repo.deactivate_all(player.id)
                 token = secrets.token_urlsafe(24)
-                session_record = repo.create_session(player_id=player.id, session_token=token, room_id=room_id)
+                session_record = repo.create_session(
+                    player_id=player.id,
+                    session_token=token,
+                    room_id=room_id,
+                    lifecycle_state=lifecycle_state,
+                    lifecycle_step=lifecycle_step,
+                )
                 db.commit()
             if player_claim_lock_acquired:
                 player_claim_lock.release()
@@ -1157,6 +1202,52 @@ async def start_session(
         ),
     }
     return JSONResponse(content=body, status_code=status_code)
+
+
+@auth_router.post("/session/lifecycle/advance", response_model=SessionResponse)
+async def advance_session_lifecycle(
+    payload: LifecycleAdvanceRequest,
+    request: Request,
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    session_context: Annotated[
+        tuple[models.PlayerSession, models.Player], Depends(require_active_session)
+    ],
+):
+    session_record, player = session_context
+    _submitted_text = payload.input
+    messages = request.app.state.fixture_cache["messages"]
+    lifecycle_messages: list[dict[str, str]] = []
+
+    if session_record.lifecycle_state == FIRST_LOGIN_INTRO_STATE:
+        step = session_record.lifecycle_step or 2
+        message_id = FIRST_LOGIN_INTRO_MESSAGES.get(step)
+        if message_id:
+            lifecycle_messages = [_intro_lifecycle_message(messages, message_id)]
+            session_record.lifecycle_step = step + 1
+        elif step == FIRST_LOGIN_ENTRY_STEP:
+            # Legacy kyrand() case 6 follows the final INTROD prompt and calls
+            # entrgp(0, ..., APPEARFLASH). See legacy/KYRANDIA.C:276-298.
+            session_record.lifecycle_state = FIRST_LOGIN_ENTRY_STATE
+            session_record.lifecycle_step = FIRST_LOGIN_ENTRY_STEP
+        else:
+            session_record.lifecycle_state = None
+            session_record.lifecycle_step = None
+    elif session_record.lifecycle_state != FIRST_LOGIN_ENTRY_STATE:
+        raise HTTPException(status_code=409, detail="No active session lifecycle")
+
+    repositories.PlayerSessionRepository(db).mark_seen(session_record.session_token)
+    db.commit()
+
+    return {
+        "status": "advanced",
+        "session": _session_payload(
+            session_record,
+            player,
+            session_record.room_id,
+            first_login=True,
+            lifecycle_messages=lifecycle_messages,
+        ),
+    }
 
 
 @auth_router.get("/session", response_model=SessionResponse)
@@ -1624,7 +1715,12 @@ async def _room_occupants_event(
     }
 
 
-def _entrance_room_message(player_id: str, room_id: int, player_flags: int | None = None) -> dict:
+def _entrance_room_message(
+    player_id: str,
+    room_id: int,
+    player_flags: int | None = None,
+    entrance_text: str = "appeared in a cloud of mists",
+) -> dict:
     """Legacy-style entrance broadcast when a player appears in a room.
 
     Mirrors ``entrgp`` in ``KYRUTIL.C`` when a player logs in or is placed into
@@ -1639,7 +1735,7 @@ def _entrance_room_message(player_id: str, room_id: int, player_flags: int | Non
         "from": None,
         "to": room_id,
         "direction": None,
-        "text": f"*** {player_id} has just appeared in a cloud of mists!",
+        "text": f"*** {player_id} has just {entrance_text}!",
         "player_flags": player_flags,
         "message_id": None,
         "command_id": None,
@@ -1862,6 +1958,7 @@ def create_app() -> FastAPI:
         db_session = provider.scope.app.state.session_factory()
         player_state: models.PlayerModel | None = None
         replaced_tokens: list[str] = []
+        first_login_entry_pending = False
         try:
             session_repo = repositories.PlayerSessionRepository(db_session)
             session_record = session_repo.get_by_token(session_token)
@@ -1871,6 +1968,18 @@ def create_app() -> FastAPI:
                     Response(status_code=status.HTTP_401_UNAUTHORIZED, content="Invalid or expired token")
                 )
                 return
+
+            if session_record.lifecycle_state == FIRST_LOGIN_INTRO_STATE:
+                await websocket.send_denial_response(
+                    Response(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        content="First-login intro is not complete",
+                    )
+                )
+                return
+            first_login_entry_pending = (
+                session_record.lifecycle_state == FIRST_LOGIN_ENTRY_STATE
+            )
 
             player = db_session.get(models.Player, session_record.player_id)
             if not player:
@@ -2056,10 +2165,24 @@ def create_app() -> FastAPI:
             {
                 "type": "room_broadcast",
                 "room": current_room,
-                "payload": _entrance_room_message(player_id, current_room, int(player_state.flags)),
+                "payload": _entrance_room_message(
+                    player_id,
+                    current_room,
+                    int(player_state.flags),
+                    "appeared in a flash"
+                    if first_login_entry_pending
+                    else "appeared in a cloud of mists",
+                ),
             },
             sender=websocket,
         )
+
+        if first_login_entry_pending:
+            with provider.scope.app.state.session_factory() as db:
+                repo = repositories.PlayerSessionRepository(db)
+                repo.set_lifecycle(session_token, None, None)
+                repo.mark_seen(session_token)
+                db.commit()
 
         async def _sync_current_room_from_state() -> None:
             nonlocal current_room

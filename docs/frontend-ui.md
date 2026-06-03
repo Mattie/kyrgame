@@ -15,7 +15,7 @@
 - Command submissions echo into the log before being relayed over the WebSocket, matching the feel of typed BBS commands.
 - Room changes and broadcasts stream into the CRT window while an occupants line keeps local presence visible.
 - Inventory, spellbook, spells, and character output stay in chronological command order. The client no longer sends silent status-card refresh commands after normal player input or reconnect.
-- First-login Player-ID claims fetch the legacy `GETALS` prompt from the public message bundle, disable room overrides so new players enter at room 0, and then show the intro message sequence in the CRT transcript. Player names are decorated from backend player flags as male/female wizard labels in the same inline rendering path used for gems and legacy creatures, keeping raw command text intact while making live players stand out.
+- First-login Player-ID claims fetch the legacy `GETALS` prompt from the public message bundle, disable room overrides so new players enter at room 0, and append only `GOODPD` after claim. Blank ENTER or typed input then advances one intro page at a time (`INTROA` through `INTROD`), with normal commands, WASD navigation, and room rendering held until the final lifecycle advance opens the room socket. Player names are decorated from backend player flags as male/female wizard labels in the same inline rendering path used for gems and legacy creatures, keeping raw command text intact while making live players stand out.
 
 ## Design Touchstones
 - Monospaced fonts (`DM Mono`, `VT323`, `Press Start 2P`) and neon-cyan/green palette reinforce the late-80s terminal vibe.
@@ -30,7 +30,9 @@
 
 ## Manual E2E Demo Checklist
 - Start the backend and frontend.
-- Claim a new 3-9 letter Player-ID from the session form and confirm the legacy intro text appears in the console with the wizard-styled player name.
+- Claim a new 3-9 letter Player-ID from the session form and confirm only the `GOODPD` first-login text appears in the console with the wizard-styled player name.
+- Press ENTER four times and confirm `INTROA`, `INTROB`, `INTROC`, and `INTROD` appear one page at a time while no room description appears.
+- Press ENTER once more and confirm the room opens at room 0; with another player watching room 0, confirm the first entry broadcast says the player appeared in a flash.
 - Reconnect with that Player-ID in room 12.
 - Run `look`, `west`, `east`, `north`, `south`, `get garnet`, `inv`, `drop garnet`, `say hello`, `read spellbook`, `memorize whereami`, `spells`, and `cast whereami`.
 - Refresh the page, reconnect with the same player and a blank room field, and confirm the player resumes in the persisted room.
