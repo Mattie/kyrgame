@@ -11,8 +11,8 @@ export const DEFAULT_CONSOLE_STREAM_CONFIG = {
   charsPerTick: 500,
 }
 
-const LOCAL_STORAGE_KEY = 'kyr.console.modem'
-const ANSI_QUERY_PARAM = 'modem'
+const LOCAL_STORAGE_KEY = 'kyrgame.console.modem'
+const MODEM_QUERY_PARAM = 'modem'
 const BAUD_QUERY_PARAM = 'modemBaud'
 const CHARS_PER_TICK_QUERY_PARAM = 'modemCharsPerTick'
 
@@ -27,8 +27,10 @@ const parseBoolean = (value: string | null): boolean | undefined => {
 const parsePositiveInteger = (value: string | null): number | undefined => {
   if (!value) return undefined
   const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) return undefined
-  return Math.floor(parsed)
+  if (!Number.isFinite(parsed)) return undefined
+  const integer = Math.floor(parsed)
+  if (integer <= 0) return undefined
+  return integer
 }
 
 const getWindowSearchParams = () => {
@@ -47,7 +49,7 @@ const readLocalStorageEnabled = () => {
 
 const getQueryStringConfig = () => {
   const params = getWindowSearchParams()
-  const enabled = parseBoolean(params.get(ANSI_QUERY_PARAM))
+  const enabled = parseBoolean(params.get(MODEM_QUERY_PARAM))
   const baud = parsePositiveInteger(params.get(BAUD_QUERY_PARAM))
   const charsPerTick = parsePositiveInteger(params.get(CHARS_PER_TICK_QUERY_PARAM))
   return { enabled, baud, charsPerTick }
@@ -57,7 +59,9 @@ export const getConsoleStreamConfig = (): ConsoleStreamConfig => {
   const query = getQueryStringConfig()
   const localStorageEnabled = readLocalStorageEnabled()
   const enabled =
-    query.enabled !== undefined ? query.enabled : localStorageEnabled ?? DEFAULT_CONSOLE_STREAM_CONFIG.enabled
+    query.enabled !== undefined
+      ? query.enabled
+      : localStorageEnabled ?? DEFAULT_CONSOLE_STREAM_CONFIG.enabled
   const baud = query.baud ?? DEFAULT_CONSOLE_STREAM_CONFIG.baud
   const charsPerTick = query.charsPerTick ?? DEFAULT_CONSOLE_STREAM_CONFIG.charsPerTick
 

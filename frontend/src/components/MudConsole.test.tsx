@@ -174,18 +174,19 @@ describe('MudConsole', () => {
 
   it('streams one console line at a time when modem mode is enabled', () => {
     vi.useFakeTimers()
-    window.history.replaceState(null, '', '/?modem=on&modemBaud=100&modemCharsPerTick=2')
-    navigatorState.session = {
-      token: 'token',
-      playerId: 'Hero',
-      roomId: 0,
-      lifecycle: { state: 'first_login_intro', step: 2 },
-    }
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
     navigatorState.activity = [
       {
         id: 'stream-entry-one',
         type: 'command_response',
-        summary: 'ABCD',
+        summary: '\u001b[32mABCD\u001b[0m',
         payload: null,
       },
       {
@@ -196,42 +197,99 @@ describe('MudConsole', () => {
       },
     ]
 
-    render(<MudConsole />)
+    const { container } = render(<MudConsole />)
+    const streamAnnouncements = screen.getByTestId('console-stream-announcements')
+    const announcedLines = () =>
+      Array.from(streamAnnouncements.querySelectorAll('p')).map((line) => line.textContent)
 
-    expect(screen.queryByText('AB')).toBeNull()
+    expect(container.querySelector('.crt')).toHaveAttribute('aria-live', 'off')
+    expect(streamAnnouncements).toHaveAttribute('aria-live', 'polite')
+    expect(announcedLines()).toEqual([])
+    expect(screen.queryByText('Connect to begin exploring the world of Kyrandia.')).toBeNull()
     expect(screen.queryByText('ABCD')).toBeNull()
-    expect(screen.queryByText('WX')).toBeNull()
     expect(screen.queryByText('WXYZ')).toBeNull()
 
-    act(() => vi.advanceTimersByTime(200))
-    expect(screen.getByText('AB')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(100))
+    expect(
+      screen.getAllByText('Connect to begin exploring the world of Kyrandia.').length
+    ).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual(['Connect to begin exploring the world of Kyrandia.'])
     expect(screen.queryByText('ABCD')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(screen.getAllByText('ABCD').length).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual([
+      'Connect to begin exploring the world of Kyrandia.',
+      'ABCD',
+    ])
     expect(screen.queryByText('WXYZ')).toBeNull()
 
-    act(() => vi.advanceTimersByTime(200))
-    expect(screen.getByText('ABCD')).toBeInTheDocument()
-    expect(screen.queryByText('WX')).toBeNull()
-    expect(screen.queryByText('WXYZ')).toBeNull()
+    act(() => vi.advanceTimersByTime(100))
+    expect(screen.getAllByText('WXYZ').length).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual([
+      'Connect to begin exploring the world of Kyrandia.',
+      'ABCD',
+      'WXYZ',
+    ])
 
-    act(() => vi.advanceTimersByTime(200))
-    expect(screen.getByText('WX')).toBeInTheDocument()
-    expect(screen.queryByText('WXYZ')).toBeNull()
+    vi.useRealTimers()
+  })
 
-    act(() => vi.advanceTimersByTime(200))
-    expect(screen.getByText('WXYZ')).toBeInTheDocument()
+  it('continues the active stream line when new prefix lines appear', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'stream-entry-one',
+        type: 'command_response',
+        summary: 'ABCD',
+        payload: null,
+      },
+    ]
+
+    const { rerender } = render(<MudConsole />)
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(
+      screen.getAllByText('Connect to begin exploring the world of Kyrandia.').length
+    ).toBeGreaterThan(0)
+    expect(screen.queryByText('ABCD')).toBeNull()
+
+    navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
+    navigatorState.world = {
+      locations: [{ id: 0, brfdes: 'A dark forest surrounds you in all directions.' }],
+      objects: [],
+      commands: [],
+      messages: {},
+    }
+    navigatorState.currentRoom = 0
+    rerender(<MudConsole />)
+
+    act(() => vi.advanceTimersByTime(100))
+
+    expect(screen.getAllByText('ABCD').length).toBeGreaterThan(0)
+    expect(() => getConsoleLine('A dark forest surrounds you in all directions.')).toThrow()
 
     vi.useRealTimers()
   })
 
   it('keeps the console pinned to the bottom while modem text streams', () => {
     vi.useFakeTimers()
-    window.history.replaceState(null, '', '/?modem=on&modemBaud=100&modemCharsPerTick=2')
-    navigatorState.session = {
-      token: 'token',
-      playerId: 'Hero',
-      roomId: 0,
-      lifecycle: { state: 'first_login_intro', step: 2 },
-    }
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
     navigatorState.activity = [
       {
         id: 'stream-scroll-entry',
@@ -256,7 +314,7 @@ describe('MudConsole', () => {
       scrollHeight: 340,
       scrollTop: 200,
     })
-    act(() => vi.advanceTimersByTime(200))
+    act(() => vi.advanceTimersByTime(100))
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 340 })
     expect(screen.queryByRole('button', { name: /scroll to latest console output/i })).toBeNull()
@@ -264,13 +322,7 @@ describe('MudConsole', () => {
     vi.useRealTimers()
   })
 
-  it('shows a latest-output control instead of scrolling when the user is reading older output', () => {
-    navigatorState.session = {
-      token: 'token',
-      playerId: 'Hero',
-      roomId: 0,
-      lifecycle: { state: 'first_login_intro', step: 2 },
-    }
+  it('shows a latest-output control instead of scrolling when reading older output', () => {
     navigatorState.activity = [
       {
         id: 'scroll-lock-entry-one',

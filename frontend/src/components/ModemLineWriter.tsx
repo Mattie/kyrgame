@@ -22,7 +22,7 @@ const clampPositiveNumber = (value: number): number => {
   return value
 }
 
-const clearAnsiCount = (value: string) => value.replace(ANSI_SEQUENCE_MATCH, '')
+const clearAnsiCount = (value: string) => value.replace(ANSI_SEQUENCE_MATCH, '').length
 
 const normalizeCharsPerSecond = (value: number) =>
   Math.max(1, Math.floor(clampPositiveNumber(value)))
@@ -37,15 +37,14 @@ const revealTextByVisibleCharacters = (text: string, visibleChars: number) => {
   let result = ''
 
   while (cursor < text.length && emitted < target) {
-    if (text[cursor] === ANSI_SEQUENCE_PREFIX && text[cursor + 1] === '[') {
-      const end = text.indexOf(ANSI_SEQUENCE_SUFFIX, cursor + 2)
-      if (end === -1) {
-        break
-      }
+    if (text.startsWith(ANSI_SEQUENCE_PREFIX, cursor)) {
+      const end = text.indexOf(ANSI_SEQUENCE_SUFFIX, cursor + ANSI_SEQUENCE_PREFIX.length)
+      if (end === -1) break
       result += text.slice(cursor, end + 1)
       cursor = end + 1
       continue
     }
+
     result += text[cursor]
     emitted += 1
     cursor += 1
@@ -63,7 +62,7 @@ export const ModemLineWriter = ({
   onDone,
   playerVisuals,
 }: ModemLineWriterProps) => {
-  const totalVisibleChars = useMemo(() => clearAnsiCount(text).length, [text])
+  const totalVisibleChars = useMemo(() => clearAnsiCount(text), [text])
   const resolvedCharsPerSecond = normalizeCharsPerSecond(charsPerSecond)
   const resolvedCharsPerTick = normalizeCharsPerTick(charsPerTick)
   const tickDelayMs = useMemo(

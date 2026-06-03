@@ -86,3 +86,8 @@ export const parseAnsiTokens = (text: string): AnsiToken[] => {
 
   return tokens
 }
+
+export const stripAnsiSgrSequences = (text: string): string =>
+  parseAnsiTokens(text)
+    .map((token) => token.text)
+    .join('')
