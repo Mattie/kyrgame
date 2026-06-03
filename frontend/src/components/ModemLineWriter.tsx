@@ -37,8 +37,8 @@ const revealTextByVisibleCharacters = (text: string, visibleChars: number) => {
   let result = ''
 
   while (cursor < text.length && emitted < target) {
-    if (text[cursor] === ANSI_SEQUENCE_PREFIX && text[cursor + 1] === '[') {
-      const end = text.indexOf(ANSI_SEQUENCE_SUFFIX, cursor + 2)
+    if (text.startsWith(ANSI_SEQUENCE_PREFIX, cursor)) {
+      const end = text.indexOf(ANSI_SEQUENCE_SUFFIX, cursor + ANSI_SEQUENCE_PREFIX.length)
       if (end === -1) break
       result += text.slice(cursor, end + 1)
       cursor = end + 1
