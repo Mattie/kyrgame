@@ -47,7 +47,7 @@ FIRST_LOGIN_INTRO_STATE = "first_login_intro"
 FIRST_LOGIN_ENTRY_STATE = "first_login_entry"
 FIRST_LOGIN_ENTRY_STEP = 6
 # Legacy kyrand() cases 2-5 emit one intro page per submitted line.
-# See legacy/KYRANDIA.C:276-293 and legacy/KYRANDIA.MSG:25-28.
+# See legacy/KYRANDIA.C:276-293 and legacy/Dist/ELWKYRM.MSG:25-28.
 FIRST_LOGIN_INTRO_MESSAGES = {
     2: "INTROA",
     3: "INTROB",
@@ -1187,7 +1187,8 @@ async def start_session(
         # Commit happened inside the lock, now clean up old connections
         await _disconnect_sessions(request.app, replaced_tokens)
 
-    await request.app.state.presence.set_location(player.plyrid, room_id, token)
+    if session_record.lifecycle_state != FIRST_LOGIN_INTRO_STATE:
+        await request.app.state.presence.set_location(player.plyrid, room_id, token)
 
     body = {
         "status": "recovered" if resumed else "created",
@@ -1214,7 +1215,6 @@ async def advance_session_lifecycle(
     ],
 ):
     session_record, player = session_context
-    _submitted_text = payload.input
     messages = request.app.state.fixture_cache["messages"]
     lifecycle_messages: list[dict[str, str]] = []
 

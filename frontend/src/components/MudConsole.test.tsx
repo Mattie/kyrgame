@@ -439,6 +439,24 @@ describe('MudConsole', () => {
     expect(mockSendCommand).not.toHaveBeenCalled()
   })
 
+  it('leaves interactive control ENTER activation alone during first-login lifecycle', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    navButton.focus()
+    fireEvent.keyDown(navButton, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+    expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
   it('does not render debug payload JSON in the MUD console', () => {
     render(<MudConsole />)
 

@@ -1,6 +1,7 @@
 import {
   CSSProperties,
   FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -270,6 +271,15 @@ export const MudConsole = () => {
     inputRef.current?.focus()
   }, [lifecycleIntroActive])
 
+  const advanceLifecycleFromPrompt = useCallback(
+    (submitted: string) => {
+      void advanceLifecycle(submitted.trim())
+      setInput('')
+      inputRef.current?.focus()
+    },
+    [advanceLifecycle]
+  )
+
   useEffect(() => {
     if (!lifecycleIntroActive) return
 
@@ -277,28 +287,40 @@ export const MudConsole = () => {
       if (event.key !== 'Enter') return
 
       const target = event.target instanceof HTMLElement ? event.target : null
-      const isPromptInput = target === inputRef.current
-      const isOtherEditable = Boolean(
-        target?.closest('input, textarea, select, [contenteditable="true"]') && !isPromptInput
+      const interactiveTarget = target?.closest(
+        'button, a[href], input, textarea, select, summary, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
       )
-      if (isOtherEditable) return
+      if (interactiveTarget) return
+
+      const standaloneTarget =
+        target === null ||
+        target === document.body ||
+        target === document.documentElement ||
+        target.closest('.crt') === logRef.current
+      if (!standaloneTarget) return
 
       event.preventDefault()
-      void advanceLifecycle((inputRef.current?.value ?? '').trim())
-      setInput('')
-      inputRef.current?.focus()
+      advanceLifecycleFromPrompt(inputRef.current?.value ?? '')
     }
 
     window.addEventListener('keydown', handleLifecycleEnter)
     return () => window.removeEventListener('keydown', handleLifecycleEnter)
-  }, [advanceLifecycle, lifecycleIntroActive])
+  }, [advanceLifecycleFromPrompt, lifecycleIntroActive])
+
+  const handlePromptKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (!lifecycleIntroActive || event.key !== 'Enter') return
+      event.preventDefault()
+      advanceLifecycleFromPrompt(inputRef.current?.value ?? input)
+    },
+    [advanceLifecycleFromPrompt, input, lifecycleIntroActive]
+  )
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const submitted = input.trim()
     if (lifecycleIntroActive) {
-      void advanceLifecycle(submitted)
-      setInput('')
+      advanceLifecycleFromPrompt(submitted)
       return
     }
     const command = submitted
@@ -728,6 +750,7 @@ export const MudConsole = () => {
                 aria-label="command input"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handlePromptKeyDown}
                 onFocus={() => setNavMode(false)}
                 placeholder="Type commands like LOOK, SAY HELLO, or INVENTORY"
               />

@@ -533,6 +533,90 @@ describe('Navigator flow', () => {
     ).toBeInTheDocument()
   })
 
+  it('reports lifecycle advance failures without opening the room socket', async () => {
+    const firstLoginMessages = {
+      ...messages,
+      GETALS:
+        'Since this is your first time entering Kyrandia (Fantasy-world), you must pick a 3-9 character Player-ID for yourself.',
+      GOODPD:
+        'Good!  You will now be known as "Merlin" throughout Kyrandia (Fantasy World).\r\n\r\nPress ENTER to begin',
+    }
+    const roomZeroLocations = [
+      {
+        id: 0,
+        brfdes: 'at the edge of Kyrandia',
+        objlds: 'nearby',
+        objects: [],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
+      ...locations,
+    ]
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.includes('/auth/session/lifecycle/advance')) {
+        return Promise.reject(new Error('Network dropped'))
+      }
+      if (url.includes('/auth/session')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'created',
+            session: {
+              token: 'new-player-token',
+              player_id: 'Merlin',
+              room_id: 0,
+              first_login: true,
+              player_flags: 1,
+              lifecycle: { state: 'first_login_intro', step: 2 },
+              lifecycle_messages: [
+                { message_id: 'GOODPD', text: firstLoginMessages.GOODPD },
+              ],
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => roomZeroLocations,
+        } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ messages: firstLoginMessages }),
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'Merlin')
+      await user.click(screen.getByRole('checkbox', { name: /claim new player-id/i }))
+      await user.click(screen.getByRole('button', { name: /claim player-id/i }))
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(0))
+    const commandInput = screen.getByLabelText(/command input/i)
+    fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
+
+    await waitFor(() => expect(screen.getAllByText(/Network dropped/i).length).toBeGreaterThan(0))
+    expect(screen.getByText(/connection: error/i)).toBeInTheDocument()
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
   it('shows session expiration metadata and reconnects with a fresh token after close', async () => {
     const fetchMock = vi.spyOn(global, 'fetch')
     const responses = [

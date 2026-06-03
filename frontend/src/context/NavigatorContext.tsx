@@ -1028,78 +1028,96 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         return
       }
 
-      const response = await fetch(`${apiBaseUrl}/auth/session/lifecycle/advance`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${currentSession.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ input }),
-      })
-      if (!response.ok) {
-        const detail = await parseSessionError(response)
-        setError(detail || 'Unable to advance session lifecycle')
+      const reportLifecycleError = (message: string) => {
+        setError(message)
         setConnectionStatus('error')
-        return
-      }
-
-      const data = await response.json()
-      const sessionPayload = data.session
-      const playerFlags =
-        typeof sessionPayload.player_flags === 'number'
-          ? sessionPayload.player_flags
-          : currentSession.playerFlags ?? null
-      const lifecycle = parseSessionLifecycle(sessionPayload.lifecycle)
-      const nextRecord: SessionRecord = {
-        ...currentSession,
-        token: sessionPayload.token ?? currentSession.token,
-        playerId: sessionPayload.player_id ?? currentSession.playerId,
-        roomId:
-          typeof sessionPayload.room_id === 'number'
-            ? sessionPayload.room_id
-            : currentSession.roomId,
-        expiresAt: sessionPayload.expires_at ?? currentSession.expiresAt ?? null,
-        expiresInSeconds:
-          typeof sessionPayload.expires_in_seconds === 'number'
-            ? sessionPayload.expires_in_seconds
-            : currentSession.expiresInSeconds ?? null,
-        playerFlags,
-        lifecycle,
-      }
-      setSession(nextRecord)
-      sessionRef.current = nextRecord
-      setPlayerVisuals((prev) => ({
-        ...prev,
-        [nextRecord.playerId]: playerVisualFromFlags(playerFlags),
-      }))
-      setCurrentRoom(nextRecord.roomId)
-
-      const lifecycleMessages = Array.isArray(sessionPayload.lifecycle_messages)
-        ? sessionPayload.lifecycle_messages
-        : []
-      lifecycleMessages.forEach((message: { message_id?: string; text?: string }) => {
         appendActivity({
-          type: 'command_response',
-          room: nextRecord.roomId,
-          summary: message.text ?? message.message_id ?? 'lifecycle_message',
-          payload: {
-            scope: 'player',
-            event: 'lifecycle_message',
-            type: 'lifecycle_message',
-            message_id: message.message_id,
-            text: message.text,
-          },
+          type: 'command_error',
+          room: currentSession.roomId,
+          summary: message,
+          payload: { detail: message },
         })
-      })
+      }
 
-      if (isFirstLoginEntryLifecycle(nextRecord.lifecycle)) {
-        const playableRecord = { ...nextRecord, lifecycle: null }
-        setSession(playableRecord)
-        sessionRef.current = playableRecord
-        if (!worldRef.current) {
-          await loadWorldData()
+      try {
+        const response = await fetch(`${apiBaseUrl}/auth/session/lifecycle/advance`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentSession.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ input }),
+        })
+        if (!response.ok) {
+          const detail = await parseSessionError(response)
+          reportLifecycleError(detail || 'Unable to advance session lifecycle')
+          return
         }
-        connectWebSocket(playableRecord.token, playableRecord.roomId)
+
+        const data = await response.json()
+        const sessionPayload = data.session
+        const playerFlags =
+          typeof sessionPayload.player_flags === 'number'
+            ? sessionPayload.player_flags
+            : currentSession.playerFlags ?? null
+        const lifecycle = parseSessionLifecycle(sessionPayload.lifecycle)
+        const nextRecord: SessionRecord = {
+          ...currentSession,
+          token: sessionPayload.token ?? currentSession.token,
+          playerId: sessionPayload.player_id ?? currentSession.playerId,
+          roomId:
+            typeof sessionPayload.room_id === 'number'
+              ? sessionPayload.room_id
+              : currentSession.roomId,
+          expiresAt: sessionPayload.expires_at ?? currentSession.expiresAt ?? null,
+          expiresInSeconds:
+            typeof sessionPayload.expires_in_seconds === 'number'
+              ? sessionPayload.expires_in_seconds
+              : currentSession.expiresInSeconds ?? null,
+          playerFlags,
+          lifecycle,
+        }
+        setSession(nextRecord)
+        sessionRef.current = nextRecord
+        setPlayerVisuals((prev) => ({
+          ...prev,
+          [nextRecord.playerId]: playerVisualFromFlags(playerFlags),
+        }))
+        setCurrentRoom(nextRecord.roomId)
+
+        const lifecycleMessages = Array.isArray(sessionPayload.lifecycle_messages)
+          ? sessionPayload.lifecycle_messages
+          : []
+        lifecycleMessages.forEach((message: { message_id?: string; text?: string }) => {
+          appendActivity({
+            type: 'command_response',
+            room: nextRecord.roomId,
+            summary: message.text ?? message.message_id ?? 'lifecycle_message',
+            payload: {
+              scope: 'player',
+              event: 'lifecycle_message',
+              type: 'lifecycle_message',
+              message_id: message.message_id,
+              text: message.text,
+            },
+          })
+        })
+
+        if (isFirstLoginEntryLifecycle(nextRecord.lifecycle)) {
+          const playableRecord = { ...nextRecord, lifecycle: null }
+          setSession(playableRecord)
+          sessionRef.current = playableRecord
+          if (!worldRef.current) {
+            await loadWorldData()
+          }
+          connectWebSocket(playableRecord.token, playableRecord.roomId)
+        }
+      } catch (err) {
+        reportLifecycleError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'Unable to advance session lifecycle'
+        )
       }
     },
     [

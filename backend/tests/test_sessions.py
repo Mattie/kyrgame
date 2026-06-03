@@ -474,6 +474,7 @@ async def test_explicit_first_login_blocks_room_socket_until_intro_finishes_and_
                 session_data = create_resp.json()["session"]
                 token = session_data["token"]
                 gated_uri = f"ws://{host}:{port}/ws/rooms/0?token={token}"
+                assert "Merlin" not in await app.state.presence.players_in_room(0)
 
                 with pytest.raises(websockets.InvalidStatusCode):
                     async with websockets.connect(gated_uri):
@@ -490,6 +491,7 @@ async def test_explicit_first_login_blocks_room_socket_until_intro_finishes_and_
                 async with websockets.connect(gated_uri) as player_ws:
                     welcome = json.loads(await asyncio.wait_for(player_ws.recv(), timeout=1))
                     assert welcome["type"] == "room_welcome"
+                    assert "Merlin" in await app.state.presence.players_in_room(0)
 
                     seen_flash = False
                     for _ in range(4):
