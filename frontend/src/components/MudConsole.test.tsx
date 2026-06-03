@@ -160,8 +160,9 @@ describe('MudConsole', () => {
       },
     ]
 
-    render(<MudConsole />)
+    const { container } = render(<MudConsole />)
 
+    expect(container.querySelector('.crt')).toHaveAttribute('aria-live', 'off')
     expect(screen.queryByText('Connect to begin exploring the world of Kyrandia.')).toBeNull()
     expect(screen.queryByText('ABCD')).toBeNull()
     expect(screen.queryByText('WXYZ')).toBeNull()
@@ -176,6 +177,49 @@ describe('MudConsole', () => {
 
     act(() => vi.advanceTimersByTime(100))
     expect(screen.getByText('WXYZ')).toBeInTheDocument()
+
+    vi.useRealTimers()
+  })
+
+  it('continues the active stream line when new prefix lines appear', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'stream-entry-one',
+        type: 'command_response',
+        summary: 'ABCD',
+        payload: null,
+      },
+    ]
+
+    const { rerender } = render(<MudConsole />)
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(screen.getByText('Connect to begin exploring the world of Kyrandia.')).toBeInTheDocument()
+    expect(screen.queryByText('ABCD')).toBeNull()
+
+    navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
+    navigatorState.world = {
+      locations: [{ id: 0, brfdes: 'A dark forest surrounds you in all directions.' }],
+      objects: [],
+      commands: [],
+      messages: {},
+    }
+    navigatorState.currentRoom = 0
+    rerender(<MudConsole />)
+
+    act(() => vi.advanceTimersByTime(100))
+
+    expect(screen.getByText('ABCD')).toBeInTheDocument()
+    expect(() => getConsoleLine('A dark forest surrounds you in all directions.')).toThrow()
 
     vi.useRealTimers()
   })

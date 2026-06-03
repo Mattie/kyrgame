@@ -173,7 +173,8 @@ export const MudConsole = () => {
   const [burnPresetCopyStatus, setBurnPresetCopyStatus] = useState('')
   const [paletteCopyStatus, setPaletteCopyStatus] = useState('')
   const [streamConfig] = useState(() => getConsoleStreamConfig())
-  const [activeStreamLine, setActiveStreamLine] = useState(0)
+  const [streamQueueIds, setStreamQueueIds] = useState<string[]>([])
+  const [completedStreamLineIds, setCompletedStreamLineIds] = useState<Set<string>>(() => new Set())
   const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false)
   const showVfxTuning =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
@@ -487,20 +488,65 @@ export const MudConsole = () => {
     return lines
   }, [bannerLines, currentRoom, occupants, session?.playerId, visibleEntries, world])
 
-  const handleLineDone = (lineIndex: number) => {
-    setActiveStreamLine((current) => Math.min(current + 1, Math.max(current, lineIndex + 1)))
+  const consoleLineIds = useMemo(() => consoleLines.map((line) => line.id), [consoleLines])
+
+  useEffect(() => {
+    const currentLineIds = new Set(consoleLineIds)
+
+    setStreamQueueIds((current) => {
+      const previousQueueIds = new Set(current)
+      const next = current.filter((id) => currentLineIds.has(id))
+      const nextQueueIds = new Set(next)
+
+      consoleLineIds.forEach((id) => {
+        if (!previousQueueIds.has(id) && !nextQueueIds.has(id)) {
+          next.push(id)
+          nextQueueIds.add(id)
+        }
+      })
+
+      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+        return current
+      }
+      return next
+    })
+
+    setCompletedStreamLineIds((current) => {
+      let changed = false
+      const next = new Set<string>()
+      current.forEach((id) => {
+        if (currentLineIds.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      })
+      return changed ? next : current
+    })
+  }, [consoleLineIds])
+
+  const activeStreamLineId = useMemo(
+    () => streamQueueIds.find((id) => !completedStreamLineIds.has(id)) ?? null,
+    [completedStreamLineIds, streamQueueIds]
+  )
+
+  const handleLineDone = (lineId: string) => {
+    setCompletedStreamLineIds((current) => {
+      if (current.has(lineId)) return current
+      const next = new Set(current)
+      next.add(lineId)
+      return next
+    })
   }
 
   useEffect(() => {
-    setActiveStreamLine((current) => Math.min(current, consoleLines.length))
-  }, [consoleLines.length])
-
-  useEffect(() => {
     handleConsoleOutputProgress()
-  }, [activeStreamLine, consoleLines, handleConsoleOutputProgress])
+  }, [activeStreamLineId, consoleLines, handleConsoleOutputProgress])
 
-  const renderLine = (line: ConsoleLine, index: number) => {
-    if (!streamConfig.enabled || index < activeStreamLine) {
+  const renderLine = (line: ConsoleLine) => {
+    const isStreamComplete = completedStreamLineIds.has(line.id)
+
+    if (!streamConfig.enabled || isStreamComplete) {
       return (
         <p key={line.id} className={line.className} style={line.style}>
           {line.promptSymbol ? (
@@ -514,7 +560,7 @@ export const MudConsole = () => {
       )
     }
 
-    if (index === activeStreamLine) {
+    if (line.id === activeStreamLineId) {
       return (
         <p key={line.id} className={line.className} style={line.style}>
           {line.promptSymbol ? (
@@ -528,7 +574,7 @@ export const MudConsole = () => {
             charsPerSecond={streamConfig.charsPerSecond}
             charsPerTick={streamConfig.charsPerTick}
             onProgress={handleConsoleOutputProgress}
-            onDone={() => handleLineDone(index)}
+            onDone={() => handleLineDone(line.id)}
             playerVisuals={playerVisuals}
           />
           {line.payloadText && <span className="payload-inline">{line.payloadText}</span>}
@@ -566,10 +612,10 @@ export const MudConsole = () => {
             </div>
           </header>
 
-          <div className="crt" ref={logRef} aria-live="polite">
+          <div className="crt" ref={logRef} aria-live={streamConfig.enabled ? 'off' : 'polite'}>
             <div className="crt-glow" />
             <div className="crt-lines">
-              {consoleLines.map((line, index) => renderLine(line, index))}
+              {consoleLines.map((line) => renderLine(line))}
             </div>
             {hasNewOutputBelow && (
               <button
