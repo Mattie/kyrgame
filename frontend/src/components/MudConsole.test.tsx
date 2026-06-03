@@ -161,22 +161,39 @@ describe('MudConsole', () => {
     ]
 
     const { container } = render(<MudConsole />)
+    const streamAnnouncements = screen.getByTestId('console-stream-announcements')
+    const announcedLines = () =>
+      Array.from(streamAnnouncements.querySelectorAll('p')).map((line) => line.textContent)
 
     expect(container.querySelector('.crt')).toHaveAttribute('aria-live', 'off')
+    expect(streamAnnouncements).toHaveAttribute('aria-live', 'polite')
+    expect(announcedLines()).toEqual([])
     expect(screen.queryByText('Connect to begin exploring the world of Kyrandia.')).toBeNull()
     expect(screen.queryByText('ABCD')).toBeNull()
     expect(screen.queryByText('WXYZ')).toBeNull()
 
     act(() => vi.advanceTimersByTime(100))
-    expect(screen.getByText('Connect to begin exploring the world of Kyrandia.')).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Connect to begin exploring the world of Kyrandia.').length
+    ).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual(['Connect to begin exploring the world of Kyrandia.'])
     expect(screen.queryByText('ABCD')).toBeNull()
 
     act(() => vi.advanceTimersByTime(100))
-    expect(screen.getByText('ABCD')).toBeInTheDocument()
+    expect(screen.getAllByText('ABCD').length).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual([
+      'Connect to begin exploring the world of Kyrandia.',
+      'ABCD',
+    ])
     expect(screen.queryByText('WXYZ')).toBeNull()
 
     act(() => vi.advanceTimersByTime(100))
-    expect(screen.getByText('WXYZ')).toBeInTheDocument()
+    expect(screen.getAllByText('WXYZ').length).toBeGreaterThan(0)
+    expect(announcedLines()).toEqual([
+      'Connect to begin exploring the world of Kyrandia.',
+      'ABCD',
+      'WXYZ',
+    ])
 
     vi.useRealTimers()
   })
@@ -203,7 +220,9 @@ describe('MudConsole', () => {
     const { rerender } = render(<MudConsole />)
 
     act(() => vi.advanceTimersByTime(100))
-    expect(screen.getByText('Connect to begin exploring the world of Kyrandia.')).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Connect to begin exploring the world of Kyrandia.').length
+    ).toBeGreaterThan(0)
     expect(screen.queryByText('ABCD')).toBeNull()
 
     navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
@@ -218,7 +237,7 @@ describe('MudConsole', () => {
 
     act(() => vi.advanceTimersByTime(100))
 
-    expect(screen.getByText('ABCD')).toBeInTheDocument()
+    expect(screen.getAllByText('ABCD').length).toBeGreaterThan(0)
     expect(() => getConsoleLine('A dark forest surrounds you in all directions.')).toThrow()
 
     vi.useRealTimers()

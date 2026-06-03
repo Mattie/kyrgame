@@ -86,6 +86,19 @@ type ConsoleLine = {
   payloadText?: string
 }
 
+type ScreenReaderConsoleLine = {
+  id: string
+  text: string
+}
+
+const SCREEN_READER_STREAM_HISTORY_LIMIT = 20
+
+const formatConsoleLineForAnnouncement = (line: ConsoleLine): string =>
+  [line.promptSymbol ? 'Command.' : null, line.text, line.payloadText]
+    .filter((part): part is string => Boolean(part && part.trim()))
+    .join(' ')
+    .trim()
+
 const fireTuningControls: Array<{
   key: keyof FireBorderTuning
   label: string
@@ -175,6 +188,9 @@ export const MudConsole = () => {
   const [streamConfig] = useState(() => getConsoleStreamConfig())
   const [streamQueueIds, setStreamQueueIds] = useState<string[]>([])
   const [completedStreamLineIds, setCompletedStreamLineIds] = useState<Set<string>>(() => new Set())
+  const [screenReaderStreamLines, setScreenReaderStreamLines] = useState<
+    ScreenReaderConsoleLine[]
+  >([])
   const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false)
   const showVfxTuning =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
@@ -531,11 +547,25 @@ export const MudConsole = () => {
   )
 
   const handleLineDone = (lineId: string) => {
+    const completedLine = consoleLines.find((line) => line.id === lineId)
+
     setCompletedStreamLineIds((current) => {
       if (current.has(lineId)) return current
       const next = new Set(current)
       next.add(lineId)
       return next
+    })
+
+    if (!streamConfig.enabled || !completedLine) return
+
+    const announcement = formatConsoleLineForAnnouncement(completedLine)
+    if (!announcement) return
+
+    setScreenReaderStreamLines((current) => {
+      if (current.some((line) => line.id === lineId)) return current
+      return [...current, { id: lineId, text: announcement }].slice(
+        -SCREEN_READER_STREAM_HISTORY_LIMIT
+      )
     })
   }
 
@@ -629,6 +659,19 @@ export const MudConsole = () => {
               </button>
             )}
           </div>
+
+          {streamConfig.enabled && (
+            <div
+              className="sr-only"
+              aria-live="polite"
+              aria-atomic="false"
+              data-testid="console-stream-announcements"
+            >
+              {screenReaderStreamLines.map((line) => (
+                <p key={line.id}>{line.text}</p>
+              ))}
+            </div>
+          )}
 
           <form className="prompt-row" onSubmit={handleSubmit}>
             <button
