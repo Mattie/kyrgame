@@ -11,7 +11,8 @@ from starlette.websockets import WebSocketState
 from kyrgame import constants, fixtures
 from kyrgame.gateway import RoomGateway
 from kyrgame.presence import PresenceService
-from kyrgame.webapp import _room_occupants_event, create_app
+from kyrgame.webapp import _room_occupants_event
+from session_test_helpers import create_seeded_app as create_app
 
 
 @pytest.mark.anyio

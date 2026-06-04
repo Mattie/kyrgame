@@ -11,7 +11,7 @@ import websockets
 from sqlalchemy import select
 
 from kyrgame import constants, models
-from kyrgame.webapp import create_app
+from session_test_helpers import create_seeded_app as create_app
 
 
 def _get_open_port() -> int:

@@ -51,13 +51,25 @@ async def test_session_creation_first_login_and_recovery():
             assert logo_resp.status_code == 200
             assert "Kyrandia" in logo_resp.json()["message"]
 
-            create_resp = await client.post("/auth/session", json={"player_id": "rook"})
+            create_resp = await client.post(
+                "/auth/session", json={"player_id": "rook", "room_id": 12}
+            )
             assert create_resp.status_code == 201
             created = create_resp.json()["session"]
 
             assert created["player_id"] == "rook"
             assert created["first_login"] is True
+            assert created["room_id"] == 0
             assert created["token"]
+            assert created["lifecycle"] == {
+                "state": "first_login_intro",
+                "step": 2,
+            }
+            assert [
+                message["message_id"] for message in created["lifecycle_messages"]
+            ] == ["GOODPD"]
+            assert '"rook"' in created["lifecycle_messages"][0]["text"]
+            assert "rook" not in await app.state.presence.players_in_room(created["room_id"])
 
             resume_resp = await client.post(
                 "/auth/session", json={"player_id": "rook", "resume_token": created["token"]}
@@ -67,6 +79,7 @@ async def test_session_creation_first_login_and_recovery():
 
             assert resumed["token"] == created["token"]
             assert resumed["resumed"] is True
+            assert resumed["lifecycle"] == created["lifecycle"]
 
 
 @pytest.mark.anyio
@@ -505,7 +518,7 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
         await asyncio.sleep(0.05)
 
     async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
-        session_resp = await client.post("/auth/session", json={"player_id": "scout"})
+        session_resp = await client.post("/auth/session", json={"player_id": "hero"})
         session_data = session_resp.json()["session"]
         token = session_data["token"]
         room_id = session_data["room_id"]
@@ -540,7 +553,14 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
 
 
 @pytest.mark.anyio
-async def test_explicit_first_login_blocks_room_socket_until_intro_finishes_and_enters_in_flash():
+@pytest.mark.parametrize(
+    "create_player",
+    [True, False],
+    ids=["explicit-claim", "compatibility-create"],
+)
+async def test_first_login_blocks_room_socket_until_intro_finishes_and_enters_in_flash(
+    create_player: bool,
+):
     app = create_app()
     host = "127.0.0.1"
     port = _get_open_port()
@@ -554,8 +574,9 @@ async def test_explicit_first_login_blocks_room_socket_until_intro_finishes_and_
     try:
         async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
             witness_resp = await client.post(
-                "/auth/session", json={"player_id": "seer", "room_id": 0}
+                "/auth/session", json={"player_id": "hero", "room_id": 0}
             )
+            assert witness_resp.status_code == 201
             witness_session = witness_resp.json()["session"]
             witness_uri = (
                 f"ws://{host}:{port}/ws/rooms/0?token={witness_session['token']}"
@@ -564,11 +585,16 @@ async def test_explicit_first_login_blocks_room_socket_until_intro_finishes_and_
             async with websockets.connect(witness_uri) as witness_ws:
                 await _receive_initial_room_payloads(witness_ws)
 
-                create_resp = await client.post(
-                    "/auth/session",
-                    json={"player_id": "Merlin", "create_player": True},
-                )
+                create_payload = {"player_id": "Merlin"}
+                if create_player:
+                    create_payload["create_player"] = True
+                create_resp = await client.post("/auth/session", json=create_payload)
+                assert create_resp.status_code == 201
                 session_data = create_resp.json()["session"]
+                assert session_data["lifecycle"] == {
+                    "state": "first_login_intro",
+                    "step": 2,
+                }
                 token = session_data["token"]
                 gated_uri = f"ws://{host}:{port}/ws/rooms/0?token={token}"
                 assert "Merlin" not in await app.state.presence.players_in_room(0)

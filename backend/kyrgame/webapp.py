@@ -812,27 +812,6 @@ def _elf_trigger_outcome(events) -> str:
     return "no_active_player"
 
 
-def _persist_player_from_template(
-    db: OrmSession, alias: str, template: models.PlayerModel, room_id: int | None
-) -> models.Player:
-    data = template.model_dump()
-    data.update(
-        {
-            "uidnam": alias[: constants.UIDSIZ],
-            "plyrid": alias[: constants.ALSSIZ],
-            "altnam": alias[: constants.APNSIZ],
-            "attnam": alias[: constants.APNSIZ],
-            "spouse": (data.get("spouse") or alias)[: constants.ALSSIZ],
-            "gamloc": room_id if room_id is not None else template.gamloc,
-            "pgploc": room_id if room_id is not None else template.pgploc,
-        }
-    )
-    player = models.Player(**data)
-    db.add(player)
-    db.flush([player])
-    return player
-
-
 def _persist_first_login_player(
     db: OrmSession, player_id: str, template: models.PlayerModel
 ) -> models.Player:
@@ -1141,10 +1120,13 @@ async def start_session(
                 player = _find_player_record(db, compat_player_id)
                 if player is None:
                     _ensure_first_login_player_id_available(db, request, compat_player_id)
-                    player = _persist_player_from_template(
-                        db, compat_player_id, template, payload.room_id
-                    )
+                    player = _persist_first_login_player(db, compat_player_id, template)
                     first_login = True
+                    lifecycle_messages = _first_login_lifecycle_messages(
+                        request.app.state.fixture_cache["messages"], player.plyrid
+                    )
+                    lifecycle_state = FIRST_LOGIN_INTRO_STATE
+                    lifecycle_step = 2
                 elif payload.room_id is not None:
                     player.gamloc = payload.room_id
                     player.pgploc = payload.room_id
