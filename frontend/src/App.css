@@ -95,6 +95,16 @@ textarea {
   min-height: 0;
 }
 
+.mobile-controls-toggle {
+  display: inline-flex;
+}
+
+@media (min-width: 761px) {
+  .mobile-controls-toggle {
+    display: none;
+  }
+}
+
 .panel {
   background: linear-gradient(155deg, rgba(16, 35, 39, 0.9), rgba(11, 21, 32, 0.94));
   border: 1px solid rgba(243, 199, 122, 0.28);
@@ -680,7 +690,14 @@ p {
   justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.mud-session-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .connection-pill {
@@ -717,10 +734,12 @@ p {
   padding: 0.85rem;
   height: auto;
   flex: 1 1 auto;
-  min-height: 420px;
-  min-width: 0;
-  overflow-y: auto;
+  min-height: calc(22lh + 1.7rem + 1px);
+  min-width: calc(80ch + 1.7rem);
+  overflow: auto;
   font-family: 'DM Mono', 'VT323', monospace;
+  font-size: 0.88rem;
+  line-height: 1.6;
   box-shadow: inset 0 0 0 1px rgba(141, 225, 198, 0.08);
 }
 
@@ -743,6 +762,8 @@ p {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  min-height: calc(22lh + 1px);
+  min-width: 80ch;
   color: #f3c77a;
   text-shadow: 0 0 6px rgba(243, 199, 122, 0.32);
 }
@@ -1177,11 +1198,225 @@ p {
 }
 
 @media (max-width: 760px) {
+  .app-shell {
+    height: 100dvh;
+    min-height: 100dvh;
+    justify-content: flex-start;
+    padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+      max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .navigator {
+    height: auto;
+    min-height: 100%;
+    max-height: none;
+    gap: 0.6rem;
+    overflow: visible;
+  }
+
+  .masthead {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .masthead .eyebrow {
+    font-size: 0.65rem;
+  }
+
+  .masthead h1 {
+    font-size: clamp(1.45rem, 8vw, 1.9rem);
+    margin: 0.05rem 0;
+  }
+
+  .masthead .muted {
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  .mobile-controls-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: start;
+    width: max-content;
+    border: 1px solid rgba(243, 199, 122, 0.42);
+    border-radius: 8px;
+    padding: 0.44rem 0.7rem;
+    background: rgba(9, 16, 24, 0.88);
+    color: #f3c77a;
+    font: inherit;
+    font-size: 0.8rem;
+    letter-spacing: 0;
+    box-shadow: inset 0 0 0 1px rgba(141, 225, 198, 0.08);
+  }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .primary {
+    flex: 0 0 auto;
+    height: min(70dvh, 40rem);
+    min-height: 0;
+  }
+
+  .secondary {
+    flex: 0 0 auto;
+    max-height: min(70dvh, 42rem);
+    overflow-y: auto;
+  }
+
+  .navigator.controls-closed .secondary {
+    display: none;
+  }
+
+  .mud-shell {
+    padding: 0.55rem;
+  }
+
+  .mud-window {
+    padding: 0.55rem;
+  }
+
+  .mud-header {
+    margin-bottom: 0.3rem;
+  }
+
+  .connection-pill {
+    padding: 0.3rem 0.48rem;
+    font-size: 0.72rem;
+  }
+
+  .crt {
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    flex: 1 1 auto;
+    padding: 0.65rem;
+    font-size: clamp(0.72rem, 3.35vw, 0.88rem);
+    line-height: 1.45;
+  }
+
+  .crt-lines {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .prompt-row {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+    padding-top: 0.2rem;
+    background: linear-gradient(180deg, rgba(5, 10, 20, 0), rgba(5, 10, 20, 0.94) 38%);
+  }
+
+  .compass {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+  }
+
+  .prompt-field {
+    min-width: 0;
+    padding: 0.38rem 0.48rem;
+  }
+
+  .prompt-field input {
+    min-width: 0;
+    font-size: 0.86rem;
+  }
+
+  .send-button {
+    padding: 0.68rem 0.75rem;
+    border-radius: 10px;
+  }
+
+  .mode-hint {
+    font-size: 0.62rem;
+  }
+
   .vfx-palette-panel {
     left: 1rem;
     bottom: 5rem;
   }
 }
+
+@media (min-width: 761px) and (max-height: 960px) {
+  .app-shell {
+    padding: 1rem 1.5rem;
+  }
+
+  .navigator {
+    gap: 0.75rem;
+  }
+
+  .masthead .eyebrow {
+    font-size: 0.68rem;
+  }
+
+  .masthead h1 {
+    font-size: 1.9rem;
+    margin: 0.08rem 0;
+  }
+
+  .masthead .muted {
+    font-size: 0.88rem;
+    line-height: 1.35;
+  }
+
+  .mud-shell {
+    padding: 0.7rem;
+  }
+
+  .mud-window {
+    padding: 0.7rem;
+  }
+
+  .mud-header {
+    margin-bottom: 0.35rem;
+  }
+
+  .prompt-row {
+    margin-top: 0.5rem;
+  }
+}
+
+@media (min-width: 761px) and (max-height: 520px) {
+  .app-shell {
+    overflow-y: auto;
+  }
+
+  .navigator {
+    height: auto;
+    min-height: 100%;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .layout {
+    flex: 0 0 auto;
+    min-height: auto;
+  }
+
+  .primary {
+    min-height: max-content;
+  }
+
+  .mud-shell,
+  .mud-window {
+    flex: 0 0 auto;
+    min-height: max-content;
+  }
+}
+
 .hud-panel {
   background: linear-gradient(180deg, rgba(10, 24, 29, 0.92), rgba(6, 12, 20, 0.95));
   border: 1px solid rgba(243, 199, 122, 0.28);

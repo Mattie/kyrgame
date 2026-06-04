@@ -317,6 +317,8 @@ class PlayerSession(Base):
     session_token = Column(String(128), nullable=False, unique=True)
     room_id = Column(Integer, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
+    lifecycle_state = Column(String(32), nullable=True)
+    lifecycle_step = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_seen = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

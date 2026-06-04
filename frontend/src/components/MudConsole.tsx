@@ -1,6 +1,7 @@
 import {
   CSSProperties,
   FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -169,6 +170,7 @@ export const MudConsole = () => {
     playerVisuals,
     sendCommand,
     sendMove,
+    advanceLifecycle,
     session,
     world,
   } = useNavigator()
@@ -194,16 +196,20 @@ export const MudConsole = () => {
     ScreenReaderConsoleLine[]
   >([])
   const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false)
+  const [lifecycleAdvancePending, setLifecycleAdvancePending] = useState(false)
   const showVfxTuning =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
   const logRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const isConsoleFollowingRef = useRef(true)
+  const lifecycleAdvancePendingRef = useRef(false)
+  const isMountedRef = useRef(true)
 
   const location = useMemo(() => {
     if (!world || currentRoom === null) return null
     return world.locations.find((loc) => loc.id === currentRoom) ?? null
   }, [currentRoom, world])
+  const lifecycleIntroActive = session?.lifecycle?.state === 'first_login_intro'
 
   const isConsoleNearBottom = useCallback((node: HTMLDivElement) => {
     return node.scrollHeight - node.scrollTop - node.clientHeight <= CONSOLE_BOTTOM_THRESHOLD_PX
@@ -252,6 +258,7 @@ export const MudConsole = () => {
     if (!navMode) return
 
     const handleKeydown = (event: KeyboardEvent) => {
+      if (lifecycleIntroActive) return
       const direction = directionByKey[event.key.toLowerCase()]
       if (!direction) return
       event.preventDefault()
@@ -260,11 +267,91 @@ export const MudConsole = () => {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [navMode, sendMove])
+  }, [lifecycleIntroActive, navMode, sendMove])
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (lifecycleIntroActive) return
+    lifecycleAdvancePendingRef.current = false
+    setLifecycleAdvancePending(false)
+  }, [lifecycleIntroActive])
+
+  useEffect(() => {
+    if (!lifecycleIntroActive) return
+    inputRef.current?.focus()
+  }, [lifecycleIntroActive])
+
+  const advanceLifecycleFromPrompt = useCallback(
+    (submitted: string) => {
+      if (lifecycleAdvancePendingRef.current) return
+      lifecycleAdvancePendingRef.current = true
+      setLifecycleAdvancePending(true)
+      setInput('')
+      void (async () => {
+        try {
+          await advanceLifecycle(submitted.trim())
+        } catch {
+          // NavigatorContext surfaces lifecycle failures; keep the prompt usable.
+        } finally {
+          lifecycleAdvancePendingRef.current = false
+          if (!isMountedRef.current) return
+          setLifecycleAdvancePending(false)
+          inputRef.current?.focus()
+        }
+      })()
+    },
+    [advanceLifecycle]
+  )
+
+  useEffect(() => {
+    if (!lifecycleIntroActive) return
+
+    const handleLifecycleEnter = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter') return
+
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const interactiveTarget = target?.closest(
+        'button, a[href], input, textarea, select, summary, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
+      )
+      if (interactiveTarget) return
+
+      const standaloneTarget =
+        target === null ||
+        target === document.body ||
+        target === document.documentElement ||
+        target.closest('.crt') === logRef.current
+      if (!standaloneTarget) return
+
+      event.preventDefault()
+      advanceLifecycleFromPrompt(inputRef.current?.value ?? '')
+    }
+
+    window.addEventListener('keydown', handleLifecycleEnter)
+    return () => window.removeEventListener('keydown', handleLifecycleEnter)
+  }, [advanceLifecycleFromPrompt, lifecycleIntroActive])
+
+  const handlePromptKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (!lifecycleIntroActive || event.key !== 'Enter') return
+      event.preventDefault()
+      advanceLifecycleFromPrompt(inputRef.current?.value ?? input)
+    },
+    [advanceLifecycleFromPrompt, input, lifecycleIntroActive]
+  )
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const command = input.trim()
+    const submitted = input.trim()
+    if (lifecycleIntroActive) {
+      advanceLifecycleFromPrompt(submitted)
+      return
+    }
+    const command = submitted
     if (!command) return
 
     sendCommand(command)
@@ -397,8 +484,11 @@ export const MudConsole = () => {
     if (!session) {
       return ['Connect to begin exploring the world of Kyrandia.']
     }
+    if (lifecycleIntroActive) {
+      return []
+    }
     return [`Player ${session.playerId} connected.`, '']
-  }, [session])
+  }, [lifecycleIntroActive, session])
 
   const hasLocationDescription = useMemo(
     () =>
@@ -411,6 +501,7 @@ export const MudConsole = () => {
 
   const initialDescriptionEntry: ActivityEntry | null = useMemo(() => {
     if (!location || !world) return null
+    if (lifecycleIntroActive) return null
     if (hasLocationDescription) return null
 
     const messageId =
@@ -436,7 +527,7 @@ export const MudConsole = () => {
     )
 
     return entry
-  }, [hasLocationDescription, location, occupants, session?.playerId, world])
+  }, [hasLocationDescription, lifecycleIntroActive, location, occupants, session?.playerId, world])
 
   const entriesToRender = useMemo(
     () => (initialDescriptionEntry ? [initialDescriptionEntry, ...activity] : activity),
@@ -628,17 +719,13 @@ export const MudConsole = () => {
       <div className="mud-grid" data-testid="mud-grid">
         <div className="mud-window">
           <header className="mud-header">
-            <div>
-              <p className="eyebrow">Kyrandia Line Interface</p>
-              <h2 aria-hidden>{location?.brfdes ?? 'Awaiting world data'}</h2>
-              <p className="muted">
-                {session ? (
-                  <AnsiText text={`Player ${session.playerId}`} playerVisuals={playerVisuals} />
-                ) : (
-                  'No session yet'
-                )}
-              </p>
-            </div>
+            <p className="muted mud-session-line">
+              {session ? (
+                <AnsiText text={`Player ${session.playerId}`} playerVisuals={playerVisuals} />
+              ) : (
+                'No session yet'
+              )}
+            </p>
             <div className={`connection-pill ${connectionStatus}`}>
               {connectionStatus}
             </div>
@@ -691,11 +778,17 @@ export const MudConsole = () => {
                 aria-label="command input"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handlePromptKeyDown}
                 onFocus={() => setNavMode(false)}
                 placeholder="Type commands like LOOK, SAY HELLO, or INVENTORY"
+                disabled={lifecycleAdvancePending}
               />
             </div>
-            <button type="submit" className="send-button">
+            <button
+              type="submit"
+              className="send-button"
+              disabled={lifecycleAdvancePending}
+            >
               Send
             </button>
           </form>

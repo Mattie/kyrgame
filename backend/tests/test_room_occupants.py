@@ -7,7 +7,7 @@ import pytest
 import uvicorn
 import websockets
 
-from kyrgame.webapp import create_app
+from session_test_helpers import create_seeded_app as create_app
 
 
 def _get_open_port() -> int:

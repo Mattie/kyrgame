@@ -5,6 +5,7 @@ import { MudConsole } from './MudConsole'
 
 const mockSendCommand = vi.fn()
 const mockSendMove = vi.fn()
+const mockAdvanceLifecycle = vi.fn()
 const navigatorState: any = {
   apiBaseUrl: 'http://example.test',
   session: { token: 'token', playerId: 'Hero', roomId: 0 },
@@ -39,6 +40,7 @@ const navigatorState: any = {
   adminToken: null,
   setAdminToken: vi.fn(),
   applyAdminUpdate: vi.fn(),
+  advanceLifecycle: mockAdvanceLifecycle,
   sendMove: mockSendMove,
   sendCommand: mockSendCommand,
 }
@@ -104,6 +106,8 @@ describe('MudConsole', () => {
   beforeEach(() => {
     mockSendCommand.mockReset()
     mockSendMove.mockReset()
+    mockAdvanceLifecycle.mockReset()
+    mockAdvanceLifecycle.mockImplementation(() => new Promise<void>(() => undefined))
     localStorage.clear()
     navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
     navigatorState.world = {
@@ -133,6 +137,40 @@ describe('MudConsole', () => {
       },
     ]
     window.history.replaceState(null, '', '/?modem=off')
+  })
+
+  it('keeps the MUD header compact for terminal rows', () => {
+    const { container } = render(<MudConsole />)
+
+    const header = container.querySelector<HTMLElement>('.mud-header')
+    expect(header).toBeInTheDocument()
+    expect(header?.querySelector('.eyebrow')).toBeNull()
+    expect(header?.querySelector('h2')).toBeNull()
+    expect(screen.queryByText('Kyrandia Line Interface')).toBeNull()
+    expect(header).toHaveTextContent('Player Hero')
+    expect(header).toHaveTextContent('connected')
+  })
+
+  it('renders text instantly when modem stream is disabled', () => {
+    window.history.replaceState(null, '', '/?modem=off')
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+    navigatorState.activity = [
+      {
+        id: 'stream-off-entry',
+        type: 'command_response',
+        summary: 'This line should appear immediately.',
+        payload: null,
+      },
+    ]
+
+    render(<MudConsole />)
+
+    expect(screen.getByText('This line should appear immediately.')).toBeInTheDocument()
   })
 
   it('streams one console line at a time when modem mode is enabled', () => {
@@ -329,6 +367,130 @@ describe('MudConsole', () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 420 })
     expect(screen.queryByRole('button', { name: /scroll to latest console output/i })).toBeNull()
+  })
+
+  it('uses blank ENTER to advance first-login lifecycle pages', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+    expect(screen.queryByText('A dark forest surrounds you in all directions.')).toBeNull()
+    expect(screen.queryByText('Player Hero connected.')).toBeNull()
+  })
+
+  it('uses standalone ENTER to advance first-login lifecycle pages', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+
+    render(<MudConsole />)
+
+    fireEvent.keyDown(window, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
+  it('consumes typed commands as lifecycle advancement before room entry', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
+  it('uses prompt ENTER to submit typed lifecycle input without a normal command', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
+  it('ignores repeated lifecycle ENTER submissions while an advance is pending', async () => {
+    let resolveLifecycle!: () => void
+    const lifecycleRequest = new Promise<void>((resolve) => {
+      resolveLifecycle = resolve
+    })
+    mockAdvanceLifecycle.mockReturnValueOnce(lifecycleRequest)
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledTimes(1)
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveLifecycle()
+      await lifecycleRequest
+    })
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves interactive control ENTER activation alone during first-login lifecycle', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    navButton.focus()
+    fireEvent.keyDown(navButton, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+    expect(mockSendCommand).not.toHaveBeenCalled()
   })
 
   it('does not render debug payload JSON in the MUD console', () => {

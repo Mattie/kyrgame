@@ -10,7 +10,7 @@ from starlette import status
 
 from kyrgame import fixtures
 from kyrgame import models
-from kyrgame.webapp import create_app
+from session_test_helpers import create_seeded_app as create_app
 
 ADMIN_TOKEN = "test-admin-token"
 

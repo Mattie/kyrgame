@@ -42,6 +42,12 @@ export type SessionRecord = {
   expiresAt?: string | null
   expiresInSeconds?: number | null
   playerFlags?: number | null
+  lifecycle?: SessionLifecycle | null
+}
+
+export type SessionLifecycle = {
+  state: string
+  step?: number | null
 }
 
 export type PlayerVisual = {
@@ -208,6 +214,7 @@ type NavigatorContextValue = {
   fetchAdminMobs: () => Promise<AdminMobSnapshot>
   triggerElf: (playerId: string, roomId: number) => Promise<AdminElfTriggerResponse>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
+  advanceLifecycle: (input: string) => Promise<void>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (command: string, options?: SendCommandOptions) => void
 }
@@ -346,6 +353,22 @@ const extractObjectIds = (objects: unknown): number[] => {
     .map(obj => (typeof obj === 'object' && obj?.id !== undefined ? obj.id : null))
     .filter((id): id is number => id !== null)
 }
+
+const parseSessionLifecycle = (value: unknown): SessionLifecycle | null => {
+  if (!value || typeof value !== 'object') return null
+  const payload = value as Record<string, unknown>
+  if (typeof payload.state !== 'string' || payload.state.trim() === '') return null
+  return {
+    state: payload.state,
+    step: typeof payload.step === 'number' ? payload.step : null,
+  }
+}
+
+const isIntroLifecycle = (lifecycle?: SessionLifecycle | null) =>
+  lifecycle?.state === 'first_login_intro'
+
+const isFirstLoginEntryLifecycle = (lifecycle?: SessionLifecycle | null) =>
+  lifecycle?.state === 'first_login_entry'
 
 export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), [])
@@ -933,6 +956,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         const sessionPayload = data.session
         const playerFlags =
           typeof sessionPayload.player_flags === 'number' ? sessionPayload.player_flags : null
+        const lifecycle = parseSessionLifecycle(sessionPayload.lifecycle)
         const record: SessionRecord = {
           token: sessionPayload.token,
           playerId: sessionPayload.player_id,
@@ -943,6 +967,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               ? sessionPayload.expires_in_seconds
               : null,
           playerFlags,
+          lifecycle,
         }
         setSession(record)
         setPlayerVisuals({
@@ -970,6 +995,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             },
           })
         })
+        if (isIntroLifecycle(record.lifecycle)) {
+          setConnectionStatus('idle')
+          return
+        }
         connectWebSocket(record.token, record.roomId)
       } catch (err) {
         setConnectionStatus('error')
@@ -988,8 +1017,123 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     ]
   )
 
+  const advanceLifecycle = useCallback(
+    async (input: string) => {
+      const currentSession = sessionRef.current
+      if (!currentSession) {
+        appendActivity({
+          type: 'command_error',
+          summary: 'Session required',
+        })
+        return
+      }
+
+      const reportLifecycleError = (message: string) => {
+        setError(message)
+        setConnectionStatus('error')
+        appendActivity({
+          type: 'command_error',
+          room: currentSession.roomId,
+          summary: message,
+          payload: { detail: message },
+        })
+      }
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/auth/session/lifecycle/advance`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${currentSession.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ input }),
+        })
+        if (!response.ok) {
+          const detail = await parseSessionError(response)
+          reportLifecycleError(detail || 'Unable to advance session lifecycle')
+          return
+        }
+
+        const data = await response.json()
+        const sessionPayload = data.session
+        const playerFlags =
+          typeof sessionPayload.player_flags === 'number'
+            ? sessionPayload.player_flags
+            : currentSession.playerFlags ?? null
+        const lifecycle = parseSessionLifecycle(sessionPayload.lifecycle)
+        const nextRecord: SessionRecord = {
+          ...currentSession,
+          token: sessionPayload.token ?? currentSession.token,
+          playerId: sessionPayload.player_id ?? currentSession.playerId,
+          roomId:
+            typeof sessionPayload.room_id === 'number'
+              ? sessionPayload.room_id
+              : currentSession.roomId,
+          expiresAt: sessionPayload.expires_at ?? currentSession.expiresAt ?? null,
+          expiresInSeconds:
+            typeof sessionPayload.expires_in_seconds === 'number'
+              ? sessionPayload.expires_in_seconds
+              : currentSession.expiresInSeconds ?? null,
+          playerFlags,
+          lifecycle,
+        }
+        setSession(nextRecord)
+        sessionRef.current = nextRecord
+        setPlayerVisuals((prev) => ({
+          ...prev,
+          [nextRecord.playerId]: playerVisualFromFlags(playerFlags),
+        }))
+        setCurrentRoom(nextRecord.roomId)
+
+        const lifecycleMessages = Array.isArray(sessionPayload.lifecycle_messages)
+          ? sessionPayload.lifecycle_messages
+          : []
+        lifecycleMessages.forEach((message: { message_id?: string; text?: string }) => {
+          appendActivity({
+            type: 'command_response',
+            room: nextRecord.roomId,
+            summary: message.text ?? message.message_id ?? 'lifecycle_message',
+            payload: {
+              scope: 'player',
+              event: 'lifecycle_message',
+              type: 'lifecycle_message',
+              message_id: message.message_id,
+              text: message.text,
+            },
+          })
+        })
+
+        if (isFirstLoginEntryLifecycle(nextRecord.lifecycle)) {
+          const playableRecord = { ...nextRecord, lifecycle: null }
+          setSession(playableRecord)
+          sessionRef.current = playableRecord
+          if (!worldRef.current) {
+            await loadWorldData()
+          }
+          connectWebSocket(playableRecord.token, playableRecord.roomId)
+        }
+      } catch (err) {
+        reportLifecycleError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'Unable to advance session lifecycle'
+        )
+      }
+    },
+    [
+      apiBaseUrl,
+      appendActivity,
+      connectWebSocket,
+      loadWorldData,
+      parseSessionError,
+    ]
+  )
+
   const sendMove = useCallback(
     (direction: 'north' | 'south' | 'east' | 'west') => {
+      if (isIntroLifecycle(sessionRef.current?.lifecycle)) {
+        return
+      }
       if (!socketRef.current) {
         appendActivity({
           type: 'command_error',
@@ -1007,6 +1151,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const sendCommand = useCallback(
     (command: string, options?: SendCommandOptions) => {
       const trimmed = command.trim()
+      if (isIntroLifecycle(sessionRef.current?.lifecycle)) {
+        void advanceLifecycle(trimmed)
+        return
+      }
       if (trimmed === '') return
       if (!socketRef.current) {
         appendActivity({
@@ -1037,7 +1185,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       }
       socketRef.current.send(JSON.stringify(outgoing))
     },
-    [appendActivity]
+    [advanceLifecycle, appendActivity]
   )
 
   const value = useMemo(
@@ -1058,6 +1206,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       fetchAdminMobs,
       triggerElf,
       applyAdminUpdate,
+      advanceLifecycle,
       sendMove,
       sendCommand,
     }),
@@ -1066,6 +1215,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       activity,
       apiBaseUrl,
       applyAdminUpdate,
+      advanceLifecycle,
       connectionStatus,
       currentRoom,
       error,

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect, select, text
 
 from kyrgame import database, loader, models, repositories
 
@@ -65,6 +65,23 @@ def test_alembic_upgrade_creates_all_tables(migrated_engine):
     }.issubset(table_names)
 
 
+def test_initial_schema_revision_does_not_include_session_lifecycle_columns(
+    alembic_config, database_url
+):
+    command.upgrade(alembic_config, "0001_initial_schema")
+    engine = database.get_engine(database_url, connect_args={"check_same_thread": False})
+    try:
+        inspector = inspect(engine)
+        session_columns = {
+            column["name"] for column in inspector.get_columns("player_sessions")
+        }
+
+        assert "lifecycle_state" not in session_columns
+        assert "lifecycle_step" not in session_columns
+    finally:
+        engine.dispose()
+
+
 def test_player_and_content_column_lengths_match_existing_contracts(migrated_engine):
     inspector = inspect(migrated_engine)
 
@@ -82,6 +99,34 @@ def test_player_and_content_column_lengths_match_existing_contracts(migrated_eng
     assert player_columns["altnam"]["type"].length == 30
     assert player_columns["attnam"]["type"].length == 30
     assert player_columns["spouse"]["type"].length == 14
+
+    session_columns = {
+        column["name"]: column for column in inspector.get_columns("player_sessions")
+    }
+    assert session_columns["lifecycle_state"]["type"].length == 32
+    assert session_columns["lifecycle_step"]["type"].python_type is int
+
+
+def test_runtime_in_memory_migration_keeps_followup_session_lifecycle_columns():
+    database_url = "sqlite+pysqlite:///:memory:"
+    engine = database.get_engine(database_url)
+    try:
+        database.run_migrations(database_url=database_url, engine=engine)
+        with engine.connect() as connection:
+            inspector = inspect(connection)
+            session_columns = {
+                column["name"]: column
+                for column in inspector.get_columns("player_sessions")
+            }
+            version = connection.execute(
+                text("select version_num from alembic_version")
+            ).scalar_one()
+
+        assert session_columns["lifecycle_state"]["type"].length == 32
+        assert session_columns["lifecycle_step"]["type"].python_type is int
+        assert version == "0002_session_lifecycle_state"
+    finally:
+        engine.dispose()
 
 
 def test_inventory_repository_upserts_by_slot(seeded_session):

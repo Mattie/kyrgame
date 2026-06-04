@@ -170,16 +170,23 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
         "resumed": false,
         "replaced_sessions": 0,
         "player_flags": 1,
+        "lifecycle": { "state": "first_login_intro", "step": 2 },
         "lifecycle_messages": [
-          { "message_id": "GOODPD", "text": "..." },
-          { "message_id": "INTROA", "text": "..." },
-          { "message_id": "INTROB", "text": "..." },
-          { "message_id": "INTROC", "text": "..." },
-          { "message_id": "INTROD", "text": "..." }
+          { "message_id": "GOODPD", "text": "..." }
         ]
       }
     }
     ```
+
+    Explicit first-login claims start a session-scoped lifecycle. The initial
+    `/auth/session` response contains only `GOODPD`. Each submitted line during
+    the intro should be sent to `POST /auth/session/lifecycle/advance` with the
+    session bearer token; the endpoint returns exactly one of `INTROA`,
+    `INTROB`, `INTROC`, then `INTROD`. The following advance returns
+    `lifecycle: { "state": "first_login_entry", "step": 6 }` with no lifecycle
+    messages. Room WebSocket entry is rejected while `first_login_intro` is
+    active. After `first_login_entry`, the room socket may connect, emits the
+    legacy first-entry `APPEARFLASH` room text, and clears lifecycle state.
 
     When resuming, `status` becomes `recovered`, `resumed` is `true`, and `first_login` is `false`.
     A fresh login for the same `player_id` replaces any existing active game session for that player.
@@ -210,6 +217,7 @@ curl -X POST http://localhost:8000/auth/session \
       "resumed": false,
       "replaced_sessions": 0,
       "player_flags": 1,
+      "lifecycle": null,
       "lifecycle_messages": []
     }
   }
