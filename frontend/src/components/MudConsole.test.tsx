@@ -107,6 +107,7 @@ describe('MudConsole', () => {
     mockSendCommand.mockReset()
     mockSendMove.mockReset()
     mockAdvanceLifecycle.mockReset()
+    mockAdvanceLifecycle.mockImplementation(() => new Promise<void>(() => undefined))
     localStorage.clear()
     navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
     navigatorState.world = {
@@ -437,6 +438,41 @@ describe('MudConsole', () => {
 
     expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
     expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
+  it('ignores repeated lifecycle ENTER submissions while an advance is pending', async () => {
+    let resolveLifecycle!: () => void
+    const lifecycleRequest = new Promise<void>((resolve) => {
+      resolveLifecycle = resolve
+    })
+    mockAdvanceLifecycle.mockReturnValueOnce(lifecycleRequest)
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledTimes(1)
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveLifecycle()
+      await lifecycleRequest
+    })
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledTimes(2)
   })
 
   it('leaves interactive control ENTER activation alone during first-login lifecycle', () => {

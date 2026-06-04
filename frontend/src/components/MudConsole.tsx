@@ -196,11 +196,14 @@ export const MudConsole = () => {
     ScreenReaderConsoleLine[]
   >([])
   const [hasNewOutputBelow, setHasNewOutputBelow] = useState(false)
+  const [lifecycleAdvancePending, setLifecycleAdvancePending] = useState(false)
   const showVfxTuning =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
   const logRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const isConsoleFollowingRef = useRef(true)
+  const lifecycleAdvancePendingRef = useRef(false)
+  const isMountedRef = useRef(true)
 
   const location = useMemo(() => {
     if (!world || currentRoom === null) return null
@@ -267,15 +270,40 @@ export const MudConsole = () => {
   }, [lifecycleIntroActive, navMode, sendMove])
 
   useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (lifecycleIntroActive) return
+    lifecycleAdvancePendingRef.current = false
+    setLifecycleAdvancePending(false)
+  }, [lifecycleIntroActive])
+
+  useEffect(() => {
     if (!lifecycleIntroActive) return
     inputRef.current?.focus()
   }, [lifecycleIntroActive])
 
   const advanceLifecycleFromPrompt = useCallback(
     (submitted: string) => {
-      void advanceLifecycle(submitted.trim())
+      if (lifecycleAdvancePendingRef.current) return
+      lifecycleAdvancePendingRef.current = true
+      setLifecycleAdvancePending(true)
       setInput('')
-      inputRef.current?.focus()
+      void (async () => {
+        try {
+          await advanceLifecycle(submitted.trim())
+        } catch {
+          // NavigatorContext surfaces lifecycle failures; keep the prompt usable.
+        } finally {
+          lifecycleAdvancePendingRef.current = false
+          if (!isMountedRef.current) return
+          setLifecycleAdvancePending(false)
+          inputRef.current?.focus()
+        }
+      })()
     },
     [advanceLifecycle]
   )
@@ -753,9 +781,14 @@ export const MudConsole = () => {
                 onKeyDown={handlePromptKeyDown}
                 onFocus={() => setNavMode(false)}
                 placeholder="Type commands like LOOK, SAY HELLO, or INVENTORY"
+                disabled={lifecycleAdvancePending}
               />
             </div>
-            <button type="submit" className="send-button">
+            <button
+              type="submit"
+              className="send-button"
+              disabled={lifecycleAdvancePending}
+            >
               Send
             </button>
           </form>
