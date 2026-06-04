@@ -7,7 +7,7 @@ export type ConsoleStreamConfig = {
 
 export const DEFAULT_CONSOLE_STREAM_CONFIG = {
   enabled: true,
-  baud: 20000,
+  baud: 40000,
   charsPerTick: 500,
 }
 

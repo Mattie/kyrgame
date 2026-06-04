@@ -102,6 +102,33 @@ const installConsoleScrollTo = (element: HTMLElement) => {
   return scrollTo
 }
 
+const makeLifecycleText = (lineCount: number) =>
+  Array.from({ length: lineCount }, (_, index) => `Line ${index + 1}`).join('\r\n')
+
+const setFirstLoginLifecycleText = (lineCount: number) => {
+  const text = makeLifecycleText(lineCount)
+  navigatorState.session = {
+    token: 'token',
+    playerId: 'Hero',
+    roomId: 0,
+    lifecycle: { state: 'first_login_intro', step: 3 },
+  }
+  navigatorState.activity = [
+    {
+      id: `long-lifecycle-${lineCount}`,
+      type: 'command_response',
+      summary: text,
+      payload: {
+        scope: 'player',
+        event: 'lifecycle_message',
+        type: 'lifecycle_message',
+        message_id: 'INTROA',
+        text,
+      },
+    },
+  ]
+}
+
 describe('MudConsole', () => {
   beforeEach(() => {
     mockSendCommand.mockReset()
@@ -438,6 +465,60 @@ describe('MudConsole', () => {
 
     expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
     expect(mockSendCommand).not.toHaveBeenCalled()
+  })
+
+  it('pauses long first-login text with a MajorBBS pager prompt', () => {
+    setFirstLoginLifecycleText(24)
+
+    render(<MudConsole />)
+
+    expect(screen.getByText(/Line 1/)).toBeInTheDocument()
+    expect(screen.getByText(/Line 22/)).toBeInTheDocument()
+    expect(screen.queryByText(/Line 23/)).toBeNull()
+    expect(screen.getByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeInTheDocument()
+  })
+
+  it('continues one first-login pager screen with C', () => {
+    setFirstLoginLifecycleText(24)
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.keyDown(input, { key: 'c' })
+
+    expect(screen.getByText(/Line 24/)).toBeInTheDocument()
+    expect(screen.queryByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeNull()
+    expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+  })
+
+  it('reveals the rest of a first-login pager output with N', () => {
+    setFirstLoginLifecycleText(45)
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.keyDown(input, { key: 'n' })
+
+    expect(screen.getByText(/Line 45/)).toBeInTheDocument()
+    expect(screen.queryByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeNull()
+    expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+  })
+
+  it('quits the current first-login pager output with Q and keeps lifecycle input available', () => {
+    setFirstLoginLifecycleText(45)
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    fireEvent.keyDown(input, { key: 'q' })
+
+    expect(screen.queryByText(/Line 45/)).toBeNull()
+    expect(screen.queryByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeNull()
+    expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('')
   })
 
   it('ignores repeated lifecycle ENTER submissions while an advance is pending', async () => {

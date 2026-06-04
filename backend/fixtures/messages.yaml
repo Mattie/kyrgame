@@ -958,19 +958,35 @@ messages:
     again. To see what spells you have memorized and how many spell points you have,
     type "spells". To see how many hit points you have, type "hits". To see what objects
     you are holding, type "inv". And if you need it, type "help". Press ENTER to continue
-  INTROD: You may ask what great treasure lies in this adventure? You will run across
-    many exciting characters and travel through breathtaking scenery. Beyond that,
-    explore this great world to find what is hidden for you. The first player to reach
-    the end will be granted the title of "Arch-Mage of Legends." Kyrandia is based
-    upon a complete Fantasy World created by Scott Brinker; it was programmed by Scott
-    Brinker and Richard Skurnick in March-June of 1988, and is based on multi-player
-    interactive game concepts originated by Tim Stryker. Also, thanks are due to those
-    who gave the support and inspiration to make this fantasy a reality. Kyrandia
-    is dedicated to the lonely souls of the world; type "help fantasy" in the game
-    for more. Enjoy the magic, mystery, and mirth of Kyrandia, Fantasy World of Legends!
-    Kyrandia,V%-4s (Fantasy World of Legends) Designed and Programmed by - Scott Brinker
-    & Richard Skurnick (C) 1988-96 by Galacticomm, Inc. (C) 2005-21 Elwynor Technologies
-    All rights reserved. Press ENTER to begin
+  INTROD: |-
+    You may ask what great treasure lies in this adventure?  You will run
+    across many exciting characters and travel through breathtaking scenery.
+    Beyond that, explore this great world to find what is hidden for you.  The
+    first player to reach the end will be granted the title of "Arch-Mage of
+    Legends."
+
+    Kyrandia is based upon a complete Fantasy World created by Scott Brinker; it
+    was programmed by Scott Brinker and Richard Skurnick in March-June of 1988,
+    and is based on multi-player interactive game concepts originated by Tim
+    Stryker.  Also, thanks are due to those who gave the support and inspiration
+    to make this fantasy a reality.  Kyrandia is dedicated to the lonely souls
+    of the world; type "help fantasy" in the game for more.
+
+    Enjoy the magic, mystery, and mirth of Kyrandia, Fantasy World of Legends!
+
+               Kyrandia,V%-4s
+         (Fantasy World of Legends)
+
+        Designed and Programmed by -
+      Scott Brinker & Richard Skurnick
+      (C) 1988-96 by Galacticomm, Inc.
+      (C) 2005-21 Elwynor Technologies
+             All rights reserved.
+
+        Ported and Modernized by -
+      Mattie Casper & his loyal AI swarm
+
+    Press ENTER to begin
   HLPMSG: 'Help is available for the following subjects: commands ... what you can
     do fantasy .... a note from the author gold ....... "money" of Kyrandia hits .......
     your strength/combat levels ..... advancing in Kyrandia spells ..... the magic
