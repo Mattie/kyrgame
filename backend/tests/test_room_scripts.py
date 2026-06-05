@@ -217,7 +217,19 @@ async def test_temple_put_requires_exact_five_chants():
 
 
 @pytest.mark.anyio
-async def test_temple_phrase_requires_speech_command():
+@pytest.mark.parametrize(
+    ("command", "args"),
+    [
+        ("say", ["glory", "be", "to", "tashanna"]),
+        ("comment", ["glory", "be", "to", "tashanna"]),
+        ("note", ["glory", "be", "to", "tashanna"]),
+        ("chant", ["glory", "be", "to", "tashanna"]),
+        ("put", ["glory", "be", "to", "tashanna"]),
+        ("nonesuch", ["glory", "be", "to", "tashanna"]),
+        ("say", ["the", "glory", "be", "to", "tashanna"]),
+    ],
+)
+async def test_temple_phrase_commands_raise_level_three(command, args):
     scheduler = SchedulerService()
     gateway = FakeGateway()
     messages = fixtures.load_messages()
@@ -232,8 +244,53 @@ async def test_temple_phrase_requires_speech_command():
     handled = await engine.handle_command(
         "hero",
         7,
-        command="put",
-        args=["glory", "be", "to", "tashanna"],
+        command=command,
+        args=args,
+        player_level=player.level,
+        player=player,
+    )
+
+    assert handled is True
+    assert player.level == 3
+    direct_texts = [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("player") == "hero"
+    ]
+    assert messages.messages["LVL300"] in direct_texts
+    assert any(
+        msg.get("payload", {}).get("text") == messages.messages["GETLVL"] % player.altnam
+        and msg.get("payload", {}).get("exclude_player") == "hero"
+        for msg in gateway.messages
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["glory", "be", "tashanna"],
+        ["glory", "be", "to", "tashanna", "please"],
+    ],
+)
+async def test_temple_rejects_wrong_temple_phrase_remainders(args):
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(update={"level": 2}, deep=True)
+
+    handled = await engine.handle_command(
+        "hero",
+        7,
+        command="say",
+        args=args,
         player_level=player.level,
         player=player,
     )
