@@ -31,6 +31,18 @@ const formatConnectionDuration = (seconds: number | null | undefined) => {
   return `${remainingSeconds}s`
 }
 
+const formatConnectionDurationDateTime = (seconds: number | null | undefined) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds ?? 0))
+  const hours = Math.floor(safeSeconds / 3600)
+  const minutes = Math.floor((safeSeconds % 3600) / 60)
+  const remainingSeconds = safeSeconds % 60
+  const hoursPart = hours > 0 ? `${hours}H` : ''
+  const minutesPart = minutes > 0 ? `${minutes}M` : ''
+  const secondsPart =
+    remainingSeconds > 0 || (hours === 0 && minutes === 0) ? `${remainingSeconds}S` : ''
+  return `PT${hoursPart}${minutesPart}${secondsPart}`
+}
+
 export const ActivePlayerIndicator = () => {
   const { apiBaseUrl, connectionStatus } = useNavigator()
   const [players, setPlayers] = useState<ActivePlayerSummary[]>([])
@@ -164,7 +176,9 @@ export const ActivePlayerIndicator = () => {
                     <strong data-testid="active-player-name">{player.display_name}</strong>
                     <small>{player.rank_title}</small>
                   </span>
-                  <time>{formatConnectionDuration(player.connection_duration_seconds)}</time>
+                  <time dateTime={formatConnectionDurationDateTime(player.connection_duration_seconds)}>
+                    {formatConnectionDuration(player.connection_duration_seconds)}
+                  </time>
                 </li>
               ))}
             </ul>

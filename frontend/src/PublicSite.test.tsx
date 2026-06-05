@@ -209,6 +209,21 @@ describe('public site routes', () => {
     expect(screen.getByRole('heading', { name: /leaderboard/i })).toBeInTheDocument()
     expect(await screen.findByText('Zed Alt')).toBeInTheDocument()
     expect(screen.getByText('19 spells')).toBeInTheDocument()
+    expect(
+      mockFetch.mock.calls.filter(([input]) => String(input).endsWith('/public/player-activity'))
+    ).toHaveLength(0)
+    expect(
+      mockFetch.mock.calls.filter(([input]) => String(input).endsWith('/public/leaderboard'))
+    ).toHaveLength(1)
+  })
+
+  it('normalizes trailing slash routes before rendering', async () => {
+    window.history.replaceState(null, '', '/leaderboard/')
+
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: /leaderboard/i })).toBeInTheDocument()
+    expect(await screen.findByText('Zed Alt')).toBeInTheDocument()
   })
 
   it('shows a clean public-data error when the API returns HTML', async () => {

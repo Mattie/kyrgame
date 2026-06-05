@@ -11,18 +11,24 @@ import {
   LeaderboardPage,
 } from './pages/PublicSite'
 
+const normalizePath = (nextPath: string) => {
+  const normalized = (nextPath || '/').replace(/\/+$/, '')
+  return normalized === '' ? '/' : normalized
+}
+
 function App() {
-  const [path, setPath] = useState(() => window.location.pathname || '/')
+  const [path, setPath] = useState(() => normalizePath(window.location.pathname))
 
   useEffect(() => {
-    const handlePopState = () => setPath(window.location.pathname || '/')
+    const handlePopState = () => setPath(normalizePath(window.location.pathname))
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   const navigate = useCallback((nextPath: string) => {
-    window.history.pushState(null, '', nextPath)
-    setPath(nextPath)
+    const normalizedPath = normalizePath(nextPath)
+    window.history.pushState(null, '', normalizedPath)
+    setPath(normalizedPath)
     window.scrollTo?.({ top: 0 })
   }, [])
 

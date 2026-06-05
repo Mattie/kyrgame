@@ -29,6 +29,11 @@ type PublicSiteData = {
   error: string | null
 }
 
+type PublicSiteDataOptions = {
+  loadActivity?: boolean
+  loadLeaderboard?: boolean
+}
+
 type PublicPageProps = {
   navigate: (path: string) => void
 }
@@ -46,7 +51,10 @@ const readPublicJson = async <T,>(response: Response): Promise<T> => {
   return (await response.json()) as T
 }
 
-const usePublicSiteData = (): PublicSiteData => {
+const usePublicSiteData = ({
+  loadActivity = true,
+  loadLeaderboard = true,
+}: PublicSiteDataOptions = {}): PublicSiteData => {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), [])
   const [activity, setActivity] = useState<PlayerActivityPayload>(emptyActivity)
   const [leaderboard, setLeaderboard] = useState<PublicPlayerSummary[]>([])
@@ -60,18 +68,24 @@ const usePublicSiteData = (): PublicSiteData => {
       setLoading(true)
       setError(null)
       try {
-        const [activityResponse, leaderboardResponse] = await Promise.all([
-          fetch(`${apiBaseUrl}/public/player-activity`),
-          fetch(`${apiBaseUrl}/public/leaderboard`),
+        const [activityPayload, leaderboardPayload] = await Promise.all([
+          loadActivity
+            ? fetch(`${apiBaseUrl}/public/player-activity`).then(readPublicJson<PlayerActivityPayload>)
+            : Promise.resolve<PlayerActivityPayload | null>(null),
+          loadLeaderboard
+            ? fetch(`${apiBaseUrl}/public/leaderboard`).then(readPublicJson<LeaderboardPayload>)
+            : Promise.resolve<LeaderboardPayload | null>(null),
         ])
-        const activityPayload = await readPublicJson<PlayerActivityPayload>(activityResponse)
-        const leaderboardPayload = await readPublicJson<LeaderboardPayload>(leaderboardResponse)
         if (cancelled) return
-        setActivity({
-          active: activityPayload.active ?? [],
-          recent: activityPayload.recent ?? [],
-        })
-        setLeaderboard(leaderboardPayload.players ?? [])
+        setActivity(
+          activityPayload
+            ? {
+                active: activityPayload.active ?? [],
+                recent: activityPayload.recent ?? [],
+              }
+            : emptyActivity
+        )
+        setLeaderboard(leaderboardPayload?.players ?? [])
       } catch (err) {
         if (cancelled) return
         setError('Unable to load public game data')
@@ -88,7 +102,7 @@ const usePublicSiteData = (): PublicSiteData => {
     return () => {
       cancelled = true
     }
-  }, [apiBaseUrl])
+  }, [apiBaseUrl, loadActivity, loadLeaderboard])
 
   return { activity, leaderboard, loading, error }
 }
@@ -295,7 +309,7 @@ export const AboutPage = ({ navigate }: PublicPageProps) => (
 )
 
 export const LeaderboardPage = ({ navigate }: PublicPageProps) => {
-  const { leaderboard, loading, error } = usePublicSiteData()
+  const { leaderboard, loading, error } = usePublicSiteData({ loadActivity: false })
 
   return (
     <SiteFrame navigate={navigate} className="leaderboard-page">
