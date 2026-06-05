@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import pytest
 
 from kyrgame import commands, constants, fixtures
@@ -33,6 +36,32 @@ def base_state():
 def _dispatcher():
     vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
     return vocabulary, commands.CommandDispatcher(commands.build_default_registry(vocabulary))
+
+
+def _legacy_kyr_cmds_source() -> str:
+    return (
+        Path(__file__).resolve().parents[2] / "legacy" / "KYRCMDS.C"
+    ).read_text(encoding="latin-1")
+
+
+def _legacy_command_rows() -> list[tuple[str, str, bool]]:
+    source = _legacy_kyr_cmds_source()
+    command_block = re.search(r"gi_cmdarr\[\]=\{(.*?)\};", source, re.S)
+    assert command_block is not None
+    return [
+        (command, routine, payonl == "1")
+        for command, routine, payonl in re.findall(
+            r'\{"([^"]+)",\s*([a-zA-Z0-9_]+),\s*([01])\}',
+            command_block.group(1),
+        )
+    ]
+
+
+def _legacy_simple_emote_commands() -> set[str]:
+    source = _legacy_kyr_cmds_source()
+    emote_block = re.search(r"smparr\[\]=\{(.*?)\};", source, re.S)
+    assert emote_block is not None
+    return set(re.findall(r'\{"([^"]+)"', emote_block.group(1)))
 
 
 def _add_room_target(base_state, *, spouse: bool = False):
@@ -100,6 +129,17 @@ def test_legacy_command_registry_has_no_stubbed_gameplay_handlers():
         entry = registry.get(verb)
         assert entry is not None, verb
         assert entry.handler is not commands._handle_stub, verb
+
+
+def test_legacy_command_fixture_matches_legacy_command_table():
+    fixture_rows = [
+        (command.command, command.cmdrou, command.payonl)
+        for command in fixtures.load_commands()
+        if command.command != "spoiler"
+    ]
+
+    assert fixture_rows == _legacy_command_rows()
+    assert set(commands.SIMPLE_EMOTES) == _legacy_simple_emote_commands()
 
 
 @pytest.mark.anyio

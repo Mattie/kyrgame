@@ -352,6 +352,21 @@ def _temple_on_enter(messages: MessageBundleModel) -> RoomCallback:
     return _handler
 
 
+_TEMPLE_ARTICLES = {"the", "a", "an"}
+
+
+def _temple_remainder_after_gi_bagthe(args: list[str]) -> str:
+    # Legacy temple() calls gi_bagthe(), then rstrin(), before comparing margv[1]
+    # with TEMPLE. Source: legacy/KYRROUS.C:294-340 and legacy/GAMUTILS.C:55-68.
+    normalized = [arg.lower() for arg in args]
+    index = 0
+    while index < len(normalized) - 1:
+        if normalized[index] in _TEMPLE_ARTICLES:
+            del normalized[index]
+        index += 1
+    return " ".join(normalized)
+
+
 def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
 
@@ -404,22 +419,13 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             )
             return True
 
-        temple_phrase = messages.messages.get("TEMPLE", "glory be to tashanna").lower()
-        if (
-            verb in {"say", "comment", "note"}
-            and " ".join(arg.lower() for arg in args) == temple_phrase
-        ):
-            # Legacy temple phrase calls chklvl(3), then glvutl and msgutl2(LVL300, GETLVL).
-            # Source: legacy/KYRROUS.C:331-340.
-            return await level_gate(3, "LVL300", "GETLVL")
-
         # Legacy: PUT object handling for level-up donations
         if verb == "put" and args:
             obj_arg = args[0].lower()
             # Legacy temple only accepts an offering when chantd is exactly 5.
             # Source: legacy/KYRROUS.C:295-314.
             chant_ready = context.state.flags.get("chantd", 0) == 5
-            
+
             if chant_ready and player is not None:
                 offered = _resolve_offering(obj_arg, objects_by_name)
                 if offered is None or offered not in player.gpobjs:
@@ -441,21 +447,28 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     others_message_id="OFFER1",
                 )
                 return True
-        
+
         # Legacy: CHANT TASHANNA command
         if verb == "chant" and args and args[0].lower() == "tashanna":
             chant_count = context.state.flags.get("chantd", 0)
             chant_count += 1
             context.state.flags["chantd"] = chant_count
-            
+
             if chant_count == 1:
-                await context.broadcast("ambient", 
+                await context.broadcast("ambient",
                                       text="*** The altar begins to glow dimly.")
             else:
                 await context.broadcast("ambient",
                                       text="*** The altar glows even brighter!")
             return True
-        
+
+        temple_phrase = messages.messages.get("TEMPLE", "glory be to tashanna").lower()
+        if _temple_remainder_after_gi_bagthe(args) == temple_phrase:
+            # Legacy temple phrase calls chklvl(3), then glvutl and msgutl2(LVL300, GETLVL).
+            # kyra() gives room routines first chance before caster handles chant as a spell.
+            # Source: legacy/KYRROUS.C:319-340 and legacy/KYRCMDS.C:1248-1257.
+            return await level_gate(3, "LVL300", "GETLVL")
+
         # Legacy: PRAY/MEDITATE commands
         if verb in {"pray", "meditate"}:
             await context.direct_and_others(
