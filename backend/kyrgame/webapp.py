@@ -41,7 +41,6 @@ WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW
 GAME_VERSION = "7.20"
 RECENT_PUBLIC_PLAYER_LIMIT = 5
 RECENT_PUBLIC_PLAYER_WINDOW = timedelta(days=7)
-PUBLIC_ACTIVE_SESSION_WINDOW = timedelta(minutes=2)
 WIZARD_SYMBOL_MALE = "\U0001f9d9\u200d\u2642\ufe0f"
 WIZARD_SYMBOL_FEMALE = "\U0001f9d9\u200d\u2640\ufe0f"
 # Legacy case 1 explicitly reserves Sysop and rejects duplicate Player-IDs
@@ -674,31 +673,6 @@ def _latest_session_seen_by_player_id(
         if current is None or last_seen > current:
             latest[session.player_id] = last_seen
     return latest
-
-
-def _active_session_connected_at_by_player_id(
-    sessions: list[models.PlayerSession], now: datetime
-) -> dict[int, datetime]:
-    active_cutoff = now - PUBLIC_ACTIVE_SESSION_WINDOW
-    active: dict[int, datetime] = {}
-    for session in sessions:
-        last_seen = _ensure_aware_utc(session.last_seen)
-        expires_at = _ensure_aware_utc(session.expires_at)
-        created_at = _ensure_aware_utc(session.created_at)
-        # Public "live" presence must stay separate from the longer reconnect
-        # window represented by active, unexpired auth sessions.
-        if (
-            session.is_active
-            and expires_at is not None
-            and expires_at > now
-            and last_seen is not None
-            and last_seen >= active_cutoff
-        ):
-            connected_at = created_at or last_seen
-            current = active.get(session.player_id)
-            if current is None or connected_at > current:
-                active[session.player_id] = connected_at
-    return active
 
 
 async def _disconnect_sessions(app: FastAPI, tokens: list[str]):
@@ -1816,8 +1790,11 @@ async def public_player_activity(
         if record.id is not None
     }
     players_by_alias = {player.plyrid: player for player in players_by_record_id.values()}
+    record_id_by_alias = {
+        player.plyrid: record_id
+        for record_id, player in players_by_record_id.items()
+    }
     latest_seen = _latest_session_seen_by_player_id(sessions)
-    db_active_connections = _active_session_connected_at_by_player_id(sessions, now)
     runtime_connected_at = _active_player_connected_at(request.app)
 
     active_summaries: list[dict] = []
@@ -1825,14 +1802,7 @@ async def public_player_activity(
     for session_token, active_player in _active_player_sessions(request.app).items():
         canonical_player = players_by_alias.get(active_player.plyrid, active_player)
         active_aliases.add(canonical_player.plyrid)
-        record_id = next(
-            (
-                record_id
-                for record_id, player in players_by_record_id.items()
-                if player.plyrid == canonical_player.plyrid
-            ),
-            None,
-        )
+        record_id = record_id_by_alias.get(canonical_player.plyrid)
         active_summaries.append(
             _public_player_summary(
                 canonical_player,
@@ -1840,32 +1810,6 @@ async def public_player_activity(
                 active=True,
                 last_seen=latest_seen.get(record_id) if record_id is not None else now,
                 connected_at=runtime_connected_at.get(session_token, now),
-                now=now,
-            )
-        )
-
-    db_active_entries = [
-        (players_by_record_id[player_id], latest_seen.get(player_id), connected_at)
-        for player_id, connected_at in db_active_connections.items()
-        if player_id in players_by_record_id
-        and players_by_record_id[player_id].plyrid not in active_aliases
-    ]
-    db_active_entries.sort(
-        key=lambda entry: (
-            entry[2],
-            entry[0].plyrid.lower(),
-        ),
-        reverse=True,
-    )
-    for player, last_seen, connected_at in db_active_entries:
-        active_aliases.add(player.plyrid)
-        active_summaries.append(
-            _public_player_summary(
-                player,
-                spells_catalog=spells_catalog,
-                active=True,
-                last_seen=last_seen,
-                connected_at=connected_at,
                 now=now,
             )
         )
@@ -1913,7 +1857,6 @@ async def public_leaderboard(
     player_records = list(db.scalars(select(models.Player)).all())
     sessions = list(db.scalars(select(models.PlayerSession)).all())
     latest_seen = _latest_session_seen_by_player_id(sessions)
-    active_record_connections = _active_session_connected_at_by_player_id(sessions, now)
     runtime_connected_by_alias = {
         player.plyrid: _active_player_connected_at(request.app).get(session_token, now)
         for session_token, player in _active_player_sessions(request.app).items()
@@ -1923,8 +1866,6 @@ async def public_leaderboard(
     for record in player_records:
         player = _player_model_from_record(record)
         connected_at = runtime_connected_by_alias.get(player.plyrid)
-        if connected_at is None and record.id is not None:
-            connected_at = active_record_connections.get(record.id)
         active = connected_at is not None
         summary = _public_player_summary(
             player,

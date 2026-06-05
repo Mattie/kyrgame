@@ -39,33 +39,46 @@ export const ActivePlayerIndicator = () => {
   const [dismissed, setDismissed] = useState(false)
   const visible = (open || hovered) && !dismissed
 
-  const loadPlayers = useCallback(async (cancelled?: () => boolean) => {
+  const loadPlayers = useCallback(async (options?: { cancelled?: () => boolean; signal?: AbortSignal }) => {
     try {
-      const response = await fetch(`${apiBaseUrl}/public/player-activity`)
+      const response = await fetch(`${apiBaseUrl}/public/player-activity`, {
+        signal: options?.signal,
+      })
       if (!response.ok) throw new Error('Unable to load active players')
       const payload = (await response.json()) as PlayerActivityPayload
-      if (!cancelled?.()) {
+      if (!options?.cancelled?.()) {
         setPlayers(Array.isArray(payload.active) ? payload.active.filter((player) => player.active) : [])
       }
     } catch {
-      if (!cancelled?.()) setPlayers([])
+      if (!options?.signal?.aborted && !options?.cancelled?.()) setPlayers([])
     }
   }, [apiBaseUrl])
 
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
     const isCancelled = () => cancelled
-    void loadPlayers(isCancelled)
-    const interval = window.setInterval(() => void loadPlayers(isCancelled), POLL_INTERVAL_MS)
+    void loadPlayers({ cancelled: isCancelled, signal: controller.signal })
+    const interval = window.setInterval(
+      () => void loadPlayers({ cancelled: isCancelled, signal: controller.signal }),
+      POLL_INTERVAL_MS
+    )
     return () => {
       cancelled = true
+      controller.abort()
       window.clearInterval(interval)
     }
   }, [loadPlayers])
 
   useEffect(() => {
     if (connectionStatus === 'connected' || connectionStatus === 'disconnected') {
-      void loadPlayers()
+      let cancelled = false
+      const controller = new AbortController()
+      void loadPlayers({ cancelled: () => cancelled, signal: controller.signal })
+      return () => {
+        cancelled = true
+        controller.abort()
+      }
     }
   }, [connectionStatus, loadPlayers])
 

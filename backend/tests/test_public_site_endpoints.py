@@ -161,8 +161,8 @@ async def test_public_player_activity_groups_sessions_active_players_and_recent_
         active_ids = [player["player_id"] for player in payload["active"]]
         recent_ids = [player["player_id"] for player in payload["recent"]]
 
-        assert active_ids == ["fresh", "tokened", "live"]
-        assert recent_ids == ["quiet", "recent1", "recent2", "recent3", "recent4"]
+        assert active_ids == ["fresh", "live"]
+        assert recent_ids == ["tokened", "quiet", "recent1", "recent2", "recent3"]
         assert "recent6" not in recent_ids
         assert "stale" not in recent_ids
         assert "live" not in recent_ids
@@ -173,7 +173,6 @@ async def test_public_player_activity_groups_sessions_active_players_and_recent_
         assert payload["active"][0]["active"] is True
         assert payload["active"][0]["connected_at"] is not None
         assert payload["active"][0]["connection_duration_seconds"] < payload["active"][1]["connection_duration_seconds"]
-        assert payload["active"][1]["connection_duration_seconds"] < payload["active"][2]["connection_duration_seconds"]
         assert payload["recent"][0]["active"] is False
         assert payload["recent"][0]["connected_at"] is None
         assert payload["recent"][0]["connection_duration_seconds"] is None
