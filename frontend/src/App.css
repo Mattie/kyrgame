@@ -786,6 +786,11 @@ p {
   color: #a4d8ff;
 }
 
+.crt-line.pager-prompt {
+  color: #8de1c6;
+  font-weight: 700;
+}
+
 .ansi-token {
   white-space: pre-wrap;
 }

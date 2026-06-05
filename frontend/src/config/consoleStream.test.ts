@@ -20,8 +20,8 @@ describe('getConsoleStreamConfig', () => {
 
     expect(getConsoleStreamConfig()).toEqual({
       enabled: true,
-      baud: 20000,
-      charsPerSecond: 2000,
+      baud: 40000,
+      charsPerSecond: 4000,
       charsPerTick: 500,
     })
   })
@@ -45,8 +45,8 @@ describe('getConsoleStreamConfig', () => {
 
     expect(getConsoleStreamConfig()).toEqual({
       enabled: false,
-      baud: 20000,
-      charsPerSecond: 2000,
+      baud: 40000,
+      charsPerSecond: 4000,
       charsPerTick: 500,
     })
   })
@@ -65,8 +65,8 @@ describe('getConsoleStreamConfig', () => {
 
     expect(getConsoleStreamConfig()).toEqual({
       enabled: true,
-      baud: 20000,
-      charsPerSecond: 2000,
+      baud: 40000,
+      charsPerSecond: 4000,
       charsPerTick: 500,
     })
   })

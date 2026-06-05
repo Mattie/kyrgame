@@ -111,6 +111,24 @@ def test_messages_preserve_crlf_line_breaks():
     assert parsed.messages["BODM01"].split("\r\n")[0].startswith("...You leap")
 
 
+def test_introd_preserves_legacy_credits_and_appends_modernized_credit():
+    catalog = load_json("messages/en-US.legacy.json")
+    parsed = models.MessageBundleModel(**catalog)
+    intro = parsed.messages["INTROD"]
+
+    assert "Kyrandia,V%-4s\r\n" in intro
+    assert "Designed and Programmed by -\r\n  Scott Brinker & Richard Skurnick" in intro
+    assert "(C) 2005-21 Elwynor Technologies" in intro
+    assert (
+        "    Ported and Modernized by -\r\n"
+        "  Mattie Casper & his loyal AI swarm"
+    ) in intro
+    assert intro.index("(C) 2005-21 Elwynor Technologies") < intro.index(
+        "Ported and Modernized by -"
+    )
+    assert intro.index("Ported and Modernized by -") < intro.index("Press ENTER to begin")
+
+
 def test_loader_populates_database(tmp_path):
     engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
     init_db_schema(engine)

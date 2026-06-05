@@ -1,5 +1,6 @@
 import {
   CSSProperties,
+  Fragment,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   useCallback,
@@ -78,6 +79,8 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
   d: 'east',
 }
 const CONSOLE_BOTTOM_THRESHOLD_PX = 24
+const TERMINAL_PAGER_SCREEN_ROWS = 22
+const TERMINAL_PAGER_PROMPT = '(N)onstop, (Q)uit, or (C)ontinue?'
 
 type ConsoleLine = {
   id: string
@@ -86,11 +89,27 @@ type ConsoleLine = {
   style?: CSSProperties
   promptSymbol?: boolean
   payloadText?: string
+  pagerEligible?: boolean
 }
 
 type ScreenReaderConsoleLine = {
   id: string
   text: string
+}
+
+type TerminalPagerAction = 'continue' | 'nonstop' | 'quit'
+
+type TerminalPagerLineState = {
+  visibleRows: number
+  nonstop?: boolean
+  quit?: boolean
+}
+
+type TerminalPagerRenderInfo = {
+  text: string
+  paused: boolean
+  totalRows: number
+  visibleRows: number
 }
 
 const SCREEN_READER_STREAM_HISTORY_LIMIT = 20
@@ -161,6 +180,58 @@ const formatPayload = (payload: ActivityEntry['payload']): string | null => {
   return null
 }
 
+const terminalRows = (text: string) => text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+
+const terminalRowCount = (text: string) => terminalRows(text).length
+
+const terminalTextForRows = (text: string, rows: number) =>
+  terminalRows(text).slice(0, Math.max(0, rows)).join('\n')
+
+const resolveTerminalPagerAction = (value: string): TerminalPagerAction | null => {
+  const normalized = value.trim().toLowerCase()
+  if (normalized === '' || normalized === 'c' || normalized === 'continue') return 'continue'
+  if (normalized === 'n' || normalized === 'nonstop') return 'nonstop'
+  if (normalized === 'q' || normalized === 'quit') return 'quit'
+  return null
+}
+
+const isLifecycleMessagePayload = (payload: ActivityEntry['payload']) =>
+  typeof payload === 'object' &&
+  payload !== null &&
+  (payload as Record<string, unknown>).event === 'lifecycle_message'
+
+const getTerminalPagerRenderInfo = (
+  line: ConsoleLine,
+  state: TerminalPagerLineState | undefined
+): TerminalPagerRenderInfo | null => {
+  if (!line.pagerEligible) return null
+  const totalRows = terminalRowCount(line.text)
+  if (totalRows <= TERMINAL_PAGER_SCREEN_ROWS) return null
+
+  const visibleRows = Math.min(
+    totalRows,
+    state?.visibleRows ?? TERMINAL_PAGER_SCREEN_ROWS
+  )
+  const paused = !state?.quit && !state?.nonstop && visibleRows < totalRows
+
+  return {
+    text: terminalTextForRows(line.text, visibleRows),
+    paused,
+    totalRows,
+    visibleRows,
+  }
+}
+
+const formatTerminalPagerAnnouncement = (
+  line: ConsoleLine,
+  pagerInfo: TerminalPagerRenderInfo
+): string => {
+  const visibleText = formatConsoleLineForAnnouncement({ ...line, text: pagerInfo.text })
+  return [visibleText, pagerInfo.paused ? TERMINAL_PAGER_PROMPT : null]
+    .filter((part): part is string => Boolean(part))
+    .join(' ')
+}
+
 export const MudConsole = () => {
   const {
     activity,
@@ -192,6 +263,9 @@ export const MudConsole = () => {
   const [streamConfig] = useState(() => getConsoleStreamConfig())
   const [streamQueueIds, setStreamQueueIds] = useState<string[]>([])
   const [completedStreamLineIds, setCompletedStreamLineIds] = useState<Set<string>>(() => new Set())
+  const [terminalPagerLineStates, setTerminalPagerLineStates] = useState<
+    Record<string, TerminalPagerLineState>
+  >({})
   const [screenReaderStreamLines, setScreenReaderStreamLines] = useState<
     ScreenReaderConsoleLine[]
   >([])
@@ -299,66 +373,15 @@ export const MudConsole = () => {
           // NavigatorContext surfaces lifecycle failures; keep the prompt usable.
         } finally {
           lifecycleAdvancePendingRef.current = false
-          if (!isMountedRef.current) return
-          setLifecycleAdvancePending(false)
-          inputRef.current?.focus()
+          if (isMountedRef.current) {
+            setLifecycleAdvancePending(false)
+            inputRef.current?.focus()
+          }
         }
       })()
     },
     [advanceLifecycle]
   )
-
-  useEffect(() => {
-    if (!lifecycleIntroActive) return
-
-    const handleLifecycleEnter = (event: KeyboardEvent) => {
-      if (event.key !== 'Enter') return
-
-      const target = event.target instanceof HTMLElement ? event.target : null
-      const interactiveTarget = target?.closest(
-        'button, a[href], input, textarea, select, summary, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
-      )
-      if (interactiveTarget) return
-
-      const standaloneTarget =
-        target === null ||
-        target === document.body ||
-        target === document.documentElement ||
-        target.closest('.crt') === logRef.current
-      if (!standaloneTarget) return
-
-      event.preventDefault()
-      advanceLifecycleFromPrompt(inputRef.current?.value ?? '')
-    }
-
-    window.addEventListener('keydown', handleLifecycleEnter)
-    return () => window.removeEventListener('keydown', handleLifecycleEnter)
-  }, [advanceLifecycleFromPrompt, lifecycleIntroActive])
-
-  const handlePromptKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLInputElement>) => {
-      if (!lifecycleIntroActive || event.key !== 'Enter') return
-      event.preventDefault()
-      advanceLifecycleFromPrompt(inputRef.current?.value ?? input)
-    },
-    [advanceLifecycleFromPrompt, input, lifecycleIntroActive]
-  )
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const submitted = input.trim()
-    if (lifecycleIntroActive) {
-      advanceLifecycleFromPrompt(submitted)
-      return
-    }
-    const command = submitted
-    if (!command) return
-
-    sendCommand(command)
-    setInput('')
-  }
-
-  const compassLabel = navMode ? 'Navigation mode active' : 'Toggle navigation mode'
 
   const markCustomFireEffect = () => {
     setFireEffectPresetId('custom')
@@ -539,6 +562,27 @@ export const MudConsole = () => {
     [entriesToRender]
   )
 
+  useEffect(() => {
+    if (!lifecycleIntroActive) return
+
+    setTerminalPagerLineStates((current) => {
+      let changed = false
+      const next = { ...current }
+
+      visibleEntries.forEach((entry) => {
+        const entryNeedsPager =
+          isLifecycleMessagePayload(entry.payload) &&
+          terminalRowCount(entry.summary) > TERMINAL_PAGER_SCREEN_ROWS
+        if (!entryNeedsPager || next[entry.id]) return
+
+        next[entry.id] = { visibleRows: TERMINAL_PAGER_SCREEN_ROWS }
+        changed = true
+      })
+
+      return changed ? next : current
+    })
+  }, [lifecycleIntroActive, visibleEntries])
+
   const consoleLines = useMemo<ConsoleLine[]>(() => {
     const lines: ConsoleLine[] = []
 
@@ -575,6 +619,11 @@ export const MudConsole = () => {
         entry.payload !== null &&
         'event' in entry.payload &&
         entry.payload.event === 'unimplemented'
+      const pagerState = terminalPagerLineStates[entry.id]
+      const pagerEligible =
+        isLifecycleMessagePayload(entry.payload) &&
+        terminalRowCount(entry.summary) > TERMINAL_PAGER_SCREEN_ROWS &&
+        (lifecycleIntroActive || Boolean(pagerState))
 
       lines.push({
         id: entry.id,
@@ -583,6 +632,7 @@ export const MudConsole = () => {
         style: isUnimplemented ? { fontStyle: 'italic' } : undefined,
         promptSymbol: isUserCommand,
         payloadText: payloadText ?? undefined,
+        pagerEligible,
       })
 
       legacyLines?.forEach((line, lineIndex) => {
@@ -595,9 +645,22 @@ export const MudConsole = () => {
     })
 
     return lines
-  }, [bannerLines, currentRoom, occupants, session?.playerId, visibleEntries, world])
+  }, [
+    bannerLines,
+    currentRoom,
+    lifecycleIntroActive,
+    occupants,
+    session?.playerId,
+    terminalPagerLineStates,
+    visibleEntries,
+    world,
+  ])
 
   const consoleLineIds = useMemo(() => consoleLines.map((line) => line.id), [consoleLines])
+  const pagerLineIds = useMemo(
+    () => new Set(consoleLines.filter((line) => line.pagerEligible).map((line) => line.id)),
+    [consoleLines]
+  )
 
   useEffect(() => {
     const currentLineIds = new Set(consoleLineIds)
@@ -632,12 +695,192 @@ export const MudConsole = () => {
       })
       return changed ? next : current
     })
+
+    setTerminalPagerLineStates((current) => {
+      let changed = false
+      const next: Record<string, TerminalPagerLineState> = {}
+      Object.entries(current).forEach(([id, value]) => {
+        if (currentLineIds.has(id)) {
+          next[id] = value
+        } else {
+          changed = true
+        }
+      })
+      return changed ? next : current
+    })
   }, [consoleLineIds])
 
   const activeStreamLineId = useMemo(
-    () => streamQueueIds.find((id) => !completedStreamLineIds.has(id)) ?? null,
-    [completedStreamLineIds, streamQueueIds]
+    () =>
+      streamQueueIds.find((id) => !completedStreamLineIds.has(id) && !pagerLineIds.has(id)) ??
+      null,
+    [completedStreamLineIds, pagerLineIds, streamQueueIds]
   )
+
+  const activeTerminalPagerLineId = useMemo(
+    () =>
+      consoleLines.find((line) =>
+        getTerminalPagerRenderInfo(line, terminalPagerLineStates[line.id])?.paused
+      )?.id ?? null,
+    [consoleLines, terminalPagerLineStates]
+  )
+
+  const terminalPagerAnnouncement = useMemo<ScreenReaderConsoleLine | null>(() => {
+    if (!streamConfig.enabled) return null
+
+    for (const line of consoleLines) {
+      const pagerInfo = getTerminalPagerRenderInfo(line, terminalPagerLineStates[line.id])
+      if (!pagerInfo) continue
+
+      const state = terminalPagerLineStates[line.id]
+      const disposition = state?.quit ? 'quit' : pagerInfo.paused ? 'paused' : 'complete'
+      return {
+        id: `${line.id}-pager-${pagerInfo.visibleRows}-${disposition}`,
+        text: formatTerminalPagerAnnouncement(line, pagerInfo),
+      }
+    }
+
+    return null
+  }, [consoleLines, streamConfig.enabled, terminalPagerLineStates])
+
+  useEffect(() => {
+    if (!terminalPagerAnnouncement) return
+
+    setScreenReaderStreamLines((current) => {
+      if (current.some((line) => line.id === terminalPagerAnnouncement.id)) return current
+      return [...current, terminalPagerAnnouncement].slice(
+        -SCREEN_READER_STREAM_HISTORY_LIMIT
+      )
+    })
+  }, [terminalPagerAnnouncement])
+
+  const handleTerminalPagerCommand = useCallback(
+    (rawCommand: string) => {
+      if (!activeTerminalPagerLineId) return false
+      const action = resolveTerminalPagerAction(rawCommand)
+      if (!action) return false
+
+      const line = consoleLines.find((candidate) => candidate.id === activeTerminalPagerLineId)
+      if (!line) return false
+
+      const totalRows = terminalRowCount(line.text)
+      setInput('')
+      setTerminalPagerLineStates((current) => {
+        const currentState = current[activeTerminalPagerLineId]
+        const currentVisibleRows = Math.min(
+          totalRows,
+          currentState?.visibleRows ?? TERMINAL_PAGER_SCREEN_ROWS
+        )
+        const nextState: TerminalPagerLineState =
+          action === 'continue'
+            ? {
+                visibleRows: Math.min(
+                  totalRows,
+                  currentVisibleRows + TERMINAL_PAGER_SCREEN_ROWS
+                ),
+              }
+            : action === 'nonstop'
+              ? { visibleRows: totalRows, nonstop: true }
+              : { visibleRows: currentVisibleRows, quit: true }
+
+        return {
+          ...current,
+          [activeTerminalPagerLineId]: nextState,
+        }
+      })
+      return true
+    },
+    [activeTerminalPagerLineId, consoleLines]
+  )
+
+  useEffect(() => {
+    if (!lifecycleIntroActive) return
+
+    const handleLifecycleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const interactiveTarget = target?.closest(
+        'button, a[href], input, textarea, select, summary, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
+      )
+
+      if (activeTerminalPagerLineId) {
+        const command = event.key === 'Enter' ? '' : event.key
+        if (!resolveTerminalPagerAction(command)) return
+        if (interactiveTarget) return
+
+        event.preventDefault()
+        handleTerminalPagerCommand(command)
+        return
+      }
+
+      if (event.key !== 'Enter') return
+      if (interactiveTarget) return
+
+      const standaloneTarget =
+        target === null ||
+        target === document.body ||
+        target === document.documentElement ||
+        target.closest('.crt') === logRef.current
+      if (!standaloneTarget) return
+
+      event.preventDefault()
+      advanceLifecycleFromPrompt(inputRef.current?.value ?? '')
+    }
+
+    window.addEventListener('keydown', handleLifecycleKeyDown)
+    return () => window.removeEventListener('keydown', handleLifecycleKeyDown)
+  }, [
+    activeTerminalPagerLineId,
+    advanceLifecycleFromPrompt,
+    handleTerminalPagerCommand,
+    lifecycleIntroActive,
+  ])
+
+  const handlePromptKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (activeTerminalPagerLineId) {
+        const command = event.key === 'Enter' ? input : event.key
+        if (!resolveTerminalPagerAction(command)) return
+
+        event.preventDefault()
+        handleTerminalPagerCommand(command)
+        return
+      }
+
+      if (!lifecycleIntroActive || event.key !== 'Enter') return
+
+      event.preventDefault()
+      advanceLifecycleFromPrompt(inputRef.current?.value ?? input)
+    },
+    [
+      activeTerminalPagerLineId,
+      advanceLifecycleFromPrompt,
+      handleTerminalPagerCommand,
+      input,
+      lifecycleIntroActive,
+    ]
+  )
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const submitted = input.trim()
+
+    if (activeTerminalPagerLineId) {
+      handleTerminalPagerCommand(submitted)
+      return
+    }
+
+    if (lifecycleIntroActive) {
+      advanceLifecycleFromPrompt(submitted)
+      return
+    }
+
+    if (!submitted) return
+
+    sendCommand(submitted)
+    setInput('')
+  }
+
+  const compassLabel = navMode ? 'Navigation mode active' : 'Toggle navigation mode'
 
   const handleLineDone = (lineId: string) => {
     const completedLine = consoleLines.find((line) => line.id === lineId)
@@ -664,22 +907,37 @@ export const MudConsole = () => {
 
   useEffect(() => {
     handleConsoleOutputProgress()
-  }, [activeStreamLineId, consoleLines, handleConsoleOutputProgress])
+  }, [activeStreamLineId, consoleLines, handleConsoleOutputProgress, terminalPagerLineStates])
 
   const renderLine = (line: ConsoleLine) => {
     const isStreamComplete = completedStreamLineIds.has(line.id)
+    const pagerInfo = getTerminalPagerRenderInfo(line, terminalPagerLineStates[line.id])
+    const text = pagerInfo?.text ?? line.text
+    const renderInstantly = Boolean(pagerInfo)
 
-    if (!streamConfig.enabled || isStreamComplete) {
-      return (
-        <p key={line.id} className={line.className} style={line.style}>
+    const renderedLine =
+      !streamConfig.enabled || isStreamComplete || renderInstantly ? (
+        <p key={`${line.id}-text`} className={line.className} style={line.style}>
           {line.promptSymbol ? (
             <span className="prompt-symbol" aria-hidden>
               &gt;
             </span>
           ) : null}
-          <AnsiText text={line.text} playerVisuals={playerVisuals} />
+          <AnsiText text={text} playerVisuals={playerVisuals} />
           {line.payloadText && <span className="payload-inline">{line.payloadText}</span>}
         </p>
+      ) : null
+
+    if (renderedLine) {
+      return (
+        <Fragment key={line.id}>
+          {renderedLine}
+          {pagerInfo?.paused && (
+            <p className="crt-line command_response pager-prompt">
+              {TERMINAL_PAGER_PROMPT}
+            </p>
+          )}
+        </Fragment>
       )
     }
 
@@ -692,7 +950,7 @@ export const MudConsole = () => {
             </span>
           ) : null}
           <ModemLineWriter
-            text={line.text}
+            text={text}
             enabled
             charsPerSecond={streamConfig.charsPerSecond}
             charsPerTick={streamConfig.charsPerTick}
