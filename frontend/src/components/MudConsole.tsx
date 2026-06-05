@@ -5,6 +5,7 @@ import {
   KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -79,7 +80,9 @@ const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
   d: 'east',
 }
 const CONSOLE_BOTTOM_THRESHOLD_PX = 24
-const TERMINAL_PAGER_SCREEN_ROWS = 22
+const TERMINAL_PAGER_DESKTOP_ROWS = 22
+const TERMINAL_PAGER_MIN_ROWS = 6
+const TERMINAL_PAGER_DEFAULT_LINE_HEIGHT_PX = 16
 const TERMINAL_PAGER_PROMPT = '(N)onstop, (Q)uit, or (C)ontinue?'
 
 type ConsoleLine = {
@@ -101,6 +104,7 @@ type TerminalPagerAction = 'continue' | 'nonstop' | 'quit'
 
 type TerminalPagerLineState = {
   visibleRows: number
+  pageRows?: number
   nonstop?: boolean
   quit?: boolean
 }
@@ -187,6 +191,30 @@ const terminalRowCount = (text: string) => terminalRows(text).length
 const terminalTextForRows = (text: string, rows: number) =>
   terminalRows(text).slice(0, Math.max(0, rows)).join('\n')
 
+const resolveTerminalPagerPageRows = (node: HTMLElement | null): number => {
+  if (!node || node.clientHeight <= 0) return TERMINAL_PAGER_DESKTOP_ROWS
+
+  const style = window.getComputedStyle(node)
+  let lineHeight = Number.parseFloat(style.lineHeight)
+  if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+    const fontSize = Number.parseFloat(style.fontSize)
+    lineHeight =
+      Number.isFinite(fontSize) && fontSize > 0
+        ? fontSize * 1.6
+        : TERMINAL_PAGER_DEFAULT_LINE_HEIGHT_PX
+  }
+
+  const visibleRows = Math.floor(node.clientHeight / lineHeight)
+  if (!Number.isFinite(visibleRows) || visibleRows <= 0) {
+    return TERMINAL_PAGER_DESKTOP_ROWS
+  }
+
+  return Math.max(
+    TERMINAL_PAGER_MIN_ROWS,
+    Math.min(TERMINAL_PAGER_DESKTOP_ROWS, visibleRows - 1)
+  )
+}
+
 const resolveTerminalPagerAction = (value: string): TerminalPagerAction | null => {
   const normalized = value.trim().toLowerCase()
   if (normalized === '' || normalized === 'c' || normalized === 'continue') return 'continue'
@@ -202,15 +230,16 @@ const isLifecycleMessagePayload = (payload: ActivityEntry['payload']) =>
 
 const getTerminalPagerRenderInfo = (
   line: ConsoleLine,
-  state: TerminalPagerLineState | undefined
+  state: TerminalPagerLineState | undefined,
+  pageRows: number
 ): TerminalPagerRenderInfo | null => {
   if (!line.pagerEligible) return null
   const totalRows = terminalRowCount(line.text)
-  if (totalRows <= TERMINAL_PAGER_SCREEN_ROWS) return null
+  if (totalRows <= pageRows) return null
 
   const visibleRows = Math.min(
     totalRows,
-    state?.visibleRows ?? TERMINAL_PAGER_SCREEN_ROWS
+    state?.visibleRows ?? pageRows
   )
   const paused = !state?.quit && !state?.nonstop && visibleRows < totalRows
 
@@ -266,6 +295,9 @@ export const MudConsole = () => {
   const [terminalPagerLineStates, setTerminalPagerLineStates] = useState<
     Record<string, TerminalPagerLineState>
   >({})
+  const [terminalPagerPageRows, setTerminalPagerPageRows] = useState(
+    TERMINAL_PAGER_DESKTOP_ROWS
+  )
   const [screenReaderStreamLines, setScreenReaderStreamLines] = useState<
     ScreenReaderConsoleLine[]
   >([])
@@ -278,6 +310,30 @@ export const MudConsole = () => {
   const isConsoleFollowingRef = useRef(true)
   const lifecycleAdvancePendingRef = useRef(false)
   const isMountedRef = useRef(true)
+
+  useLayoutEffect(() => {
+    const updatePagerRows = () => {
+      setTerminalPagerPageRows((current) => {
+        const next = resolveTerminalPagerPageRows(logRef.current)
+        return next === current ? current : next
+      })
+    }
+
+    updatePagerRows()
+
+    const node = logRef.current
+    let observer: ResizeObserver | null = null
+    if (node && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updatePagerRows)
+      observer.observe(node)
+    }
+
+    window.addEventListener('resize', updatePagerRows)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', updatePagerRows)
+    }
+  }, [])
 
   const location = useMemo(() => {
     if (!world || currentRoom === null) return null
@@ -344,6 +400,7 @@ export const MudConsole = () => {
   }, [lifecycleIntroActive, navMode, sendMove])
 
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
     }
@@ -570,18 +627,42 @@ export const MudConsole = () => {
       const next = { ...current }
 
       visibleEntries.forEach((entry) => {
+        const rowCount = terminalRowCount(entry.summary)
         const entryNeedsPager =
           isLifecycleMessagePayload(entry.payload) &&
-          terminalRowCount(entry.summary) > TERMINAL_PAGER_SCREEN_ROWS
-        if (!entryNeedsPager || next[entry.id]) return
+          rowCount > terminalPagerPageRows
+        if (!entryNeedsPager) return
 
-        next[entry.id] = { visibleRows: TERMINAL_PAGER_SCREEN_ROWS }
+        const currentState = next[entry.id]
+        if (!currentState) {
+          next[entry.id] = {
+            visibleRows: terminalPagerPageRows,
+            pageRows: terminalPagerPageRows,
+          }
+          changed = true
+          return
+        }
+
+        if (currentState.pageRows === terminalPagerPageRows) return
+
+        const previousPageRows = currentState.pageRows ?? currentState.visibleRows
+        const isInitialPage =
+          !currentState.nonstop &&
+          !currentState.quit &&
+          currentState.visibleRows === previousPageRows
+        next[entry.id] = {
+          ...currentState,
+          visibleRows: isInitialPage
+            ? Math.min(rowCount, terminalPagerPageRows)
+            : currentState.visibleRows,
+          pageRows: terminalPagerPageRows,
+        }
         changed = true
       })
 
       return changed ? next : current
     })
-  }, [lifecycleIntroActive, visibleEntries])
+  }, [lifecycleIntroActive, terminalPagerPageRows, visibleEntries])
 
   const consoleLines = useMemo<ConsoleLine[]>(() => {
     const lines: ConsoleLine[] = []
@@ -622,7 +703,7 @@ export const MudConsole = () => {
       const pagerState = terminalPagerLineStates[entry.id]
       const pagerEligible =
         isLifecycleMessagePayload(entry.payload) &&
-        terminalRowCount(entry.summary) > TERMINAL_PAGER_SCREEN_ROWS &&
+        terminalRowCount(entry.summary) > terminalPagerPageRows &&
         (lifecycleIntroActive || Boolean(pagerState))
 
       lines.push({
@@ -651,6 +732,7 @@ export const MudConsole = () => {
     lifecycleIntroActive,
     occupants,
     session?.playerId,
+    terminalPagerPageRows,
     terminalPagerLineStates,
     visibleEntries,
     world,
@@ -720,16 +802,24 @@ export const MudConsole = () => {
   const activeTerminalPagerLineId = useMemo(
     () =>
       consoleLines.find((line) =>
-        getTerminalPagerRenderInfo(line, terminalPagerLineStates[line.id])?.paused
+        getTerminalPagerRenderInfo(
+          line,
+          terminalPagerLineStates[line.id],
+          terminalPagerPageRows
+        )?.paused
       )?.id ?? null,
-    [consoleLines, terminalPagerLineStates]
+    [consoleLines, terminalPagerLineStates, terminalPagerPageRows]
   )
 
   const terminalPagerAnnouncement = useMemo<ScreenReaderConsoleLine | null>(() => {
     if (!streamConfig.enabled) return null
 
     for (const line of consoleLines) {
-      const pagerInfo = getTerminalPagerRenderInfo(line, terminalPagerLineStates[line.id])
+      const pagerInfo = getTerminalPagerRenderInfo(
+        line,
+        terminalPagerLineStates[line.id],
+        terminalPagerPageRows
+      )
       if (!pagerInfo) continue
 
       const state = terminalPagerLineStates[line.id]
@@ -741,7 +831,7 @@ export const MudConsole = () => {
     }
 
     return null
-  }, [consoleLines, streamConfig.enabled, terminalPagerLineStates])
+  }, [consoleLines, streamConfig.enabled, terminalPagerLineStates, terminalPagerPageRows])
 
   useEffect(() => {
     if (!terminalPagerAnnouncement) return
@@ -769,19 +859,21 @@ export const MudConsole = () => {
         const currentState = current[activeTerminalPagerLineId]
         const currentVisibleRows = Math.min(
           totalRows,
-          currentState?.visibleRows ?? TERMINAL_PAGER_SCREEN_ROWS
+          currentState?.visibleRows ?? terminalPagerPageRows
         )
+        const pageRows = currentState?.pageRows ?? terminalPagerPageRows
         const nextState: TerminalPagerLineState =
           action === 'continue'
             ? {
                 visibleRows: Math.min(
                   totalRows,
-                  currentVisibleRows + TERMINAL_PAGER_SCREEN_ROWS
+                  currentVisibleRows + pageRows
                 ),
+                pageRows,
               }
             : action === 'nonstop'
-              ? { visibleRows: totalRows, nonstop: true }
-              : { visibleRows: currentVisibleRows, quit: true }
+              ? { visibleRows: totalRows, pageRows, nonstop: true }
+              : { visibleRows: currentVisibleRows, pageRows, quit: true }
 
         return {
           ...current,
@@ -790,7 +882,7 @@ export const MudConsole = () => {
       })
       return true
     },
-    [activeTerminalPagerLineId, consoleLines]
+    [activeTerminalPagerLineId, consoleLines, terminalPagerPageRows]
   )
 
   useEffect(() => {
@@ -881,6 +973,12 @@ export const MudConsole = () => {
   }
 
   const compassLabel = navMode ? 'Navigation mode active' : 'Toggle navigation mode'
+  const sendButtonLabel = activeTerminalPagerLineId
+    ? 'Continue'
+    : lifecycleIntroActive
+      ? 'Enter'
+      : 'Send'
+  const promptControlsDisabled = lifecycleAdvancePending && !activeTerminalPagerLineId
 
   const handleLineDone = (lineId: string) => {
     const completedLine = consoleLines.find((line) => line.id === lineId)
@@ -911,7 +1009,11 @@ export const MudConsole = () => {
 
   const renderLine = (line: ConsoleLine) => {
     const isStreamComplete = completedStreamLineIds.has(line.id)
-    const pagerInfo = getTerminalPagerRenderInfo(line, terminalPagerLineStates[line.id])
+    const pagerInfo = getTerminalPagerRenderInfo(
+      line,
+      terminalPagerLineStates[line.id],
+      terminalPagerPageRows
+    )
     const text = pagerInfo?.text ?? line.text
     const renderInstantly = Boolean(pagerInfo)
 
@@ -1039,17 +1141,42 @@ export const MudConsole = () => {
                 onKeyDown={handlePromptKeyDown}
                 onFocus={() => setNavMode(false)}
                 placeholder="Type commands like LOOK, SAY HELLO, or INVENTORY"
-                disabled={lifecycleAdvancePending}
+                disabled={promptControlsDisabled}
               />
             </div>
             <button
               type="submit"
               className="send-button"
-              disabled={lifecycleAdvancePending}
+              disabled={promptControlsDisabled}
             >
-              Send
+              {sendButtonLabel}
             </button>
           </form>
+          {activeTerminalPagerLineId && (
+            <div className="terminal-action-row pager-actions" aria-label="Pager controls">
+              <button
+                type="button"
+                aria-label="Continue pager output"
+                onClick={() => handleTerminalPagerCommand('c')}
+              >
+                Continue
+              </button>
+              <button
+                type="button"
+                aria-label="Show all pager output"
+                onClick={() => handleTerminalPagerCommand('n')}
+              >
+                Nonstop
+              </button>
+              <button
+                type="button"
+                aria-label="Quit pager output"
+                onClick={() => handleTerminalPagerCommand('q')}
+              >
+                Quit
+              </button>
+            </div>
+          )}
           <p className="mode-hint">
             {navMode
               ? 'Navigation mode: WASD sends movement (click the prompt to exit).'

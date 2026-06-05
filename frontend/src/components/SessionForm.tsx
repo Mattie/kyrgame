@@ -22,7 +22,23 @@ const formatTokenTtl = (seconds?: number | null) => {
   return `${hours}h ${minutes}m`
 }
 
-export const SessionForm = () => {
+type SessionFormProps = {
+  title?: string
+  eyebrow?: string
+  showAdminFields?: boolean
+  showRoomField?: boolean
+  showEndpoint?: boolean
+  onSessionStarted?: () => void
+}
+
+export const SessionForm = ({
+  title = 'Request a token',
+  eyebrow = 'Session',
+  showAdminFields = true,
+  showRoomField = true,
+  showEndpoint = true,
+  onSessionStarted,
+}: SessionFormProps = {}) => {
   const {
     startSession,
     connectionStatus,
@@ -128,22 +144,24 @@ export const SessionForm = () => {
     event.preventDefault()
     setSubmitting(true)
     try {
-      const parsedRoom = claimNewPlayer || roomId.trim() === '' ? null : Number(roomId)
+      const parsedRoom =
+        !showRoomField || claimNewPlayer || roomId.trim() === '' ? null : Number(roomId)
       const trimmedPlayerId = playerId.trim()
       const trimmedAdminToken = adminTokenInput.trim()
 
-      setAdminToken(joinAsAdmin ? trimmedAdminToken || null : null)
+      setAdminToken(showAdminFields && joinAsAdmin ? trimmedAdminToken || null : null)
       persistPlayerId(trimmedPlayerId)
-      if (!claimNewPlayer) {
+      if (showRoomField && !claimNewPlayer) {
         persistRoomId(roomId)
       }
-      persistAdminSession(joinAsAdmin)
-      if (joinAsAdmin) {
+      persistAdminSession(showAdminFields && joinAsAdmin)
+      if (showAdminFields && joinAsAdmin) {
         persistAdminToken(trimmedAdminToken)
       }
       await startSession(trimmedPlayerId, Number.isNaN(parsedRoom) ? null : parsedRoom, {
         createPlayer: claimNewPlayer,
       })
+      onSessionStarted?.()
     } finally {
       setSubmitting(false)
     }
@@ -169,9 +187,9 @@ export const SessionForm = () => {
     <section className={`panel session-form ${collapsed ? 'collapsed' : ''}`}>
       <header className="panel-header">
         <div>
-          <p className="eyebrow">Session</p>
-          <h2>Request a token</h2>
-          <p className="endpoint">API base: {apiBaseUrl}</p>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+          {showEndpoint && <p className="endpoint">API base: {apiBaseUrl}</p>}
         </div>
         {isDevEnvironment && (
           <button
@@ -203,25 +221,27 @@ export const SessionForm = () => {
               />
             </div>
 
-            <div className="field">
-              <label htmlFor="room-id">Room ID (optional)</label>
-              <input
-                id="room-id"
-                name="room-id"
-                value={roomId}
-                disabled={claimNewPlayer}
-                onChange={(event) => {
-                  const nextValue = event.target.value
-                  setRoomId(nextValue)
-                  persistRoomId(nextValue)
-                }}
-              />
-              <p className="field-hint">
-                {claimNewPlayer
-                  ? 'New Player-IDs always enter Kyrandia at the willow tree.'
-                  : "Leave blank to use the player's current room."}
-              </p>
-            </div>
+            {showRoomField && (
+              <div className="field">
+                <label htmlFor="room-id">Room ID (optional)</label>
+                <input
+                  id="room-id"
+                  name="room-id"
+                  value={roomId}
+                  disabled={claimNewPlayer}
+                  onChange={(event) => {
+                    const nextValue = event.target.value
+                    setRoomId(nextValue)
+                    persistRoomId(nextValue)
+                  }}
+                />
+                <p className="field-hint">
+                  {claimNewPlayer
+                    ? 'New Player-IDs always enter Kyrandia at the willow tree.'
+                    : "Leave blank to use the player's current room."}
+                </p>
+              </div>
+            )}
 
             <label className="checkbox">
               <input
@@ -239,39 +259,43 @@ export const SessionForm = () => {
               </p>
             )}
 
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                name="admin-session"
-                checked={joinAsAdmin}
-                onChange={(event) => {
-                  const enabled = event.target.checked
-                  setJoinAsAdmin(enabled)
-                  persistAdminSession(enabled)
-                  if (!enabled) {
-                    setAdminTokenInput('')
-                    setAdminToken(null)
-                  }
-                }}
-              />
-              Admin session
-            </label>
+            {showAdminFields && (
+              <>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    name="admin-session"
+                    checked={joinAsAdmin}
+                    onChange={(event) => {
+                      const enabled = event.target.checked
+                      setJoinAsAdmin(enabled)
+                      persistAdminSession(enabled)
+                      if (!enabled) {
+                        setAdminTokenInput('')
+                        setAdminToken(null)
+                      }
+                    }}
+                  />
+                  Admin session
+                </label>
 
-            <div className="field">
-              <label htmlFor="admin-token">Admin token</label>
-              <input
-                id="admin-token"
-                name="admin-token"
-                value={adminTokenInput}
-                onChange={(event) => {
-                  const nextValue = event.target.value
-                  setAdminTokenInput(nextValue)
-                  persistAdminToken(nextValue)
-                }}
-                disabled={!joinAsAdmin}
-              />
-              <p className="field-hint">Configured via KYRGAME_ADMIN_TOKEN in backend/.env.</p>
-            </div>
+                <div className="field">
+                  <label htmlFor="admin-token">Admin token</label>
+                  <input
+                    id="admin-token"
+                    name="admin-token"
+                    value={adminTokenInput}
+                    onChange={(event) => {
+                      const nextValue = event.target.value
+                      setAdminTokenInput(nextValue)
+                      persistAdminToken(nextValue)
+                    }}
+                    disabled={!joinAsAdmin}
+                  />
+                  <p className="field-hint">Configured via KYRGAME_ADMIN_TOKEN in backend/.env.</p>
+                </div>
+              </>
+            )}
 
             <button type="submit" disabled={submitting || playerId.trim() === ''}>
               {submitting ? 'Requesting...' : claimNewPlayer ? 'Claim Player-ID' : 'Start session'}

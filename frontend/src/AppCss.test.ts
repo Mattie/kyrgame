@@ -3,7 +3,10 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-const appCss = readFileSync(path.join(process.cwd(), 'src', 'App.css'), 'utf8')
+const appCss = readFileSync(path.join(process.cwd(), 'src', 'App.css'), 'utf8').replace(
+  /\r\n/g,
+  '\n'
+)
 
 const readRule = (selector: string) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -63,5 +66,17 @@ describe('App CSS', () => {
     expect(appCss).toContain('.crt {\n    min-width: 0;')
     expect(appCss).toContain('.crt-lines {\n    min-width: 0;')
     expect(appCss).toContain('.prompt-row {\n    position: sticky;')
+  })
+
+  it('keeps mobile active roster names compact', () => {
+    expect(appCss).toContain('.active-player-popover strong {\n    font-size: 0.8rem;')
+  })
+
+  it('keeps active roster player rows to one identity line', () => {
+    const identityRule = readRule('.active-player-identity')
+
+    expect(identityRule).toContain('display: flex;')
+    expect(identityRule).toContain('gap: 0.52rem;')
+    expect(appCss).toContain('.active-player-symbol {')
   })
 })

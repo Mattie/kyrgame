@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 
@@ -502,6 +503,127 @@ describe('MudConsole', () => {
     expect(screen.getByText(/Line 22/)).toBeInTheDocument()
     expect(screen.queryByText(/Line 23/)).toBeNull()
     expect(screen.getByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeInTheDocument()
+  })
+
+  it('sizes first-login pager pages to the visible terminal height', async () => {
+    const originalClientHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientHeight'
+    )
+    const originalGetComputedStyle = window.getComputedStyle
+    const getComputedStyleSpy = vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element) =>
+        ({
+          ...originalGetComputedStyle(element),
+          fontSize: '16px',
+          lineHeight: '16px',
+        }) as CSSStyleDeclaration
+    )
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return this instanceof HTMLElement && this.classList.contains('crt') ? 176 : 0
+      },
+    })
+
+    try {
+      setFirstLoginLifecycleText(12)
+
+      render(<MudConsole />)
+
+      await waitFor(() => expect(screen.getByText(/Line 10/)).toBeInTheDocument())
+      expect(screen.queryByText(/Line 11/)).toBeNull()
+      expect(screen.getByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeInTheDocument()
+    } finally {
+      getComputedStyleSpy.mockRestore()
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight)
+      } else {
+        delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight
+      }
+    }
+  })
+
+  it('offers tappable first-login pager controls for mobile keyboards', () => {
+    setFirstLoginLifecycleText(45)
+
+    render(<MudConsole />)
+
+    fireEvent.click(screen.getByRole('button', { name: /continue pager output/i }))
+
+    expect(screen.getByText(/Line 44/)).toBeInTheDocument()
+    expect(screen.queryByText(/Line 45/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /show all pager output/i }))
+
+    expect(screen.getByText(/Line 45/)).toBeInTheDocument()
+    expect(screen.queryByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeNull()
+    expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+  })
+
+  it('labels the first-login submit control as Enter and advances by tap', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+    navigatorState.activity = []
+
+    render(<MudConsole />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^enter$/i }))
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('')
+  })
+
+  it('reenables the first-login submit control after a StrictMode lifecycle advance resolves', async () => {
+    mockAdvanceLifecycle.mockResolvedValue(undefined)
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+    navigatorState.activity = []
+
+    const { container } = render(
+      <StrictMode>
+        <MudConsole />
+      </StrictMode>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /^enter$/i }))
+
+    const sendButton = container.querySelector<HTMLButtonElement>('.send-button')
+    expect(sendButton).toBeInTheDocument()
+    await waitFor(() => expect(sendButton).not.toBeDisabled())
+  })
+
+  it('keeps the on-screen pager Continue control enabled after an intro advance renders a pager', () => {
+    mockAdvanceLifecycle.mockImplementation(() => new Promise<void>(() => undefined))
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 2 },
+    }
+    navigatorState.activity = []
+
+    const { container, rerender } = render(<MudConsole />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^enter$/i }))
+    setFirstLoginLifecycleText(45)
+    rerender(<MudConsole />)
+
+    const sendButton = container.querySelector<HTMLButtonElement>('.send-button')
+    expect(sendButton).toHaveTextContent('Continue')
+    expect(sendButton).not.toBeDisabled()
+
+    fireEvent.click(sendButton as HTMLButtonElement)
+
+    expect(screen.getByText(/Line 44/)).toBeInTheDocument()
+    expect(screen.queryByText(/Line 45/)).toBeNull()
   })
 
   it('announces first-login pager text and prompt when modem streaming is enabled', async () => {
