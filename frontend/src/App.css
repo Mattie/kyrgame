@@ -344,6 +344,15 @@
   min-height: 0;
 }
 
+.player-console-entry {
+  max-width: 420px;
+  margin: 0 auto 1rem;
+}
+
+.player-console-entry .session-form {
+  border-radius: 8px;
+}
+
 @media (max-width: 900px) {
   .site-hero,
   .entry-layout {
@@ -1812,6 +1821,22 @@ p {
     flex: 0 0 auto;
     height: min(70dvh, 40rem);
     min-height: 0;
+  }
+
+  .player-console .primary {
+    flex-direction: column;
+    gap: 0.75rem;
+    height: auto;
+  }
+
+  .player-console-entry {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  .player-console .mud-shell {
+    flex: 0 0 min(64dvh, 34rem);
   }
 
   .secondary {

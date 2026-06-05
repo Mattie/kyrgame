@@ -56,6 +56,17 @@ const NavigatorContent = ({ mode = 'admin' }: NavigatorProps) => {
       )}
       <div className="layout">
         <div className="primary">
+          {!isAdmin && !sessionToken && (
+            <section className="player-console-entry" aria-label="Player entry">
+              <SessionForm
+                title="Player-ID"
+                eyebrow="Login"
+                showAdminFields={false}
+                showRoomField={false}
+                showEndpoint={false}
+              />
+            </section>
+          )}
           <MudConsole />
         </div>
         {isAdmin && (

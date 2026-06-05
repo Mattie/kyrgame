@@ -162,7 +162,10 @@ describe('public site routes', () => {
 
     expect(screen.getByRole('heading', { name: /play kyrandia/i })).toBeInTheDocument()
     expect(screen.getByTestId('game-panel-fire-border')).toBeInTheDocument()
+    expect(screen.getByLabelText('Player ID')).toBeInTheDocument()
+    expect(screen.getByLabelText('Claim new Player-ID')).toBeInTheDocument()
     expect(screen.queryByText('Admin controls')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Admin token')).not.toBeInTheDocument()
     expect(screen.queryByText('Events')).not.toBeInTheDocument()
     const playActiveButton = await screen.findByRole('button', { name: /active players: 2/i })
     await user.click(playActiveButton)
