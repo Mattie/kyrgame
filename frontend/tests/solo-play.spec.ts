@@ -69,7 +69,7 @@ test('solo player can start, run core adventure commands, and resume persisted r
   const playerId = `solo${String(Date.now()).slice(-6)}`;
   const crt = consolePane(page);
 
-  await page.goto('/');
+  await page.goto('/admin');
   await page.evaluate(() => localStorage.clear());
 
   await startSession(page, playerId, '12');
@@ -141,7 +141,7 @@ test('multiplayer command fan-out renders direct target room and nearby output',
   const nearby = await context.newPage();
 
   for (const targetPage of [hero, seer, observer, nearby]) {
-    await targetPage.goto('/');
+    await targetPage.goto('/admin');
     await targetPage.evaluate(() => localStorage.clear());
   }
 

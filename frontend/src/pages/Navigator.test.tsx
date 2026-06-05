@@ -53,6 +53,17 @@ const queryConsoleLines = (text: string) =>
     Boolean(element?.classList.contains('crt-line') && element.textContent === text)
   )
 
+const activePlayerRosterResponse = () =>
+  Promise.resolve({
+    ok: true,
+    json: async () => ({ active: [], recent: [] }),
+  } as unknown as Response)
+
+const maybeActivePlayerRosterFetch = (input: RequestInfo | URL) => {
+  const url = String(input)
+  return url.endsWith('/public/player-activity') ? activePlayerRosterResponse() : null
+}
+
 describe('Navigator flow', () => {
   const locations = [
     {
@@ -167,7 +178,7 @@ describe('Navigator flow', () => {
     vi.restoreAllMocks()
     MockWebSocket.instances.length = 0
     localStorage.clear()
-    window.history.replaceState(null, '', '/?modem=off')
+    window.history.replaceState(null, '', '/admin?modem=off')
   })
 
   it('starts with mobile controls drawer open before login', () => {
@@ -195,7 +206,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -239,7 +252,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -368,6 +383,8 @@ describe('Navigator flow', () => {
       ...locations,
     ]
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = String(input)
       if (url.includes('/auth/session/lifecycle/advance')) {
         const page = lifecyclePages[advanceIndex++]
@@ -555,6 +572,8 @@ describe('Navigator flow', () => {
       ...locations,
     ]
     vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = String(input)
       if (url.includes('/auth/session/lifecycle/advance')) {
         return Promise.reject(new Error('Network dropped'))
@@ -656,7 +675,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    fetchMock.mockImplementation(() => {
+    fetchMock.mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -713,7 +734,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -766,7 +789,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -864,7 +889,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -938,7 +965,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -1011,7 +1040,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -1067,7 +1098,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)
@@ -1208,6 +1241,8 @@ describe('Navigator flow', () => {
     }
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
         return Promise.resolve({
@@ -1340,6 +1375,8 @@ describe('Navigator flow', () => {
     }
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes(`/admin/players/${canonical}`) && init?.method === 'PATCH') {
         const payload = JSON.parse(init?.body as string)
@@ -1456,6 +1493,8 @@ describe('Navigator flow', () => {
     }
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/admin/mobs/elf/trigger')) {
         expect(init?.method).toBe('POST')
@@ -1590,6 +1629,8 @@ describe('Navigator flow', () => {
     }
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
         return Promise.resolve({
@@ -1694,6 +1735,8 @@ describe('Navigator flow', () => {
     }
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
         return Promise.resolve({
@@ -1760,6 +1803,8 @@ describe('Navigator flow', () => {
     ]
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
         return Promise.resolve({
@@ -1857,6 +1902,8 @@ describe('Navigator flow', () => {
     }
 
     const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const url = typeof input === 'string' ? input : input.toString()
       if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
         return Promise.resolve({
@@ -1979,7 +2026,9 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation(() => {
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
       const next = responses.shift()
       if (!next) throw new Error('Unexpected fetch call')
       return Promise.resolve(next as unknown as Response)

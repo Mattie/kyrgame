@@ -10,6 +10,7 @@ from . import constants, fixtures, models, repositories, room_spoilers
 from .effects import EffectError, ObjectEffectEngine, SpellEffectEngine
 from .inventory import pop_inventory_index
 from .player_lifecycle import reset_player_after_death
+from .player_titles import legacy_title_for_level
 from .spellbook import (
     add_spell_to_book,
     forget_all_memorized,
@@ -224,37 +225,6 @@ class CommandDispatcher:
             raise CooldownActiveError(
                 f"Command '{verb}' on cooldown for {metadata.cooldown_seconds - (now - last_used):.2f}s"
             )
-
-
-# Legacy titles array used by shwsutl output (legacy/KYRANDIA.C:106-133).
-_LEGACY_TITLES_BY_LEVEL = [
-    "",
-    "Apprentice",
-    "Magic-user",
-    "Evoker",
-    "Conjurer",
-    "Magician",
-    "Mystic",
-    "Enchanter",
-    "Warlock",
-    "Sorcerer",
-    "Green Wizard",
-    "Blue Wizard",
-    "Red Wizard",
-    "Grey Wizard",
-    "White Wizard",
-    "Mage",
-    "Mage of Ice",
-    "Mage of Wind",
-    "Mage of Fire",
-    "Mage of Light",
-    "Arch-Mage",
-    "Arch-Mage of Wands",
-    "Arch Mage of Staves",
-    "Arch-Mage of Swords",
-    "Arch-Mage of Jewels",
-    "Arch-Mage of Legends",
-]
 
 
 _DIRECTION_FIELDS = {
@@ -2041,11 +2011,6 @@ def _find_spell_by_name(raw_name: str, spells_catalog: list[models.SpellModel]) 
     return None
 
 
-def _legacy_title_for_level(level: int) -> str:
-    index = max(0, min(level, len(_LEGACY_TITLES_BY_LEVEL) - 1))
-    return _LEGACY_TITLES_BY_LEVEL[index]
-
-
 def _legacy_memorized_spells_text(memorized_names: list[str]) -> str:
     # Ported from shwsutl in legacy/KYRSPEL.C (lines 1372-1387):
     # 0=no spells, 1="x", 2="x" and "y", n=comma list with final and.
@@ -2070,7 +2035,7 @@ def _handle_spells(state: GameState, args: dict) -> CommandResult:
         for spell_id in memorized_spell_ids
     ]
     memorized_text = _legacy_memorized_spells_text(memorized_spell_names)
-    title = _legacy_title_for_level(state.player.level)
+    title = legacy_title_for_level(state.player.level)
     text = (
         f"{memorized_text} memorized, and {state.player.spts} spell points of energy.  "
         f"You are at level {state.player.level}, titled \"{title}\"."

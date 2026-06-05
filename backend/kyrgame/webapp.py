@@ -6,7 +6,7 @@ import re
 import secrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -19,10 +19,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
-from . import commands, constants, fixtures, models, repositories
+from . import commands, constants, fixtures, models, repositories, spellbook
 from .env import load_env_file
 from .gateway import RoomGateway
 from .player_lifecycle import initialize_player_for_first_login
+from .player_titles import legacy_title_for_level
 from .presence import PresenceService
 from .rate_limit import RateLimiter
 from .runtime import bootstrap_app, shutdown_app
@@ -38,6 +39,10 @@ DEFAULT_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS = 0.5
 WS_COMMAND_RATE_LIMIT_MAX_EVENTS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS"
 WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS"
 GAME_VERSION = "7.20"
+RECENT_PUBLIC_PLAYER_LIMIT = 5
+RECENT_PUBLIC_PLAYER_WINDOW = timedelta(days=7)
+WIZARD_SYMBOL_MALE = "\U0001f9d9\u200d\u2642\ufe0f"
+WIZARD_SYMBOL_FEMALE = "\U0001f9d9\u200d\u2640\ufe0f"
 # Legacy case 1 explicitly reserves Sysop and rejects duplicate Player-IDs
 # (legacy/KYRANDIA.C:260-264). The added creature names protect the visible
 # NPC/object namespace now that the browser decorates those names inline.
@@ -544,10 +549,23 @@ def _active_player_sessions(app: FastAPI) -> dict[str, models.PlayerModel]:
     return sessions
 
 
+def _active_player_connected_at(app: FastAPI) -> dict[str, datetime]:
+    connected_at = getattr(app.state, "active_player_connected_at", None)
+    if connected_at is None:
+        connected_at = {}
+        app.state.active_player_connected_at = connected_at
+    return connected_at
+
+
 def _register_active_player_session(
-    app: FastAPI, session_token: str, player: models.PlayerModel
+    app: FastAPI,
+    session_token: str,
+    player: models.PlayerModel,
+    *,
+    connected_at: datetime | None = None,
 ) -> None:
     _active_player_sessions(app)[session_token] = player
+    _active_player_connected_at(app)[session_token] = connected_at or datetime.now(timezone.utc)
     app.state.active_players[player.plyrid] = player
 
 
@@ -555,6 +573,7 @@ def _remove_active_player_session(
     app: FastAPI, session_token: str, player_id: str | None = None
 ) -> None:
     sessions = _active_player_sessions(app)
+    _active_player_connected_at(app).pop(session_token, None)
     removed = sessions.pop(session_token, None)
     player_key = player_id or getattr(removed, "plyrid", None)
     if not player_key:
@@ -584,6 +603,76 @@ def _active_player_in_room(
     if active_player is not None and active_player.gamloc == room_id:
         return active_player
     return None
+
+
+def _ensure_aware_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _spellbook_count(
+    player: models.PlayerModel, spells_catalog: list[models.SpellModel]
+) -> int:
+    return len(spellbook.list_spellbook_spells(player, spells_catalog))
+
+
+def _wizard_symbol_for_player(player: models.PlayerModel) -> str:
+    return (
+        WIZARD_SYMBOL_FEMALE
+        if int(player.flags) & int(constants.PlayerFlag.FEMALE)
+        else WIZARD_SYMBOL_MALE
+    )
+
+
+def _public_player_summary(
+    player: models.PlayerModel,
+    *,
+    spells_catalog: list[models.SpellModel],
+    active: bool,
+    last_seen: datetime | None,
+    connected_at: datetime | None = None,
+    now: datetime | None = None,
+) -> dict:
+    normalized_last_seen = _ensure_aware_utc(last_seen)
+    normalized_connected_at = _ensure_aware_utc(connected_at)
+    reference_now = now or datetime.now(timezone.utc)
+    connection_duration_seconds = (
+        max(0, int((reference_now - normalized_connected_at).total_seconds()))
+        if normalized_connected_at is not None
+        else None
+    )
+    display_name = player.altnam.strip() or player.plyrid
+    return {
+        "player_id": player.plyrid,
+        "display_name": display_name,
+        "level": player.level,
+        "rank_title": legacy_title_for_level(player.level),
+        "wizard_symbol": _wizard_symbol_for_player(player),
+        "spellbook_count": _spellbook_count(player, spells_catalog),
+        "active": active,
+        "last_seen": normalized_last_seen.isoformat() if normalized_last_seen else None,
+        "connected_at": normalized_connected_at.isoformat()
+        if normalized_connected_at
+        else None,
+        "connection_duration_seconds": connection_duration_seconds,
+    }
+
+
+def _latest_session_seen_by_player_id(
+    sessions: list[models.PlayerSession],
+) -> dict[int, datetime]:
+    latest: dict[int, datetime] = {}
+    for session in sessions:
+        last_seen = _ensure_aware_utc(session.last_seen)
+        if last_seen is None:
+            continue
+        current = latest.get(session.player_id)
+        if current is None or last_seen > current:
+            latest[session.player_id] = last_seen
+    return latest
 
 
 async def _disconnect_sessions(app: FastAPI, tokens: list[str]):
@@ -1389,6 +1478,9 @@ admin_router = APIRouter(prefix="/admin", tags=["admin"])
 players_router = APIRouter(prefix="/players", tags=["players"])
 
 
+public_router = APIRouter(prefix="/public", tags=["public"])
+
+
 @admin_router.get("/fixtures")
 async def fixture_summary(
     provider: Annotated[FixtureProvider, Depends(get_request_provider)],
@@ -1682,6 +1774,119 @@ async def echo_player(player: models.PlayerModel):
     return {"player": player.model_dump()}
 
 
+@public_router.get("/player-activity")
+async def public_player_activity(
+    request: Request,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+):
+    now = datetime.now(timezone.utc)
+    spells_catalog = provider.cache["spells"]
+    player_records = list(db.scalars(select(models.Player)).all())
+    sessions = list(db.scalars(select(models.PlayerSession)).all())
+    players_by_record_id = {
+        record.id: _player_model_from_record(record)
+        for record in player_records
+        if record.id is not None
+    }
+    players_by_alias = {player.plyrid: player for player in players_by_record_id.values()}
+    record_id_by_alias = {
+        player.plyrid: record_id
+        for record_id, player in players_by_record_id.items()
+    }
+    latest_seen = _latest_session_seen_by_player_id(sessions)
+    runtime_connected_at = _active_player_connected_at(request.app)
+
+    active_summaries: list[dict] = []
+    active_aliases: set[str] = set()
+    for session_token, active_player in _active_player_sessions(request.app).items():
+        canonical_player = players_by_alias.get(active_player.plyrid, active_player)
+        active_aliases.add(canonical_player.plyrid)
+        record_id = record_id_by_alias.get(canonical_player.plyrid)
+        active_summaries.append(
+            _public_player_summary(
+                canonical_player,
+                spells_catalog=spells_catalog,
+                active=True,
+                last_seen=latest_seen.get(record_id) if record_id is not None else now,
+                connected_at=runtime_connected_at.get(session_token, now),
+                now=now,
+            )
+        )
+
+    active_summaries.sort(
+        key=lambda player: (
+            player["connection_duration_seconds"]
+            if player["connection_duration_seconds"] is not None
+            else 2**31,
+            str(player["player_id"]).lower(),
+        )
+    )
+
+    recent_cutoff = now - RECENT_PUBLIC_PLAYER_WINDOW
+    recent_entries = [
+        (players_by_record_id[player_id], last_seen)
+        for player_id, last_seen in latest_seen.items()
+        if player_id in players_by_record_id
+        and players_by_record_id[player_id].plyrid not in active_aliases
+        and last_seen >= recent_cutoff
+    ]
+    recent_entries.sort(key=lambda entry: (entry[1], entry[0].plyrid.lower()), reverse=True)
+    recent_summaries = [
+        _public_player_summary(
+            player,
+            spells_catalog=spells_catalog,
+            active=False,
+            last_seen=last_seen,
+            now=now,
+        )
+        for player, last_seen in recent_entries[:RECENT_PUBLIC_PLAYER_LIMIT]
+    ]
+
+    return {"active": active_summaries, "recent": recent_summaries}
+
+
+@public_router.get("/leaderboard")
+async def public_leaderboard(
+    request: Request,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+):
+    now = datetime.now(timezone.utc)
+    spells_catalog = provider.cache["spells"]
+    player_records = list(db.scalars(select(models.Player)).all())
+    sessions = list(db.scalars(select(models.PlayerSession)).all())
+    latest_seen = _latest_session_seen_by_player_id(sessions)
+    runtime_connected_by_alias = {
+        player.plyrid: _active_player_connected_at(request.app).get(session_token, now)
+        for session_token, player in _active_player_sessions(request.app).items()
+    }
+
+    entries = []
+    for record in player_records:
+        player = _player_model_from_record(record)
+        connected_at = runtime_connected_by_alias.get(player.plyrid)
+        active = connected_at is not None
+        summary = _public_player_summary(
+            player,
+            spells_catalog=spells_catalog,
+            active=active,
+            last_seen=latest_seen.get(record.id),
+            connected_at=connected_at if active else None,
+            now=now,
+        )
+        entries.append(summary)
+
+    entries.sort(
+        key=lambda player: (
+            -int(player["level"]),
+            -int(player["spellbook_count"]),
+            str(player["player_id"]).lower(),
+        )
+    )
+    return {"players": entries}
+
+
 def _format_room_occupants(occupants: list[str], messages: models.MessageBundleModel | None):
     """Format the occupant list shown when entering a room.
 
@@ -1794,6 +1999,7 @@ def create_app() -> FastAPI:
     app.include_router(spells_router)
     app.include_router(content_router)
     app.include_router(i18n_router)
+    app.include_router(public_router)
     app.include_router(admin_router)
     app.include_router(players_router)
 
@@ -1801,6 +2007,7 @@ def create_app() -> FastAPI:
     app.state.session_connections = {}
     app.state.active_players = {}
     app.state.active_player_sessions = {}
+    app.state.active_player_connected_at = {}
 
     @app.websocket("/ws/admin/kyraedit")
     async def kyraedit_socket(
@@ -2048,6 +2255,7 @@ def create_app() -> FastAPI:
 
         # All validation passed - now accept the WebSocket connection
         await websocket.accept()
+        connected_at = datetime.now(timezone.utc)
 
         session_connections = provider.scope.app.state.session_connections
         existing_socket = session_connections.get(session_token)
@@ -2105,7 +2313,12 @@ def create_app() -> FastAPI:
             ),
         )
 
-        _register_active_player_session(provider.scope.app, session_token, player_state)
+        _register_active_player_session(
+            provider.scope.app,
+            session_token,
+            player_state,
+            connected_at=connected_at,
+        )
         await provider.presence.set_location(player_id, current_room, session_token)
         await gateway.register(current_room, websocket)
 
