@@ -11,7 +11,10 @@ async def test_session_response_includes_expiration_metadata():
 
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.post("/auth/session", json={"player_id": "gapcheck"})
+            resp = await client.post(
+                "/auth/session",
+                json={"player_id": "gapcheck", "create_player": True},
+            )
             assert resp.status_code == 201
             session_data = resp.json()["session"]
             assert session_data["expires_at"].endswith("+00:00")

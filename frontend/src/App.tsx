@@ -7,7 +7,7 @@ import { Navigator } from './pages/Navigator'
 import {
   AboutPage,
   EntryPage,
-  LandingPage,
+  HomePage,
   LeaderboardPage,
 } from './pages/PublicSite'
 
@@ -38,7 +38,7 @@ function App() {
     if (path === '/enter') return <EntryPage navigate={navigate} />
     if (path === '/about') return <AboutPage navigate={navigate} />
     if (path === '/leaderboard') return <LeaderboardPage navigate={navigate} />
-    return <LandingPage navigate={navigate} />
+    return <HomePage navigate={navigate} />
   }, [navigate, path])
 
   const shellClass = path === '/admin' || path === '/play' ? 'app-shell' : 'app-shell site-shell'

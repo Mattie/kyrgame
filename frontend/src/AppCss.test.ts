@@ -79,4 +79,40 @@ describe('App CSS', () => {
     expect(identityRule).toContain('gap: 0.52rem;')
     expect(appCss).toContain('.active-player-symbol {')
   })
+
+  it('uses tracked mockup assets and pinned background positioning on the home page', () => {
+    const shellRule = readRule('.site-shell')
+
+    expect(appCss).toContain('HomePage_Background1b_wider_taller')
+    expect(appCss).toContain('HomePage_Background1.')
+    expect(appCss).toContain('background-position: left top;')
+    expect(appCss).toContain('--home-bg-desktop')
+    expect(appCss).toContain('--home-bg-mobile')
+    expect(appCss).toContain('@media (max-width: 760px)')
+    expect(shellRule).toContain('font-family: \'DM Mono\', \'Segoe UI\', sans-serif;')
+    expect(appCss).not.toMatch(/Arial/i)
+  })
+
+  it('keeps about-page prose wider than the landing hero copy', () => {
+    const aboutCopyRule = readRule('.about-page .public-copy')
+    const aboutParagraphRule = readRule('.about-page .public-copy p')
+
+    expect(aboutCopyRule).toContain('width: min(100%, 58rem);')
+    expect(aboutParagraphRule).toContain('max-width: 92ch;')
+  })
+
+  it('anchors public page text to the left edge on very wide screens', () => {
+    expect(appCss).toContain('@media (min-width: 1400px)')
+    expect(appCss).toContain('.site-page {\n    margin-left: clamp(2rem, 4vw, 4rem);')
+    expect(appCss).toContain('.about-page .public-copy {\n    margin-left: 0;')
+  })
+
+  it('styles the player entry form as a welcoming creation/login choice', () => {
+    expect(appCss).toContain('.player-id-status {')
+    expect(appCss).toContain('.player-id-status[data-state=\'available\']')
+    expect(appCss).toContain('.player-id-status[data-state=\'existing\']')
+    expect(appCss).toContain('.character-choice {')
+    expect(appCss).toContain('.character-choice input:checked + span')
+    expect(appCss).toContain('.coming-soon-note {')
+  })
 })

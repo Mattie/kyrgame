@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+.local_references/
+screenshots/play-page-logo-footer-desktop.png
 
 # Playwright
 test-results/

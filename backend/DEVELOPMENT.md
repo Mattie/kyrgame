@@ -154,7 +154,7 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
 - **Responses:**
   - `201 Created` for new sessions, `200 OK` when resuming with `resume_token`.
   - Set `create_player: true` for the explicit first-login Player-ID claim flow. The backend applies the legacy `KYRANDIA.C` case 1 rules: 3-9 letters, duplicate rejection, `Sysop` reservation, and visible entity-name reservation for `Zar`, `dragon`, `dryad`, `elf`, and `brownie`. Explicit claims always enter at room 0, matching the legacy intro-to-`entrgp(0, ...)` handoff; any submitted `room_id` is ignored for that claim.
-  - Compatibility first-logins without `create_player` still create a missing valid player for existing tools/tests, but they run through the same legacy invalid/reserved-name checks before insertion.
+  - Logins without `create_player` require an existing Player-ID. Unknown valid Player-IDs return `404` so public clients can keep login and character creation as separate user choices.
   - Envelope:
 
     ```json

@@ -1182,6 +1182,10 @@ export const MudConsole = () => {
               ? 'Navigation mode: WASD sends movement (click the prompt to exit).'
               : 'Enter a command to interact. Click the compass for WASD navigation.'}
           </p>
+          <p className="fatigue-hint">
+            If Kyrandia says you are exhausting yourself, rest for about 30 seconds before
+            continuing.
+          </p>
           {showVfxTuning && (
             <>
               <section

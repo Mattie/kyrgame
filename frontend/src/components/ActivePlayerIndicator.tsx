@@ -43,6 +43,25 @@ const formatConnectionDurationDateTime = (seconds: number | null | undefined) =>
   return `PT${hoursPart}${minutesPart}${secondsPart}`
 }
 
+const activePlayerSummariesEqual = (
+  left: ActivePlayerSummary[],
+  right: ActivePlayerSummary[]
+) =>
+  left.length === right.length &&
+  left.every((player, index) => {
+    const nextPlayer = right[index]
+    return (
+      player.player_id === nextPlayer.player_id &&
+      player.display_name === nextPlayer.display_name &&
+      player.level === nextPlayer.level &&
+      player.rank_title === nextPlayer.rank_title &&
+      player.wizard_symbol === nextPlayer.wizard_symbol &&
+      player.active === nextPlayer.active &&
+      player.connected_at === nextPlayer.connected_at &&
+      player.connection_duration_seconds === nextPlayer.connection_duration_seconds
+    )
+  })
+
 export const ActivePlayerIndicator = () => {
   const { apiBaseUrl, connectionStatus } = useNavigator()
   const [players, setPlayers] = useState<ActivePlayerSummary[]>([])
@@ -59,10 +78,17 @@ export const ActivePlayerIndicator = () => {
       if (!response.ok) throw new Error('Unable to load active players')
       const payload = (await response.json()) as PlayerActivityPayload
       if (!options?.cancelled?.()) {
-        setPlayers(Array.isArray(payload.active) ? payload.active.filter((player) => player.active) : [])
+        const activePlayers = Array.isArray(payload.active)
+          ? payload.active.filter((player) => player.active)
+          : []
+        setPlayers((current) =>
+          activePlayerSummariesEqual(current, activePlayers) ? current : activePlayers
+        )
       }
     } catch {
-      if (!options?.signal?.aborted && !options?.cancelled?.()) setPlayers([])
+      if (!options?.signal?.aborted && !options?.cancelled?.()) {
+        setPlayers((current) => (current.length === 0 ? current : []))
+      }
     }
   }, [apiBaseUrl])
 

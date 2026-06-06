@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   PropsWithChildren,
   createContext,
@@ -206,7 +207,7 @@ type NavigatorContextValue = {
   startSession: (
     playerId: string,
     roomId?: number | null,
-    options?: { createPlayer?: boolean }
+    options?: { createPlayer?: boolean; background?: 'lord' | 'lady' }
   ) => Promise<void>
   adminToken: string | null
   setAdminToken: (token: string | null) => void
@@ -431,6 +432,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
   const handleRoomChange = useCallback(
     (roomId: number | null, _origin: string) => {
+      void _origin
       if (roomId !== null) {
         setCurrentRoom(roomId)
         // Don't append activity here - let the specific event handlers decide what to show
@@ -443,6 +445,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   )
 
   const handleIncoming = useCallback(
+    // WebSocket payloads are legacy-shaped event envelopes; narrow individual fields as used.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (message: any) => {
       if (!message || typeof message !== 'object') return
       const meta = message.meta ?? {}
@@ -655,7 +659,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             const inventoryList =
               message.payload?.inventory ??
               payloadItems
-                .map((item: any) => {
+                .map((item: { display_name?: string; name?: string } | null | undefined) => {
                   const name = item?.display_name ?? item?.name
                   // Return plain name - GemstoneText will add emoji and color when rendering
                   return name || null
@@ -736,6 +740,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       handleRoomChange,
       mergePlayerVisuals,
       session?.playerId,
+      session?.roomId,
       updateOccupants,
     ]
   )
@@ -926,7 +931,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     async (
       playerId: string,
       roomId?: number | null,
-      options?: { createPlayer?: boolean }
+      options?: { createPlayer?: boolean; background?: 'lord' | 'lady' }
     ) => {
       setConnectionStatus('connecting')
       setError(null)
@@ -939,6 +944,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         if (options?.createPlayer) {
           payload.create_player = true
+        }
+        if (options?.background) {
+          payload.background = options.background
         }
         if (roomId !== undefined && roomId !== null && !Number.isNaN(roomId)) {
           payload.room_id = roomId

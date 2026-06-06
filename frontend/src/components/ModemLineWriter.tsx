@@ -13,9 +13,10 @@ type ModemLineWriterProps = {
   playerVisuals?: Record<string, PlayerVisual>
 }
 
-const ANSI_SEQUENCE_PREFIX = '\u001b['
+const ANSI_ESCAPE = String.fromCharCode(27)
+const ANSI_SEQUENCE_PREFIX = `${ANSI_ESCAPE}[`
 const ANSI_SEQUENCE_SUFFIX = 'm'
-const ANSI_SEQUENCE_MATCH = /\u001b\[[0-9;]*m/g
+const ANSI_SEQUENCE_MATCH = new RegExp(`${ANSI_ESCAPE}\\[[0-9;]*m`, 'g')
 
 const clampPositiveNumber = (value: number): number => {
   if (!Number.isFinite(value) || value <= 0) return 0

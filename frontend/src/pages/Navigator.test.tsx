@@ -192,7 +192,7 @@ describe('Navigator flow', () => {
   })
 
   it('closes the mobile controls drawer after login and can reopen it', async () => {
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -228,7 +228,7 @@ describe('Navigator flow', () => {
     const toggle = screen.getByRole('button', { name: /show controls/i })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
-    await user.click(toggle)
+    fireEvent.click(toggle)
 
     expect(screen.getByRole('main')).toHaveClass('controls-open')
     expect(screen.getByRole('button', { name: /hide controls/i })).toHaveAttribute(
@@ -238,7 +238,7 @@ describe('Navigator flow', () => {
   })
 
   it('creates a session, caches world data, and streams room activity', async () => {
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -720,7 +720,7 @@ describe('Navigator flow', () => {
   })
 
   it('renders command_response room_message text for look-style replies', async () => {
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -775,7 +775,7 @@ describe('Navigator flow', () => {
   })
 
   it('ignores room_broadcast messages excluded for the current player', async () => {
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -875,7 +875,7 @@ describe('Navigator flow', () => {
       { id: 7, brfdes: 'Edge of the forest', objlds: 'on the ground', objects: [0], gi_north: -1, gi_south: -1, gi_east: -1, gi_west: -1 },
     ]
 
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -951,7 +951,7 @@ describe('Navigator flow', () => {
     ]
     const localObjects = [...objects, { id: 45, name: 'dryad', flags: [] }]
 
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -1026,7 +1026,7 @@ describe('Navigator flow', () => {
     ]
     const localObjects = [...objects, { id: 45, name: 'dryad', flags: [] }]
 
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -1084,7 +1084,7 @@ describe('Navigator flow', () => {
   })
 
   it('renders spoiler command responses with a whisper prompt', async () => {
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({
@@ -1140,12 +1140,11 @@ describe('Navigator flow', () => {
 
   it('collapses dev helper panels to reclaim space', async () => {
     render(<App />)
-    const user = userEvent.setup()
 
     const sessionToggle = screen.getByRole('button', {
       name: /collapse session panel/i,
     })
-    await user.click(sessionToggle)
+    fireEvent.click(sessionToggle)
     expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
 
     // RoomPanel has been deprecated/disabled
@@ -1158,10 +1157,10 @@ describe('Navigator flow', () => {
     const activityToggle = screen.getByRole('button', {
       name: /collapse room activity panel/i,
     })
-    await user.click(activityToggle)
+    fireEvent.click(activityToggle)
     expect(screen.queryByTestId('activity-log-body')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /expand session panel/i }))
+    fireEvent.click(screen.getByRole('button', { name: /expand session panel/i }))
     expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
   })
 
@@ -1975,22 +1974,23 @@ describe('Navigator flow', () => {
 
   it('persists session form changes and clears stored admin token when disabled', async () => {
     render(<App />)
-    const user = userEvent.setup()
 
-    await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+    fireEvent.change(screen.getByLabelText(/^player id$/i), { target: { value: 'hero' } })
     expect(localStorage.getItem('kyrgame.navigator.playerId')).toBe('hero')
 
-    await user.type(screen.getByLabelText(/room id/i), '34')
+    fireEvent.change(screen.getByLabelText(/room id/i), { target: { value: '34' } })
     expect(localStorage.getItem('kyrgame.navigator.roomId')).toBe('34')
 
     const adminToggle = screen.getByRole('checkbox', { name: /admin session/i })
-    await user.click(adminToggle)
+    fireEvent.click(adminToggle)
     expect(localStorage.getItem('kyrgame.navigator.adminSession')).toBe('true')
 
-    await user.type(screen.getByLabelText(/admin token/i), 'secret-token')
+    fireEvent.change(screen.getByLabelText(/admin token/i), {
+      target: { value: 'secret-token' },
+    })
     expect(localStorage.getItem('kyrgame.navigator.adminToken')).toBe('secret-token')
 
-    await user.click(adminToggle)
+    fireEvent.click(adminToggle)
     expect(localStorage.getItem('kyrgame.navigator.adminSession')).toBe('false')
     expect(localStorage.getItem('kyrgame.navigator.adminToken')).toBeNull()
   })
@@ -2002,17 +2002,17 @@ describe('Navigator flow', () => {
     render(<App />)
 
     expect(screen.queryByTestId('admin-panel-body')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /expand admin panel/i }))
+    fireEvent.click(screen.getByRole('button', { name: /expand admin panel/i }))
     expect(await screen.findByTestId('admin-panel-body')).toBeInTheDocument()
 
     expect(screen.queryByTestId('admin-section-body-identity')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /expand identity section/i }))
+    fireEvent.click(screen.getByRole('button', { name: /expand identity section/i }))
     expect(await screen.findByTestId('admin-section-body-identity')).toBeInTheDocument()
     expect(localStorage.getItem('kyrgame.navigator.adminSection.identity')).toBe('false')
   })
 
   it('dispatches move commands and updates room details on location change', async () => {
-    let responses = [
+    const responses = [
       {
         ok: true,
         json: async () => ({

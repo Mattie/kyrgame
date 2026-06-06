@@ -1,3 +1,4 @@
+import string
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -84,6 +85,67 @@ def _add_session(
     )
     db.add(session)
     return session
+
+
+@pytest.mark.anyio
+async def test_public_player_id_lookup_reports_existing_available_and_reserved(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            existing = await client.get("/public/player-id/hero")
+            available = await client.get("/public/player-id/Willow")
+            reserved = await client.get("/public/player-id/Zar")
+            invalid = await client.get("/public/player-id/ab12")
+
+        assert existing.status_code == 200
+        assert existing.json() == {
+            "player_id": "hero",
+            "canonical_player_id": "hero",
+            "valid": True,
+            "exists": True,
+            "available": False,
+            "reserved": False,
+            "status": "existing",
+        }
+        assert available.status_code == 200
+        assert available.json() == {
+            "player_id": "Willow",
+            "canonical_player_id": "Willow",
+            "valid": True,
+            "exists": False,
+            "available": True,
+            "reserved": False,
+            "status": "available",
+        }
+        assert reserved.json()["status"] == "reserved"
+        assert reserved.json()["available"] is False
+        assert invalid.json()["status"] == "invalid"
+        assert invalid.json()["valid"] is False
+
+
+@pytest.mark.anyio
+async def test_public_player_id_lookup_rate_limits_repeated_checks(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            for _ in range(30):
+                response = await client.get("/public/player-id/Willow")
+                assert response.status_code == 200
+
+            limited = await client.get("/public/player-id/Willow")
+
+        assert limited.status_code == 429
+        assert limited.json()["detail"] == "Too many Player-ID checks. Please slow down."
 
 
 @pytest.mark.anyio
@@ -231,3 +293,30 @@ async def test_public_leaderboard_sorts_by_level_spellbook_count_and_player_id(m
         assert "gold" not in players[0]
         assert "session_token" not in players[0]
         assert "offspls" not in players[0]
+
+
+@pytest.mark.anyio
+async def test_public_leaderboard_caps_release_payload_size(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        with app.state.session_factory() as db:
+            names = [
+                f"p{first}{second}"
+                for first in string.ascii_lowercase
+                for second in string.ascii_lowercase
+            ][:60]
+            for player_id in names:
+                _add_player(db, player_id, level=25, spells=spells, owned=3)
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/public/leaderboard")
+
+        assert response.status_code == 200
+        assert len(response.json()["players"]) == 50
