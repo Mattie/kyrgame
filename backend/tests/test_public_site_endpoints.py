@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from kyrgame import constants, fixtures, models
-from kyrgame.webapp import create_app
+from kyrgame.webapp import PUBLIC_RECENT_PLAYER_SCAN_LIMIT, create_app
 
 
 def _spell_bits(spells: list[models.SpellModel], sbkref: int, count: int) -> int:
@@ -288,6 +288,57 @@ async def test_public_player_activity_groups_sessions_active_players_and_recent_
             "connected_at",
             "connection_duration_seconds",
         }
+
+
+@pytest.mark.anyio
+async def test_public_player_activity_excludes_runtime_active_players_before_recent_cap(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        active_names = [
+            f"aa{first}{second}"
+            for first in string.ascii_lowercase
+            for second in string.ascii_lowercase
+        ][: PUBLIC_RECENT_PLAYER_SCAN_LIMIT + 1]
+        offline_names = ["offaa", "offab", "offac", "offad", "offae"]
+        with app.state.session_factory() as db:
+            for index, player_id in enumerate(active_names):
+                record, player_model = _add_player(
+                    db, player_id, level=25, spells=spells, owned=2
+                )
+                _add_session(
+                    db,
+                    record,
+                    token=f"{player_id}-old-session",
+                    last_seen=now - timedelta(seconds=index + 1),
+                )
+                app.state.active_player_sessions[f"{player_id}-token"] = player_model
+                app.state.active_player_connected_at[f"{player_id}-token"] = (
+                    now - timedelta(minutes=index + 1)
+                )
+
+            for index, player_id in enumerate(offline_names):
+                record, _ = _add_player(db, player_id, level=10, spells=spells, owned=1)
+                _add_session(
+                    db,
+                    record,
+                    token=f"{player_id}-session",
+                    last_seen=now - timedelta(minutes=2, seconds=index),
+                )
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/public/player-activity")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert [player["player_id"] for player in payload["recent"]] == offline_names
 
 
 @pytest.mark.anyio

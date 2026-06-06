@@ -808,12 +808,19 @@ def _latest_session_seen_for_player_ids(
 
 
 def _recent_session_seen_rows(
-    db: OrmSession, *, since: datetime, limit: int
+    db: OrmSession,
+    *,
+    since: datetime,
+    limit: int,
+    exclude_player_ids: set[int] | None = None,
 ) -> list[tuple[int, datetime]]:
     latest_seen = func.max(models.PlayerSession.last_seen)
+    conditions = [models.PlayerSession.last_seen >= since]
+    if exclude_player_ids:
+        conditions.append(~models.PlayerSession.player_id.in_(exclude_player_ids))
     rows = db.execute(
         select(models.PlayerSession.player_id, latest_seen)
-        .where(models.PlayerSession.last_seen >= since)
+        .where(*conditions)
         .group_by(models.PlayerSession.player_id)
         .order_by(latest_seen.desc(), models.PlayerSession.player_id.asc())
         .limit(limit)
@@ -2000,7 +2007,8 @@ async def public_player_activity(
         for record in active_records
         if record.id is not None
     }
-    latest_seen = _latest_session_seen_for_player_ids(db, set(record_id_by_alias.values()))
+    active_record_ids = set(record_id_by_alias.values())
+    latest_seen = _latest_session_seen_for_player_ids(db, active_record_ids)
 
     active_summaries: list[dict] = []
     for session_token, active_player in runtime_sessions.items():
@@ -2029,7 +2037,10 @@ async def public_player_activity(
 
     recent_cutoff = now - RECENT_PUBLIC_PLAYER_WINDOW
     recent_rows = _recent_session_seen_rows(
-        db, since=recent_cutoff, limit=PUBLIC_RECENT_PLAYER_SCAN_LIMIT
+        db,
+        since=recent_cutoff,
+        limit=PUBLIC_RECENT_PLAYER_SCAN_LIMIT,
+        exclude_player_ids=active_record_ids,
     )
     recent_records = _player_records_by_id(db, {player_id for player_id, _ in recent_rows})
     recent_entries = []
