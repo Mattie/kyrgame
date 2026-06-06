@@ -242,6 +242,24 @@ describe('public site routes', () => {
     expect(screen.getByRole('button', { name: 'Create Character...' })).toBeInTheDocument()
   })
 
+  it('does not reuse a stale player ID lookup while checking the next name', async () => {
+    window.history.replaceState(null, '', '/enter')
+
+    render(<App />)
+
+    const playerId = screen.getByLabelText('Player ID')
+    fireEvent.change(playerId, { target: { value: 'Hero' } })
+
+    expect(await screen.findByRole('button', { name: 'Login as Hero' })).toBeEnabled()
+
+    fireEvent.change(playerId, { target: { value: 'Avalon' } })
+
+    expect(screen.getByText(/Looking for Avalon/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Checking Player-ID...' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Login as Avalon' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Create Character...' })).toBeEnabled()
+  })
+
   it('keeps a login path available when the player ID lookup is unavailable', async () => {
     window.history.replaceState(null, '', '/enter')
 

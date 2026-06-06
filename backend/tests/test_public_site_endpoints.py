@@ -342,6 +342,45 @@ async def test_public_player_activity_excludes_runtime_active_players_before_rec
 
 
 @pytest.mark.anyio
+async def test_public_player_activity_orders_recent_timestamp_ties_by_player_id(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        tied_seen_at = now - timedelta(days=1)
+        with app.state.session_factory() as db:
+            for player_id, last_seen in [
+                ("zulu", tied_seen_at),
+                ("alpha", tied_seen_at),
+                ("bravo", now - timedelta(hours=12)),
+            ]:
+                record, _ = _add_player(db, player_id, level=10, spells=spells, owned=1)
+                _add_session(
+                    db,
+                    record,
+                    token=f"{player_id}-session",
+                    last_seen=last_seen,
+                )
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/public/player-activity")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert [player["player_id"] for player in payload["recent"]] == [
+            "bravo",
+            "alpha",
+            "zulu",
+        ]
+
+
+@pytest.mark.anyio
 async def test_public_leaderboard_sorts_by_level_spellbook_count_and_player_id(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")

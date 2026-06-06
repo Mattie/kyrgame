@@ -2052,7 +2052,8 @@ async def public_player_activity(
         if player.plyrid in active_aliases:
             continue
         recent_entries.append((player, last_seen))
-    recent_entries.sort(key=lambda entry: (entry[1], entry[0].plyrid.lower()), reverse=True)
+    recent_entries.sort(key=lambda entry: entry[0].plyrid.lower())
+    recent_entries.sort(key=lambda entry: entry[1], reverse=True)
     recent_summaries = [
         _public_player_summary(
             player,

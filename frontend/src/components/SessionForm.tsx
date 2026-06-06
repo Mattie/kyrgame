@@ -80,7 +80,7 @@ export const SessionForm = ({
 
   const trimmedPlayerId = playerId.trim()
   const effectiveClaimNewPlayer = isPlayerEntry
-    ? playerIdLookup?.status === 'available'
+    ? !playerIdLookupLoading && playerIdLookup?.status === 'available'
     : claimNewPlayer
 
   useEffect(() => {
@@ -318,16 +318,17 @@ export const SessionForm = ({
   const canSubmit =
     trimmedPlayerId !== '' &&
     (!isPlayerEntry ||
-      playerIdLookup?.status === 'existing' ||
-      playerIdLookup?.status === 'available' ||
-      playerIdLookup?.status === 'unavailable')
+      (!playerIdLookupLoading &&
+        (playerIdLookup?.status === 'existing' ||
+          playerIdLookup?.status === 'available' ||
+          playerIdLookup?.status === 'unavailable')))
   const submitLabel = (() => {
     if (submitting) return effectiveClaimNewPlayer ? 'Opening the gates...' : 'Entering...'
     if (isPlayerEntry) {
+      if (playerIdLookupLoading) return 'Checking Player-ID...'
       if (playerIdLookup?.status === 'existing') return `Login as ${trimmedPlayerId}`
       if (playerIdLookup?.status === 'available') return 'Create Character...'
       if (playerIdLookup?.status === 'unavailable') return 'Try Login'
-      if (playerIdLookupLoading) return 'Checking Player-ID...'
       return 'Enter Player ID'
     }
     return effectiveClaimNewPlayer ? 'Claim Player-ID' : 'Start session'
@@ -369,6 +370,10 @@ export const SessionForm = ({
                 onChange={(event) => {
                   const nextValue = sanitizePlayerIdInput(event.target.value)
                   setPlayerId(nextValue)
+                  if (isPlayerEntry) {
+                    setPlayerIdLookup(null)
+                    setPlayerIdLookupLoading(nextValue.trim().length >= 3)
+                  }
                   persistPlayerId(nextValue)
                 }}
                 required
