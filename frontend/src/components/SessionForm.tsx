@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 import { isDevEnvironment } from '../config/devMode'
 import { useNavigator } from '../context/NavigatorContext'
@@ -31,6 +31,22 @@ type SessionFormProps = {
   onSessionStarted?: () => void
 }
 
+type CharacterBackground = 'lord' | 'lady'
+
+type PlayerIdLookup = {
+  player_id?: string
+  canonical_player_id?: string
+  valid?: boolean
+  exists?: boolean
+  available?: boolean
+  reserved?: boolean
+  status?: 'invalid' | 'reserved' | 'existing' | 'available' | 'unavailable'
+}
+
+const PLAYER_ID_LOOKUP_DEBOUNCE_MS = 250
+
+const sanitizePlayerIdInput = (value: string) => value.replace(/[^A-Za-z]/g, '').slice(0, 9)
+
 export const SessionForm = ({
   title = 'Request a token',
   eyebrow = 'Session',
@@ -53,14 +69,24 @@ export const SessionForm = ({
   const [adminTokenInput, setAdminTokenInput] = useState('')
   const [joinAsAdmin, setJoinAsAdmin] = useState(false)
   const [claimNewPlayer, setClaimNewPlayer] = useState(false)
+  const [characterBackground, setCharacterBackground] =
+    useState<CharacterBackground>('lord')
+  const [playerIdLookup, setPlayerIdLookup] = useState<PlayerIdLookup | null>(null)
+  const [playerIdLookupLoading, setPlayerIdLookupLoading] = useState(false)
   const [legacyPlayerIdPrompt, setLegacyPlayerIdPrompt] = useState(fallbackLegacyPlayerIdPrompt)
   const [submitting, setSubmitting] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const isPlayerEntry = !showAdminFields
+
+  const trimmedPlayerId = playerId.trim()
+  const effectiveClaimNewPlayer = isPlayerEntry
+    ? !playerIdLookupLoading && playerIdLookup?.status === 'available'
+    : claimNewPlayer
 
   useEffect(() => {
     const storedPlayerId = localStorage.getItem(storageKeys.playerId)
     if (storedPlayerId) {
-      setPlayerId(storedPlayerId)
+      setPlayerId(isPlayerEntry ? sanitizePlayerIdInput(storedPlayerId) : storedPlayerId)
     }
 
     const storedRoomId = localStorage.getItem(storageKeys.roomId)
@@ -79,10 +105,72 @@ export const SessionForm = ({
     } else {
       localStorage.removeItem(storageKeys.adminToken)
     }
-  }, [])
+  }, [isPlayerEntry])
 
   useEffect(() => {
-    if (!claimNewPlayer) return
+    if (!isPlayerEntry) return
+
+    if (trimmedPlayerId.length === 0) {
+      setPlayerIdLookup(null)
+      setPlayerIdLookupLoading(false)
+      return
+    }
+
+    if (trimmedPlayerId.length < 3) {
+      setPlayerIdLookup({
+        player_id: trimmedPlayerId,
+        canonical_player_id: trimmedPlayerId,
+        valid: false,
+        exists: false,
+        available: false,
+        reserved: false,
+        status: 'invalid',
+      })
+      setPlayerIdLookupLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    setPlayerIdLookupLoading(true)
+
+    const loadPlayerId = async () => {
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/public/player-id/${encodeURIComponent(trimmedPlayerId)}`,
+          { signal: controller.signal }
+        )
+        if (!response.ok) throw new Error('Unable to check Player-ID')
+        const payload = (await response.json()) as PlayerIdLookup
+        setPlayerIdLookup(payload.status ? payload : null)
+      } catch (err) {
+        if (controller.signal.aborted) return
+        setPlayerIdLookup({
+          player_id: trimmedPlayerId,
+          canonical_player_id: trimmedPlayerId,
+          valid: true,
+          exists: false,
+          available: false,
+          reserved: false,
+          status: 'unavailable',
+        })
+      } finally {
+        if (!controller.signal.aborted) {
+          setPlayerIdLookupLoading(false)
+        }
+      }
+    }
+
+    const lookupTimer = window.setTimeout(() => {
+      void loadPlayerId()
+    }, PLAYER_ID_LOOKUP_DEBOUNCE_MS)
+    return () => {
+      window.clearTimeout(lookupTimer)
+      controller.abort()
+    }
+  }, [apiBaseUrl, isPlayerEntry, trimmedPlayerId])
+
+  useEffect(() => {
+    if (!effectiveClaimNewPlayer || isPlayerEntry) return
 
     let cancelled = false
     const loadPrompt = async () => {
@@ -103,7 +191,7 @@ export const SessionForm = ({
     return () => {
       cancelled = true
     }
-  }, [apiBaseUrl, claimNewPlayer])
+  }, [apiBaseUrl, effectiveClaimNewPlayer, isPlayerEntry])
 
   const persistPlayerId = (nextValue: string) => {
     if (nextValue.trim() === '') {
@@ -145,13 +233,12 @@ export const SessionForm = ({
     setSubmitting(true)
     try {
       const parsedRoom =
-        !showRoomField || claimNewPlayer || roomId.trim() === '' ? null : Number(roomId)
-      const trimmedPlayerId = playerId.trim()
+        !showRoomField || effectiveClaimNewPlayer || roomId.trim() === '' ? null : Number(roomId)
       const trimmedAdminToken = adminTokenInput.trim()
 
       setAdminToken(showAdminFields && joinAsAdmin ? trimmedAdminToken || null : null)
       persistPlayerId(trimmedPlayerId)
-      if (showRoomField && !claimNewPlayer) {
+      if (showRoomField && !effectiveClaimNewPlayer) {
         persistRoomId(roomId)
       }
       persistAdminSession(showAdminFields && joinAsAdmin)
@@ -159,7 +246,9 @@ export const SessionForm = ({
         persistAdminToken(trimmedAdminToken)
       }
       await startSession(trimmedPlayerId, Number.isNaN(parsedRoom) ? null : parsedRoom, {
-        createPlayer: claimNewPlayer,
+        createPlayer: effectiveClaimNewPlayer,
+        background:
+          isPlayerEntry && effectiveClaimNewPlayer ? characterBackground : undefined,
       })
       onSessionStarted?.()
     } finally {
@@ -182,6 +271,68 @@ export const SessionForm = ({
   }
 
   const tokenTtl = formatTokenTtl(session?.expiresInSeconds)
+  const playerIdStatus = useMemo(() => {
+    if (!isPlayerEntry) return null
+    if (trimmedPlayerId.length === 0) {
+      return {
+        state: 'idle',
+        text: 'Choose 3-9 letters. This is the name Kyrandia will remember.',
+      }
+    }
+    if (playerIdLookupLoading) {
+      return { state: 'checking', text: `Looking for ${trimmedPlayerId}...` }
+    }
+    switch (playerIdLookup?.status) {
+      case 'existing':
+        return {
+          state: 'existing',
+          text: `${trimmedPlayerId} is already known in Kyrandia. Welcome back.`,
+        }
+      case 'available':
+        return {
+          state: 'available',
+          text: `${trimmedPlayerId} is yours to claim, if you wish!`,
+        }
+      case 'reserved':
+        return {
+          state: 'reserved',
+          text: `${trimmedPlayerId} is part of Kyrandia's old magic. Choose another name.`,
+        }
+      case 'invalid':
+        return {
+          state: 'invalid',
+          text: 'Player IDs use 3-9 letters.',
+        }
+      case 'unavailable':
+        return {
+          state: 'unavailable',
+          text: `I can't check that name right now. You can try to enter as ${trimmedPlayerId}.`,
+        }
+      default:
+        return {
+          state: 'idle',
+          text: 'Choose 3-9 letters. This is the name Kyrandia will remember.',
+        }
+    }
+  }, [isPlayerEntry, playerIdLookup?.status, playerIdLookupLoading, trimmedPlayerId])
+  const canSubmit =
+    trimmedPlayerId !== '' &&
+    (!isPlayerEntry ||
+      (!playerIdLookupLoading &&
+        (playerIdLookup?.status === 'existing' ||
+          playerIdLookup?.status === 'available' ||
+          playerIdLookup?.status === 'unavailable')))
+  const submitLabel = (() => {
+    if (submitting) return effectiveClaimNewPlayer ? 'Opening the gates...' : 'Entering...'
+    if (isPlayerEntry) {
+      if (playerIdLookupLoading) return 'Checking Player-ID...'
+      if (playerIdLookup?.status === 'existing') return `Login as ${trimmedPlayerId}`
+      if (playerIdLookup?.status === 'available') return 'Create Character...'
+      if (playerIdLookup?.status === 'unavailable') return 'Try Login'
+      return 'Enter Player ID'
+    }
+    return effectiveClaimNewPlayer ? 'Claim Player-ID' : 'Start session'
+  })()
 
   return (
     <section className={`panel session-form ${collapsed ? 'collapsed' : ''}`}>
@@ -212,13 +363,26 @@ export const SessionForm = ({
                 id="player-id"
                 name="player-id"
                 value={playerId}
+                autoComplete="username"
+                inputMode="text"
+                maxLength={9}
+                pattern="[A-Za-z]{3,9}"
                 onChange={(event) => {
-                  const nextValue = event.target.value
+                  const nextValue = sanitizePlayerIdInput(event.target.value)
                   setPlayerId(nextValue)
+                  if (isPlayerEntry) {
+                    setPlayerIdLookup(null)
+                    setPlayerIdLookupLoading(nextValue.trim().length >= 3)
+                  }
                   persistPlayerId(nextValue)
                 }}
                 required
               />
+              {playerIdStatus && (
+                <p className="player-id-status" data-state={playerIdStatus.state}>
+                  {playerIdStatus.text}
+                </p>
+              )}
             </div>
 
             {showRoomField && (
@@ -243,17 +407,45 @@ export const SessionForm = ({
               </div>
             )}
 
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                name="claim-new-player"
-                checked={claimNewPlayer}
-                onChange={(event) => setClaimNewPlayer(event.target.checked)}
-              />
-              Claim new Player-ID
-            </label>
+            {!isPlayerEntry && (
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  name="claim-new-player"
+                  checked={claimNewPlayer}
+                  onChange={(event) => setClaimNewPlayer(event.target.checked)}
+                />
+                Claim new Player-ID
+              </label>
+            )}
 
-            {claimNewPlayer && (
+            {isPlayerEntry && effectiveClaimNewPlayer && (
+              <fieldset className="character-choice">
+                <legend>Choose your background</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="character-background"
+                    value="lord"
+                    checked={characterBackground === 'lord'}
+                    onChange={() => setCharacterBackground('lord')}
+                  />
+                  <span>Lord</span>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="character-background"
+                    value="lady"
+                    checked={characterBackground === 'lady'}
+                    onChange={() => setCharacterBackground('lady')}
+                  />
+                  <span>Lady</span>
+                </label>
+              </fieldset>
+            )}
+
+            {effectiveClaimNewPlayer && !isPlayerEntry && (
               <p className="field-hint">
                 <AnsiText text={legacyPlayerIdPrompt} />
               </p>
@@ -297,13 +489,15 @@ export const SessionForm = ({
               </>
             )}
 
-            <button type="submit" disabled={submitting || playerId.trim() === ''}>
-              {submitting ? 'Requesting...' : claimNewPlayer ? 'Claim Player-ID' : 'Start session'}
+            <button type="submit" disabled={submitting || !canSubmit}>
+              {submitLabel}
             </button>
           </form>
-          <p className={`status ${connectionStatus}`}>
-            Connection: {connectionStatus}
-          </p>
+          {!isPlayerEntry && (
+            <p className={`status ${connectionStatus}`}>
+              Connection: {connectionStatus}
+            </p>
+          )}
           {tokenTtl && <p className="status">Token expires in {tokenTtl}</p>}
           {error && (
             <p className="status error">

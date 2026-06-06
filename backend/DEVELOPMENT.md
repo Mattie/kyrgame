@@ -50,6 +50,10 @@ Once running, the API will be available at:
 - `http://localhost:8000` (local access)
 - `http://0.0.0.0:8000` (network access from other machines)
 
+### HTTP rate limit client identity
+
+Public Player-ID and session creation throttles use the direct peer address by default. Set `KYRGAME_TRUST_PROXY_HEADERS=1` only when the API is behind a reverse proxy that overwrites or strips client-supplied `CF-Connecting-IP`, `X-Forwarded-For`, and `X-Real-IP` headers. `KYRGAME_HTTP_RATE_LIMIT_MAX_CLIENT_KEYS` caps each endpoint's in-memory limiter cache and defaults to `1024`.
+
 ### Verifying the Server is Running
 
 You can verify the backend is running by checking the health endpoints:
@@ -147,14 +151,16 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
     "player_id": "hero",
     "resume_token": "...",
     "room_id": 7,
-    "create_player": false
+    "create_player": false,
+    "background": "lord"
   }
   ```
 
 - **Responses:**
   - `201 Created` for new sessions, `200 OK` when resuming with `resume_token`.
   - Set `create_player: true` for the explicit first-login Player-ID claim flow. The backend applies the legacy `KYRANDIA.C` case 1 rules: 3-9 letters, duplicate rejection, `Sysop` reservation, and visible entity-name reservation for `Zar`, `dragon`, `dryad`, `elf`, and `brownie`. Explicit claims always enter at room 0, matching the legacy intro-to-`entrgp(0, ...)` handoff; any submitted `room_id` is ignored for that claim.
-  - Compatibility first-logins without `create_player` still create a missing valid player for existing tools/tests, but they run through the same legacy invalid/reserved-name checks before insertion.
+  - For explicit claims, pass `background: "lord"` or `background: "lady"` to choose the first-login background. `lady` sets the legacy female player flag; `lord` and omitted values keep the default first-login flags.
+  - Logins without `create_player` require an existing Player-ID. Unknown valid Player-IDs return `404` so public clients can keep login and character creation as separate user choices.
   - Envelope:
 
     ```json

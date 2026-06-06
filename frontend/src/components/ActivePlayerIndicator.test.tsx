@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ActivePlayerIndicator } from './ActivePlayerIndicator'
@@ -56,7 +55,7 @@ describe('ActivePlayerIndicator', () => {
     render(<ActivePlayerIndicator />)
 
     const trigger = await screen.findByRole('button', { name: /active players: 1/i })
-    await userEvent.click(trigger)
+    fireEvent.click(trigger)
 
     expect(screen.getByText('2m 15s').closest('time')).toHaveAttribute('dateTime', 'PT2M15S')
   })

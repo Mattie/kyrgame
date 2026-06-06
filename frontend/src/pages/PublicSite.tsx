@@ -2,6 +2,10 @@ import { MouseEvent, ReactNode, useEffect, useMemo, useState } from 'react'
 
 import { SessionForm } from '../components/SessionForm'
 import { getApiBaseUrl } from '../config/endpoints'
+import activePlayersIcon from '../assets/home/kyrandia-active-players-icon.png'
+import leaderboardIcon from '../assets/home/kyrandia-leaderboard-icon.png'
+import recentlyActiveIcon from '../assets/home/kyrandia-recently-active-icon.png'
+import kyrandiaLogo from '../assets/home/KyrandiaLogo_trans_trimmed.png'
 
 export type PublicPlayerSummary = {
   player_id: string
@@ -115,23 +119,31 @@ const handleRouteClick =
     navigate(path)
   }
 
+const EasterEggComment = () => (
+  <span
+    aria-hidden="true"
+    hidden
+    dangerouslySetInnerHTML={{ __html: '<!-- Slayer must die... -->' }}
+  />
+)
+
 const SiteNav = ({ navigate }: PublicPageProps) => (
   <nav className="site-nav" aria-label="Primary">
-    <a href="/" onClick={handleRouteClick(navigate, '/')}>
-      Kyrandia
+    <a className="site-logo-link" href="/" onClick={handleRouteClick(navigate, '/')}>
+      <img src={kyrandiaLogo} alt="Kyrandia Online Edition" />
     </a>
-    <div>
+    <div className="site-nav-links">
+      <a href="/" onClick={handleRouteClick(navigate, '/')}>
+        Home
+      </a>
       <a href="/about" onClick={handleRouteClick(navigate, '/about')}>
         About
       </a>
       <a href="/leaderboard" onClick={handleRouteClick(navigate, '/leaderboard')}>
         Leaderboard
       </a>
-      <a href="/enter" onClick={handleRouteClick(navigate, '/enter')}>
-        Enter
-      </a>
-      <a href="/admin" onClick={handleRouteClick(navigate, '/admin')}>
-        Admin
+      <a className="site-nav-cta" href="/enter" onClick={handleRouteClick(navigate, '/enter')}>
+        Enter Kyrandia
       </a>
     </div>
   </nav>
@@ -150,7 +162,15 @@ const SiteFrame = ({
 
 const spellText = (count: number) => `${count} ${count === 1 ? 'spell' : 'spells'}`
 
-const PlayerRow = ({ player, rank }: { player: PublicPlayerSummary; rank?: number }) => (
+const PlayerRow = ({
+  player,
+  rank,
+  showSpellCount = true,
+}: {
+  player: PublicPlayerSummary
+  rank?: number
+  showSpellCount?: boolean
+}) => (
   <article className="public-player-row">
     <div className="player-rank">{rank ? `#${rank}` : player.active ? 'Live' : 'Recent'}</div>
     <div>
@@ -159,68 +179,81 @@ const PlayerRow = ({ player, rank }: { player: PublicPlayerSummary; rank?: numbe
         Level {player.level} - {player.rank_title}
       </p>
     </div>
-    <span>{spellText(player.spellbook_count)}</span>
+    {showSpellCount && <span>{spellText(player.spellbook_count)}</span>}
   </article>
 )
 
 const PlayerList = ({
   title,
+  icon,
   players,
   emptyText,
+  footer,
+  showSpellCount = true,
 }: {
   title: string
+  icon: string
   players: PublicPlayerSummary[]
   emptyText: string
+  footer?: ReactNode
+  showSpellCount?: boolean
 }) => (
   <section className="public-panel">
     <header className="public-panel-header">
-      <p className="eyebrow">{title}</p>
-      <h2>{title}</h2>
+      <img className="public-panel-icon" src={icon} alt="" aria-hidden="true" />
+      <div>
+        <h2>{title}</h2>
+      </div>
     </header>
     <div className="public-player-list">
       {players.length === 0 ? (
         <p className="muted">{emptyText}</p>
       ) : (
-        players.map((player) => <PlayerRow key={player.player_id} player={player} />)
+        players.map((player) => (
+          <PlayerRow
+            key={player.player_id}
+            player={player}
+            showSpellCount={showSpellCount}
+          />
+        ))
       )}
     </div>
+    {footer && <div className="public-panel-footer">{footer}</div>}
   </section>
 )
 
-export const LandingPage = ({ navigate }: PublicPageProps) => {
+export const HomePage = ({ navigate }: PublicPageProps) => {
   const { activity, leaderboard, loading, error } = usePublicSiteData()
-  const leaders = leaderboard.slice(0, 5)
+  const recentPlayers = activity.recent.slice(0, 2)
+  const leaders = leaderboard.slice(0, 2)
 
   return (
     <SiteFrame navigate={navigate} className="landing-page">
-      <section className="site-hero">
+      <EasterEggComment />
+      <section className="site-hero" aria-labelledby="home-hero-title">
         <div className="site-hero-copy">
-          <p className="eyebrow">Fantasy World of Legends</p>
-          <h1>Kyrandia</h1>
+          <h1 id="home-hero-title">Legends pass and time goes by...</h1>
+          <div className="site-ornament" aria-hidden="true" />
           <p>
-            Cross a living text realm of spells, rival mages, puzzles, and old BBS magic.
+            Begin at the willow. Search the dark forest. Read the old inscriptions. Kyrandia
+            wizards seek every spell, ponder every puzzle, and learn from every mistake.
           </p>
           <div className="site-actions">
-            <a className="site-primary-link" href="/enter" onClick={handleRouteClick(navigate, '/enter')}>
-              Start Playing
+            <a
+              className="site-primary-link"
+              href="/enter"
+              onClick={handleRouteClick(navigate, '/enter')}
+            >
+              Begin Your Journey
             </a>
-            <a href="/leaderboard" onClick={handleRouteClick(navigate, '/leaderboard')}>
-              View Leaderboard
+            <a href="/about" onClick={handleRouteClick(navigate, '/about')}>
+              Learn More
             </a>
           </div>
-        </div>
-        <div
-          className="kyrandia-hero-art"
-          role="img"
-          aria-label="Kyrandia magic forest with a glowing console portal"
-        >
-          <div className="moon" />
-          <div className="tower tower-left" />
-          <div className="tower tower-right" />
-          <div className="console-portal">
-            <span>Kyrandia</span>
-            <span>&gt; cast whereami</span>
-          </div>
+          <blockquote className="site-quote">
+            <p>"No matter where you go, I will be with you..."</p>
+            <cite>- Tashanna</cite>
+          </blockquote>
         </div>
       </section>
 
@@ -230,48 +263,75 @@ export const LandingPage = ({ navigate }: PublicPageProps) => {
       <section className="public-dashboard">
         <PlayerList
           title="Active Players"
+          icon={activePlayersIcon}
           players={activity.active}
           emptyText="No players are active right now."
+          showSpellCount={false}
         />
         <PlayerList
           title="Recently Active"
-          players={activity.recent}
+          icon={recentlyActiveIcon}
+          players={recentPlayers}
           emptyText="No recent players in the last seven days."
+          showSpellCount={false}
+          footer={
+            <a href="/leaderboard" onClick={handleRouteClick(navigate, '/leaderboard')}>
+              See all recent activity {'->'}
+            </a>
+          }
         />
         <section className="public-panel leaderboard-preview">
           <header className="public-panel-header">
-            <p className="eyebrow">Leaderboard</p>
-            <h2>Current Leaders</h2>
+            <img className="public-panel-icon" src={leaderboardIcon} alt="" aria-hidden="true" />
+            <div>
+              <h2>Leaderboard</h2>
+            </div>
           </header>
           <div className="public-player-list">
             {leaders.length === 0 ? (
               <p className="muted">No ranked players yet.</p>
             ) : (
               leaders.map((player, index) => (
-                <PlayerRow key={player.player_id} player={player} rank={index + 1} />
+                <PlayerRow
+                  key={player.player_id}
+                  player={player}
+                  rank={index + 1}
+                  showSpellCount={false}
+                />
               ))
             )}
           </div>
+          <div className="public-panel-footer">
+            <a href="/leaderboard" onClick={handleRouteClick(navigate, '/leaderboard')}>
+              View full leaderboard {'->'}
+            </a>
+          </div>
         </section>
       </section>
+      <p className="site-welcome-line">
+        If you don't believe in legends, you haven't seen Kyrandia...
+      </p>
     </SiteFrame>
   )
 }
+
+export const LandingPage = HomePage
 
 export const EntryPage = ({ navigate }: PublicPageProps) => (
   <SiteFrame navigate={navigate} className="entry-page">
     <section className="entry-layout">
       <div>
-        <p className="eyebrow">Player entry</p>
+        <p className="eyebrow">The willow is waiting</p>
         <h1>Enter Kyrandia</h1>
         <p>
-          Sign in with a Player-ID for now. This page is the account handoff point when we add
-          Google sign-in later.
+          Bring back a name Kyrandia already knows, or claim a new one and step into the old
+          forest as a Lord or Lady.
         </p>
+        <p className="coming-soon-note">Google sign-in is coming soon.</p>
       </div>
       <SessionForm
-        title="Player-ID"
-        eyebrow="Login"
+        title="Who enters the realm?"
+        eyebrow="Welcome"
         showAdminFields={false}
         showRoomField={false}
         showEndpoint={false}
@@ -283,6 +343,7 @@ export const EntryPage = ({ navigate }: PublicPageProps) => (
 
 export const AboutPage = ({ navigate }: PublicPageProps) => (
   <SiteFrame navigate={navigate} className="about-page">
+    <EasterEggComment />
     <section className="public-copy">
       <p className="eyebrow">History</p>
       <h1>About Kyrandia</h1>
@@ -301,9 +362,24 @@ export const AboutPage = ({ navigate }: PublicPageProps) => (
         the play experience to a browser, FastAPI backend, and WebSocket command console.
       </p>
       <p>
-        The objective remains simple and severe: master the world, advance through the ranks,
-        and become an Arch-Mage of Legends.
+        The objective remains: master the world, advance through the wizarding ranks, and become an
+        Arch-Mage of Legends. May Tashanna show you the way...
       </p>
+      <section className="public-credits" aria-labelledby="source-credits-title">
+        <h2 id="source-credits-title">Source and Credits</h2>
+        <p>Original source copyright notices include:</p>
+        <ul className="public-credit-list">
+          <li>Copyright (C) 1988-2024 Rick Hadsall. All Rights Reserved.</li>
+          <li>Copyright (C) 1988-95 Galacticomm</li>
+          <li>Copyright (C) 2005-24 Elwynor Technologies</li>
+        </ul>
+        <p>
+          This modern port lives at{' '}
+          <a href="https://github.com/Mattie/kyrgame">Mattie/kyrgame</a>, with the original
+          upstream preserved by <a href="https://github.com/elwynor/elwkyr">elwynor/elwkyr</a>.
+        </p>
+        <p className="public-port-credit">Ported and Modernized by Mattie Casper</p>
+      </section>
     </section>
   </SiteFrame>
 )

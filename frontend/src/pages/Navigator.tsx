@@ -7,6 +7,7 @@ import { ActivePlayerIndicator } from '../components/ActivePlayerIndicator'
 import { MudConsole } from '../components/MudConsole'
 // import { RoomPanel } from '../components/RoomPanel' // Deprecated - not needed anymore
 import { SessionForm } from '../components/SessionForm'
+import kyrandiaLogo from '../assets/home/KyrandiaLogo_trans_trimmed.png'
 import { isDevEnvironment } from '../config/devMode'
 import { useNavigator } from '../context/NavigatorContext'
 
@@ -33,16 +34,19 @@ const NavigatorContent = ({ mode = 'admin' }: NavigatorProps) => {
         isAdmin ? 'admin-console' : 'player-console'
       }`}
     >
+      {!isAdmin && (
+        <a className="play-logo-link" href="/" aria-label="Return to Kyrandia home">
+          <img src={kyrandiaLogo} alt="" />
+        </a>
+      )}
       <ActivePlayerIndicator />
-      <header className="masthead">
-        <p className="eyebrow">{isAdmin ? 'Operator console' : 'Fantasy world console'}</p>
-        <h1>{isAdmin ? 'Kyrandia Admin' : 'Play Kyrandia'}</h1>
-        <p className="muted">
-          {isAdmin
-            ? 'Session, runtime, and player-editing tools for local development.'
-            : 'The realm opens through the same MUD console, with the tooling kept out of the play surface.'}
-        </p>
-      </header>
+      {isAdmin && (
+        <header className="masthead">
+          <p className="eyebrow">Operator console</p>
+          <h1>Kyrandia Admin</h1>
+          <p className="muted">Session, runtime, and player-editing tools for local development.</p>
+        </header>
+      )}
       {isAdmin && (
         <button
           type="button"
@@ -84,6 +88,19 @@ const NavigatorContent = ({ mode = 'admin' }: NavigatorProps) => {
           </aside>
         )}
       </div>
+      {!isAdmin && (
+        <footer className="play-footer" aria-label="Kyrandia site links">
+          <a href="/" target="_blank" rel="noreferrer">
+            Home
+          </a>
+          <a href="/about" target="_blank" rel="noreferrer">
+            About
+          </a>
+          <a href="/leaderboard" target="_blank" rel="noreferrer">
+            Leaderboard
+          </a>
+        </footer>
+      )}
     </main>
   )
 }

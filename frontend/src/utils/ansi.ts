@@ -24,7 +24,8 @@ const fgColorMap: Record<number, string> = {
 
 export const parseAnsiTokens = (text: string): AnsiToken[] => {
   const tokens: AnsiToken[] = []
-  const sgrPattern = /\u001b\[([0-9;]*)m/g
+  const ansiEscape = String.fromCharCode(27)
+  const sgrPattern = new RegExp(`${ansiEscape}\\[([0-9;]*)m`, 'g')
   let lastIndex = 0
   let bold = false
   let fgClass: string | null = null

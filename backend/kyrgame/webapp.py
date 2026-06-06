@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import secrets
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -40,6 +41,16 @@ WS_COMMAND_RATE_LIMIT_MAX_EVENTS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS
 WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS"
 GAME_VERSION = "7.20"
 RECENT_PUBLIC_PLAYER_LIMIT = 5
+PUBLIC_ACTIVE_PLAYER_LIMIT = 25
+PUBLIC_RECENT_PLAYER_SCAN_LIMIT = 40
+PUBLIC_LEADERBOARD_LIMIT = 50
+PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_MAX_EVENTS = 30
+PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_WINDOW_SECONDS = 60.0
+SESSION_RATE_LIMIT_MAX_EVENTS = 5
+SESSION_RATE_LIMIT_WINDOW_SECONDS = 1.0
+HTTP_RATE_LIMIT_MAX_CLIENT_KEYS = 1024
+HTTP_RATE_LIMIT_MAX_CLIENT_KEYS_ENV = "KYRGAME_HTTP_RATE_LIMIT_MAX_CLIENT_KEYS"
+TRUST_PROXY_HEADERS_ENV = "KYRGAME_TRUST_PROXY_HEADERS"
 RECENT_PUBLIC_PLAYER_WINDOW = timedelta(days=7)
 WIZARD_SYMBOL_MALE = "\U0001f9d9\u200d\u2642\ufe0f"
 WIZARD_SYMBOL_FEMALE = "\U0001f9d9\u200d\u2640\ufe0f"
@@ -74,6 +85,8 @@ class SessionRequest(BaseModel):
     resume_token: str | None = None
     room_id: int | None = None
     create_player: bool = False
+    gender: str | None = None
+    background: str | None = None
 
 
 class LifecycleAdvanceRequest(BaseModel):
@@ -166,6 +179,107 @@ def _cors_origins_from_env() -> list[str]:
     if not configured:
         return ["*"]
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _http_rate_limit_max_client_keys() -> int:
+    configured = os.getenv(HTTP_RATE_LIMIT_MAX_CLIENT_KEYS_ENV)
+    if not configured:
+        return HTTP_RATE_LIMIT_MAX_CLIENT_KEYS
+    try:
+        parsed = int(configured)
+    except ValueError:
+        return HTTP_RATE_LIMIT_MAX_CLIENT_KEYS
+    return max(1, parsed)
+
+
+def _client_rate_limit_key(request: Request) -> str:
+    client_host = request.client.host if request.client else "unknown"
+    if not _truthy_env(TRUST_PROXY_HEADERS_ENV):
+        return client_host
+
+    cf_connecting_ip = request.headers.get("cf-connecting-ip")
+    if cf_connecting_ip:
+        client_ip = cf_connecting_ip.strip()
+        if client_ip:
+            return client_ip
+
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        first_hop = forwarded_for.split(",", 1)[0].strip()
+        if first_hop:
+            return first_hop
+
+    for header_name in ("x-real-ip",):
+        value = request.headers.get(header_name)
+        if value:
+            client_ip = value.strip()
+            if client_ip:
+                return client_ip
+
+    return client_host
+
+
+def _http_rate_limit_entry_seen_at(entry: object) -> float:
+    if isinstance(entry, tuple) and len(entry) == 2:
+        return float(entry[1])
+    return time.monotonic()
+
+
+def _prune_http_rate_limiters(
+    limiters: dict[str, tuple[RateLimiter, float] | RateLimiter],
+    *,
+    now: float,
+    window_seconds: float,
+    max_client_keys: int,
+    incoming_client_key: str,
+) -> None:
+    stale_before = now - window_seconds
+    for client_key, entry in list(limiters.items()):
+        if _http_rate_limit_entry_seen_at(entry) < stale_before:
+            del limiters[client_key]
+
+    while incoming_client_key not in limiters and len(limiters) >= max_client_keys:
+        oldest_key = min(limiters, key=lambda key: _http_rate_limit_entry_seen_at(limiters[key]))
+        del limiters[oldest_key]
+
+
+def _enforce_http_rate_limit(
+    request: Request,
+    *,
+    state_attr: str,
+    max_events: int,
+    window_seconds: float,
+    detail: str,
+) -> None:
+    limiters = getattr(request.app.state, state_attr, None)
+    if limiters is None:
+        limiters = {}
+        setattr(request.app.state, state_attr, limiters)
+
+    now = time.monotonic()
+    client_key = _client_rate_limit_key(request)
+    _prune_http_rate_limiters(
+        limiters,
+        now=now,
+        window_seconds=window_seconds,
+        max_client_keys=_http_rate_limit_max_client_keys(),
+        incoming_client_key=client_key,
+    )
+    entry = limiters.get(client_key)
+    if entry is None:
+        limiter = RateLimiter(max_events=max_events, window_seconds=window_seconds)
+    elif isinstance(entry, tuple):
+        limiter = entry[0]
+    else:
+        limiter = entry
+    limiters[client_key] = (limiter, now)
+
+    if not limiter.allow(now=now):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
 
 
 def get_db_session(request: Request) -> OrmSession:
@@ -675,6 +789,61 @@ def _latest_session_seen_by_player_id(
     return latest
 
 
+def _latest_session_seen_for_player_ids(
+    db: OrmSession, player_ids: set[int]
+) -> dict[int, datetime]:
+    if not player_ids:
+        return {}
+
+    rows = db.execute(
+        select(models.PlayerSession.player_id, func.max(models.PlayerSession.last_seen))
+        .where(models.PlayerSession.player_id.in_(player_ids))
+        .group_by(models.PlayerSession.player_id)
+    )
+    return {
+        int(player_id): seen
+        for player_id, last_seen in rows
+        if (seen := _ensure_aware_utc(last_seen)) is not None
+    }
+
+
+def _recent_session_seen_rows(
+    db: OrmSession,
+    *,
+    since: datetime,
+    limit: int,
+    exclude_player_ids: set[int] | None = None,
+) -> list[tuple[int, datetime]]:
+    latest_seen = func.max(models.PlayerSession.last_seen)
+    conditions = [models.PlayerSession.last_seen >= since]
+    if exclude_player_ids:
+        conditions.append(~models.PlayerSession.player_id.in_(exclude_player_ids))
+    rows = db.execute(
+        select(models.PlayerSession.player_id, latest_seen)
+        .where(*conditions)
+        .group_by(models.PlayerSession.player_id)
+        .order_by(latest_seen.desc(), models.PlayerSession.player_id.asc())
+        .limit(limit)
+    )
+    return [
+        (int(player_id), seen)
+        for player_id, last_seen in rows
+        if (seen := _ensure_aware_utc(last_seen)) is not None
+    ]
+
+
+def _player_records_by_id(
+    db: OrmSession, player_ids: set[int]
+) -> dict[int, models.Player]:
+    if not player_ids:
+        return {}
+    return {
+        int(record.id): record
+        for record in db.scalars(select(models.Player).where(models.Player.id.in_(player_ids))).all()
+        if record.id is not None
+    }
+
+
 async def _disconnect_sessions(app: FastAPI, tokens: list[str]):
     connections = app.state.session_connections
     for token in tokens:
@@ -902,7 +1071,7 @@ def _elf_trigger_outcome(events) -> str:
 
 
 def _persist_first_login_player(
-    db: OrmSession, player_id: str, template: models.PlayerModel
+    db: OrmSession, player_id: str, template: models.PlayerModel, *, female: bool = False
 ) -> models.Player:
     player_model = template.model_copy(deep=True)
     initialize_player_for_first_login(
@@ -910,6 +1079,7 @@ def _persist_first_login_player(
         player_id=player_id,
         uidnam=player_id[: constants.UIDSIZ],
         birthstone_picker=lambda low, high: low + secrets.randbelow(high - low),
+        female=female,
         room_id=0,
     )
     player = models.Player(**player_model.model_dump())
@@ -942,6 +1112,10 @@ def _find_player_record_casefold(db: OrmSession, player_id: str) -> models.Playe
     return db.scalar(
         select(models.Player).where(func.lower(models.Player.plyrid) == player_id.lower())
     )
+
+
+def _is_female_creation_choice(*values: str | None) -> bool:
+    return any((value or "").strip().lower() in {"lady", "sorceress"} for value in values)
 
 
 def _canonical_first_login_player_id(raw_player_id: str) -> str:
@@ -1147,20 +1321,14 @@ async def start_session(
     request: Request,
     db: Annotated[OrmSession, Depends(get_db_session)],
 ):
-    # Rate limiting for session creation (5 per second per IP to allow for test suites)
-    if not hasattr(request.app.state, 'session_rate_limiters'):
-        request.app.state.session_rate_limiters = {}
-    
-    client_ip = request.client.host if request.client else "unknown"
-    if client_ip not in request.app.state.session_rate_limiters:
-        request.app.state.session_rate_limiters[client_ip] = RateLimiter(max_events=5, window_seconds=1.0)
-    
-    if not request.app.state.session_rate_limiters[client_ip].allow():
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many session creation attempts. Please try again later."
-        )
-    
+    _enforce_http_rate_limit(
+        request,
+        state_attr="session_rate_limiters",
+        max_events=SESSION_RATE_LIMIT_MAX_EVENTS,
+        window_seconds=SESSION_RATE_LIMIT_WINDOW_SECONDS,
+        detail="Too many session creation attempts. Please try again later.",
+    )
+
     template = request.app.state.fixture_cache["player_template"]
     repo = repositories.PlayerSessionRepository(db)
     if not hasattr(request.app.state, 'player_claim_lock'):
@@ -1185,7 +1353,12 @@ async def start_session(
                     message_ids=["BADPID", "B4PLA2"],
                 )
             _ensure_first_login_player_id_available(db, request, canonical_player_id)
-            player = _persist_first_login_player(db, canonical_player_id, template)
+            player = _persist_first_login_player(
+                db,
+                canonical_player_id,
+                template,
+                female=_is_female_creation_choice(payload.background, payload.gender),
+            )
             first_login = True
             lifecycle_messages = _first_login_lifecycle_messages(
                 request.app.state.fixture_cache["messages"], player.plyrid
@@ -1197,28 +1370,17 @@ async def start_session(
             first_login = False
             if player is None:
                 try:
-                    compat_player_id = _validated_compat_first_login_player_id(payload.player_id)
+                    _validated_compat_first_login_player_id(payload.player_id)
                 except ValueError:
                     raise _legacy_auth_error(
                         request,
                         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                         message_ids=["BADPID", "B4PLA2"],
                     )
-                await player_claim_lock.acquire()
-                player_claim_lock_acquired = True
-                player = _find_player_record(db, compat_player_id)
-                if player is None:
-                    _ensure_first_login_player_id_available(db, request, compat_player_id)
-                    player = _persist_first_login_player(db, compat_player_id, template)
-                    first_login = True
-                    lifecycle_messages = _first_login_lifecycle_messages(
-                        request.app.state.fixture_cache["messages"], player.plyrid
-                    )
-                    lifecycle_state = FIRST_LOGIN_INTRO_STATE
-                    lifecycle_step = 2
-                elif payload.room_id is not None:
-                    player.gamloc = payload.room_id
-                    player.pgploc = payload.room_id
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Player-ID not found. Create Character to claim it.",
+                )
             elif payload.room_id is not None:
                 player.gamloc = payload.room_id
                 player.pgploc = payload.room_id
@@ -1774,6 +1936,47 @@ async def echo_player(player: models.PlayerModel):
     return {"player": player.model_dump()}
 
 
+@public_router.get("/player-id/{player_id}")
+async def public_player_id_lookup(
+    player_id: str,
+    request: Request,
+    db: Annotated[OrmSession, Depends(get_db_session)],
+):
+    _enforce_http_rate_limit(
+        request,
+        state_attr="public_player_id_lookup_rate_limiters",
+        max_events=PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_MAX_EVENTS,
+        window_seconds=PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_WINDOW_SECONDS,
+        detail="Too many Player-ID checks. Please slow down.",
+    )
+
+    trimmed = player_id.strip()
+    valid = bool(PLAYER_ID_PATTERN.fullmatch(trimmed))
+    reserved = trimmed.lower() in RESERVED_PLAYER_IDS if trimmed else False
+    existing = _find_player_record(db, trimmed) if valid else None
+    canonical_player_id = _canonical_first_login_player_id(trimmed) if valid else trimmed
+    exists = existing is not None
+    available = valid and not reserved and not exists
+    if not valid:
+        status_value = "invalid"
+    elif reserved:
+        status_value = "reserved"
+    elif exists:
+        status_value = "existing"
+    else:
+        status_value = "available"
+
+    return {
+        "player_id": existing.plyrid if existing else canonical_player_id,
+        "canonical_player_id": existing.plyrid if existing else canonical_player_id,
+        "valid": valid,
+        "exists": exists,
+        "available": available,
+        "reserved": reserved,
+        "status": status_value,
+    }
+
+
 @public_router.get("/player-activity")
 async def public_player_activity(
     request: Request,
@@ -1782,26 +1985,34 @@ async def public_player_activity(
 ):
     now = datetime.now(timezone.utc)
     spells_catalog = provider.cache["spells"]
-    player_records = list(db.scalars(select(models.Player)).all())
-    sessions = list(db.scalars(select(models.PlayerSession)).all())
-    players_by_record_id = {
-        record.id: _player_model_from_record(record)
-        for record in player_records
+    runtime_connected_at = _active_player_connected_at(request.app)
+    runtime_sessions = _active_player_sessions(request.app)
+    active_aliases = {player.plyrid for player in runtime_sessions.values()}
+    active_records = (
+        list(
+            db.scalars(
+                select(models.Player).where(models.Player.plyrid.in_(active_aliases))
+            ).all()
+        )
+        if active_aliases
+        else []
+    )
+    players_by_alias = {
+        record.plyrid: _player_model_from_record(record)
+        for record in active_records
         if record.id is not None
     }
-    players_by_alias = {player.plyrid: player for player in players_by_record_id.values()}
     record_id_by_alias = {
-        player.plyrid: record_id
-        for record_id, player in players_by_record_id.items()
+        record.plyrid: int(record.id)
+        for record in active_records
+        if record.id is not None
     }
-    latest_seen = _latest_session_seen_by_player_id(sessions)
-    runtime_connected_at = _active_player_connected_at(request.app)
+    active_record_ids = set(record_id_by_alias.values())
+    latest_seen = _latest_session_seen_for_player_ids(db, active_record_ids)
 
     active_summaries: list[dict] = []
-    active_aliases: set[str] = set()
-    for session_token, active_player in _active_player_sessions(request.app).items():
+    for session_token, active_player in runtime_sessions.items():
         canonical_player = players_by_alias.get(active_player.plyrid, active_player)
-        active_aliases.add(canonical_player.plyrid)
         record_id = record_id_by_alias.get(canonical_player.plyrid)
         active_summaries.append(
             _public_player_summary(
@@ -1822,16 +2033,27 @@ async def public_player_activity(
             str(player["player_id"]).lower(),
         )
     )
+    active_summaries = active_summaries[:PUBLIC_ACTIVE_PLAYER_LIMIT]
 
     recent_cutoff = now - RECENT_PUBLIC_PLAYER_WINDOW
-    recent_entries = [
-        (players_by_record_id[player_id], last_seen)
-        for player_id, last_seen in latest_seen.items()
-        if player_id in players_by_record_id
-        and players_by_record_id[player_id].plyrid not in active_aliases
-        and last_seen >= recent_cutoff
-    ]
-    recent_entries.sort(key=lambda entry: (entry[1], entry[0].plyrid.lower()), reverse=True)
+    recent_rows = _recent_session_seen_rows(
+        db,
+        since=recent_cutoff,
+        limit=PUBLIC_RECENT_PLAYER_SCAN_LIMIT,
+        exclude_player_ids=active_record_ids,
+    )
+    recent_records = _player_records_by_id(db, {player_id for player_id, _ in recent_rows})
+    recent_entries = []
+    for player_id, last_seen in recent_rows:
+        record = recent_records.get(player_id)
+        if record is None:
+            continue
+        player = _player_model_from_record(record)
+        if player.plyrid in active_aliases:
+            continue
+        recent_entries.append((player, last_seen))
+    recent_entries.sort(key=lambda entry: entry[0].plyrid.lower())
+    recent_entries.sort(key=lambda entry: entry[1], reverse=True)
     recent_summaries = [
         _public_player_summary(
             player,
@@ -1854,11 +2076,17 @@ async def public_leaderboard(
 ):
     now = datetime.now(timezone.utc)
     spells_catalog = provider.cache["spells"]
-    player_records = list(db.scalars(select(models.Player)).all())
-    sessions = list(db.scalars(select(models.PlayerSession)).all())
-    latest_seen = _latest_session_seen_by_player_id(sessions)
+    player_records = list(
+        db.scalars(
+            select(models.Player).order_by(models.Player.level.desc(), models.Player.plyrid.asc())
+        ).all()
+    )
+    latest_seen = _latest_session_seen_for_player_ids(
+        db, {int(record.id) for record in player_records if record.id is not None}
+    )
+    runtime_connected_at = _active_player_connected_at(request.app)
     runtime_connected_by_alias = {
-        player.plyrid: _active_player_connected_at(request.app).get(session_token, now)
+        player.plyrid: runtime_connected_at.get(session_token, now)
         for session_token, player in _active_player_sessions(request.app).items()
     }
 
@@ -1884,7 +2112,7 @@ async def public_leaderboard(
             str(player["player_id"]).lower(),
         )
     )
-    return {"players": entries}
+    return {"players": entries[:PUBLIC_LEADERBOARD_LIMIT]}
 
 
 def _format_room_occupants(occupants: list[str], messages: models.MessageBundleModel | None):
