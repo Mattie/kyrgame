@@ -50,6 +50,10 @@ Once running, the API will be available at:
 - `http://localhost:8000` (local access)
 - `http://0.0.0.0:8000` (network access from other machines)
 
+### HTTP rate limit client identity
+
+Public Player-ID and session creation throttles use the direct peer address by default. Set `KYRGAME_TRUST_PROXY_HEADERS=1` only when the API is behind a reverse proxy that overwrites or strips client-supplied `CF-Connecting-IP`, `X-Forwarded-For`, and `X-Real-IP` headers. `KYRGAME_HTTP_RATE_LIMIT_MAX_CLIENT_KEYS` caps each endpoint's in-memory limiter cache and defaults to `1024`.
+
 ### Verifying the Server is Running
 
 You can verify the backend is running by checking the health endpoints:

@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import secrets
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -43,11 +44,13 @@ RECENT_PUBLIC_PLAYER_LIMIT = 5
 PUBLIC_ACTIVE_PLAYER_LIMIT = 25
 PUBLIC_RECENT_PLAYER_SCAN_LIMIT = 40
 PUBLIC_LEADERBOARD_LIMIT = 50
-PUBLIC_LEADERBOARD_CANDIDATE_LIMIT = 500
 PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_MAX_EVENTS = 30
 PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_WINDOW_SECONDS = 60.0
 SESSION_RATE_LIMIT_MAX_EVENTS = 5
 SESSION_RATE_LIMIT_WINDOW_SECONDS = 1.0
+HTTP_RATE_LIMIT_MAX_CLIENT_KEYS = 1024
+HTTP_RATE_LIMIT_MAX_CLIENT_KEYS_ENV = "KYRGAME_HTTP_RATE_LIMIT_MAX_CLIENT_KEYS"
+TRUST_PROXY_HEADERS_ENV = "KYRGAME_TRUST_PROXY_HEADERS"
 RECENT_PUBLIC_PLAYER_WINDOW = timedelta(days=7)
 WIZARD_SYMBOL_MALE = "\U0001f9d9\u200d\u2642\ufe0f"
 WIZARD_SYMBOL_FEMALE = "\U0001f9d9\u200d\u2640\ufe0f"
@@ -178,10 +181,31 @@ def _cors_origins_from_env() -> list[str]:
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
 
 
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _http_rate_limit_max_client_keys() -> int:
+    configured = os.getenv(HTTP_RATE_LIMIT_MAX_CLIENT_KEYS_ENV)
+    if not configured:
+        return HTTP_RATE_LIMIT_MAX_CLIENT_KEYS
+    try:
+        parsed = int(configured)
+    except ValueError:
+        return HTTP_RATE_LIMIT_MAX_CLIENT_KEYS
+    return max(1, parsed)
+
+
 def _client_rate_limit_key(request: Request) -> str:
+    client_host = request.client.host if request.client else "unknown"
+    if not _truthy_env(TRUST_PROXY_HEADERS_ENV):
+        return client_host
+
     cf_connecting_ip = request.headers.get("cf-connecting-ip")
     if cf_connecting_ip:
-        return cf_connecting_ip.strip()
+        client_ip = cf_connecting_ip.strip()
+        if client_ip:
+            return client_ip
 
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
@@ -192,9 +216,35 @@ def _client_rate_limit_key(request: Request) -> str:
     for header_name in ("x-real-ip",):
         value = request.headers.get(header_name)
         if value:
-            return value.strip()
+            client_ip = value.strip()
+            if client_ip:
+                return client_ip
 
-    return request.client.host if request.client else "unknown"
+    return client_host
+
+
+def _http_rate_limit_entry_seen_at(entry: object) -> float:
+    if isinstance(entry, tuple) and len(entry) == 2:
+        return float(entry[1])
+    return time.monotonic()
+
+
+def _prune_http_rate_limiters(
+    limiters: dict[str, tuple[RateLimiter, float] | RateLimiter],
+    *,
+    now: float,
+    window_seconds: float,
+    max_client_keys: int,
+    incoming_client_key: str,
+) -> None:
+    stale_before = now - window_seconds
+    for client_key, entry in list(limiters.items()):
+        if _http_rate_limit_entry_seen_at(entry) < stale_before:
+            del limiters[client_key]
+
+    while incoming_client_key not in limiters and len(limiters) >= max_client_keys:
+        oldest_key = min(limiters, key=lambda key: _http_rate_limit_entry_seen_at(limiters[key]))
+        del limiters[oldest_key]
 
 
 def _enforce_http_rate_limit(
@@ -210,13 +260,25 @@ def _enforce_http_rate_limit(
         limiters = {}
         setattr(request.app.state, state_attr, limiters)
 
+    now = time.monotonic()
     client_key = _client_rate_limit_key(request)
-    limiter = limiters.get(client_key)
-    if limiter is None:
+    _prune_http_rate_limiters(
+        limiters,
+        now=now,
+        window_seconds=window_seconds,
+        max_client_keys=_http_rate_limit_max_client_keys(),
+        incoming_client_key=client_key,
+    )
+    entry = limiters.get(client_key)
+    if entry is None:
         limiter = RateLimiter(max_events=max_events, window_seconds=window_seconds)
-        limiters[client_key] = limiter
+    elif isinstance(entry, tuple):
+        limiter = entry[0]
+    else:
+        limiter = entry
+    limiters[client_key] = (limiter, now)
 
-    if not limiter.allow():
+    if not limiter.allow(now=now):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
 
 
@@ -1885,6 +1947,7 @@ async def public_player_id_lookup(
     valid = bool(PLAYER_ID_PATTERN.fullmatch(trimmed))
     reserved = trimmed.lower() in RESERVED_PLAYER_IDS if trimmed else False
     existing = _find_player_record(db, trimmed) if valid else None
+    canonical_player_id = _canonical_first_login_player_id(trimmed) if valid else trimmed
     exists = existing is not None
     available = valid and not reserved and not exists
     if not valid:
@@ -1897,8 +1960,8 @@ async def public_player_id_lookup(
         status_value = "available"
 
     return {
-        "player_id": existing.plyrid if existing else trimmed,
-        "canonical_player_id": existing.plyrid if existing else trimmed,
+        "player_id": existing.plyrid if existing else canonical_player_id,
+        "canonical_player_id": existing.plyrid if existing else canonical_player_id,
         "valid": valid,
         "exists": exists,
         "available": available,
@@ -2003,9 +2066,7 @@ async def public_leaderboard(
     spells_catalog = provider.cache["spells"]
     player_records = list(
         db.scalars(
-            select(models.Player)
-            .order_by(models.Player.level.desc(), models.Player.plyrid.asc())
-            .limit(PUBLIC_LEADERBOARD_CANDIDATE_LIMIT)
+            select(models.Player).order_by(models.Player.level.desc(), models.Player.plyrid.asc())
         ).all()
     )
     latest_seen = _latest_session_seen_for_player_ids(

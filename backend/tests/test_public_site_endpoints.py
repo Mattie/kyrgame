@@ -99,7 +99,9 @@ async def test_public_player_id_lookup_reports_existing_available_and_reserved(m
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             existing = await client.get("/public/player-id/hero")
             available = await client.get("/public/player-id/Willow")
+            lower_available = await client.get("/public/player-id/avalon")
             reserved = await client.get("/public/player-id/Zar")
+            lower_reserved = await client.get("/public/player-id/zar")
             invalid = await client.get("/public/player-id/ab12")
 
         assert existing.status_code == 200
@@ -122,8 +124,12 @@ async def test_public_player_id_lookup_reports_existing_available_and_reserved(m
             "reserved": False,
             "status": "available",
         }
+        assert lower_available.json()["player_id"] == "Avalon"
+        assert lower_available.json()["canonical_player_id"] == "Avalon"
         assert reserved.json()["status"] == "reserved"
         assert reserved.json()["available"] is False
+        assert lower_reserved.json()["player_id"] == "Zar"
+        assert lower_reserved.json()["canonical_player_id"] == "Zar"
         assert invalid.json()["status"] == "invalid"
         assert invalid.json()["valid"] is False
 
@@ -138,14 +144,46 @@ async def test_public_player_id_lookup_rate_limits_repeated_checks(monkeypatch):
 
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            for _ in range(30):
-                response = await client.get("/public/player-id/Willow")
+            for index in range(30):
+                response = await client.get(
+                    "/public/player-id/Willow",
+                    headers={
+                        "cf-connecting-ip": f"198.51.100.{index}",
+                        "x-forwarded-for": f"203.0.113.{index}",
+                    },
+                )
                 assert response.status_code == 200
 
-            limited = await client.get("/public/player-id/Willow")
+            limited = await client.get(
+                "/public/player-id/Willow",
+                headers={"cf-connecting-ip": "198.51.100.200", "x-forwarded-for": "203.0.113.200"},
+            )
 
         assert limited.status_code == 429
         assert limited.json()["detail"] == "Too many Player-ID checks. Please slow down."
+
+
+@pytest.mark.anyio
+async def test_public_player_id_lookup_bounds_rate_limit_client_cache(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    monkeypatch.setenv("KYRGAME_TRUST_PROXY_HEADERS", "1")
+    monkeypatch.setenv("KYRGAME_HTTP_RATE_LIMIT_MAX_CLIENT_KEYS", "3")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            for index in range(5):
+                response = await client.get(
+                    "/public/player-id/Willow",
+                    headers={"x-forwarded-for": f"203.0.113.{index}"},
+                )
+                assert response.status_code == 200
+
+        limiters = app.state.public_player_id_lookup_rate_limiters
+        assert len(limiters) == 3
 
 
 @pytest.mark.anyio
@@ -320,3 +358,33 @@ async def test_public_leaderboard_caps_release_payload_size(monkeypatch):
 
         assert response.status_code == 200
         assert len(response.json()["players"]) == 50
+
+
+@pytest.mark.anyio
+async def test_public_leaderboard_ranks_spellbooks_before_payload_slice(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        with app.state.session_factory() as db:
+            low_spell_names = [
+                f"a{first}{second}{third}"
+                for first in string.ascii_lowercase
+                for second in string.ascii_lowercase
+                for third in string.ascii_lowercase
+            ][:505]
+            for player_id in low_spell_names:
+                _add_player(db, player_id, level=25, spells=spells, owned=0)
+            _add_player(db, "zzzz", level=25, spells=spells, owned=6)
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/public/leaderboard")
+
+        assert response.status_code == 200
+        players = response.json()["players"]
+        assert players[0]["player_id"] == "zzzz"
