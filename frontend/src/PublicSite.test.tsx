@@ -122,7 +122,7 @@ const mockFetch = vi.fn(async (input: RequestInfo | URL) => {
   }
   if (url.endsWith('/public/player-id/Hero')) {
     return jsonResponse({
-      player_id: 'Hero',
+      player_id: 'hero',
       canonical_player_id: 'hero',
       valid: true,
       exists: true,
@@ -240,6 +240,9 @@ describe('public site routes', () => {
     expect(screen.getByRole('radio', { name: 'Lord' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Lady' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create Character...' })).toBeInTheDocument()
+    expect(
+      mockFetch.mock.calls.some(([url]) => String(url).endsWith('/i18n/en-US/messages'))
+    ).toBe(false)
   })
 
   it('does not reuse a stale player ID lookup while checking the next name', async () => {

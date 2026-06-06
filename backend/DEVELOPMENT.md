@@ -151,13 +151,15 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
     "player_id": "hero",
     "resume_token": "...",
     "room_id": 7,
-    "create_player": false
+    "create_player": false,
+    "background": "lord"
   }
   ```
 
 - **Responses:**
   - `201 Created` for new sessions, `200 OK` when resuming with `resume_token`.
   - Set `create_player: true` for the explicit first-login Player-ID claim flow. The backend applies the legacy `KYRANDIA.C` case 1 rules: 3-9 letters, duplicate rejection, `Sysop` reservation, and visible entity-name reservation for `Zar`, `dragon`, `dryad`, `elf`, and `brownie`. Explicit claims always enter at room 0, matching the legacy intro-to-`entrgp(0, ...)` handoff; any submitted `room_id` is ignored for that claim.
+  - For explicit claims, pass `background: "lord"` or `background: "lady"` to choose the first-login background. `lady` sets the legacy female player flag; `lord` and omitted values keep the default first-login flags.
   - Logins without `create_player` require an existing Player-ID. Unknown valid Player-IDs return `404` so public clients can keep login and character creation as separate user choices.
   - Envelope:
 

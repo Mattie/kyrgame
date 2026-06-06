@@ -170,7 +170,7 @@ export const SessionForm = ({
   }, [apiBaseUrl, isPlayerEntry, trimmedPlayerId])
 
   useEffect(() => {
-    if (!effectiveClaimNewPlayer) return
+    if (!effectiveClaimNewPlayer || isPlayerEntry) return
 
     let cancelled = false
     const loadPrompt = async () => {
@@ -191,7 +191,7 @@ export const SessionForm = ({
     return () => {
       cancelled = true
     }
-  }, [apiBaseUrl, effectiveClaimNewPlayer])
+  }, [apiBaseUrl, effectiveClaimNewPlayer, isPlayerEntry])
 
   const persistPlayerId = (nextValue: string) => {
     if (nextValue.trim() === '') {
