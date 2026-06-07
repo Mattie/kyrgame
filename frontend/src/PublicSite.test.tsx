@@ -510,13 +510,15 @@ describe('public site routes', () => {
     const { container, unmount } = render(<App />)
 
     expect(screen.getByRole('heading', { name: /about kyrandia/i })).toBeInTheDocument()
-    expect(screen.getByText(/MajorBBS\/Worldgroup/i)).toBeInTheDocument()
+    expect(screen.getByText(/Kyrandia began as a MajorBBS\/Worldgroup/i)).toBeInTheDocument()
     expect(
       screen.getByText(
         /The objective remains: master the world, advance through the wizarding ranks, and become an Arch-Mage of Legends\. May Tashanna show you the way\.\.\./i
       )
     ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /source and credits/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /source, license, and credits/i })
+    ).toBeInTheDocument()
     expect(screen.getByText(/Copyright \(C\) 1988-2024 Rick Hadsall/i)).toBeInTheDocument()
     expect(screen.getByText(/Copyright \(C\) 1988-95 Galacticomm/i)).toBeInTheDocument()
     expect(screen.getByText(/Copyright \(C\) 2005-24 Elwynor Technologies/i)).toBeInTheDocument()
@@ -524,10 +526,17 @@ describe('public site routes', () => {
       'href',
       'https://github.com/Mattie/kyrgame'
     )
-    expect(screen.getByRole('link', { name: 'elwynor/elwkyr' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Elwynor Technologies' })).toHaveAttribute(
       'href',
       'https://github.com/elwynor/elwkyr'
     )
+    expect(
+      screen.getByText(/GNU Affero General Public License version 3/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/available at no charge through the repository above/i)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/no affiliation with Westwood Studios/i)).toBeInTheDocument()
     expect(screen.getByText(/Ported and Modernized by Mattie Casper/i)).toBeInTheDocument()
     const aboutMarkup = container.querySelector('.about-page')?.innerHTML ?? ''
     expect(aboutMarkup).toContain('<!-- Slayer must die... -->')

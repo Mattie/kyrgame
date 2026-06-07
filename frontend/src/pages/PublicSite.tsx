@@ -354,7 +354,7 @@ export const AboutPage = ({ navigate }: PublicPageProps) => (
       </p>
       <p>
         Scott Brinker and Richard Skurnick designed and programmed the original game in 1988.
-        The modern project keeps the original C sources and message catalogs close while moving
+        This modern web port keeps the original C sources and message catalogs close while moving
         the play experience to a browser, FastAPI backend, and WebSocket command console.
       </p>
       <p>
@@ -362,7 +362,7 @@ export const AboutPage = ({ navigate }: PublicPageProps) => (
         Arch-Mage of Legends. May Tashanna show you the way...
       </p>
       <section className="public-credits" aria-labelledby="source-credits-title">
-        <h2 id="source-credits-title">Source and Credits</h2>
+        <h2 id="source-credits-title">Source, License, and Credits</h2>
         <p>Original source copyright notices include:</p>
         <ul className="public-credit-list">
           <li>Copyright (C) 1988-2024 Rick Hadsall. All Rights Reserved.</li>
@@ -370,9 +370,18 @@ export const AboutPage = ({ navigate }: PublicPageProps) => (
           <li>Copyright (C) 2005-24 Elwynor Technologies</li>
         </ul>
         <p>
-          This modern port lives at{' '}
-          <a href="https://github.com/Mattie/kyrgame">Mattie/kyrgame</a>, with the original
-          upstream preserved by <a href="https://github.com/elwynor/elwkyr">elwynor/elwkyr</a>.
+          This modern port is available at{' '}
+          <a href="https://github.com/Mattie/kyrgame">Mattie/kyrgame</a>. It is based on the
+          original MajorBBS/Worldgroup source distribution published by{' '}
+          <a href="https://github.com/elwynor/elwkyr">Elwynor Technologies</a>.
+        </p>
+        <p>
+          The project is licensed under the GNU Affero General Public License version 3. Source code
+          for the running version is available at no charge through the repository above.
+        </p>
+        <p>
+          This independent modern port has no affiliation with Westwood Studios, Electronic Arts, or
+          the Legend of Kyrandia adventure-game series.
         </p>
         <p className="public-port-credit">Ported and Modernized by Mattie Casper</p>
       </section>
