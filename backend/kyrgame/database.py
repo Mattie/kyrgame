@@ -1,10 +1,12 @@
 import os
+import time
 from pathlib import Path
 from typing import Optional
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from .models import Base
@@ -47,6 +49,19 @@ def create_session_factory(engine):
 def create_session(engine):
     session_factory = create_session_factory(engine)
     return session_factory()
+
+
+def wait_for_database(engine, *, attempts: int = 1, delay_seconds: float = 1.0):
+    attempts = max(1, attempts)
+    for attempt in range(attempts):
+        try:
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+            return
+        except OperationalError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay_seconds)
 
 
 def _default_alembic_config() -> Path:

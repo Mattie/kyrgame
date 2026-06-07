@@ -364,7 +364,19 @@ node_modules/
 
 # Environment files
 .env
+.env.docker.local
+.env.local
 backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
+
+# Local Docker and tunnel credentials
+/local-docker/
+/cloudflared/*.json
+/cloudflared/*.pem
+/cloudflared/cert.*
+/cloudflared/credentials.*
 
 # Visual Studio 6 build log
 *.plg

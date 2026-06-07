@@ -389,7 +389,7 @@ export const AdminControls = () => {
         <div className="panel-body" data-testid="admin-panel-body">
           {!adminToken && (
             <p className="status error">
-              Admin access is locked. Enable an admin session and set KYRGAME_ADMIN_TOKEN in backend/.env.
+              Admin access is locked. Enable an admin session and log in with an allowlisted account.
             </p>
           )}
           <form onSubmit={handleSubmit} className="admin-form">

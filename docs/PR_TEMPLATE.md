@@ -36,7 +36,7 @@ Be explicit:
 
 - [ ] `cd legacy && make -f ELWKYR` (Worldgroup build)
 - [ ] `pytest backend/tests`
-- [ ] `python -m kyrgame.scripts.package_content --output legacy/Dist/offline-content.json`
+- [ ] `cd backend && python -m kyrgame.scripts.package_content --output ../legacy/Dist/offline-content.json`
 - [ ] Other:
 
 Details:

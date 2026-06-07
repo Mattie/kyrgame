@@ -626,6 +626,19 @@ describe('MudConsole', () => {
     expect(screen.queryByText(/Line 45/)).toBeNull()
   })
 
+  it('renders pager action buttons above the normal command bar', () => {
+    setFirstLoginLifecycleText(45)
+
+    const { container } = render(<MudConsole />)
+
+    const orderedControls = Array.from(
+      container.querySelectorAll('.pager-actions, form.prompt-row')
+    )
+    expect(orderedControls).toHaveLength(2)
+    expect(orderedControls[0]).toHaveClass('pager-actions')
+    expect(orderedControls[1]).toHaveClass('prompt-row')
+  })
+
   it('announces first-login pager text and prompt when modem streaming is enabled', async () => {
     window.history.replaceState(null, '', '/?modem=on')
     setFirstLoginLifecycleText(24)

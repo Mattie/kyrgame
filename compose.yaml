@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kyrgame}
+      POSTGRES_USER: ${POSTGRES_USER:-kyrgame}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kyrgame}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - kyrgame_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: uvicorn kyrgame.webapp:create_app --factory --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-kyrgame}:${POSTGRES_PASSWORD:-kyrgame}@db:5432/${POSTGRES_DB:-kyrgame}
+      KYRGAME_ADMIN_TOKEN: ${KYRGAME_ADMIN_TOKEN:-dev-admin-token}
+      KYRGAME_ADMIN_ALLOWLIST_PATH: ${KYRGAME_ADMIN_ALLOWLIST_PATH:-/config/admin-allowlist.yaml}
+      KYRGAME_CORS_ORIGINS: ${KYRGAME_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      KYRGAME_RESET_ON_BOOT: ${KYRGAME_RESET_ON_BOOT:-0}
+      KYRGAME_SEED_IF_EMPTY: ${KYRGAME_SEED_IF_EMPTY:-1}
+      KYRGAME_RUN_MIGRATIONS: ${KYRGAME_RUN_MIGRATIONS:-1}
+      KYRGAME_TELEMETRY_DIR: ${KYRGAME_TELEMETRY_DIR:-/data/telemetry}
+      KYRGAME_TRUST_PROXY_HEADERS: ${KYRGAME_TRUST_PROXY_HEADERS:-0}
+      KYRGAME_DB_CONNECT_ATTEMPTS: ${KYRGAME_DB_CONNECT_ATTEMPTS:-30}
+      KYRGAME_DB_CONNECT_RETRY_SECONDS: ${KYRGAME_DB_CONNECT_RETRY_SECONDS:-1}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+      - ./local-docker:/config:ro
+      - kyrgame_backend_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-bookworm-slim
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host ::"
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+      VITE_WS_URL: ${VITE_WS_URL:-}
+      KYRGAME_ALLOW_CLOUDFLARE_TUNNEL: ${KYRGAME_ALLOW_CLOUDFLARE_TUNNEL:-0}
+      KYRGAME_BACKEND_PROXY_TARGET: ${KYRGAME_BACKEND_PROXY_TARGET:-http://backend:8000}
+      KYRGAME_VITE_USE_POLLING: ${KYRGAME_VITE_USE_POLLING:-1}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/app
+      - kyrgame_frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles:
+      - tunnel
+    command: tunnel --config /etc/cloudflared/config.yml --no-autoupdate run
+    network_mode: service:frontend
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      - frontend
+
+volumes:
+  kyrgame_backend_data:
+  kyrgame_frontend_node_modules:
+  kyrgame_postgres_data:

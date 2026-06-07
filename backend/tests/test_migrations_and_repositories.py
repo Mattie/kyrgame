@@ -5,6 +5,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect, select, text
+from sqlalchemy.exc import OperationalError
 
 from kyrgame import database, loader, models, repositories
 
@@ -58,11 +59,22 @@ def test_alembic_upgrade_creates_all_tables(migrated_engine):
         "players",
         "commands",
         "messages",
+        "accounts",
         "player_sessions",
         "player_inventories",
         "spell_timers",
         "room_occupants",
     }.issubset(table_names)
+
+
+def test_message_text_column_has_no_legacy_catalog_length_cap(migrated_engine):
+    inspector = inspect(migrated_engine)
+    message_columns = {
+        column["name"]: column
+        for column in inspector.get_columns("messages")
+    }
+
+    assert getattr(message_columns["text"]["type"], "length", None) is None
 
 
 def test_initial_schema_revision_does_not_include_session_lifecycle_columns(
@@ -105,6 +117,13 @@ def test_player_and_content_column_lengths_match_existing_contracts(migrated_eng
     }
     assert session_columns["lifecycle_state"]["type"].length == 32
     assert session_columns["lifecycle_step"]["type"].python_type is int
+    assert session_columns["session_kind"]["type"].length == 16
+    assert session_columns["hidden_from_activity"]["type"].python_type is bool
+
+    account_columns = {column["name"]: column for column in inspector.get_columns("accounts")}
+    assert account_columns["userid_norm"]["type"].length == 14
+    assert account_columns["userid"]["type"].length == 14
+    assert account_columns["password_hash"]["type"].length == 255
 
 
 def test_runtime_in_memory_migration_keeps_followup_session_lifecycle_columns():
@@ -124,9 +143,44 @@ def test_runtime_in_memory_migration_keeps_followup_session_lifecycle_columns():
 
         assert session_columns["lifecycle_state"]["type"].length == 32
         assert session_columns["lifecycle_step"]["type"].python_type is int
-        assert version == "0002_session_lifecycle_state"
+        assert session_columns["session_kind"]["type"].length == 16
+        assert session_columns["hidden_from_activity"]["type"].python_type is bool
+        assert version == "0003_accounts_session_metadata"
     finally:
         engine.dispose()
+
+
+def test_wait_for_database_retries_transient_operational_errors(monkeypatch):
+    sleeps: list[float] = []
+
+    class ReadyConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, statement):
+            self.statement = statement
+
+    class FlakyEngine:
+        def __init__(self):
+            self.connect_calls = 0
+
+        def connect(self):
+            self.connect_calls += 1
+            if self.connect_calls < 3:
+                raise OperationalError("SELECT 1", {}, Exception("database system is starting up"))
+            return ReadyConnection()
+
+    monkeypatch.setattr(database.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    engine = FlakyEngine()
+
+    database.wait_for_database(engine, attempts=3, delay_seconds=0.25)
+
+    assert engine.connect_calls == 3
+    assert sleeps == [0.25, 0.25]
 
 
 def test_inventory_repository_upserts_by_slot(seeded_session):

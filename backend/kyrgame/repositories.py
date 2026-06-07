@@ -22,12 +22,18 @@ class PlayerSessionRepository:
         expiration_hours: int = DEFAULT_SESSION_EXPIRATION_HOURS,
         lifecycle_state: str | None = None,
         lifecycle_step: int | None = None,
+        account_id: int | None = None,
+        session_kind: str = "game",
+        hidden_from_activity: bool = False,
     ):
         now = datetime.now(timezone.utc)
         player_session = models.PlayerSession(
             player_id=player_id,
+            account_id=account_id,
             session_token=session_token,
             room_id=room_id,
+            session_kind=session_kind,
+            hidden_from_activity=hidden_from_activity,
             lifecycle_state=lifecycle_state,
             lifecycle_step=lifecycle_step,
             last_seen=now,
@@ -49,14 +55,22 @@ class PlayerSessionRepository:
             player_session.last_seen = timestamp or datetime.now(timezone.utc)
         return player_session
 
-    def deactivate_all(self, player_id: int, timestamp: Optional[datetime] = None) -> List[str]:
+    def deactivate_all(
+        self,
+        player_id: int,
+        timestamp: Optional[datetime] = None,
+        session_kind: str | None = None,
+    ) -> List[str]:
         # First, get all active session tokens
+        conditions = [
+            models.PlayerSession.player_id == player_id,
+            models.PlayerSession.is_active.is_(True),
+        ]
+        if session_kind is not None:
+            conditions.append(models.PlayerSession.session_kind == session_kind)
         tokens = [
             row[0] for row in self.session.execute(
-                select(models.PlayerSession.session_token).where(
-                    models.PlayerSession.player_id == player_id,
-                    models.PlayerSession.is_active.is_(True),
-                )
+                select(models.PlayerSession.session_token).where(*conditions)
             )
         ]
         
@@ -64,10 +78,7 @@ class PlayerSessionRepository:
         if tokens:
             self.session.execute(
                 update(models.PlayerSession)
-                .where(
-                    models.PlayerSession.player_id == player_id,
-                    models.PlayerSession.is_active.is_(True),
-                )
+                .where(*conditions)
                 .values(
                     is_active=False,
                     last_seen=timestamp or datetime.now(timezone.utc)
@@ -76,13 +87,18 @@ class PlayerSessionRepository:
         
         return tokens
 
-    def list_active(self, player_id: int) -> List[models.PlayerSession]:
+    def list_active(
+        self, player_id: int, session_kind: str | None = None
+    ) -> List[models.PlayerSession]:
+        conditions = [
+            models.PlayerSession.player_id == player_id,
+            models.PlayerSession.is_active.is_(True),
+        ]
+        if session_kind is not None:
+            conditions.append(models.PlayerSession.session_kind == session_kind)
         return list(
             self.session.scalars(
-                select(models.PlayerSession).where(
-                    models.PlayerSession.player_id == player_id,
-                    models.PlayerSession.is_active.is_(True),
-                )
+                select(models.PlayerSession).where(*conditions)
             ).all()
         )
 
@@ -112,6 +128,33 @@ class PlayerSessionRepository:
             player_session.lifecycle_state = lifecycle_state
             player_session.lifecycle_step = lifecycle_step
         return player_session
+
+
+class AccountRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get_by_userid_norm(self, userid_norm: str) -> models.Account | None:
+        return self.session.scalar(
+            select(models.Account).where(models.Account.userid_norm == userid_norm)
+        )
+
+    def create_account(
+        self,
+        *,
+        userid: str,
+        userid_norm: str,
+        password_hash: str,
+        player_id: int,
+    ) -> models.Account:
+        account = models.Account(
+            userid=userid,
+            userid_norm=userid_norm,
+            password_hash=password_hash,
+            player_id=player_id,
+        )
+        self.session.add(account)
+        return account
 
 
 class InventoryRepository:

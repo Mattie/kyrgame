@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     JSON,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -304,7 +305,25 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(String(64), primary_key=True)
-    text = Column(String(255), nullable=False)
+    text = Column(Text, nullable=False)
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id = Column(Integer, primary_key=True)
+    userid_norm = Column(String(constants.ALSSIZ), nullable=False, unique=True, index=True)
+    userid = Column(String(constants.ALSSIZ), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    player_id = Column(
+        Integer, ForeignKey("players.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    disabled = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    first_login_completed_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class PlayerSession(Base):
@@ -314,9 +333,12 @@ class PlayerSession(Base):
     player_id = Column(
         Integer, ForeignKey("players.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    account_id = Column(Integer, ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True, index=True)
     session_token = Column(String(128), nullable=False, unique=True)
     room_id = Column(Integer, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
+    session_kind = Column(String(16), nullable=False, default="game")
+    hidden_from_activity = Column(Boolean, nullable=False, default=False)
     lifecycle_state = Column(String(32), nullable=True)
     lifecycle_step = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

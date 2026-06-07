@@ -43,6 +43,9 @@ export type SessionRecord = {
   expiresAt?: string | null
   expiresInSeconds?: number | null
   playerFlags?: number | null
+  accountUserId?: string | null
+  sessionKind?: SessionKind
+  adminGrants?: AdminGrants
   lifecycle?: SessionLifecycle | null
 }
 
@@ -182,6 +185,21 @@ export type AdminElfTriggerResponse = {
 }
 
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
+type SessionKind = 'game' | 'admin'
+type AccountAuthMode = 'legacy' | 'login' | 'register'
+
+type AdminGrants = {
+  roles: string[]
+  flags: string[]
+}
+
+type StartSessionOptions = {
+  createPlayer?: boolean
+  background?: 'lord' | 'lady'
+  password?: string
+  authMode?: AccountAuthMode
+  sessionKind?: SessionKind
+}
 
 type SendCommandOptions = {
   silent?: boolean
@@ -207,7 +225,7 @@ type NavigatorContextValue = {
   startSession: (
     playerId: string,
     roomId?: number | null,
-    options?: { createPlayer?: boolean; background?: 'lord' | 'lady' }
+    options?: StartSessionOptions
   ) => Promise<void>
   adminToken: string | null
   setAdminToken: (token: string | null) => void
@@ -363,6 +381,45 @@ const parseSessionLifecycle = (value: unknown): SessionLifecycle | null => {
     state: payload.state,
     step: typeof payload.step === 'number' ? payload.step : null,
   }
+}
+
+const parseAdminGrants = (value: unknown): AdminGrants => {
+  if (!value || typeof value !== 'object') return { roles: [], flags: [] }
+  const payload = value as Record<string, unknown>
+  return {
+    roles: Array.isArray(payload.roles)
+      ? payload.roles.filter((role): role is string => typeof role === 'string')
+      : [],
+    flags: Array.isArray(payload.flags)
+      ? payload.flags.filter((flag): flag is string => typeof flag === 'string')
+      : [],
+  }
+}
+
+const parseSessionKind = (value: unknown): SessionKind =>
+  value === 'admin' ? 'admin' : 'game'
+
+const formatAccountAuthError = (
+  authMode: AccountAuthMode,
+  responseStatus: number,
+  playerId: string,
+  detail: string
+) => {
+  const trimmedDetail = detail.trim()
+  const isPlainNotFound = /^not found$/i.test(trimmedDetail)
+
+  if (
+    authMode === 'login' &&
+    (responseStatus === 401 || responseStatus === 404 || isPlainNotFound)
+  ) {
+    return `No saved account matched ${playerId}. If this is a new character, use Create Character when the name check is available so we can remember that password.`
+  }
+
+  if (authMode === 'register' && (responseStatus === 404 || isPlainNotFound)) {
+    return `Account creation is unavailable. ${playerId}'s password was not saved. Please try again after the server updates.`
+  }
+
+  return trimmedDetail || 'Unable to start session'
 }
 
 const isIntroLifecycle = (lifecycle?: SessionLifecycle | null) =>
@@ -931,7 +988,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     async (
       playerId: string,
       roomId?: number | null,
-      options?: { createPlayer?: boolean; background?: 'lord' | 'lady' }
+      options?: StartSessionOptions
     ) => {
       setConnectionStatus('connecting')
       setError(null)
@@ -939,10 +996,25 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       setPlayerVisuals({})
       resetSocket()
       try {
-        const payload: Record<string, string | number | boolean | null | undefined> = {
-          player_id: playerId,
-        }
-        if (options?.createPlayer) {
+        const authMode: AccountAuthMode =
+          options?.authMode ?? (options?.password ? 'login' : 'legacy')
+        const useAccountAuth = authMode === 'login' || authMode === 'register'
+        const endpoint = useAccountAuth
+          ? authMode === 'register'
+            ? '/auth/register'
+            : '/auth/login'
+          : '/auth/session'
+        const payload: Record<string, string | number | boolean | null | undefined> =
+          useAccountAuth
+            ? {
+                userid: playerId,
+                password: options?.password,
+                session_kind: options?.sessionKind ?? 'game',
+              }
+            : {
+                player_id: playerId,
+              }
+        if (!useAccountAuth && options?.createPlayer) {
           payload.create_player = true
         }
         if (options?.background) {
@@ -951,20 +1023,26 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         if (roomId !== undefined && roomId !== null && !Number.isNaN(roomId)) {
           payload.room_id = roomId
         }
-        const response = await fetch(`${apiBaseUrl}/auth/session`, {
+        const response = await fetch(`${apiBaseUrl}${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
         if (!response.ok) {
           const detail = await parseSessionError(response)
-          throw new Error(detail || 'Unable to start session')
+          const message = useAccountAuth
+            ? formatAccountAuthError(authMode, response.status, playerId, detail)
+            : detail.trim() || 'Unable to start session'
+          throw new Error(message)
         }
         const data = await response.json()
         const sessionPayload = data.session
         const playerFlags =
           typeof sessionPayload.player_flags === 'number' ? sessionPayload.player_flags : null
         const lifecycle = parseSessionLifecycle(sessionPayload.lifecycle)
+        const sessionKind = parseSessionKind(
+          sessionPayload.session_kind ?? options?.sessionKind ?? 'game'
+        )
         const record: SessionRecord = {
           token: sessionPayload.token,
           playerId: sessionPayload.player_id,
@@ -975,6 +1053,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               ? sessionPayload.expires_in_seconds
               : null,
           playerFlags,
+          accountUserId:
+            typeof sessionPayload.account_userid === 'string'
+              ? sessionPayload.account_userid
+              : null,
+          sessionKind,
+          adminGrants: parseAdminGrants(sessionPayload.admin_grants),
           lifecycle,
         }
         setSession(record)
@@ -1004,6 +1088,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           })
         })
         if (isIntroLifecycle(record.lifecycle)) {
+          setConnectionStatus('idle')
+          return
+        }
+        if (record.sessionKind === 'admin') {
+          setAdminToken(record.token)
           setConnectionStatus('idle')
           return
         }

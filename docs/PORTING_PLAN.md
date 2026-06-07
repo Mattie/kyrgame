@@ -105,7 +105,7 @@
 
 ### Release/Ops Cleanup (Final Porting Lane)
 
-- [ ] Provide Docker Compose, Makefile targets, CI wiring, and package-content automation after gameplay parity is complete. *(In progress: added `backend/Dockerfile` with uvicorn startup, runtime env defaults, and default `/data` directory creation for SQLite deployments; still need compose orchestration, make targets, and CI integration.)* Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.
+- [ ] Provide Docker Compose, Makefile targets, CI wiring, and package-content automation after gameplay parity is complete. *(In progress: added `backend/Dockerfile` with uvicorn startup, runtime env defaults, and default `/data` directory creation for SQLite deployments; added root `compose.yaml`, `.env.docker.example`, `.dockerignore`, Makefile targets, a Cloudflare tunnel profile using the frontend network namespace plus Vite proxying for backend paths, service restart policies for alpha testing, `docs/ALPHA_TESTING_RUNBOOK.md`, and file-contract tests for the dev stack. Remaining: CI wiring, package-content CI job, and full compose-up smoke.)* Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.
 
 ## Remaining Implementation Task Plan
 

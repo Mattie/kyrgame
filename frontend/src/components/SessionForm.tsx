@@ -1,6 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 
-import { isDevEnvironment } from '../config/devMode'
 import { useNavigator } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
 
@@ -8,7 +7,6 @@ const storageKeys = {
   playerId: 'kyrgame.navigator.playerId',
   roomId: 'kyrgame.navigator.roomId',
   adminSession: 'kyrgame.navigator.adminSession',
-  adminToken: 'kyrgame.navigator.adminToken',
 }
 
 const fallbackLegacyPlayerIdPrompt =
@@ -45,7 +43,8 @@ type PlayerIdLookup = {
 
 const PLAYER_ID_LOOKUP_DEBOUNCE_MS = 250
 
-const sanitizePlayerIdInput = (value: string) => value.replace(/[^A-Za-z]/g, '').slice(0, 9)
+const sanitizePlayerIdInput = (value: string) =>
+  value.replace(/[^A-Za-z]/g, '').slice(0, 9)
 
 export const SessionForm = ({
   title = 'Request a token',
@@ -66,17 +65,21 @@ export const SessionForm = ({
   } = useNavigator()
   const [playerId, setPlayerId] = useState('')
   const [roomId, setRoomId] = useState('')
-  const [adminTokenInput, setAdminTokenInput] = useState('')
+  const [password, setPassword] = useState('')
   const [joinAsAdmin, setJoinAsAdmin] = useState(false)
   const [claimNewPlayer, setClaimNewPlayer] = useState(false)
   const [characterBackground, setCharacterBackground] =
     useState<CharacterBackground>('lord')
-  const [playerIdLookup, setPlayerIdLookup] = useState<PlayerIdLookup | null>(null)
+  const [playerIdLookup, setPlayerIdLookup] = useState<PlayerIdLookup | null>(
+    null
+  )
   const [playerIdLookupLoading, setPlayerIdLookupLoading] = useState(false)
-  const [legacyPlayerIdPrompt, setLegacyPlayerIdPrompt] = useState(fallbackLegacyPlayerIdPrompt)
+  const [legacyPlayerIdPrompt, setLegacyPlayerIdPrompt] = useState(
+    fallbackLegacyPlayerIdPrompt
+  )
   const [submitting, setSubmitting] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
   const isPlayerEntry = !showAdminFields
+  const usesAccountAuth = isPlayerEntry || (showAdminFields && joinAsAdmin)
 
   const trimmedPlayerId = playerId.trim()
   const effectiveClaimNewPlayer = isPlayerEntry
@@ -86,7 +89,9 @@ export const SessionForm = ({
   useEffect(() => {
     const storedPlayerId = localStorage.getItem(storageKeys.playerId)
     if (storedPlayerId) {
-      setPlayerId(isPlayerEntry ? sanitizePlayerIdInput(storedPlayerId) : storedPlayerId)
+      setPlayerId(
+        isPlayerEntry ? sanitizePlayerIdInput(storedPlayerId) : storedPlayerId
+      )
     }
 
     const storedRoomId = localStorage.getItem(storageKeys.roomId)
@@ -94,17 +99,10 @@ export const SessionForm = ({
       setRoomId(storedRoomId)
     }
 
-    const storedAdminSession = localStorage.getItem(storageKeys.adminSession) === 'true'
+    const storedAdminSession =
+      localStorage.getItem(storageKeys.adminSession) === 'true'
     setJoinAsAdmin(storedAdminSession)
-
-    if (storedAdminSession) {
-      const storedAdminToken = localStorage.getItem(storageKeys.adminToken)
-      if (storedAdminToken) {
-        setAdminTokenInput(storedAdminToken)
-      }
-    } else {
-      localStorage.removeItem(storageKeys.adminToken)
-    }
+    setPassword('')
   }, [isPlayerEntry])
 
   useEffect(() => {
@@ -211,21 +209,6 @@ export const SessionForm = ({
 
   const persistAdminSession = (enabled: boolean) => {
     localStorage.setItem(storageKeys.adminSession, String(enabled))
-    if (!enabled) {
-      localStorage.removeItem(storageKeys.adminToken)
-    }
-  }
-
-  const persistAdminToken = (nextValue: string) => {
-    if (!joinAsAdmin) {
-      localStorage.removeItem(storageKeys.adminToken)
-      return
-    }
-    if (nextValue.trim() === '') {
-      localStorage.removeItem(storageKeys.adminToken)
-      return
-    }
-    localStorage.setItem(storageKeys.adminToken, nextValue)
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -233,24 +216,40 @@ export const SessionForm = ({
     setSubmitting(true)
     try {
       const parsedRoom =
-        !showRoomField || effectiveClaimNewPlayer || roomId.trim() === '' ? null : Number(roomId)
-      const trimmedAdminToken = adminTokenInput.trim()
+        !showRoomField || effectiveClaimNewPlayer || roomId.trim() === ''
+          ? null
+          : Number(roomId)
+      const trimmedPassword = password.trim()
 
-      setAdminToken(showAdminFields && joinAsAdmin ? trimmedAdminToken || null : null)
+      if (!showAdminFields || !joinAsAdmin) {
+        setAdminToken(null)
+      }
       persistPlayerId(trimmedPlayerId)
       if (showRoomField && !effectiveClaimNewPlayer) {
         persistRoomId(roomId)
       }
       persistAdminSession(showAdminFields && joinAsAdmin)
-      if (showAdminFields && joinAsAdmin) {
-        persistAdminToken(trimmedAdminToken)
-      }
-      await startSession(trimmedPlayerId, Number.isNaN(parsedRoom) ? null : parsedRoom, {
-        createPlayer: effectiveClaimNewPlayer,
-        background:
-          isPlayerEntry && effectiveClaimNewPlayer ? characterBackground : undefined,
-      })
+      await startSession(
+        trimmedPlayerId,
+        Number.isNaN(parsedRoom) ? null : parsedRoom,
+        {
+          createPlayer: effectiveClaimNewPlayer,
+          background:
+            isPlayerEntry && effectiveClaimNewPlayer
+              ? characterBackground
+              : undefined,
+          password: usesAccountAuth ? trimmedPassword : undefined,
+          authMode: usesAccountAuth
+            ? effectiveClaimNewPlayer
+              ? 'register'
+              : 'login'
+            : 'legacy',
+          sessionKind: showAdminFields && joinAsAdmin ? 'admin' : 'game',
+        }
+      )
       onSessionStarted?.()
+    } catch {
+      // startSession is responsible for updating shared error state.
     } finally {
       setSubmitting(false)
     }
@@ -314,19 +313,30 @@ export const SessionForm = ({
           text: 'Choose 3-9 letters. This is the name Kyrandia will remember.',
         }
     }
-  }, [isPlayerEntry, playerIdLookup?.status, playerIdLookupLoading, trimmedPlayerId])
+  }, [
+    isPlayerEntry,
+    playerIdLookup?.status,
+    playerIdLookupLoading,
+    trimmedPlayerId,
+  ])
   const canSubmit =
     trimmedPlayerId !== '' &&
+    (!usesAccountAuth || password.trim() !== '') &&
     (!isPlayerEntry ||
       (!playerIdLookupLoading &&
         (playerIdLookup?.status === 'existing' ||
           playerIdLookup?.status === 'available' ||
           playerIdLookup?.status === 'unavailable')))
   const submitLabel = (() => {
-    if (submitting) return effectiveClaimNewPlayer ? 'Opening the gates...' : 'Entering...'
+    if (submitting)
+      return effectiveClaimNewPlayer ? 'Opening the gates...' : 'Entering...'
+    if (showAdminFields && joinAsAdmin) {
+      return effectiveClaimNewPlayer ? 'Create admin account' : 'Admin login'
+    }
     if (isPlayerEntry) {
       if (playerIdLookupLoading) return 'Checking Player-ID...'
-      if (playerIdLookup?.status === 'existing') return `Login as ${trimmedPlayerId}`
+      if (playerIdLookup?.status === 'existing')
+        return `Login as ${trimmedPlayerId}`
       if (playerIdLookup?.status === 'available') return 'Create Character...'
       if (playerIdLookup?.status === 'unavailable') return 'Try Login'
       return 'Enter Player ID'
@@ -335,182 +345,172 @@ export const SessionForm = ({
   })()
 
   return (
-    <section className={`panel session-form ${collapsed ? 'collapsed' : ''}`}>
+    <section className="panel session-form">
       <header className="panel-header">
         <div>
           <p className="eyebrow">{eyebrow}</p>
           <h2>{title}</h2>
           {showEndpoint && <p className="endpoint">API base: {apiBaseUrl}</p>}
         </div>
-        {isDevEnvironment && (
-          <button
-            type="button"
-            className="panel-toggle"
-            aria-label={`${collapsed ? 'Expand' : 'Collapse'} session panel`}
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((prev) => !prev)}
-          >
-            {collapsed ? 'Expand' : 'Collapse'}
-          </button>
-        )}
       </header>
-      {!collapsed && (
-        <div className="panel-body" data-testid="session-panel-body">
-          <form onSubmit={handleSubmit} className="form-stack">
+      <div className="panel-body" data-testid="session-panel-body">
+        <form onSubmit={handleSubmit} className="form-stack">
+          <div className="field">
+            <label htmlFor="player-id">Player ID</label>
+            <input
+              id="player-id"
+              name="player-id"
+              value={playerId}
+              autoComplete="username"
+              inputMode="text"
+              maxLength={9}
+              pattern="[A-Za-z]{3,9}"
+              onChange={event => {
+                const nextValue = sanitizePlayerIdInput(event.target.value)
+                setPlayerId(nextValue)
+                if (isPlayerEntry) {
+                  setPlayerIdLookup(null)
+                  setPlayerIdLookupLoading(nextValue.trim().length >= 3)
+                }
+                persistPlayerId(nextValue)
+              }}
+              required
+            />
+            {playerIdStatus && (
+              <p className="player-id-status" data-state={playerIdStatus.state}>
+                {playerIdStatus.text}
+              </p>
+            )}
+          </div>
+
+          {usesAccountAuth && (
             <div className="field">
-              <label htmlFor="player-id">Player ID</label>
+              <label htmlFor="account-password">
+                {showAdminFields && joinAsAdmin ? 'Admin password' : 'Password'}
+              </label>
               <input
-                id="player-id"
-                name="player-id"
-                value={playerId}
-                autoComplete="username"
-                inputMode="text"
-                maxLength={9}
-                pattern="[A-Za-z]{3,9}"
-                onChange={(event) => {
-                  const nextValue = sanitizePlayerIdInput(event.target.value)
-                  setPlayerId(nextValue)
-                  if (isPlayerEntry) {
-                    setPlayerIdLookup(null)
-                    setPlayerIdLookupLoading(nextValue.trim().length >= 3)
-                  }
-                  persistPlayerId(nextValue)
-                }}
+                id="account-password"
+                name="account-password"
+                type="password"
+                value={password}
+                autoComplete={
+                  effectiveClaimNewPlayer ? 'new-password' : 'current-password'
+                }
+                onChange={event => setPassword(event.target.value)}
                 required
               />
-              {playerIdStatus && (
-                <p className="player-id-status" data-state={playerIdStatus.state}>
-                  {playerIdStatus.text}
-                </p>
-              )}
             </div>
+          )}
 
-            {showRoomField && (
-              <div className="field">
-                <label htmlFor="room-id">Room ID (optional)</label>
+          {showRoomField && (
+            <div className="field">
+              <label htmlFor="room-id">Room ID (optional)</label>
+              <input
+                id="room-id"
+                name="room-id"
+                value={roomId}
+                disabled={claimNewPlayer}
+                onChange={event => {
+                  const nextValue = event.target.value
+                  setRoomId(nextValue)
+                  persistRoomId(nextValue)
+                }}
+              />
+              <p className="field-hint">
+                {claimNewPlayer
+                  ? 'New Player-IDs always enter Kyrandia at the willow tree.'
+                  : "Leave blank to use the player's current room."}
+              </p>
+            </div>
+          )}
+
+          {!isPlayerEntry && (
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                name="claim-new-player"
+                checked={claimNewPlayer}
+                onChange={event => setClaimNewPlayer(event.target.checked)}
+              />
+              Claim new Player-ID
+            </label>
+          )}
+
+          {isPlayerEntry && effectiveClaimNewPlayer && (
+            <fieldset className="character-choice">
+              <legend>Choose your background</legend>
+              <label>
                 <input
-                  id="room-id"
-                  name="room-id"
-                  value={roomId}
-                  disabled={claimNewPlayer}
-                  onChange={(event) => {
-                    const nextValue = event.target.value
-                    setRoomId(nextValue)
-                    persistRoomId(nextValue)
-                  }}
+                  type="radio"
+                  name="character-background"
+                  value="lord"
+                  checked={characterBackground === 'lord'}
+                  onChange={() => setCharacterBackground('lord')}
                 />
-                <p className="field-hint">
-                  {claimNewPlayer
-                    ? 'New Player-IDs always enter Kyrandia at the willow tree.'
-                    : "Leave blank to use the player's current room."}
-                </p>
-              </div>
-            )}
+                <span>Lord</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="character-background"
+                  value="lady"
+                  checked={characterBackground === 'lady'}
+                  onChange={() => setCharacterBackground('lady')}
+                />
+                <span>Lady</span>
+              </label>
+            </fieldset>
+          )}
 
-            {!isPlayerEntry && (
+          {effectiveClaimNewPlayer && !isPlayerEntry && (
+            <p className="field-hint">
+              <AnsiText text={legacyPlayerIdPrompt} />
+            </p>
+          )}
+
+          {showAdminFields && (
+            <>
               <label className="checkbox">
                 <input
                   type="checkbox"
-                  name="claim-new-player"
-                  checked={claimNewPlayer}
-                  onChange={(event) => setClaimNewPlayer(event.target.checked)}
+                  name="admin-session"
+                  checked={joinAsAdmin}
+                  onChange={event => {
+                    const enabled = event.target.checked
+                    setJoinAsAdmin(enabled)
+                    persistAdminSession(enabled)
+                    if (!enabled) {
+                      setPassword('')
+                      setAdminToken(null)
+                    }
+                  }}
                 />
-                Claim new Player-ID
+                Admin session
               </label>
-            )}
-
-            {isPlayerEntry && effectiveClaimNewPlayer && (
-              <fieldset className="character-choice">
-                <legend>Choose your background</legend>
-                <label>
-                  <input
-                    type="radio"
-                    name="character-background"
-                    value="lord"
-                    checked={characterBackground === 'lord'}
-                    onChange={() => setCharacterBackground('lord')}
-                  />
-                  <span>Lord</span>
-                </label>
-                <label>
-                  <input
-                    type="radio"
-                    name="character-background"
-                    value="lady"
-                    checked={characterBackground === 'lady'}
-                    onChange={() => setCharacterBackground('lady')}
-                  />
-                  <span>Lady</span>
-                </label>
-              </fieldset>
-            )}
-
-            {effectiveClaimNewPlayer && !isPlayerEntry && (
-              <p className="field-hint">
-                <AnsiText text={legacyPlayerIdPrompt} />
-              </p>
-            )}
-
-            {showAdminFields && (
-              <>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    name="admin-session"
-                    checked={joinAsAdmin}
-                    onChange={(event) => {
-                      const enabled = event.target.checked
-                      setJoinAsAdmin(enabled)
-                      persistAdminSession(enabled)
-                      if (!enabled) {
-                        setAdminTokenInput('')
-                        setAdminToken(null)
-                      }
-                    }}
-                  />
-                  Admin session
-                </label>
-
-                <div className="field">
-                  <label htmlFor="admin-token">Admin token</label>
-                  <input
-                    id="admin-token"
-                    name="admin-token"
-                    value={adminTokenInput}
-                    onChange={(event) => {
-                      const nextValue = event.target.value
-                      setAdminTokenInput(nextValue)
-                      persistAdminToken(nextValue)
-                    }}
-                    disabled={!joinAsAdmin}
-                  />
-                  <p className="field-hint">Configured via KYRGAME_ADMIN_TOKEN in backend/.env.</p>
-                </div>
-              </>
-            )}
-
-            <button type="submit" disabled={submitting || !canSubmit}>
-              {submitLabel}
-            </button>
-          </form>
-          {!isPlayerEntry && (
-            <p className={`status ${connectionStatus}`}>
-              Connection: {connectionStatus}
-            </p>
+            </>
           )}
-          {tokenTtl && <p className="status">Token expires in {tokenTtl}</p>}
-          {error && (
-            <p className="status error">
-              <AnsiText text={error} />
-            </p>
-          )}
-          {session && connectionStatus === 'disconnected' && (
-            <button type="button" onClick={handleReconnect} disabled={submitting}>
-              Reconnect session
-            </button>
-          )}
-        </div>
-      )}
+
+          <button type="submit" disabled={submitting || !canSubmit}>
+            {submitLabel}
+          </button>
+        </form>
+        {!isPlayerEntry && (
+          <p className={`status ${connectionStatus}`}>
+            Connection: {connectionStatus}
+          </p>
+        )}
+        {tokenTtl && <p className="status">Token expires in {tokenTtl}</p>}
+        {error && (
+          <p className="status error">
+            <AnsiText text={error} />
+          </p>
+        )}
+        {session && connectionStatus === 'disconnected' && (
+          <button type="button" onClick={handleReconnect} disabled={submitting}>
+            Reconnect session
+          </button>
+        )}
+      </div>
     </section>
   )
 }
