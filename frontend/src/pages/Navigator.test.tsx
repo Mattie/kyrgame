@@ -1653,6 +1653,207 @@ describe('Navigator flow', () => {
     await screen.findByText(/Admin update saved/i)
   })
 
+  it('keeps an admin account token available when the session pauses for intro', async () => {
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [],
+      nmpdes: 0,
+      modno: 0,
+      level: 1,
+      gamloc: 0,
+      pgploc: 0,
+      flags: 0,
+      gold: 0,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 0,
+      hitpts: 0,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: '',
+    }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = String(input)
+        if (url.includes('/auth/login')) {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            userid: 'hero',
+            password: 'dev-admin-password',
+            session_kind: 'admin',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'created',
+              session: {
+                token: 'admin-intro-token',
+                player_id: 'hero',
+                account_userid: 'hero',
+                session_kind: 'admin',
+                room_id: 0,
+                lifecycle: { state: 'first_login_intro', step: 2 },
+                lifecycle_messages: [
+                  { message_id: 'GOODPD', text: 'Press ENTER to begin' },
+                ],
+              },
+            }),
+          } as unknown as Response)
+        }
+        if (url.includes('/admin/players/hero')) {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer admin-intro-token',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        if (url.includes('/locations')) {
+          return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+        }
+        if (url.includes('/objects')) {
+          return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+        }
+        if (url.includes('/commands')) {
+          return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+        }
+        if (url.includes('/i18n/en-US/messages')) {
+          return Promise.resolve({ ok: true, json: async () => ({ messages }) } as unknown as Response)
+        }
+        throw new Error(`Unexpected fetch call: ${url}`)
+      })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
+    })
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer admin-intro-token',
+          }),
+        })
+      )
+    )
+    expect(screen.queryByText(/admin access is locked/i)).not.toBeInTheDocument()
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('uses the static emergency admin token with a legacy session', async () => {
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [],
+      nmpdes: 0,
+      modno: 0,
+      level: 1,
+      gamloc: 7,
+      pgploc: 7,
+      flags: 0,
+      gold: 0,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 0,
+      hitpts: 0,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: '',
+    }
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'legacy-game-token', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = String(input)
+        if (url.includes('/admin/players/hero')) {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer static-admin-token',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        const next = responses.shift()
+        if (!next) throw new Error(`Unexpected fetch call: ${url}`)
+        return Promise.resolve(next as unknown as Response)
+      })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.type(
+        screen.getByLabelText(/emergency admin token/i),
+        'static-admin-token'
+      )
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer static-admin-token',
+          }),
+        })
+      )
+    )
+    expect(screen.queryByText(/admin access is locked/i)).not.toBeInTheDocument()
+  })
+
   it('normalizes admin alias lookups to the canonical player id before saving', async () => {
     const alias = 'Test2dsfdsdf'
     const canonical = 'Test2dsfds'

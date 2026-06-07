@@ -2313,6 +2313,14 @@ async def public_player_id_lookup(
     canonical_player_id = _canonical_first_login_player_id(trimmed) if valid else trimmed
     exists = existing is not None
     available = valid and not reserved and not exists
+    account_bound = (
+        db.scalar(
+            select(models.Account.id).where(models.Account.player_id == existing.id)
+        )
+        is not None
+        if existing is not None
+        else None
+    )
     if not valid:
         status_value = "invalid"
     elif reserved:
@@ -2329,6 +2337,7 @@ async def public_player_id_lookup(
         "exists": exists,
         "available": available,
         "reserved": reserved,
+        "account_bound": account_bound,
         "status": status_value,
     }
 

@@ -1087,12 +1087,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             },
           })
         })
-        if (isIntroLifecycle(record.lifecycle)) {
+        if (record.sessionKind === 'admin') {
+          setAdminToken(record.token)
           setConnectionStatus('idle')
           return
         }
-        if (record.sessionKind === 'admin') {
-          setAdminToken(record.token)
+        if (isIntroLifecycle(record.lifecycle)) {
           setConnectionStatus('idle')
           return
         }

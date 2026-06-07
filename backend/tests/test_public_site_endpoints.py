@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from kyrgame import constants, fixtures, models
 from kyrgame.webapp import PUBLIC_RECENT_PLAYER_SCAN_LIMIT, create_app
@@ -112,6 +113,7 @@ async def test_public_player_id_lookup_reports_existing_available_and_reserved(m
             "exists": True,
             "available": False,
             "reserved": False,
+            "account_bound": False,
             "status": "existing",
         }
         assert available.status_code == 200
@@ -122,6 +124,7 @@ async def test_public_player_id_lookup_reports_existing_available_and_reserved(m
             "exists": False,
             "available": True,
             "reserved": False,
+            "account_bound": None,
             "status": "available",
         }
         assert lower_available.json()["player_id"] == "Avalon"
@@ -132,6 +135,36 @@ async def test_public_player_id_lookup_reports_existing_available_and_reserved(m
         assert lower_reserved.json()["canonical_player_id"] == "Zar"
         assert invalid.json()["status"] == "invalid"
         assert invalid.json()["valid"] is False
+
+
+@pytest.mark.anyio
+async def test_public_player_id_lookup_reports_existing_account_binding(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            db.add(
+                models.Account(
+                    userid="hero",
+                    userid_norm="hero",
+                    password_hash="test-password-hash",
+                    player_id=player.id,
+                )
+            )
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            existing = await client.get("/public/player-id/hero")
+
+        assert existing.status_code == 200
+        assert existing.json()["status"] == "existing"
+        assert existing.json()["account_bound"] is True
 
 
 @pytest.mark.anyio

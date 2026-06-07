@@ -38,6 +38,7 @@ type PlayerIdLookup = {
   exists?: boolean
   available?: boolean
   reserved?: boolean
+  account_bound?: boolean | null
   status?: 'invalid' | 'reserved' | 'existing' | 'available' | 'unavailable'
 }
 
@@ -66,6 +67,7 @@ export const SessionForm = ({
   const [playerId, setPlayerId] = useState('')
   const [roomId, setRoomId] = useState('')
   const [password, setPassword] = useState('')
+  const [staticAdminToken, setStaticAdminToken] = useState('')
   const [joinAsAdmin, setJoinAsAdmin] = useState(false)
   const [claimNewPlayer, setClaimNewPlayer] = useState(false)
   const [characterBackground, setCharacterBackground] =
@@ -82,8 +84,17 @@ export const SessionForm = ({
   const usesAccountAuth = isPlayerEntry || (showAdminFields && joinAsAdmin)
 
   const trimmedPlayerId = playerId.trim()
+  const isPlayerEntryAvailable =
+    isPlayerEntry &&
+    !playerIdLookupLoading &&
+    playerIdLookup?.status === 'available'
+  const isPlayerEntryKnownUnowned =
+    isPlayerEntry &&
+    !playerIdLookupLoading &&
+    playerIdLookup?.status === 'existing' &&
+    playerIdLookup.account_bound === false
   const effectiveClaimNewPlayer = isPlayerEntry
-    ? !playerIdLookupLoading && playerIdLookup?.status === 'available'
+    ? isPlayerEntryAvailable || isPlayerEntryKnownUnowned
     : claimNewPlayer
 
   useEffect(() => {
@@ -220,9 +231,13 @@ export const SessionForm = ({
           ? null
           : Number(roomId)
       const trimmedPassword = password.trim()
+      const trimmedStaticAdminToken = staticAdminToken.trim()
 
-      if (!showAdminFields || !joinAsAdmin) {
+      if (!showAdminFields) {
         setAdminToken(null)
+      }
+      if (showAdminFields && !joinAsAdmin && trimmedStaticAdminToken !== '') {
+        setAdminToken(trimmedStaticAdminToken)
       }
       persistPlayerId(trimmedPlayerId)
       if (showRoomField && !effectiveClaimNewPlayer) {
@@ -235,7 +250,7 @@ export const SessionForm = ({
         {
           createPlayer: effectiveClaimNewPlayer,
           background:
-            isPlayerEntry && effectiveClaimNewPlayer
+            isPlayerEntry && isPlayerEntryAvailable
               ? characterBackground
               : undefined,
           password: usesAccountAuth ? trimmedPassword : undefined,
@@ -283,6 +298,12 @@ export const SessionForm = ({
     }
     switch (playerIdLookup?.status) {
       case 'existing':
+        if (playerIdLookup.account_bound === false) {
+          return {
+            state: 'existing',
+            text: `${trimmedPlayerId} is known in Kyrandia and can be claimed with a password.`,
+          }
+        }
         return {
           state: 'existing',
           text: `${trimmedPlayerId} is already known in Kyrandia. Welcome back.`,
@@ -315,6 +336,7 @@ export const SessionForm = ({
     }
   }, [
     isPlayerEntry,
+    playerIdLookup?.account_bound,
     playerIdLookup?.status,
     playerIdLookupLoading,
     trimmedPlayerId,
@@ -335,6 +357,8 @@ export const SessionForm = ({
     }
     if (isPlayerEntry) {
       if (playerIdLookupLoading) return 'Checking Player-ID...'
+      if (playerIdLookup?.status === 'existing' && isPlayerEntryKnownUnowned)
+        return 'Claim Player-ID'
       if (playerIdLookup?.status === 'existing')
         return `Login as ${trimmedPlayerId}`
       if (playerIdLookup?.status === 'available') return 'Create Character...'
@@ -436,7 +460,7 @@ export const SessionForm = ({
             </label>
           )}
 
-          {isPlayerEntry && effectiveClaimNewPlayer && (
+          {isPlayerEntry && isPlayerEntryAvailable && (
             <fieldset className="character-choice">
               <legend>Choose your background</legend>
               <label>
@@ -468,6 +492,25 @@ export const SessionForm = ({
             </p>
           )}
 
+          {showAdminFields && !joinAsAdmin && (
+            <div className="field">
+              <label htmlFor="emergency-admin-token">
+                Emergency admin token (optional)
+              </label>
+              <input
+                id="emergency-admin-token"
+                name="emergency-admin-token"
+                type="password"
+                value={staticAdminToken}
+                autoComplete="off"
+                onChange={event => setStaticAdminToken(event.target.value)}
+              />
+              <p className="field-hint">
+                Use a private KYRGAME_ADMIN_TOKEN for emergency static-token deployments.
+              </p>
+            </div>
+          )}
+
           {showAdminFields && (
             <>
               <label className="checkbox">
@@ -479,6 +522,9 @@ export const SessionForm = ({
                     const enabled = event.target.checked
                     setJoinAsAdmin(enabled)
                     persistAdminSession(enabled)
+                    if (enabled) {
+                      setStaticAdminToken('')
+                    }
                     if (!enabled) {
                       setPassword('')
                       setAdminToken(null)

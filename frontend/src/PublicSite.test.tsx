@@ -136,6 +136,19 @@ const mockFetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
       exists: true,
       available: false,
       reserved: false,
+      account_bound: true,
+      status: 'existing',
+    })
+  }
+  if (url.endsWith('/public/player-id/Rook')) {
+    return jsonResponse({
+      player_id: 'Rook',
+      canonical_player_id: 'Rook',
+      valid: true,
+      exists: true,
+      available: false,
+      reserved: false,
+      account_bound: false,
       status: 'existing',
     })
   }
@@ -172,12 +185,15 @@ const mockFetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
     return jsonResponse({
       status: 'created',
       session: {
-        token: 'avalon-token',
-        player_id: 'Avalon',
-        account_userid: 'Avalon',
+        token: `${body.userid?.toLowerCase() ?? 'player'}-token`,
+        player_id: body.userid ?? 'Avalon',
+        account_userid: body.userid ?? 'Avalon',
         session_kind: 'game',
         room_id: 0,
-        lifecycle: { state: 'first_login_intro', step: 2 },
+        lifecycle:
+          body.userid === 'Rook'
+            ? null
+            : { state: 'first_login_intro', step: 2 },
         lifecycle_messages: [],
       },
     })
@@ -326,6 +342,37 @@ describe('public site routes', () => {
       password: 'new-avalon-password',
       session_kind: 'game',
       background: 'lord',
+    })
+  })
+
+  it('lets unowned existing player IDs claim an account from the enter page', async () => {
+    window.history.replaceState(null, '', '/enter')
+
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('Player ID'), { target: { value: 'Rook' } })
+    expect(await screen.findByText(/Rook is known in Kyrandia and can be claimed/i)).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Lord' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Claim Player-ID' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'rook-secret' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Claim Player-ID' }))
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(([url]) => String(url).endsWith('/auth/register'))
+      ).toBe(true)
+    )
+    const registerCall = mockFetch.mock.calls.find(([url]) =>
+      String(url).endsWith('/auth/register')
+    )
+    const registerInit = registerCall?.[1] as RequestInit | undefined
+    expect(JSON.parse(String(registerInit?.body))).toEqual({
+      userid: 'Rook',
+      password: 'rook-secret',
+      session_kind: 'game',
     })
   })
 

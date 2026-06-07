@@ -389,7 +389,7 @@ export const AdminControls = () => {
         <div className="panel-body" data-testid="admin-panel-body">
           {!adminToken && (
             <p className="status error">
-              Admin access is locked. Enable an admin session and log in with an allowlisted account.
+              Admin access is locked. Log in with an allowlisted admin account or enter a private emergency admin token.
             </p>
           )}
           <form onSubmit={handleSubmit} className="admin-form">
