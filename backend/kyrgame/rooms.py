@@ -511,12 +511,33 @@ def _spring_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         player: Optional[PlayerModel],
     ) -> bool:  # noqa: ARG001
         verb = command.lower()
-        
-        # Legacy: GET ROSE command gives player object 40
-        if verb in {"get", "take", "pick"} and args and args[0].lower() == "rose":
-            # Note: Legacy checks npobjs >= MXPOBS for inventory full
-            # Simplified here without inventory check
-            display_name = player.altnam if player is not None else player_id
+
+        if (
+            verb in {"get", "grab", "pick", "take"}
+            and args
+            and args[0].lower() == "rose"
+        ):
+            player_obj = player or context.engine.players.get(player_id)
+            if player_obj is None:
+                return False
+
+            display_name = player_obj.altnam
+            # Legacy rosutl checks pack size before pgmpobj(&gmobjs[40],0).
+            # Source: legacy/KYRROUS.C:742-753.
+            if player_obj.npobjs >= constants.MXPOBS:
+                await context.direct_and_others(
+                    player_id,
+                    "room_message",
+                    direct_text=messages.messages.get("GROSE3", ""),
+                    others_text=messages.messages.get("GROSE4", "") % display_name,
+                    direct_message_id="GROSE3",
+                    others_message_id="GROSE4",
+                )
+                return True
+
+            player_obj.gpobjs.append(40)
+            player_obj.obvals.append(0)
+            player_obj.npobjs = len(player_obj.gpobjs)
             await context.direct_and_others(
                 player_id,
                 "room_message",
@@ -526,7 +547,7 @@ def _spring_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 others_message_id="GROSE2",
             )
             return True
-        
+
         return False
 
     return _handler

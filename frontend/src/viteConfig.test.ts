@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const originalCloudflareEnv = process.env.KYRGAME_ALLOW_CLOUDFLARE_TUNNEL
+const originalAllowedHostsEnv = process.env.KYRGAME_VITE_ALLOWED_HOSTS
 
 const loadConfig = async () => {
   vi.resetModules()
@@ -17,22 +18,46 @@ describe('Vite config', () => {
     } else {
       process.env.KYRGAME_ALLOW_CLOUDFLARE_TUNNEL = originalCloudflareEnv
     }
+    if (originalAllowedHostsEnv === undefined) {
+      delete process.env.KYRGAME_VITE_ALLOWED_HOSTS
+    } else {
+      process.env.KYRGAME_VITE_ALLOWED_HOSTS = originalAllowedHostsEnv
+    }
     vi.resetModules()
   })
 
-  it('keeps dev-server host checks strict by default', async () => {
+  it('allows the named alpha host by default', async () => {
     delete process.env.KYRGAME_ALLOW_CLOUDFLARE_TUNNEL
+    delete process.env.KYRGAME_VITE_ALLOWED_HOSTS
 
     const config = await loadConfig()
 
-    expect(config.server).not.toHaveProperty('allowedHosts')
+    expect(config.server?.allowedHosts).toEqual(['willow.eventscripts.com'])
+    expect(config.server?.allowedHosts).not.toContain(true)
   })
 
-  it('allows Cloudflare preview hosts only when opted in', async () => {
+  it('adds Cloudflare preview hosts when opted in', async () => {
     process.env.KYRGAME_ALLOW_CLOUDFLARE_TUNNEL = '1'
+    process.env.KYRGAME_VITE_ALLOWED_HOSTS = 'willow.eventscripts.com'
 
     const config = await loadConfig()
 
-    expect(config.server?.allowedHosts).toEqual(['.trycloudflare.com'])
+    expect(config.server?.allowedHosts).toEqual([
+      'willow.eventscripts.com',
+      '.trycloudflare.com',
+    ])
+  })
+
+  it('trims comma-separated named hosts', async () => {
+    delete process.env.KYRGAME_ALLOW_CLOUDFLARE_TUNNEL
+    process.env.KYRGAME_VITE_ALLOWED_HOSTS =
+      'willow.eventscripts.com, preview.eventscripts.com '
+
+    const config = await loadConfig()
+
+    expect(config.server?.allowedHosts).toEqual([
+      'willow.eventscripts.com',
+      'preview.eventscripts.com',
+    ])
   })
 })

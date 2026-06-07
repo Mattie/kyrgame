@@ -76,6 +76,7 @@
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
 - [x] Audited room broadcast recipient splits against legacy `msgutl2`/`sndoth`/`sndbt2`/`sndloc`, aligning Python room routines, YAML room scripts, command room events, and frontend filtering for actor-excluding, target-excluding, and sender-inclusive cases.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
+- [x] Fixed room 32 bubbling spring rose pickup parity so full inventories emit `GROSE3`/`GROSE4` and successful pickups grant object 40 before `GROSE1`/`GROSE2`, matching `rosutl()` (`legacy/KYRROUS.C:742-753`).
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).
 - [x] Normalize non-chat command tokenization to strip articles/prepositions per `GAMUTILS.C` (`gi_bagthe`/`bagprep`).
 - [x] Preserve full whisper payloads for `whisper <target> <message...>` parsing so `whispr` receives complete `margv[2]` text (including quoted multi-word content).
@@ -97,6 +98,7 @@
 - [x] Shared `hitoth()` death handling for all spell/self/area damage paths, including reset, room fan-out, active-session relocation, and DB persistence.
 - [x] Legacy `macros` fatigue gate from `kyrand()` case 7: increment per accepted command, emit `TIRED` on the 20th command before tick reset, with an allowlisted read-only UI refresh bypass for satellite status panels.
 - [x] First-login player-ID lifecycle parity: 3-9 letters, duplicate rejection, `Sysop` plus visible entity-name reservation (`Zar`, `dragon`, `dryad`, `elf`, `brownie`), `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, ENTER-gated `INTROA`/`INTROB`/`INTROC`/`INTROD` paging, delayed room entry, initgp-style player initialization, `APPEARFLASH` first-entry broadcast, and wizard player-name UI styling.
+- [x] Corrected first-login/death-reset birthstone generation to match legacy `genrdn(0,12)` exclusive-upper-bound semantics, preventing object 12 (`elixir`) from being assigned as a birthstone.
 - [x] Preserved the original `INTROD` version and designed/programmed-by credit block while appending the modernized porting credit block for first-login intro paging.
 - [x] Frontend first-login intro rendering through the existing console/session UI, including blank ENTER advancement, typed-input consumption during intro, WASD command gating, and room description suppression until lifecycle completion.
 - [x] Simulated MajorBBS-style screen-length paging for long first-login lifecycle output with `C` continue, `N` nonstop, and `Q` quit controls.

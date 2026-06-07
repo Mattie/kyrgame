@@ -114,3 +114,22 @@ def test_initialize_player_for_first_login_matches_legacy_initgp_state():
     assert player.macros == 0
     assert player.stumpi == 0
     assert player.spouse == ""
+
+
+def test_initialize_player_for_first_login_uses_legacy_birthstone_range():
+    player = fixtures.build_player()
+    calls = []
+
+    def picker(low, high):
+        calls.append((low, high))
+        return high - 1
+
+    initialize_player_for_first_login(
+        player,
+        player_id="Merlin",
+        uidnam="Merlin",
+        birthstone_picker=picker,
+    )
+
+    assert calls == [(0, 12)] * constants.BIRTHSTONE_SLOTS
+    assert player.stones == [11, 11, 11, 11]
