@@ -1419,6 +1419,19 @@ def _session_payload(
     }
 
 
+def _pending_first_login_session(
+    sessions: list[models.PlayerSession],
+) -> models.PlayerSession | None:
+    return next(
+        (
+            active_session
+            for active_session in sessions
+            if active_session.lifecycle_state in FIRST_LOGIN_PENDING_STATES
+        ),
+        None,
+    )
+
+
 async def _issue_player_session(
     *,
     request: Request,
@@ -1447,14 +1460,9 @@ async def _issue_player_session(
     async with request.app.state.session_replacement_lock:
         active_sessions = repo.list_active(player.id, session_kind=session_kind)
         if session_kind == SESSION_KIND_GAME and lifecycle_state is None:
-            pending_lifecycle = next(
-                (
-                    active_session
-                    for active_session in active_sessions
-                    if active_session.lifecycle_state in FIRST_LOGIN_PENDING_STATES
-                ),
-                None,
-            )
+            pending_lifecycle = _pending_first_login_session(active_sessions)
+            if pending_lifecycle is None:
+                pending_lifecycle = _pending_first_login_session(repo.list_active(player.id))
             if pending_lifecycle is not None:
                 lifecycle_state = pending_lifecycle.lifecycle_state
                 lifecycle_step = pending_lifecycle.lifecycle_step
@@ -1467,6 +1475,9 @@ async def _issue_player_session(
                     lifecycle_state,
                     lifecycle_step,
                 )
+                if pending_lifecycle.session_kind != SESSION_KIND_GAME:
+                    pending_lifecycle.lifecycle_state = None
+                    pending_lifecycle.lifecycle_step = None
 
         replaced_tokens = repo.deactivate_all(player.id, session_kind=session_kind)
         token = secrets.token_urlsafe(24)
@@ -1586,13 +1597,12 @@ async def register_account(
                 request.app.state.fixture_cache["player_template"],
                 female=_is_female_creation_choice(payload.background, payload.gender),
             )
-            if session_kind == SESSION_KIND_GAME:
-                first_login = True
-                lifecycle_messages = _first_login_lifecycle_messages(
-                    request.app.state.fixture_cache["messages"], player.plyrid
-                )
-                lifecycle_state = FIRST_LOGIN_INTRO_STATE
-                lifecycle_step = 2
+            first_login = True
+            lifecycle_messages = _first_login_lifecycle_messages(
+                request.app.state.fixture_cache["messages"], player.plyrid
+            )
+            lifecycle_state = FIRST_LOGIN_INTRO_STATE
+            lifecycle_step = 2
         else:
             existing_owner = db.scalar(
                 select(models.Account).where(models.Account.player_id == player.id)

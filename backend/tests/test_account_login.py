@@ -178,6 +178,57 @@ admins:
 
 
 @pytest.mark.anyio
+async def test_admin_registration_preserves_first_login_intro_for_game_login(account_env):
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            registered = await client.post(
+                "/auth/register",
+                json={
+                    "userid": "Sage",
+                    "password": "correct horse battery staple",
+                    "session_kind": "admin",
+                },
+            )
+            logged_in = await client.post(
+                "/auth/login",
+                json={"userid": "sage", "password": "correct horse battery staple"},
+            )
+
+        assert registered.status_code == 201
+        admin_session = registered.json()["session"]
+        assert admin_session["session_kind"] == "admin"
+        assert admin_session["first_login"] is True
+        assert admin_session["lifecycle"] == {"state": "first_login_intro", "step": 2}
+        assert [message["message_id"] for message in admin_session["lifecycle_messages"]] == [
+            "GOODPD"
+        ]
+
+        assert logged_in.status_code == 201
+        game_session = logged_in.json()["session"]
+        assert game_session["session_kind"] == "game"
+        assert game_session["lifecycle"] == {"state": "first_login_intro", "step": 2}
+        assert [message["message_id"] for message in game_session["lifecycle_messages"]] == [
+            "GOODPD"
+        ]
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "Sage"))
+            assert player is not None
+            sessions = db.scalars(
+                select(models.PlayerSession).where(models.PlayerSession.player_id == player.id)
+            ).all()
+
+        lifecycle_by_kind = {session.session_kind: session.lifecycle_state for session in sessions}
+        assert lifecycle_by_kind == {
+            "admin": None,
+            "game": "first_login_intro",
+        }
+
+
+@pytest.mark.anyio
 async def test_allowlisted_game_session_token_cannot_use_admin_endpoints(
     monkeypatch, tmp_path, account_env
 ):
