@@ -164,6 +164,21 @@ def test_account_session_metadata_migration_adds_account_foreign_key_for_non_sql
     assert 'bind.dialect.name != "sqlite"' in migration_text
 
 
+def test_account_session_metadata_migration_upgrades_existing_message_text_column():
+    migration_text = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0003_accounts_and_session_metadata.py"
+    ).read_text(encoding="utf-8")
+
+    assert "op.alter_column(" in migration_text
+    assert '"messages"' in migration_text
+    assert '"text"' in migration_text
+    assert "sa.Text()" in migration_text
+    assert "existing_type=sa.String(length=255)" in migration_text
+
+
 def test_wait_for_database_retries_transient_operational_errors(monkeypatch):
     sleeps: list[float] = []
 

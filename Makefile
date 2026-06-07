@@ -6,7 +6,7 @@ NPM ?= npm
 .PHONY: up down logs config test test-backend test-frontend build-frontend seed package-content tunnel-up tunnel-logs tunnel-config
 
 up:
-	$(COMPOSE) --env-file $(ENV_FILE) up --build
+	$(COMPOSE) --env-file $(ENV_FILE) up -d --build
 
 down:
 	$(COMPOSE) --env-file $(ENV_FILE) down

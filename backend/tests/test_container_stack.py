@@ -96,10 +96,20 @@ def test_makefile_exposes_documented_ops_targets():
     for target in ["up", "test", "seed", "package-content", "config", "tunnel-up", "tunnel-logs", "tunnel-config"]:
         assert f"{target}:" in text
 
-    assert "$(COMPOSE) --env-file $(ENV_FILE) up --build" in text
+    assert "$(COMPOSE) --env-file $(ENV_FILE) up -d --build" in text
     assert "$(COMPOSE) --env-file $(ENV_FILE) --profile tunnel up -d cloudflared" in text
     assert "-m kyrgame.scripts.seed_db" in text
     assert "-m kyrgame.scripts.package_content" in text
+
+
+def test_backend_development_package_content_command_runs_from_repo_root():
+    text = (REPO_ROOT / "backend" / "DEVELOPMENT.md").read_text(encoding="utf-8")
+    command = (
+        "cd backend && python -m kyrgame.scripts.package_content --output "
+        "../legacy/Dist/offline-content.json"
+    )
+
+    assert text.count(command) == 1
 
 
 def test_alpha_runbook_uses_portable_paths_and_distinct_tunnel_steps():

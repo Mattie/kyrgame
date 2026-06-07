@@ -31,6 +31,19 @@ def upgrade():
     bind = op.get_bind()
     tables = _table_names(bind)
 
+    if (
+        bind.dialect.name != "sqlite"
+        and "messages" in tables
+        and "text" in _column_names(bind, "messages")
+    ):
+        op.alter_column(
+            "messages",
+            "text",
+            existing_type=sa.String(length=255),
+            type_=sa.Text(),
+            existing_nullable=False,
+        )
+
     if "accounts" not in tables:
         op.create_table(
             "accounts",

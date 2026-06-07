@@ -373,7 +373,11 @@ def _load_account_admin_grants() -> dict[str, AdminGrant]:
         logger.warning("Admin allowlist file does not exist: %s", path)
         return {}
 
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        logger.warning("Admin allowlist file is not valid YAML: %s", path)
+        return {}
     admins = data.get("admins", {}) if isinstance(data, dict) else {}
     grants: dict[str, AdminGrant] = {}
     if not isinstance(admins, dict):

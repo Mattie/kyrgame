@@ -268,6 +268,17 @@ admins:
     assert grants["broken"].flags == set()
 
 
+def test_admin_allowlist_parse_errors_disable_optional_account_grants(monkeypatch, tmp_path, caplog):
+    allowlist_path = tmp_path / "admin-allowlist.yaml"
+    allowlist_path.write_text("admins: [broken\n", encoding="utf-8")
+    monkeypatch.setenv("KYRGAME_ADMIN_ALLOWLIST_PATH", str(allowlist_path))
+
+    grants = _load_account_admin_grants()
+
+    assert grants == {}
+    assert "Admin allowlist file is not valid YAML" in caplog.text
+
+
 @pytest.mark.anyio
 async def test_telemetry_records_player_input_output_events(monkeypatch, tmp_path, account_env):
     from kyrgame.telemetry import TelemetryEventSink
