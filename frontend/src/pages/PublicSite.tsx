@@ -323,11 +323,7 @@ export const EntryPage = ({ navigate }: PublicPageProps) => (
       <div>
         <p className="eyebrow">The willow is waiting</p>
         <h1>Enter Kyrandia</h1>
-        <p>
-          Bring back a name Kyrandia already knows, or claim a new one and step into the old
-          forest as a Lord or Lady.
-        </p>
-        <p className="coming-soon-note">Google sign-in is coming soon.</p>
+        <p>Provide your character name and password to begin your journey.</p>
       </div>
       <SessionForm
         title="Who enters the realm?"
@@ -392,7 +388,10 @@ export const LeaderboardPage = ({ navigate }: PublicPageProps) => {
       <section className="public-copy leaderboard-heading">
         <p className="eyebrow">Ranks</p>
         <h1>Leaderboard</h1>
-        <p>Level breaks the first tie; spellbook mastery breaks the next.</p>
+        <p>
+          The most powerful wizards in all of Kyrandia are known to everyone. May you one day
+          achieve such glory!
+        </p>
       </section>
       {error && <p className="status error">{error}</p>}
       {loading && <p className="status">Loading leaderboard...</p>}

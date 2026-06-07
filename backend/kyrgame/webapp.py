@@ -12,6 +12,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated
 
+import yaml
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -20,7 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
-from . import commands, constants, fixtures, models, repositories, spellbook
+from . import accounts, commands, constants, fixtures, models, repositories, spellbook
 from .env import load_env_file
 from .gateway import RoomGateway
 from .player_lifecycle import initialize_player_for_first_login
@@ -33,6 +34,7 @@ from .session_state import (
     sync_active_player_state_from_db,
 )
 from .world.animation_tick_system import AnimationTickSystem, BrownieRoutine, ZarDragonRoutine
+from .telemetry import TelemetryEventSink
 
 logger = logging.getLogger(__name__)
 DEFAULT_WS_COMMAND_RATE_LIMIT_MAX_EVENTS = 2
@@ -65,6 +67,9 @@ FIRST_LOGIN_ENTRY_STEP = 6
 FIRST_LOGIN_PENDING_STATES = frozenset(
     {FIRST_LOGIN_INTRO_STATE, FIRST_LOGIN_ENTRY_STATE}
 )
+SESSION_KIND_GAME = "game"
+SESSION_KIND_ADMIN = "admin"
+VALID_SESSION_KINDS = frozenset({SESSION_KIND_GAME, SESSION_KIND_ADMIN})
 # Legacy kyrand() cases 2-5 emit one intro page per submitted line.
 # See legacy/KYRANDIA.C:276-293 and legacy/Dist/ELWKYRM.MSG:25-28.
 FIRST_LOGIN_INTRO_MESSAGES = {
@@ -89,6 +94,15 @@ class SessionRequest(BaseModel):
     background: str | None = None
 
 
+class AccountAuthRequest(BaseModel):
+    userid: str
+    password: str
+    room_id: int | None = None
+    background: str | None = None
+    gender: str | None = None
+    session_kind: str = SESSION_KIND_GAME
+
+
 class LifecycleAdvanceRequest(BaseModel):
     input: str = ""
 
@@ -103,6 +117,11 @@ class SessionLifecycle(BaseModel):
     step: int | None = None
 
 
+class AdminGrantData(BaseModel):
+    roles: list[str] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
+
+
 class SessionData(BaseModel):
     token: str
     player_id: str
@@ -113,6 +132,9 @@ class SessionData(BaseModel):
     resumed: bool = False
     replaced_sessions: int = 0
     player_flags: int = 0
+    account_userid: str | None = None
+    session_kind: str = SESSION_KIND_GAME
+    admin_grants: AdminGrantData = Field(default_factory=AdminGrantData)
     lifecycle: SessionLifecycle | None = None
     lifecycle_messages: list[LifecycleMessage] = Field(default_factory=list)
 
@@ -146,6 +168,13 @@ class AdminFlag(str, Enum):
 class AdminGrant:
     roles: set[str]
     flags: set[str]
+
+
+def _admin_grant_payload(grant: AdminGrant | None = None) -> dict[str, list[str]]:
+    return {
+        "roles": sorted(grant.roles) if grant else [],
+        "flags": sorted(grant.flags) if grant else [],
+    }
 
 
 class PlayerAdminUpdate(BaseModel):
@@ -334,6 +363,63 @@ def _load_admin_grants() -> dict[str, AdminGrant]:
     return grants
 
 
+def _load_account_admin_grants() -> dict[str, AdminGrant]:
+    path_value = os.getenv("KYRGAME_ADMIN_ALLOWLIST_PATH")
+    if not path_value:
+        return {}
+
+    path = Path(path_value)
+    if not path.exists():
+        logger.warning("Admin allowlist file does not exist: %s", path)
+        return {}
+
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        logger.warning("Admin allowlist file is not valid YAML: %s", path)
+        return {}
+    admins = data.get("admins", {}) if isinstance(data, dict) else {}
+    grants: dict[str, AdminGrant] = {}
+    if not isinstance(admins, dict):
+        return grants
+
+    for userid, settings in admins.items():
+        if not isinstance(settings, dict):
+            continue
+        roles = _admin_grant_string_set(settings.get("roles", []))
+        flags = _admin_grant_string_set(settings.get("flags", []))
+        grants[accounts.normalize_userid(str(userid))] = AdminGrant(roles=roles, flags=flags)
+    return grants
+
+
+def _admin_grant_string_set(value: object) -> set[str]:
+    if isinstance(value, str):
+        candidates = [value]
+    elif isinstance(value, (list, tuple, set)):
+        candidates = value
+    else:
+        return set()
+    return {item.strip() for item in candidates if isinstance(item, str) and item.strip()}
+
+
+def _account_grant_for_token(app: FastAPI, token: str) -> tuple[AdminGrant | None, bool]:
+    session_factory = getattr(app.state, "session_factory", None)
+    if session_factory is None:
+        return None, False
+
+    with session_factory() as db:
+        session_record = repositories.PlayerSessionRepository(db).get_by_token(token)
+        if session_record is None or session_record.account_id is None:
+            return None, session_record is not None
+        if session_record.session_kind != SESSION_KIND_ADMIN:
+            return None, True
+        account = db.get(models.Account, session_record.account_id)
+        if account is None:
+            return None, True
+        grants: dict[str, AdminGrant] = getattr(app.state, "account_admin_grants", {})
+        return grants.get(account.userid_norm), True
+
+
 def require_admin(
     request: Request,
     roles: set[AdminRole] | None = None,
@@ -343,7 +429,17 @@ def require_admin(
     grants: dict[str, AdminGrant] = request.app.state.admin_grants
     grant = grants.get(token)
     if grant is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized admin token")
+        grant, valid_account_token = _account_grant_for_token(request.app, token)
+        if grant is None:
+            if valid_account_token:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient admin role",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized admin token",
+            )
 
     required_roles = {role.value for role in roles or set()}
     if required_roles and not required_roles.issubset(grant.roles):
@@ -365,7 +461,17 @@ def _validate_admin_token(
     grants: dict[str, AdminGrant] = app.state.admin_grants
     grant = grants.get(token)
     if grant is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized admin token")
+        grant, valid_account_token = _account_grant_for_token(app, token)
+        if grant is None:
+            if valid_account_token:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient admin role",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Unauthorized admin token",
+            )
 
     required_roles = {role.value for role in roles or set()}
     if required_roles and not required_roles.issubset(grant.roles):
@@ -797,7 +903,11 @@ def _latest_session_seen_for_player_ids(
 
     rows = db.execute(
         select(models.PlayerSession.player_id, func.max(models.PlayerSession.last_seen))
-        .where(models.PlayerSession.player_id.in_(player_ids))
+        .where(
+            models.PlayerSession.player_id.in_(player_ids),
+            models.PlayerSession.session_kind == SESSION_KIND_GAME,
+            models.PlayerSession.hidden_from_activity.is_(False),
+        )
         .group_by(models.PlayerSession.player_id)
     )
     return {
@@ -815,7 +925,11 @@ def _recent_session_seen_rows(
     exclude_player_ids: set[int] | None = None,
 ) -> list[tuple[int, datetime]]:
     latest_seen = func.max(models.PlayerSession.last_seen)
-    conditions = [models.PlayerSession.last_seen >= since]
+    conditions = [
+        models.PlayerSession.last_seen >= since,
+        models.PlayerSession.session_kind == SESSION_KIND_GAME,
+        models.PlayerSession.hidden_from_activity.is_(False),
+    ]
     if exclude_player_ids:
         conditions.append(~models.PlayerSession.player_id.in_(exclude_player_ids))
     rows = db.execute(
@@ -1266,6 +1380,13 @@ def _websocket_command_rate_limiter() -> RateLimiter:
     )
 
 
+def _normalize_session_kind(value: str | None) -> str:
+    session_kind = (value or SESSION_KIND_GAME).strip().lower()
+    if session_kind not in VALID_SESSION_KINDS:
+        raise HTTPException(status_code=422, detail="Unsupported session kind")
+    return session_kind
+
+
 def _session_payload(
     session_record: models.PlayerSession,
     player: models.Player,
@@ -1275,6 +1396,8 @@ def _session_payload(
     resumed: bool = False,
     replaced_sessions: int = 0,
     lifecycle_messages: list[dict[str, str]] | None = None,
+    account: models.Account | None = None,
+    admin_grant: AdminGrant | None = None,
 ):
     expires_at = _as_utc(session_record.expires_at)
     now = datetime.now(timezone.utc)
@@ -1288,9 +1411,119 @@ def _session_payload(
         "resumed": resumed,
         "replaced_sessions": replaced_sessions,
         "player_flags": int(player.flags),
+        "account_userid": account.userid if account is not None else None,
+        "session_kind": session_record.session_kind,
+        "admin_grants": _admin_grant_payload(admin_grant),
         "lifecycle": _lifecycle_payload(session_record),
         "lifecycle_messages": lifecycle_messages or [],
     }
+
+
+def _pending_first_login_session(
+    sessions: list[models.PlayerSession],
+) -> models.PlayerSession | None:
+    return next(
+        (
+            active_session
+            for active_session in sessions
+            if active_session.lifecycle_state in FIRST_LOGIN_PENDING_STATES
+        ),
+        None,
+    )
+
+
+async def _issue_player_session(
+    *,
+    request: Request,
+    db: OrmSession,
+    player: models.Player,
+    account: models.Account | None = None,
+    session_kind: str = SESSION_KIND_GAME,
+    room_id: int | None = None,
+    lifecycle_state: str | None = None,
+    lifecycle_step: int | None = None,
+    lifecycle_messages: list[dict[str, str]] | None = None,
+    first_login: bool = False,
+    resumed: bool = False,
+    status_code: int = status.HTTP_201_CREATED,
+) -> JSONResponse:
+    repo = repositories.PlayerSessionRepository(db)
+    target_room = player.gamloc if room_id is None else room_id
+    if session_kind == SESSION_KIND_GAME and room_id is not None:
+        player.gamloc = room_id
+        player.pgploc = room_id
+
+    replaced_tokens: list[str] = []
+    if not hasattr(request.app.state, "session_replacement_lock"):
+        request.app.state.session_replacement_lock = asyncio.Lock()
+
+    async with request.app.state.session_replacement_lock:
+        active_sessions = repo.list_active(player.id, session_kind=session_kind)
+        if session_kind == SESSION_KIND_GAME and lifecycle_state is None:
+            pending_lifecycle = _pending_first_login_session(active_sessions)
+            if pending_lifecycle is None:
+                pending_lifecycle = _pending_first_login_session(repo.list_active(player.id))
+            if pending_lifecycle is not None:
+                lifecycle_state = pending_lifecycle.lifecycle_state
+                lifecycle_step = pending_lifecycle.lifecycle_step
+                target_room = pending_lifecycle.room_id
+                player.gamloc = target_room
+                player.pgploc = target_room
+                lifecycle_messages = _current_first_login_lifecycle_messages(
+                    request.app.state.fixture_cache["messages"],
+                    player.plyrid,
+                    lifecycle_state,
+                    lifecycle_step,
+                )
+                if pending_lifecycle.session_kind != SESSION_KIND_GAME:
+                    pending_lifecycle.lifecycle_state = None
+                    pending_lifecycle.lifecycle_step = None
+
+        replaced_tokens = repo.deactivate_all(player.id, session_kind=session_kind)
+        token = secrets.token_urlsafe(24)
+        hidden_from_activity = session_kind != SESSION_KIND_GAME
+        session_record = repo.create_session(
+            player_id=player.id,
+            account_id=account.id if account is not None else None,
+            session_token=token,
+            room_id=target_room,
+            lifecycle_state=lifecycle_state,
+            lifecycle_step=lifecycle_step,
+            session_kind=session_kind,
+            hidden_from_activity=hidden_from_activity,
+        )
+        db.commit()
+
+    await _disconnect_sessions(request.app, replaced_tokens)
+
+    if (
+        session_kind == SESSION_KIND_GAME
+        and not hidden_from_activity
+        and session_record.lifecycle_state not in FIRST_LOGIN_PENDING_STATES
+    ):
+        await request.app.state.presence.set_location(player.plyrid, target_room, token)
+
+    admin_grant = None
+    if account is not None and session_kind == SESSION_KIND_ADMIN:
+        admin_grant = getattr(request.app.state, "account_admin_grants", {}).get(
+            account.userid_norm
+        )
+
+    body = {
+        "status": "recovered" if resumed else "created",
+        "session": _session_payload(
+            session_record,
+            player,
+            target_room,
+            first_login=first_login,
+            resumed=resumed,
+            replaced_sessions=len(replaced_tokens),
+            lifecycle_messages=lifecycle_messages,
+            account=account,
+            admin_grant=admin_grant,
+        ),
+    }
+    return JSONResponse(content=body, status_code=status_code)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -1313,6 +1546,129 @@ async def fetch_logo():
         "             |___/                                   ",
     ]
     return {"message": "Welcome to Kyrandia", "lines": lines}
+
+
+@auth_router.post("/register", response_model=SessionResponse)
+async def register_account(
+    payload: AccountAuthRequest,
+    request: Request,
+    db: Annotated[OrmSession, Depends(get_db_session)],
+):
+    _enforce_http_rate_limit(
+        request,
+        state_attr="session_rate_limiters",
+        max_events=SESSION_RATE_LIMIT_MAX_EVENTS,
+        window_seconds=SESSION_RATE_LIMIT_WINDOW_SECONDS,
+        detail="Too many session creation attempts. Please try again later.",
+    )
+    if not payload.password:
+        raise HTTPException(status_code=422, detail="Password is required")
+
+    session_kind = _normalize_session_kind(payload.session_kind)
+    try:
+        canonical_userid = _canonical_first_login_player_id(payload.userid)
+    except ValueError:
+        raise _legacy_auth_error(
+            request,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            message_ids=["BADPID", "B4PLA2"],
+        )
+
+    account_repo = repositories.AccountRepository(db)
+    userid_norm = accounts.normalize_userid(canonical_userid)
+    if account_repo.get_by_userid_norm(userid_norm) is not None:
+        raise HTTPException(status_code=409, detail="User ID already has an account")
+
+    if not hasattr(request.app.state, "player_claim_lock"):
+        request.app.state.player_claim_lock = asyncio.Lock()
+
+    async with request.app.state.player_claim_lock:
+        player = _find_player_record(db, canonical_userid)
+        first_login = False
+        lifecycle_messages: list[dict[str, str]] = []
+        lifecycle_state: str | None = None
+        lifecycle_step: int | None = None
+
+        if player is None:
+            _ensure_first_login_player_id_available(db, request, canonical_userid)
+            player = _persist_first_login_player(
+                db,
+                canonical_userid,
+                request.app.state.fixture_cache["player_template"],
+                female=_is_female_creation_choice(payload.background, payload.gender),
+            )
+            first_login = True
+            lifecycle_messages = _first_login_lifecycle_messages(
+                request.app.state.fixture_cache["messages"], player.plyrid
+            )
+            lifecycle_state = FIRST_LOGIN_INTRO_STATE
+            lifecycle_step = 2
+        else:
+            existing_owner = db.scalar(
+                select(models.Account).where(models.Account.player_id == player.id)
+            )
+            if existing_owner is not None:
+                raise HTTPException(status_code=409, detail="Player ID already has an account")
+
+        account = account_repo.create_account(
+            userid=player.plyrid,
+            userid_norm=accounts.normalize_userid(player.plyrid),
+            password_hash=accounts.hash_password(payload.password),
+            player_id=player.id,
+        )
+        db.flush([account])
+
+    return await _issue_player_session(
+        request=request,
+        db=db,
+        player=player,
+        account=account,
+        session_kind=session_kind,
+        lifecycle_state=lifecycle_state,
+        lifecycle_step=lifecycle_step,
+        lifecycle_messages=lifecycle_messages,
+        first_login=first_login,
+    )
+
+
+@auth_router.post("/login", response_model=SessionResponse)
+async def login_account(
+    payload: AccountAuthRequest,
+    request: Request,
+    db: Annotated[OrmSession, Depends(get_db_session)],
+):
+    _enforce_http_rate_limit(
+        request,
+        state_attr="session_rate_limiters",
+        max_events=SESSION_RATE_LIMIT_MAX_EVENTS,
+        window_seconds=SESSION_RATE_LIMIT_WINDOW_SECONDS,
+        detail="Too many session creation attempts. Please try again later.",
+    )
+    session_kind = _normalize_session_kind(payload.session_kind)
+    account = repositories.AccountRepository(db).get_by_userid_norm(
+        accounts.normalize_userid(payload.userid)
+    )
+    if account is None or account.disabled:
+        raise HTTPException(status_code=401, detail="Invalid userid or password")
+
+    verification = accounts.verify_password(payload.password, account.password_hash)
+    if not verification.valid:
+        raise HTTPException(status_code=401, detail="Invalid userid or password")
+    if verification.updated_hash:
+        account.password_hash = verification.updated_hash
+
+    player = db.get(models.Player, account.player_id)
+    if player is None:
+        raise HTTPException(status_code=404, detail="Bound player not found")
+
+    return await _issue_player_session(
+        request=request,
+        db=db,
+        player=player,
+        account=account,
+        session_kind=session_kind,
+        room_id=payload.room_id,
+    )
 
 
 @auth_router.post("/session", response_model=SessionResponse)
@@ -1414,7 +1770,7 @@ async def start_session(
                 request.app.state.session_replacement_lock = asyncio.Lock()
 
             async with request.app.state.session_replacement_lock:
-                active_sessions = repo.list_active(player.id)
+                active_sessions = repo.list_active(player.id, session_kind=SESSION_KIND_GAME)
                 pending_lifecycle = next(
                     (
                         active_session
@@ -1435,7 +1791,7 @@ async def start_session(
                         lifecycle_state,
                         lifecycle_step,
                     )
-                replaced_tokens = repo.deactivate_all(player.id)
+                replaced_tokens = repo.deactivate_all(player.id, session_kind=SESSION_KIND_GAME)
                 token = secrets.token_urlsafe(24)
                 session_record = repo.create_session(
                     player_id=player.id,
@@ -1957,6 +2313,14 @@ async def public_player_id_lookup(
     canonical_player_id = _canonical_first_login_player_id(trimmed) if valid else trimmed
     exists = existing is not None
     available = valid and not reserved and not exists
+    account_bound = (
+        db.scalar(
+            select(models.Account.id).where(models.Account.player_id == existing.id)
+        )
+        is not None
+        if existing is not None
+        else None
+    )
     if not valid:
         status_value = "invalid"
     elif reserved:
@@ -1973,6 +2337,7 @@ async def public_player_id_lookup(
         "exists": exists,
         "available": available,
         "reserved": reserved,
+        "account_bound": account_bound,
         "status": status_value,
     }
 
@@ -2170,6 +2535,22 @@ async def _room_occupants_event(
     }
 
 
+async def _publish_scry_event(app: FastAPI, player_id: str, event: dict) -> None:
+    subscribers: dict[str, set[WebSocket]] = getattr(app.state, "scry_subscribers", {})
+    sockets = set(subscribers.get(player_id, set()))
+    stale: set[WebSocket] = set()
+    for socket in sockets:
+        if socket.application_state != WebSocketState.CONNECTED:
+            stale.add(socket)
+            continue
+        try:
+            await socket.send_json({"type": "scry_event", "player_id": player_id, "event": event})
+        except Exception:
+            stale.add(socket)
+    if stale and player_id in subscribers:
+        subscribers[player_id].difference_update(stale)
+
+
 def _entrance_room_message(
     player_id: str,
     room_id: int,
@@ -2210,6 +2591,9 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Kyrgame API", lifespan=lifespan)
 
     app.state.admin_grants = _load_admin_grants()
+    app.state.account_admin_grants = _load_account_admin_grants()
+    app.state.telemetry_sink = TelemetryEventSink.from_env()
+    app.state.scry_subscribers = {}
 
     cors_origins = _cors_origins_from_env()
     app.add_middleware(
@@ -2394,6 +2778,43 @@ def create_app() -> FastAPI:
             if websocket.application_state == WebSocketState.CONNECTED:
                 await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
 
+    @app.websocket("/ws/admin/scry/{target_player_id}")
+    async def scry_socket(
+        websocket: WebSocket,
+        target_player_id: str,
+        provider: Annotated[FixtureProvider, Depends(get_websocket_provider)],
+    ):
+        admin_token = websocket.query_params.get("token") or websocket.query_params.get(
+            "admin_token"
+        )
+        try:
+            _validate_admin_token(provider.scope.app, admin_token, roles={AdminRole.PLAYER})
+        except HTTPException as exc:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail)
+            return
+
+        await websocket.accept()
+        subscribers: dict[str, set[WebSocket]] = provider.scope.app.state.scry_subscribers
+        sockets = subscribers.setdefault(target_player_id, set())
+        sockets.add(websocket)
+        await websocket.send_json({"type": "scry_started", "player_id": target_player_id})
+        try:
+            while True:
+                incoming = await websocket.receive_json()
+                if incoming.get("type") in {"stop", "close"}:
+                    break
+                await websocket.send_json(
+                    {"type": "scry_read_only", "detail": "SCRY observers cannot send commands"}
+                )
+        except WebSocketDisconnect:
+            pass
+        finally:
+            sockets.discard(websocket)
+            if not sockets:
+                subscribers.pop(target_player_id, None)
+            if websocket.application_state == WebSocketState.CONNECTED:
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+
     @app.websocket("/ws/rooms/{room_id}")
     async def room_socket(
         websocket: WebSocket,
@@ -2426,6 +2847,18 @@ def create_app() -> FastAPI:
                 )
                 return
 
+            if (
+                session_record.session_kind != SESSION_KIND_GAME
+                or session_record.hidden_from_activity
+            ):
+                await websocket.send_denial_response(
+                    Response(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        content="Session cannot enter game rooms",
+                    )
+                )
+                return
+
             if session_record.lifecycle_state == FIRST_LOGIN_INTRO_STATE:
                 await websocket.send_denial_response(
                     Response(
@@ -2447,7 +2880,7 @@ def create_app() -> FastAPI:
                 return
 
             session_repo.mark_seen(session_token)
-            for active_session in session_repo.list_active(player.id):
+            for active_session in session_repo.list_active(player.id, session_kind=SESSION_KIND_GAME):
                 if active_session.session_token == session_token:
                     continue
                 replaced_tokens.append(active_session.session_token)
@@ -2491,6 +2924,32 @@ def create_app() -> FastAPI:
             await gateway.unregister(current_room, existing_socket)
             await existing_socket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         session_connections[session_token] = websocket
+
+        async def send_player_json(message: dict) -> None:
+            await websocket.send_json(message)
+            await provider.scope.app.state.telemetry_sink.record(
+                userid=player_id,
+                event_type="output",
+                payload=message,
+            )
+            await _publish_scry_event(
+                provider.scope.app,
+                player_id,
+                {"event_type": "output", "payload": message},
+            )
+
+        async def record_player_input(command_text: str) -> None:
+            payload = {"command": command_text}
+            await provider.scope.app.state.telemetry_sink.record(
+                userid=player_id,
+                event_type="input",
+                payload=payload,
+            )
+            await _publish_scry_event(
+                provider.scope.app,
+                player_id,
+                {"event_type": "input", "payload": payload},
+            )
 
         limiter = _websocket_command_rate_limiter()
 
@@ -2554,7 +3013,7 @@ def create_app() -> FastAPI:
         location = state.locations.get(current_room)
         if location is not None:
             description_id, long_description = commands._location_description(state, location)
-            await websocket.send_json(
+            await send_player_json(
                 {
                     "type": "command_response",
                     "room": current_room,
@@ -2570,7 +3029,7 @@ def create_app() -> FastAPI:
                     },
                 }
             )
-            await websocket.send_json(
+            await send_player_json(
                 {
                     "type": "command_response",
                     "room": current_room,
@@ -2592,7 +3051,7 @@ def create_app() -> FastAPI:
             _active_player_flags(provider.scope.app),
         )
         if location is not None:
-            await websocket.send_json(
+            await send_player_json(
                 {
                     "type": "command_response",
                     "room": current_room,
@@ -2602,7 +3061,7 @@ def create_app() -> FastAPI:
                 }
             )
         if occupants_event:
-            await websocket.send_json(
+            await send_player_json(
                 {
                     "type": "command_response",
                     "room": current_room,
@@ -2666,17 +3125,18 @@ def create_app() -> FastAPI:
                 payload = await websocket.receive_json()
                 meta = payload.get("meta") or None
                 if not limiter.allow():
-                    await websocket.send_json(
+                    await send_player_json(
                         {"type": "rate_limited", "detail": "Too many commands, slow down."}
                     )
                     continue
 
                 if payload.get("type") != "command":
-                    await websocket.send_json({"type": "noop", "room": current_room})
+                    await send_player_json({"type": "noop", "room": current_room})
                     continue
 
                 await _sync_current_room_from_state()
                 command_text = payload.get("command", "")
+                await record_player_input(str(command_text))
                 args = payload.get("args", {}) or {}
                 raw_tokens = command_text.strip().split()
                 raw_verb = raw_tokens[0].lower() if raw_tokens else ""
@@ -2746,7 +3206,7 @@ def create_app() -> FastAPI:
                             }
                             if meta:
                                 ack_payload["meta"] = meta
-                            await websocket.send_json(ack_payload)
+                            await send_player_json(ack_payload)
                             for event in fatigue_result.events:
                                 envelope = {
                                     "type": "command_response",
@@ -2755,7 +3215,7 @@ def create_app() -> FastAPI:
                                 }
                                 if meta:
                                     envelope["meta"] = meta
-                                await websocket.send_json(envelope)
+                                await send_player_json(envelope)
                             continue
                         if parsed is not None:
                             parsed.args[commands.FATIGUE_CHECKED_ARG] = True
@@ -2797,7 +3257,7 @@ def create_app() -> FastAPI:
                         }
                         if meta:
                             ack_payload["meta"] = meta
-                        await websocket.send_json(ack_payload)
+                        await send_player_json(ack_payload)
                         
                         # Process pending events from room script engine
                         pending_events = provider.room_scripts.get_and_clear_pending_events()
@@ -2871,7 +3331,7 @@ def create_app() -> FastAPI:
                                 envelope = {"type": "command_response", "room": current_room, "payload": event}
                                 if meta:
                                     envelope["meta"] = meta
-                                await websocket.send_json(envelope)
+                                await send_player_json(envelope)
 
                         if transfer_event:
                             target_room = int(transfer_event.get("target_room", current_room))
@@ -2915,7 +3375,7 @@ def create_app() -> FastAPI:
                                     description_id, long_description = commands._location_description(
                                         state, location
                                     )
-                                    await websocket.send_json(
+                                    await send_player_json(
                                         {
                                             "type": "command_response",
                                             "room": current_room,
@@ -2931,7 +3391,7 @@ def create_app() -> FastAPI:
                                             },
                                         }
                                     )
-                                    await websocket.send_json(
+                                    await send_player_json(
                                         {
                                             "type": "command_response",
                                             "room": current_room,
@@ -2945,7 +3405,7 @@ def create_app() -> FastAPI:
                                             },
                                         }
                                     )
-                                    await websocket.send_json(
+                                    await send_player_json(
                                         {
                                             "type": "command_response",
                                             "room": current_room,
@@ -2963,7 +3423,7 @@ def create_app() -> FastAPI:
                                     _active_player_flags(provider.scope.app),
                                 )
                                 if occupant_event:
-                                    await websocket.send_json(
+                                    await send_player_json(
                                         {
                                             "type": "command_response",
                                             "room": current_room,
@@ -2995,7 +3455,7 @@ def create_app() -> FastAPI:
                         continue
 
                 if parse_error:
-                    await websocket.send_json(
+                    await send_player_json(
                         {
                             "type": "command_error",
                             "room": current_room,
@@ -3013,7 +3473,7 @@ def create_app() -> FastAPI:
                 try:
                     result = await provider.command_dispatcher.dispatch_parsed(parsed, state)
                 except commands.CommandError as exc:  # type: ignore[attr-defined]
-                    await websocket.send_json(
+                    await send_player_json(
                         {
                             "type": "command_error",
                             "room": current_room,
@@ -3062,7 +3522,7 @@ def create_app() -> FastAPI:
                 }
                 if meta:
                     ack_payload["meta"] = meta
-                await websocket.send_json(ack_payload)
+                await send_player_json(ack_payload)
 
                 for event in result.events:
                     scope = event.get("scope", "player")
@@ -3123,7 +3583,7 @@ def create_app() -> FastAPI:
                                 exclude=excluded_sockets or None,
                             )
                             if event.get("include_sender") and nearby_room_id != current_room:
-                                await websocket.send_json(envelope)
+                                await send_player_json(envelope)
                     elif scope == "target":
                         target_id = event.get("player")
                         if not target_id:
@@ -3171,7 +3631,7 @@ def create_app() -> FastAPI:
                         envelope = {"type": "command_response", "room": current_room, "payload": event}
                         if meta:
                             envelope["meta"] = meta
-                        await websocket.send_json(envelope)
+                        await send_player_json(envelope)
         except WebSocketDisconnect:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)

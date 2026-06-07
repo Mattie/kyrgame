@@ -45,12 +45,16 @@ Object.defineProperty(global, 'WebSocket', {
 
 const getConsoleLines = (text: string) =>
   screen.getAllByText((_, element) =>
-    Boolean(element?.classList.contains('crt-line') && element.textContent === text)
+    Boolean(
+      element?.classList.contains('crt-line') && element.textContent === text
+    )
   )
 
 const queryConsoleLines = (text: string) =>
   screen.queryAllByText((_, element) =>
-    Boolean(element?.classList.contains('crt-line') && element.textContent === text)
+    Boolean(
+      element?.classList.contains('crt-line') && element.textContent === text
+    )
   )
 
 const activePlayerRosterResponse = () =>
@@ -61,7 +65,9 @@ const activePlayerRosterResponse = () =>
 
 const maybeActivePlayerRosterFetch = (input: RequestInfo | URL) => {
   const url = String(input)
-  return url.endsWith('/public/player-activity') ? activePlayerRosterResponse() : null
+  return url.endsWith('/public/player-activity')
+    ? activePlayerRosterResponse()
+    : null
 }
 
 describe('Navigator flow', () => {
@@ -112,7 +118,14 @@ describe('Navigator flow', () => {
     animation: {
       routine_index: 5,
       next_routine: 'browns',
-      routine_sequence: ['dryads', 'elves', 'gemakr', 'gemakr', 'zarapp', 'browns'],
+      routine_sequence: [
+        'dryads',
+        'elves',
+        'gemakr',
+        'gemakr',
+        'zarapp',
+        'browns',
+      ],
       tick_seconds: 1,
       animation_tick_interval_seconds: 15,
       brownie_routine_interval_seconds: 90,
@@ -127,7 +140,11 @@ describe('Navigator flow', () => {
         status: 'present',
         object_id: 45,
         room_id: 0,
-        room: { id: 0, brief: 'near a mystical willow tree', object_landing: 'on the ground' },
+        room: {
+          id: 0,
+          brief: 'near a mystical willow tree',
+          object_landing: 'on the ground',
+        },
         legacy_source: 'legacy/KYRANIM.C:326-348',
       },
       {
@@ -136,11 +153,19 @@ describe('Navigator flow', () => {
         kind: 'path_encounter',
         status: 'last_checked',
         room_id: 0,
-        room: { id: 0, brief: 'near a mystical willow tree', object_landing: 'on the ground' },
+        room: {
+          id: 0,
+          brief: 'near a mystical willow tree',
+          object_landing: 'on the ground',
+        },
         path_index: 19,
         path_length: 40,
         next_room_id: 129,
-        next_room: { id: 129, brief: 'on a winding trail', object_landing: 'nearby' },
+        next_room: {
+          id: 129,
+          brief: 'on a winding trail',
+          object_landing: 'nearby',
+        },
         routine_interval_seconds: 90,
         full_path_interval_seconds: 3600,
         legacy_source: 'legacy/KYRANIM.C:69-80,393-426',
@@ -168,7 +193,11 @@ describe('Navigator flow', () => {
         counter: 8,
         attack_index: 2,
         next_attack: 'claw',
-        room: { id: 250, brief: 'in a dark passage', object_landing: 'on the ground' },
+        room: {
+          id: 250,
+          brief: 'in a dark passage',
+          object_landing: 'on the ground',
+        },
         legacy_source: 'legacy/KYRANIM.C:155-263,453-459',
       },
     ],
@@ -187,7 +216,9 @@ describe('Navigator flow', () => {
     expect(screen.getByRole('main')).toHaveClass('controls-open')
     const toggle = screen.getByRole('button', { name: /hide controls/i })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('complementary', { name: /session and admin controls/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('complementary', { name: /session and admin controls/i })
+    ).toBeInTheDocument()
     expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
   })
 
@@ -206,7 +237,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -224,17 +255,18 @@ describe('Navigator flow', () => {
     })
 
     await waitFor(() => expect(MockWebSocket.instances.length).toBe(1))
-    await waitFor(() => expect(screen.getByRole('main')).toHaveClass('controls-closed'))
+    await waitFor(() =>
+      expect(screen.getByRole('main')).toHaveClass('controls-closed')
+    )
     const toggle = screen.getByRole('button', { name: /show controls/i })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
 
     fireEvent.click(toggle)
 
     expect(screen.getByRole('main')).toHaveClass('controls-open')
-    expect(screen.getByRole('button', { name: /hide controls/i })).toHaveAttribute(
-      'aria-expanded',
-      'true'
-    )
+    expect(
+      screen.getByRole('button', { name: /hide controls/i })
+    ).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('creates a session, caches world data, and streams room activity', async () => {
@@ -252,7 +284,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -315,16 +347,18 @@ describe('Navigator flow', () => {
 
     // RoomPanel is disabled, so we check MudConsole header instead
     await waitFor(() =>
-      expect(
-        screen.getAllByText(/Edge of the forest/i).length
-      ).toBeGreaterThan(0)
+      expect(screen.getAllByText(/Edge of the forest/i).length).toBeGreaterThan(
+        0
+      )
     )
 
     // RoomPanel components are no longer rendered (room-commands, room-look-description)
     // The room information is now only shown in MudConsole
 
     expect(screen.getAllByText(/seer is here/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/appeared from the west/i).length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(/appeared from the west/i).length
+    ).toBeGreaterThan(0)
     // ruby appears in MudConsole (initial room description with GemstoneText styling)
     expect(screen.getAllByText(/ruby/i).length).toBeGreaterThan(0)
 
@@ -341,27 +375,38 @@ describe('Navigator flow', () => {
         'Since this is your first time entering Kyrandia (Fantasy-world), you must pick a 3-9 character Player-ID for yourself.',
       GOODPD:
         'Good!  You will now be known as "Merlin" throughout Kyrandia (Fantasy World).\r\n\r\nPress ENTER to begin',
-      INTROA: 'Welcome, brave and adventurous one.\r\n\r\nPress ENTER to continue',
+      INTROA:
+        'Welcome, brave and adventurous one.\r\n\r\nPress ENTER to continue',
       INTROB: 'Here is how to play.\r\n\r\nPress ENTER to continue',
-      INTROC: 'Spells are magic cast by players.\r\n\r\nPress ENTER to continue',
-      INTROD: 'Enjoy the magic, mystery, and mirth of Kyrandia, Fantasy World of Legends!',
+      INTROC:
+        'Spells are magic cast by players.\r\n\r\nPress ENTER to continue',
+      INTROD:
+        'Enjoy the magic, mystery, and mirth of Kyrandia, Fantasy World of Legends!',
     }
     const lifecyclePages = [
       {
         lifecycle: { state: 'first_login_intro', step: 3 },
-        lifecycle_messages: [{ message_id: 'INTROA', text: firstLoginMessages.INTROA }],
+        lifecycle_messages: [
+          { message_id: 'INTROA', text: firstLoginMessages.INTROA },
+        ],
       },
       {
         lifecycle: { state: 'first_login_intro', step: 4 },
-        lifecycle_messages: [{ message_id: 'INTROB', text: firstLoginMessages.INTROB }],
+        lifecycle_messages: [
+          { message_id: 'INTROB', text: firstLoginMessages.INTROB },
+        ],
       },
       {
         lifecycle: { state: 'first_login_intro', step: 5 },
-        lifecycle_messages: [{ message_id: 'INTROC', text: firstLoginMessages.INTROC }],
+        lifecycle_messages: [
+          { message_id: 'INTROC', text: firstLoginMessages.INTROC },
+        ],
       },
       {
         lifecycle: { state: 'first_login_intro', step: 6 },
-        lifecycle_messages: [{ message_id: 'INTROD', text: firstLoginMessages.INTROD }],
+        lifecycle_messages: [
+          { message_id: 'INTROD', text: firstLoginMessages.INTROD },
+        ],
       },
       {
         lifecycle: { state: 'first_login_entry', step: 6 },
@@ -382,7 +427,7 @@ describe('Navigator flow', () => {
       },
       ...locations,
     ]
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const url = String(input)
@@ -430,10 +475,16 @@ describe('Navigator flow', () => {
         } as unknown as Response)
       }
       if (url.includes('/objects')) {
-        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+        return Promise.resolve({
+          ok: true,
+          json: async () => objects,
+        } as unknown as Response)
       }
       if (url.includes('/commands')) {
-        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+        return Promise.resolve({
+          ok: true,
+          json: async () => commands,
+        } as unknown as Response)
       }
       if (url.includes('/i18n/en-US/messages')) {
         return Promise.resolve({
@@ -446,20 +497,30 @@ describe('Navigator flow', () => {
 
     render(<App />)
 
-    expect(screen.queryByText(/Since this is your first time entering Kyrandia/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Since this is your first time entering Kyrandia/i)
+    ).not.toBeInTheDocument()
 
     const user = userEvent.setup()
     await act(async () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'Merlin')
       await user.type(screen.getByLabelText(/room id/i), '12')
-      await user.click(screen.getByRole('checkbox', { name: /claim new player-id/i }))
+      await user.click(
+        screen.getByRole('checkbox', { name: /claim new player-id/i })
+      )
       expect(screen.getByLabelText(/room id/i)).toBeDisabled()
-      expect(screen.getByText(/Since this is your first time entering Kyrandia/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/Since this is your first time entering Kyrandia/i)
+      ).toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: /claim player-id/i }))
     })
 
-    const authCall = fetchMock.mock.calls.find(([input]) => String(input).includes('/auth/session'))
-    const sessionRequest = JSON.parse(String((authCall?.[1] as RequestInit)?.body))
+    const authCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes('/auth/session')
+    )
+    const sessionRequest = JSON.parse(
+      String((authCall?.[1] as RequestInit)?.body)
+    )
     expect(sessionRequest).toEqual({
       player_id: 'Merlin',
       create_player: true,
@@ -469,22 +530,26 @@ describe('Navigator flow', () => {
       screen.getByText((_, element) =>
         Boolean(
           element?.classList.contains('crt-line') &&
-            element.textContent?.includes('Good!  You will now be known as "') &&
-            element.textContent?.includes('Merlin')
+          element.textContent?.includes('Good!  You will now be known as "') &&
+          element.textContent?.includes('Merlin')
         )
       )
     ).toBeInTheDocument()
-    expect(screen.queryByText(/at the edge of Kyrandia/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/at the edge of Kyrandia/i)
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByText((_, element) =>
         Boolean(
           element?.classList.contains('crt-line') &&
-            element.textContent?.includes('Player') &&
-            element.textContent?.includes('Merlin connected.')
+          element.textContent?.includes('Player') &&
+          element.textContent?.includes('Merlin connected.')
         )
       )
     ).not.toBeInTheDocument()
-    expect(screen.queryByText(/Welcome, brave and adventurous one/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Welcome, brave and adventurous one/i)
+    ).not.toBeInTheDocument()
 
     const commandInput = screen.getByLabelText(/command input/i)
     fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
@@ -493,7 +558,7 @@ describe('Navigator flow', () => {
         screen.getByText((_, element) =>
           Boolean(
             element?.classList.contains('crt-line') &&
-              element.textContent?.includes('Welcome, brave and adventurous one')
+            element.textContent?.includes('Welcome, brave and adventurous one')
           )
         )
       ).toBeInTheDocument()
@@ -506,7 +571,7 @@ describe('Navigator flow', () => {
         screen.getByText((_, element) =>
           Boolean(
             element?.classList.contains('crt-line') &&
-              element.textContent?.includes('Here is how to play')
+            element.textContent?.includes('Here is how to play')
           )
         )
       ).toBeInTheDocument()
@@ -518,7 +583,7 @@ describe('Navigator flow', () => {
         screen.getByText((_, element) =>
           Boolean(
             element?.classList.contains('crt-line') &&
-              element.textContent?.includes('Spells are magic cast by players')
+            element.textContent?.includes('Spells are magic cast by players')
           )
         )
       ).toBeInTheDocument()
@@ -530,7 +595,7 @@ describe('Navigator flow', () => {
         screen.getByText((_, element) =>
           Boolean(
             element?.classList.contains('crt-line') &&
-              element.textContent?.includes('Enjoy the magic, mystery, and mirth')
+            element.textContent?.includes('Enjoy the magic, mystery, and mirth')
           )
         )
       ).toBeInTheDocument()
@@ -544,10 +609,218 @@ describe('Navigator flow', () => {
       screen.getByText((_, element) =>
         Boolean(
           element?.classList.contains('crt-line') &&
-            element.textContent === 'Player 🧙‍♂️ Merlin connected.'
+          element.textContent === 'Player 🧙‍♂️ Merlin connected.'
         )
       )
     ).toBeInTheDocument()
+  })
+
+  it('logs an existing player in with userid and password from the play screen', async () => {
+    window.history.replaceState(null, '', '/play')
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input, init) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = String(input)
+        if (url.includes('/public/player-id/')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              player_id: 'Hero',
+              canonical_player_id: 'Hero',
+              valid: true,
+              exists: true,
+              available: false,
+              reserved: false,
+              status: 'existing',
+            }),
+          } as unknown as Response)
+        }
+        if (url.includes('/auth/login')) {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            userid: 'Hero',
+            password: 'secret-password',
+            session_kind: 'game',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'created',
+              session: {
+                token: 'account-token',
+                player_id: 'Hero',
+                account_userid: 'Hero',
+                session_kind: 'game',
+                room_id: 7,
+              },
+            }),
+          } as unknown as Response)
+        }
+        if (url.includes('/locations')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => locations,
+          } as unknown as Response)
+        }
+        if (url.includes('/objects')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => objects,
+          } as unknown as Response)
+        }
+        if (url.includes('/commands')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => commands,
+          } as unknown as Response)
+        }
+        if (url.includes('/i18n/en-US/messages')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ messages }),
+          } as unknown as Response)
+        }
+        throw new Error(`Unexpected fetch call: ${url}`)
+      })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/^player id$/i), 'Hero')
+    await user.type(screen.getByLabelText(/^password$/i), 'secret-password')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /login as hero/i })
+      ).toBeEnabled()
+    )
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(
+      screen.queryByText(/use the password for this player-id account/i)
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /login as hero/i }))
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    expect(socket.url).toContain('/rooms/7?token=account-token')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/auth/login',
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('registers an available player account from the play screen', async () => {
+    window.history.replaceState(null, '', '/play')
+    const firstLoginMessages = {
+      ...messages,
+      GOODPD:
+        'Good!  You will now be known as "Lyra" throughout Kyrandia (Fantasy World).\r\n\r\nPress ENTER to begin',
+    }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input, init) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = String(input)
+        if (url.includes('/public/player-id/')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              player_id: 'Lyra',
+              canonical_player_id: 'Lyra',
+              valid: true,
+              exists: false,
+              available: true,
+              reserved: false,
+              status: 'available',
+            }),
+          } as unknown as Response)
+        }
+        if (url.includes('/auth/register')) {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            userid: 'Lyra',
+            password: 'new-secret',
+            session_kind: 'game',
+            background: 'lord',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'created',
+              session: {
+                token: 'new-account-token',
+                player_id: 'Lyra',
+                account_userid: 'Lyra',
+                session_kind: 'game',
+                room_id: 0,
+                first_login: true,
+                lifecycle: { state: 'first_login_intro', step: 2 },
+                lifecycle_messages: [
+                  { message_id: 'GOODPD', text: firstLoginMessages.GOODPD },
+                ],
+              },
+            }),
+          } as unknown as Response)
+        }
+        if (url.includes('/locations')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => locations,
+          } as unknown as Response)
+        }
+        if (url.includes('/objects')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => objects,
+          } as unknown as Response)
+        }
+        if (url.includes('/commands')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => commands,
+          } as unknown as Response)
+        }
+        if (url.includes('/i18n/en-US/messages')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ messages: firstLoginMessages }),
+          } as unknown as Response)
+        }
+        throw new Error(`Unexpected fetch call: ${url}`)
+      })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/^player id$/i), 'Lyra')
+    await user.type(screen.getByLabelText(/^password$/i), 'new-secret')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /create character/i })
+      ).toBeEnabled()
+    )
+    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute(
+      'autocomplete',
+      'new-password'
+    )
+    expect(
+      screen.queryByText(/use the password for this player-id account/i)
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /create character/i }))
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/auth/register',
+      expect.objectContaining({ method: 'POST' })
+    )
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        'Good!  You will now be known as "'
+      )
+      expect(document.body.textContent).toContain('Lyra')
+    })
+    expect(MockWebSocket.instances).toHaveLength(0)
   })
 
   it('reports lifecycle advance failures without opening the room socket', async () => {
@@ -571,7 +844,7 @@ describe('Navigator flow', () => {
       },
       ...locations,
     ]
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const url = String(input)
@@ -604,10 +877,16 @@ describe('Navigator flow', () => {
         } as unknown as Response)
       }
       if (url.includes('/objects')) {
-        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+        return Promise.resolve({
+          ok: true,
+          json: async () => objects,
+        } as unknown as Response)
       }
       if (url.includes('/commands')) {
-        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+        return Promise.resolve({
+          ok: true,
+          json: async () => commands,
+        } as unknown as Response)
       }
       if (url.includes('/i18n/en-US/messages')) {
         return Promise.resolve({
@@ -623,7 +902,9 @@ describe('Navigator flow', () => {
     const user = userEvent.setup()
     await act(async () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'Merlin')
-      await user.click(screen.getByRole('checkbox', { name: /claim new player-id/i }))
+      await user.click(
+        screen.getByRole('checkbox', { name: /claim new player-id/i })
+      )
       await user.click(screen.getByRole('button', { name: /claim player-id/i }))
     })
 
@@ -631,7 +912,9 @@ describe('Navigator flow', () => {
     const commandInput = screen.getByLabelText(/command input/i)
     fireEvent.submit(commandInput.closest('form') as HTMLFormElement)
 
-    await waitFor(() => expect(screen.getAllByText(/Network dropped/i).length).toBeGreaterThan(0))
+    await waitFor(() =>
+      expect(screen.getAllByText(/Network dropped/i).length).toBeGreaterThan(0)
+    )
     expect(screen.getByText(/connection: error/i)).toBeInTheDocument()
     expect(MockWebSocket.instances).toHaveLength(0)
   })
@@ -675,7 +958,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    fetchMock.mockImplementation((input) => {
+    fetchMock.mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -694,7 +977,9 @@ describe('Navigator flow', () => {
 
     const firstSocket = await waitFor(() => MockWebSocket.instances[0])
     expect(firstSocket.url).toContain('/rooms/7?token=abc123')
-    expect(await screen.findByText(/token expires in 24h 0m/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/token expires in 24h 0m/i)
+    ).toBeInTheDocument()
 
     act(() => {
       firstSocket.close(1008, 'Invalid session token')
@@ -704,7 +989,9 @@ describe('Navigator flow', () => {
     expect(screen.getByText(/Invalid session token/i)).toBeInTheDocument()
 
     await act(async () => {
-      await user.click(screen.getByRole('button', { name: /reconnect session/i }))
+      await user.click(
+        screen.getByRole('button', { name: /reconnect session/i })
+      )
     })
 
     const secondSocket = await waitFor(() => MockWebSocket.instances[1])
@@ -716,7 +1003,9 @@ describe('Navigator flow', () => {
         body: JSON.stringify({ player_id: 'hero', room_id: 7 }),
       })
     )
-    expect(await screen.findByText(/token expires in 24h 30m/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/token expires in 24h 30m/i)
+    ).toBeInTheDocument()
   })
 
   it('renders command_response room_message text for look-style replies', async () => {
@@ -734,7 +1023,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -789,7 +1078,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -855,15 +1144,21 @@ describe('Navigator flow', () => {
     })
 
     await waitFor(() =>
-      expect(screen.queryByText(/concentrating with sincere determination/i)).toBeNull()
+      expect(
+        screen.queryByText(/concentrating with sincere determination/i)
+      ).toBeNull()
     )
     expect(screen.queryByText(/notices Hero and steps aside/i)).toBeNull()
-    expect(screen.queryByText(/Only Buddy should see this private temple response/i)).toBeNull()
+    expect(
+      screen.queryByText(/Only Buddy should see this private temple response/i)
+    ).toBeNull()
     expect(
       screen.getByText((_, element) =>
         Boolean(
           element?.classList.contains('summary') &&
-            element.textContent?.includes('Only Hero should see this private temple response.')
+          element.textContent?.includes(
+            'Only Hero should see this private temple response.'
+          )
         )
       )
     ).toBeInTheDocument()
@@ -872,7 +1167,16 @@ describe('Navigator flow', () => {
   it('updates world room objects when room_broadcast delivers room_objects event (gem spawn)', async () => {
     // Location 7 starts with object id=0 (ruby). After gem spawn broadcast it should have id=1 (emerald) too.
     const localLocations = [
-      { id: 7, brfdes: 'Edge of the forest', objlds: 'on the ground', objects: [0], gi_north: -1, gi_south: -1, gi_east: -1, gi_west: -1 },
+      {
+        id: 7,
+        brfdes: 'Edge of the forest',
+        objlds: 'on the ground',
+        objects: [0],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
     ]
 
     const responses = [
@@ -889,7 +1193,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -965,7 +1269,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -988,7 +1292,9 @@ describe('Navigator flow', () => {
       socket.triggerMessage({ type: 'room_welcome', room: 7 })
     })
 
-    expect(queryConsoleLines('There is a 🌱 dryad standing here.')).toHaveLength(0)
+    expect(
+      queryConsoleLines('There is a 🌱 dryad standing here.')
+    ).toHaveLength(0)
 
     act(() => {
       socket.triggerMessage({
@@ -1004,10 +1310,16 @@ describe('Navigator flow', () => {
     })
 
     await waitFor(() =>
-      expect(getConsoleLines('There is a 🌱 dryad standing here.').length).toBeGreaterThan(0)
+      expect(
+        getConsoleLines('There is a 🌱 dryad standing here.').length
+      ).toBeGreaterThan(0)
     )
-    expect(getConsoleLines('There is a 🌱 dryad standing here.')[0]).toContainElement(
-      getConsoleLines('There is a 🌱 dryad standing here.')[0].querySelector('.creature-dryad')
+    expect(
+      getConsoleLines('There is a 🌱 dryad standing here.')[0]
+    ).toContainElement(
+      getConsoleLines('There is a 🌱 dryad standing here.')[0].querySelector(
+        '.creature-dryad'
+      )
     )
   })
 
@@ -1040,7 +1352,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -1073,9 +1385,13 @@ describe('Navigator flow', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getAllByText('You look around the forest edge.').length).toBeGreaterThan(0)
+      expect(
+        screen.getAllByText('You look around the forest edge.').length
+      ).toBeGreaterThan(0)
     )
-    expect(screen.getByText('There is nothing lying among the roots.')).toBeInTheDocument()
+    expect(
+      screen.getByText('There is nothing lying among the roots.')
+    ).toBeInTheDocument()
     const dryadLine = getConsoleLines('There is a 🌱 dryad standing here.')[0]
     expect(dryadLine).toBeInTheDocument()
     expect(dryadLine.querySelector('.creature-dryad')).toHaveStyle({
@@ -1098,7 +1414,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()
@@ -1133,19 +1449,19 @@ describe('Navigator flow', () => {
 
     await waitFor(() =>
       expect(
-        screen.getAllByText(/mysterious voice whispers words of secret wisdom/i).length
+        screen.getAllByText(/mysterious voice whispers words of secret wisdom/i)
+          .length
       ).toBeGreaterThan(0)
     )
   })
 
-  it('collapses dev helper panels to reclaim space', async () => {
+  it('keeps the session form open while dev helper panels collapse', async () => {
     render(<App />)
 
-    const sessionToggle = screen.getByRole('button', {
-      name: /collapse session panel/i,
-    })
-    fireEvent.click(sessionToggle)
-    expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /collapse session panel/i })
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
 
     // RoomPanel has been deprecated/disabled
     // const roomToggle = screen.getByRole('button', {
@@ -1159,12 +1475,9 @@ describe('Navigator flow', () => {
     })
     fireEvent.click(activityToggle)
     expect(screen.queryByTestId('activity-log-body')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /expand session panel/i }))
-    expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
   })
 
-  it('stores an admin token and calls admin update endpoints', async () => {
+  it('uses the admin account session token for admin update endpoints', async () => {
     const responses = [
       {
         ok: true,
@@ -1239,41 +1552,48 @@ describe('Navigator flow', () => {
       spouse: 'seer',
     }
 
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const rosterResponse = maybeActivePlayerRosterFetch(input)
-      if (rosterResponse) return rosterResponse
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ player: adminPlayer }),
-        } as unknown as Response)
-      }
-      if (url.includes('/admin/players/hero')) {
-        expect(init?.headers).toMatchObject({ Authorization: 'Bearer dev-admin' })
-        const payload = JSON.parse(init?.body as string)
-        expect(payload).toMatchObject({
-          flags: [],
-          gpobjs: [0, 1, null, null, null, null],
-          npobjs: 2,
-          gemidx: 2,
-          stones: [0, 1, 2, 3],
-          stumpi: 5,
-          charms: [0, 0, 0, 0, 7, 0],
-          grant_all_spells: true,
-        })
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ status: 'updated', player: patchedPlayer }),
-        } as unknown as Response)
-      }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = typeof input === 'string' ? input : input.toString()
+        if (
+          url.includes('/admin/players/hero') &&
+          (!init?.method || init?.method === 'GET')
+        ) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        if (url.includes('/admin/players/hero')) {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer abc123',
+          })
+          const payload = JSON.parse(init?.body as string)
+          expect(payload).toMatchObject({
+            flags: [],
+            gpobjs: [0, 1, null, null, null, null],
+            npobjs: 2,
+            gemidx: 2,
+            stones: [0, 1, 2, 3],
+            stumpi: 5,
+            charms: [0, 0, 0, 0, 7, 0],
+            grant_all_spells: true,
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ status: 'updated', player: patchedPlayer }),
+          } as unknown as Response)
+        }
 
-      const next = responses.shift()
-      if (!next) {
-        throw new Error(`Unexpected fetch call: ${url}`)
-      }
-      return Promise.resolve(next as unknown as Response)
-    })
+        const next = responses.shift()
+        if (!next) {
+          throw new Error(`Unexpected fetch call: ${url}`)
+        }
+        return Promise.resolve(next as unknown as Response)
+      })
 
     render(<App />)
 
@@ -1282,13 +1602,11 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.type(screen.getByLabelText(/room id/i), '7')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
-      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
-      await user.click(screen.getByRole('button', { name: /start session/i }))
-    })
-
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    act(() => {
-      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
     })
 
     await screen.findByText(/admin controls/i)
@@ -1318,12 +1636,222 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/stump index/i), '5')
       await user.clear(screen.getByLabelText(/object protection charm/i))
       await user.type(screen.getByLabelText(/object protection charm/i), '7')
-      await user.click(screen.getByRole('checkbox', { name: /grant all spells/i }))
-      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+      await user.click(
+        screen.getByRole('checkbox', { name: /grant all spells/i })
+      )
+      await user.click(
+        screen.getByRole('button', { name: /apply admin changes/i })
+      )
     })
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.anything()
+      )
+    )
     await screen.findByText(/Admin update saved/i)
+  })
+
+  it('keeps an admin account token available when the session pauses for intro', async () => {
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [],
+      nmpdes: 0,
+      modno: 0,
+      level: 1,
+      gamloc: 0,
+      pgploc: 0,
+      flags: 0,
+      gold: 0,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 0,
+      hitpts: 0,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: '',
+    }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = String(input)
+        if (url.includes('/auth/login')) {
+          expect(JSON.parse(String(init?.body))).toEqual({
+            userid: 'hero',
+            password: 'dev-admin-password',
+            session_kind: 'admin',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'created',
+              session: {
+                token: 'admin-intro-token',
+                player_id: 'hero',
+                account_userid: 'hero',
+                session_kind: 'admin',
+                room_id: 0,
+                lifecycle: { state: 'first_login_intro', step: 2 },
+                lifecycle_messages: [
+                  { message_id: 'GOODPD', text: 'Press ENTER to begin' },
+                ],
+              },
+            }),
+          } as unknown as Response)
+        }
+        if (url.includes('/admin/players/hero')) {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer admin-intro-token',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        if (url.includes('/locations')) {
+          return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+        }
+        if (url.includes('/objects')) {
+          return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+        }
+        if (url.includes('/commands')) {
+          return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+        }
+        if (url.includes('/i18n/en-US/messages')) {
+          return Promise.resolve({ ok: true, json: async () => ({ messages }) } as unknown as Response)
+        }
+        throw new Error(`Unexpected fetch call: ${url}`)
+      })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
+    })
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer admin-intro-token',
+          }),
+        })
+      )
+    )
+    expect(screen.queryByText(/admin access is locked/i)).not.toBeInTheDocument()
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('uses the static emergency admin token with a legacy session', async () => {
+    const adminPlayer = {
+      uidnam: 'HeroicUser',
+      plyrid: 'hero',
+      altnam: 'Hero',
+      attnam: 'Heroic Attire',
+      gpobjs: [],
+      nmpdes: 0,
+      modno: 0,
+      level: 1,
+      gamloc: 7,
+      pgploc: 7,
+      flags: 0,
+      gold: 0,
+      npobjs: 0,
+      obvals: [],
+      nspells: 0,
+      spts: 0,
+      hitpts: 0,
+      charms: [0, 0, 0, 0, 0, 0],
+      offspls: 0,
+      defspls: 0,
+      othspls: 0,
+      spells: [],
+      gemidx: 0,
+      stones: [0, 0, 0, 0],
+      macros: 0,
+      stumpi: 0,
+      spouse: '',
+    }
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'legacy-game-token', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = String(input)
+        if (url.includes('/admin/players/hero')) {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer static-admin-token',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        const next = responses.shift()
+        if (!next) throw new Error(`Unexpected fetch call: ${url}`)
+        return Promise.resolve(next as unknown as Response)
+      })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.type(
+        screen.getByLabelText(/emergency admin token/i),
+        'static-admin-token'
+      )
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer static-admin-token',
+          }),
+        })
+      )
+    )
+    expect(screen.queryByText(/admin access is locked/i)).not.toBeInTheDocument()
   })
 
   it('normalizes admin alias lookups to the canonical player id before saving', async () => {
@@ -1373,37 +1901,49 @@ describe('Navigator flow', () => {
       spouse: '',
     }
 
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const rosterResponse = maybeActivePlayerRosterFetch(input)
-      if (rosterResponse) return rosterResponse
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes(`/admin/players/${canonical}`) && init?.method === 'PATCH') {
-        const payload = JSON.parse(init?.body as string)
-        expect(payload.altnam).toBe('Alias Admin')
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ status: 'updated', player: { ...adminPlayer, altnam: 'Alias Admin' } }),
-        } as unknown as Response)
-      }
-      if (url.includes(`/admin/players/${alias}`) && init?.method === 'PATCH') {
-        throw new Error('Admin save used the non-canonical alias')
-      }
-      if (
-        (url.includes(`/admin/players/${canonical}`) || url.includes(`/admin/players/${alias}`)) &&
-        (!init?.method || init?.method === 'GET')
-      ) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ player: adminPlayer }),
-        } as unknown as Response)
-      }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = typeof input === 'string' ? input : input.toString()
+        if (
+          url.includes(`/admin/players/${canonical}`) &&
+          init?.method === 'PATCH'
+        ) {
+          const payload = JSON.parse(init?.body as string)
+          expect(payload.altnam).toBe('Alias Admin')
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'updated',
+              player: { ...adminPlayer, altnam: 'Alias Admin' },
+            }),
+          } as unknown as Response)
+        }
+        if (
+          url.includes(`/admin/players/${alias}`) &&
+          init?.method === 'PATCH'
+        ) {
+          throw new Error('Admin save used the non-canonical alias')
+        }
+        if (
+          (url.includes(`/admin/players/${canonical}`) ||
+            url.includes(`/admin/players/${alias}`)) &&
+          (!init?.method || init?.method === 'GET')
+        ) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
 
-      const next = responses.shift()
-      if (!next) {
-        throw new Error(`Unexpected fetch call: ${url}`)
-      }
-      return Promise.resolve(next as unknown as Response)
-    })
+        const next = responses.shift()
+        if (!next) {
+          throw new Error(`Unexpected fetch call: ${url}`)
+        }
+        return Promise.resolve(next as unknown as Response)
+      })
 
     render(<App />)
 
@@ -1412,13 +1952,11 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/^player id$/i), alias)
       await user.type(screen.getByLabelText(/room id/i), '7')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
-      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
-      await user.click(screen.getByRole('button', { name: /start session/i }))
-    })
-
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    act(() => {
-      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
     })
 
     await screen.findByText(/admin controls/i)
@@ -1427,14 +1965,19 @@ describe('Navigator flow', () => {
 
     fireEvent.change(targetInput, { target: { value: alias } })
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`/admin/players/${alias}`), expect.anything())
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/admin/players/${alias}`),
+        expect.anything()
+      )
     )
     await waitFor(() => expect(targetInput).toHaveValue(canonical))
 
     await act(async () => {
       await user.clear(screen.getByLabelText(/^alternate name$/i))
       await user.type(screen.getByLabelText(/^alternate name$/i), 'Alias Admin')
-      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+      await user.click(
+        screen.getByRole('button', { name: /apply admin changes/i })
+      )
     })
 
     await waitFor(() =>
@@ -1491,48 +2034,58 @@ describe('Navigator flow', () => {
       spouse: '',
     }
 
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const rosterResponse = maybeActivePlayerRosterFetch(input)
-      if (rosterResponse) return rosterResponse
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/admin/mobs/elf/trigger')) {
-        expect(init?.method).toBe('POST')
-        expect(init?.headers).toMatchObject({
-          Authorization: 'Bearer dev-admin',
-          'Content-Type': 'application/json',
-        })
-        expect(JSON.parse(String(init?.body))).toEqual({ player_id: 'hero', room_id: 7 })
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            status: 'triggered',
-            room_id: 7,
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/admin/mobs/elf/trigger')) {
+          expect(init?.method).toBe('POST')
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer abc123',
+            'Content-Type': 'application/json',
+          })
+          expect(JSON.parse(String(init?.body))).toEqual({
             player_id: 'hero',
-            outcome: 'hint',
-            snapshot: adminMobSnapshot,
-          }),
-        } as unknown as Response)
-      }
-      if (url.includes('/admin/mobs')) {
-        expect(init?.headers).toMatchObject({ Authorization: 'Bearer dev-admin' })
-        return Promise.resolve({
-          ok: true,
-          json: async () => adminMobSnapshot,
-        } as unknown as Response)
-      }
-      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ player: adminPlayer }),
-        } as unknown as Response)
-      }
+            room_id: 7,
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'triggered',
+              room_id: 7,
+              player_id: 'hero',
+              outcome: 'hint',
+              snapshot: adminMobSnapshot,
+            }),
+          } as unknown as Response)
+        }
+        if (url.includes('/admin/mobs')) {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer abc123',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => adminMobSnapshot,
+          } as unknown as Response)
+        }
+        if (
+          url.includes('/admin/players/hero') &&
+          (!init?.method || init?.method === 'GET')
+        ) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
 
-      const next = responses.shift()
-      if (!next) {
-        throw new Error(`Unexpected fetch call: ${url}`)
-      }
-      return Promise.resolve(next as unknown as Response)
-    })
+        const next = responses.shift()
+        if (!next) {
+          throw new Error(`Unexpected fetch call: ${url}`)
+        }
+        return Promise.resolve(next as unknown as Response)
+      })
 
     render(<App />)
 
@@ -1541,19 +2094,19 @@ describe('Navigator flow', () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.type(screen.getByLabelText(/room id/i), '7')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
-      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
-      await user.click(screen.getByRole('button', { name: /start session/i }))
-    })
-
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    act(() => {
-      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
     })
 
     expect(await screen.findByText(/Mob tracker/i)).toBeInTheDocument()
     expect(screen.getByText('🌱 Dryad')).toHaveClass('creature-dryad')
     expect(screen.getByText('🐲 Zar')).toHaveClass('creature-dragon')
-    expect(screen.getAllByText(/near a mystical willow tree/i).length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText(/near a mystical willow tree/i).length
+    ).toBeGreaterThan(0)
     expect(screen.getByText(/next 129/i)).toBeInTheDocument()
     expect(screen.getByText(/next claw; counter 8/i)).toBeInTheDocument()
     await act(async () => {
@@ -1563,14 +2116,14 @@ describe('Navigator flow', () => {
       await screen.findByText((_, element) =>
         Boolean(
           element?.classList.contains('field-hint') &&
-            element.textContent === '🧝 Elf triggered: hint'
+          element.textContent === '🧝 Elf triggered: hint'
         )
       )
     ).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
       'http://api.local/admin/mobs',
       expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer dev-admin' }),
+        headers: expect.objectContaining({ Authorization: 'Bearer abc123' }),
       })
     )
     expect(fetchMock).toHaveBeenCalledWith(
@@ -1627,23 +2180,28 @@ describe('Navigator flow', () => {
       spouse: 'seer',
     }
 
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const rosterResponse = maybeActivePlayerRosterFetch(input)
-      if (rosterResponse) return rosterResponse
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ player: adminPlayer }),
-        } as unknown as Response)
-      }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = typeof input === 'string' ? input : input.toString()
+        if (
+          url.includes('/admin/players/hero') &&
+          (!init?.method || init?.method === 'GET')
+        ) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
 
-      const next = responses.shift()
-      if (!next) {
-        throw new Error(`Unexpected fetch call: ${url}`)
-      }
-      return Promise.resolve(next as unknown as Response)
-    })
+        const next = responses.shift()
+        if (!next) {
+          throw new Error(`Unexpected fetch call: ${url}`)
+        }
+        return Promise.resolve(next as unknown as Response)
+      })
 
     render(<App />)
 
@@ -1651,24 +2209,28 @@ describe('Navigator flow', () => {
     await act(async () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
-      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
-      await user.click(screen.getByRole('button', { name: /start session/i }))
-    })
-
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    act(() => {
-      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
     })
 
     await screen.findByText(/admin controls/i)
-    expect(await screen.findByLabelText(/^alternate name$/i)).toHaveValue('Hero')
+    expect(await screen.findByLabelText(/^alternate name$/i)).toHaveValue(
+      'Hero'
+    )
     expect(screen.getByLabelText(/attire name/i)).toHaveValue('Heroic Attire')
     expect(screen.getByLabelText(/level/i)).toHaveValue(8)
     expect(screen.getByLabelText(/hit points/i)).toHaveValue(30)
     expect(screen.getByLabelText(/spell points/i)).toHaveValue(15)
     expect(screen.getByLabelText(/^gold$/i)).toHaveValue(250)
     expect(screen.queryByLabelText(/inventory count/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/inventory count is auto-calculated from filled slots:/i)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        /inventory count is auto-calculated from filled slots:/i
+      )
+    ).not.toBeInTheDocument()
     expect(screen.getByLabelText(/inventory slot 1/i)).toHaveValue('ruby')
     expect(screen.getByLabelText(/inventory slot 2/i)).toHaveValue('emerald')
     expect(screen.getByLabelText(/birthstone 1/i)).toHaveValue('ruby')
@@ -1682,10 +2244,15 @@ describe('Navigator flow', () => {
     expect(screen.getByRole('checkbox', { name: /female/i })).toBeChecked()
 
     await act(async () => {
-      await user.click(screen.getByRole('button', { name: /refresh admin data/i }))
+      await user.click(
+        screen.getByRole('button', { name: /refresh admin data/i })
+      )
     })
 
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything())
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/admin/players/hero'),
+      expect.anything()
+    )
   })
 
   it('submits unchecked flags to clear them on save', async () => {
@@ -1733,31 +2300,36 @@ describe('Navigator flow', () => {
       spouse: 'seer',
     }
 
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const rosterResponse = maybeActivePlayerRosterFetch(input)
-      if (rosterResponse) return rosterResponse
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ player: adminPlayer }),
-        } as unknown as Response)
-      }
-      if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
-        const payload = JSON.parse(init?.body as string)
-        expect(payload.flags).toEqual([])
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ status: 'updated', player: adminPlayer }),
-        } as unknown as Response)
-      }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = typeof input === 'string' ? input : input.toString()
+        if (
+          url.includes('/admin/players/hero') &&
+          (!init?.method || init?.method === 'GET')
+        ) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
+          const payload = JSON.parse(init?.body as string)
+          expect(payload.flags).toEqual([])
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ status: 'updated', player: adminPlayer }),
+          } as unknown as Response)
+        }
 
-      const next = responses.shift()
-      if (!next) {
-        throw new Error(`Unexpected fetch call: ${url}`)
-      }
-      return Promise.resolve(next as unknown as Response)
-    })
+        const next = responses.shift()
+        if (!next) {
+          throw new Error(`Unexpected fetch call: ${url}`)
+        }
+        return Promise.resolve(next as unknown as Response)
+      })
 
     render(<App />)
 
@@ -1765,13 +2337,11 @@ describe('Navigator flow', () => {
     await act(async () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
-      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
-      await user.click(screen.getByRole('button', { name: /start session/i }))
-    })
-
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    act(() => {
-      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
     })
 
     await screen.findByText(/admin controls/i)
@@ -1780,10 +2350,17 @@ describe('Navigator flow', () => {
 
     await act(async () => {
       await user.click(femaleFlag)
-      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+      await user.click(
+        screen.getByRole('button', { name: /apply admin changes/i })
+      )
     })
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.anything()
+      )
+    )
   })
 
   it('does not send npobjs when inventory slots are still blank', async () => {
@@ -1801,33 +2378,41 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const rosterResponse = maybeActivePlayerRosterFetch(input)
-      if (rosterResponse) return rosterResponse
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
-        return Promise.resolve({
-          ok: false,
-          json: async () => ({ detail: 'service unavailable' }),
-        } as unknown as Response)
-      }
-      if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
-        const payload = JSON.parse(init?.body as string)
-        expect(payload.altnam).toBe('Admin Hero')
-        expect(payload).not.toHaveProperty('npobjs')
-        expect(payload).not.toHaveProperty('gpobjs')
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ status: 'updated', player: { plyrid: 'hero' } }),
-        } as unknown as Response)
-      }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = typeof input === 'string' ? input : input.toString()
+        if (
+          url.includes('/admin/players/hero') &&
+          (!init?.method || init?.method === 'GET')
+        ) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ detail: 'service unavailable' }),
+          } as unknown as Response)
+        }
+        if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
+          const payload = JSON.parse(init?.body as string)
+          expect(payload.altnam).toBe('Admin Hero')
+          expect(payload).not.toHaveProperty('npobjs')
+          expect(payload).not.toHaveProperty('gpobjs')
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'updated',
+              player: { plyrid: 'hero' },
+            }),
+          } as unknown as Response)
+        }
 
-      const next = responses.shift()
-      if (!next) {
-        throw new Error(`Unexpected fetch call: ${url}`)
-      }
-      return Promise.resolve(next as unknown as Response)
-    })
+        const next = responses.shift()
+        if (!next) {
+          throw new Error(`Unexpected fetch call: ${url}`)
+        }
+        return Promise.resolve(next as unknown as Response)
+      })
 
     render(<App />)
 
@@ -1835,13 +2420,11 @@ describe('Navigator flow', () => {
     await act(async () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
-      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
-      await user.click(screen.getByRole('button', { name: /start session/i }))
-    })
-
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    act(() => {
-      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
     })
 
     await screen.findByText(/admin controls/i)
@@ -1849,10 +2432,17 @@ describe('Navigator flow', () => {
     await act(async () => {
       await user.clear(screen.getByLabelText(/^alternate name$/i))
       await user.type(screen.getByLabelText(/^alternate name$/i), 'Admin Hero')
-      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+      await user.click(
+        screen.getByRole('button', { name: /apply admin changes/i })
+      )
     })
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.anything()
+      )
+    )
   })
 
   it('sends explicit empty inventory when all slots are cleared', async () => {
@@ -1900,33 +2490,41 @@ describe('Navigator flow', () => {
       spouse: '',
     }
 
-    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const rosterResponse = maybeActivePlayerRosterFetch(input)
-      if (rosterResponse) return rosterResponse
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.includes('/admin/players/hero') && (!init?.method || init?.method === 'GET')) {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ player: adminPlayer }),
-        } as unknown as Response)
-      }
-      if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
-        const payload = JSON.parse(init?.body as string)
-        // All slots cleared: gpobjs must be all-null and npobjs must be 0
-        expect(payload.gpobjs).toEqual([null, null, null, null, null, null])
-        expect(payload.npobjs).toBe(0)
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({ status: 'updated', player: { plyrid: 'hero' } }),
-        } as unknown as Response)
-      }
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const rosterResponse = maybeActivePlayerRosterFetch(input)
+        if (rosterResponse) return rosterResponse
+        const url = typeof input === 'string' ? input : input.toString()
+        if (
+          url.includes('/admin/players/hero') &&
+          (!init?.method || init?.method === 'GET')
+        ) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        if (url.includes('/admin/players/hero') && init?.method === 'PATCH') {
+          const payload = JSON.parse(init?.body as string)
+          // All slots cleared: gpobjs must be all-null and npobjs must be 0
+          expect(payload.gpobjs).toEqual([null, null, null, null, null, null])
+          expect(payload.npobjs).toBe(0)
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'updated',
+              player: { plyrid: 'hero' },
+            }),
+          } as unknown as Response)
+        }
 
-      const next = responses.shift()
-      if (!next) {
-        throw new Error(`Unexpected fetch call: ${url}`)
-      }
-      return Promise.resolve(next as unknown as Response)
-    })
+        const next = responses.shift()
+        if (!next) {
+          throw new Error(`Unexpected fetch call: ${url}`)
+        }
+        return Promise.resolve(next as unknown as Response)
+      })
 
     render(<App />)
 
@@ -1934,61 +2532,73 @@ describe('Navigator flow', () => {
     await act(async () => {
       await user.type(screen.getByLabelText(/^player id$/i), 'hero')
       await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
-      await user.type(screen.getByLabelText(/admin token/i), 'dev-admin')
-      await user.click(screen.getByRole('button', { name: /start session/i }))
-    })
-
-    const socket = await waitFor(() => MockWebSocket.instances[0])
-    act(() => {
-      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      await user.type(
+        screen.getByLabelText(/admin password/i),
+        'dev-admin-password'
+      )
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
     })
 
     await screen.findByText(/admin controls/i)
     // Wait for the pre-populated slots to appear
-    expect(await screen.findByLabelText(/inventory slot 1/i)).toHaveValue('ruby')
+    expect(await screen.findByLabelText(/inventory slot 1/i)).toHaveValue(
+      'ruby'
+    )
     expect(screen.getByLabelText(/inventory slot 2/i)).toHaveValue('emerald')
 
     await act(async () => {
       // Clear both pre-populated inventory slots
       await user.clear(screen.getByLabelText(/inventory slot 1/i))
       await user.clear(screen.getByLabelText(/inventory slot 2/i))
-      await user.click(screen.getByRole('button', { name: /apply admin changes/i }))
+      await user.click(
+        screen.getByRole('button', { name: /apply admin changes/i })
+      )
     })
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/admin/players/hero'), expect.anything()))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/players/hero'),
+        expect.anything()
+      )
+    )
   })
 
   it('restores session form fields from browser storage', () => {
     localStorage.setItem('kyrgame.navigator.playerId', 'hero')
     localStorage.setItem('kyrgame.navigator.roomId', '12')
     localStorage.setItem('kyrgame.navigator.adminSession', 'true')
-    localStorage.setItem('kyrgame.navigator.adminToken', 'stored-token')
 
     render(<App />)
 
     expect(screen.getByLabelText(/^player id$/i)).toHaveValue('hero')
     expect(screen.getByLabelText(/room id/i)).toHaveValue('12')
-    expect(screen.getByRole('checkbox', { name: /admin session/i })).toBeChecked()
-    expect(screen.getByLabelText(/admin token/i)).toHaveValue('stored-token')
+    expect(
+      screen.getByRole('checkbox', { name: /admin session/i })
+    ).toBeChecked()
+    expect(screen.getByLabelText(/admin password/i)).toHaveValue('')
   })
 
-  it('persists session form changes and clears stored admin token when disabled', async () => {
+  it('persists session form changes without storing admin passwords', async () => {
     render(<App />)
 
-    fireEvent.change(screen.getByLabelText(/^player id$/i), { target: { value: 'hero' } })
+    fireEvent.change(screen.getByLabelText(/^player id$/i), {
+      target: { value: 'hero' },
+    })
     expect(localStorage.getItem('kyrgame.navigator.playerId')).toBe('hero')
 
-    fireEvent.change(screen.getByLabelText(/room id/i), { target: { value: '34' } })
+    fireEvent.change(screen.getByLabelText(/room id/i), {
+      target: { value: '34' },
+    })
     expect(localStorage.getItem('kyrgame.navigator.roomId')).toBe('34')
 
     const adminToggle = screen.getByRole('checkbox', { name: /admin session/i })
     fireEvent.click(adminToggle)
     expect(localStorage.getItem('kyrgame.navigator.adminSession')).toBe('true')
 
-    fireEvent.change(screen.getByLabelText(/admin token/i), {
-      target: { value: 'secret-token' },
+    fireEvent.change(screen.getByLabelText(/admin password/i), {
+      target: { value: 'secret-password' },
     })
-    expect(localStorage.getItem('kyrgame.navigator.adminToken')).toBe('secret-token')
+    expect(localStorage.getItem('kyrgame.navigator.adminToken')).toBeNull()
 
     fireEvent.click(adminToggle)
     expect(localStorage.getItem('kyrgame.navigator.adminSession')).toBe('false')
@@ -2005,10 +2615,18 @@ describe('Navigator flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /expand admin panel/i }))
     expect(await screen.findByTestId('admin-panel-body')).toBeInTheDocument()
 
-    expect(screen.queryByTestId('admin-section-body-identity')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /expand identity section/i }))
-    expect(await screen.findByTestId('admin-section-body-identity')).toBeInTheDocument()
-    expect(localStorage.getItem('kyrgame.navigator.adminSection.identity')).toBe('false')
+    expect(
+      screen.queryByTestId('admin-section-body-identity')
+    ).not.toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: /expand identity section/i })
+    )
+    expect(
+      await screen.findByTestId('admin-section-body-identity')
+    ).toBeInTheDocument()
+    expect(
+      localStorage.getItem('kyrgame.navigator.adminSection.identity')
+    ).toBe('false')
   })
 
   it('dispatches move commands and updates room details on location change', async () => {
@@ -2026,7 +2644,7 @@ describe('Navigator flow', () => {
       { ok: true, json: async () => ({ messages }) },
     ]
 
-    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
       const rosterResponse = maybeActivePlayerRosterFetch(input)
       if (rosterResponse) return rosterResponse
       const next = responses.shift()

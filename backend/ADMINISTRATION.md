@@ -10,7 +10,8 @@ runtime caches.
 - **Tokens**
   - `KYRGAME_ADMIN_TOKEN`: single token seeded with all roles/flags.
   - `KYRGAME_ADMIN_TOKENS`: JSON map of `{token: {"roles": [...], "flags": [...]}}`.
-  - Admin endpoints are locked until one of the tokens above is configured.
+  - `KYRGAME_ADMIN_ALLOWLIST_PATH`: YAML map of account userids to roles/flags.
+  - Admin endpoints are locked until an env token is configured or an authenticated account session has allowlist grants.
   - The API auto-loads `backend/.env` at startup; override the path with `KYRGAME_ENV_FILE`.
 - **Roles**
   - `player_admin`: CRUD on players.
@@ -25,6 +26,22 @@ Example token map:
 ```bash
 export KYRGAME_ADMIN_TOKENS='{"sysop":{"roles":["player_admin","content_admin","message_admin"],"flags":["allow_delete_players","allow_player_rename"]}}'
 ```
+
+Example account allowlist:
+
+```yaml
+admins:
+  sysop:
+    roles:
+      - player_admin
+      - content_admin
+      - message_admin
+    flags:
+      - allow_delete_players
+      - allow_player_rename
+```
+
+An allowlisted userid can call `POST /auth/login` with `session_kind: "admin"` and then use the returned session token as the admin bearer token. Admin account sessions are hidden from public activity, room occupants, and player counts.
 
 For local development, copy the sample `.env` file and source it before running the API:
 

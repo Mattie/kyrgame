@@ -1122,6 +1122,31 @@ export const MudConsole = () => {
             </div>
           )}
 
+          {activeTerminalPagerLineId && (
+            <div className="terminal-action-row pager-actions" aria-label="Pager controls">
+              <button
+                type="button"
+                aria-label="Show all pager output"
+                onClick={() => handleTerminalPagerCommand('n')}
+              >
+                Nonstop
+              </button>
+              <button
+                type="button"
+                aria-label="Quit pager output"
+                onClick={() => handleTerminalPagerCommand('q')}
+              >
+                Quit
+              </button>
+              <button
+                type="button"
+                aria-label="Continue pager output"
+                onClick={() => handleTerminalPagerCommand('c')}
+              >
+                Continue
+              </button>
+            </div>
+          )}
           <form className="prompt-row" onSubmit={handleSubmit}>
             <button
               type="button"
@@ -1152,39 +1177,10 @@ export const MudConsole = () => {
               {sendButtonLabel}
             </button>
           </form>
-          {activeTerminalPagerLineId && (
-            <div className="terminal-action-row pager-actions" aria-label="Pager controls">
-              <button
-                type="button"
-                aria-label="Continue pager output"
-                onClick={() => handleTerminalPagerCommand('c')}
-              >
-                Continue
-              </button>
-              <button
-                type="button"
-                aria-label="Show all pager output"
-                onClick={() => handleTerminalPagerCommand('n')}
-              >
-                Nonstop
-              </button>
-              <button
-                type="button"
-                aria-label="Quit pager output"
-                onClick={() => handleTerminalPagerCommand('q')}
-              >
-                Quit
-              </button>
-            </div>
-          )}
           <p className="mode-hint">
             {navMode
               ? 'Navigation mode: WASD sends movement (click the prompt to exit).'
               : 'Enter a command to interact. Click the compass for WASD navigation.'}
-          </p>
-          <p className="fatigue-hint">
-            If Kyrandia says you are exhausting yourself, rest for about 30 seconds before
-            continuing.
           </p>
           {showVfxTuning && (
             <>

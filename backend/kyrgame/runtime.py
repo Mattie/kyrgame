@@ -48,6 +48,8 @@ class RuntimeConfig:
     reset_on_boot: bool = False
     # Default to seed only when the database is empty so first boot is usable without forcing reloads.
     seed_if_empty: bool = True
+    db_connect_attempts: int = 1
+    db_connect_retry_seconds: float = 1.0
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -70,6 +72,8 @@ class RuntimeConfig:
             migration_revision=os.getenv("KYRGAME_MIGRATION_REVISION", "head"),
             reset_on_boot=_env_flag("KYRGAME_RESET_ON_BOOT", default=False),
             seed_if_empty=_env_flag("KYRGAME_SEED_IF_EMPTY", default=True),
+            db_connect_attempts=_env_int("KYRGAME_DB_CONNECT_ATTEMPTS", default=1),
+            db_connect_retry_seconds=_env_float("KYRGAME_DB_CONNECT_RETRY_SECONDS", default=1.0),
         )
 
     def should_seed_database(self, session: Session) -> bool:
@@ -93,6 +97,20 @@ def _env_flag(name: str, *, default: bool) -> bool:
     return value.lower() not in {"0", "false", "no"}
 
 
+def _env_int(name: str, *, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return int(value)
+
+
+def _env_float(name: str, *, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return float(value)
+
+
 def _database_has_locations(session: Session) -> bool:
     return session.query(models.Location.id).first() is not None
 
@@ -102,6 +120,11 @@ async def bootstrap_app(app: FastAPI):
 
     runtime_config = RuntimeConfig.from_env()
     engine = database.get_engine(runtime_config.database_url)
+    database.wait_for_database(
+        engine,
+        attempts=runtime_config.db_connect_attempts,
+        delay_seconds=runtime_config.db_connect_retry_seconds,
+    )
 
     if runtime_config.run_migrations and runtime_config.migration_runner == "alembic":
         database.run_migrations(

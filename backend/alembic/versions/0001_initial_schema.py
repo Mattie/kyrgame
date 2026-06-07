@@ -99,7 +99,7 @@ def upgrade():
     op.create_table(
         "messages",
         sa.Column("id", sa.String(length=64), nullable=False),
-        sa.Column("text", sa.String(length=255), nullable=False),
+        sa.Column("text", sa.Text(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -112,7 +112,7 @@ def upgrade():
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("last_seen", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("expires_at", sa.DateTime(timezone=True), server_default=sa.text("datetime('now', '+1 day')"), nullable=False),
+        sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["player_id"], ["players.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("session_token", name="uq_player_session_token"),

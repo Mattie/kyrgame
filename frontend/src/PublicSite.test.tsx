@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
@@ -112,7 +112,15 @@ const failedJsonResponse = (payload: unknown, status = 503) =>
     text: async () => JSON.stringify(payload),
   }) as unknown as Response
 
-const mockFetch = vi.fn(async (input: RequestInfo | URL) => {
+const failedTextResponse = (body: string, status = 404) =>
+  ({
+    ok: false,
+    status,
+    headers: { get: () => 'text/plain' },
+    text: async () => body,
+  }) as unknown as Response
+
+const mockFetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
   const url = String(input)
   if (url.endsWith('/public/player-activity')) {
     return jsonResponse(publicActivity)
@@ -128,6 +136,19 @@ const mockFetch = vi.fn(async (input: RequestInfo | URL) => {
       exists: true,
       available: false,
       reserved: false,
+      account_bound: true,
+      status: 'existing',
+    })
+  }
+  if (url.endsWith('/public/player-id/Rook')) {
+    return jsonResponse({
+      player_id: 'Rook',
+      canonical_player_id: 'Rook',
+      valid: true,
+      exists: true,
+      available: false,
+      reserved: false,
+      account_bound: false,
       status: 'existing',
     })
   }
@@ -142,8 +163,55 @@ const mockFetch = vi.fn(async (input: RequestInfo | URL) => {
       status: 'available',
     })
   }
+  if (url.endsWith('/public/player-id/Necrox')) {
+    return jsonResponse({
+      player_id: 'Necrox',
+      canonical_player_id: 'Necrox',
+      valid: true,
+      exists: false,
+      available: true,
+      reserved: false,
+      status: 'available',
+    })
+  }
   if (url.endsWith('/public/player-id/Glitch')) {
     return failedJsonResponse({ detail: 'lookup unavailable' })
+  }
+  if (url.endsWith('/auth/register')) {
+    const body = JSON.parse(String(_init?.body ?? '{}')) as { userid?: string }
+    if (body.userid === 'Necrox') {
+      return failedTextResponse('Not Found')
+    }
+    return jsonResponse({
+      status: 'created',
+      session: {
+        token: `${body.userid?.toLowerCase() ?? 'player'}-token`,
+        player_id: body.userid ?? 'Avalon',
+        account_userid: body.userid ?? 'Avalon',
+        session_kind: 'game',
+        room_id: 0,
+        lifecycle:
+          body.userid === 'Rook'
+            ? null
+            : { state: 'first_login_intro', step: 2 },
+        lifecycle_messages: [],
+      },
+    })
+  }
+  if (url.endsWith('/auth/login')) {
+    return failedTextResponse('Not Found')
+  }
+  if (url.endsWith('/world/locations')) {
+    return jsonResponse([])
+  }
+  if (url.endsWith('/objects')) {
+    return jsonResponse([])
+  }
+  if (url.endsWith('/commands')) {
+    return jsonResponse([])
+  }
+  if (url.endsWith('/i18n/en-US/messages')) {
+    return jsonResponse({ messages: {} })
   }
   return jsonResponse({})
 })
@@ -158,6 +226,10 @@ describe('public site routes', () => {
     Object.defineProperty(global, 'fetch', {
       writable: true,
       value: mockFetch,
+    })
+    Object.defineProperty(window, 'scrollTo', {
+      writable: true,
+      value: vi.fn(),
     })
     mockFetch.mockClear()
     localStorage.clear()
@@ -218,11 +290,15 @@ describe('public site routes', () => {
 
     expect(screen.getByRole('heading', { name: /enter kyrandia/i })).toBeInTheDocument()
     expect(screen.getByText(/The willow is waiting/i)).toBeInTheDocument()
-    expect(screen.getByText(/Google sign-in is coming soon/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Provide your character name and password to begin your journey/i)
+    ).toBeInTheDocument()
     expect(screen.getByLabelText('Player ID')).toBeInTheDocument()
     expect(screen.queryByLabelText('Claim new Player-ID')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /collapse session panel/i })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Player ID'), { target: { value: 'Hero' } })
     expect(await screen.findByText(/Hero is already known in Kyrandia/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Login as Hero' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Admin token')).not.toBeInTheDocument()
   })
@@ -237,12 +313,102 @@ describe('public site routes', () => {
 
     expect(playerId).toHaveValue('Avalon')
     expect(await screen.findByText(/Avalon is yours to claim, if you wish!/i)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/This creates the account for the matching Player-ID/i)
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Lord' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Lady' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create Character...' })).toBeInTheDocument()
     expect(
       mockFetch.mock.calls.some(([url]) => String(url).endsWith('/i18n/en-US/messages'))
     ).toBe(false)
+
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'new-avalon-password' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Character...' }))
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(([url]) => String(url).endsWith('/auth/register'))
+      ).toBe(true)
+    )
+    const registerCall = mockFetch.mock.calls.find(([url]) =>
+      String(url).endsWith('/auth/register')
+    )
+    const registerInit = registerCall?.[1] as RequestInit | undefined
+    expect(JSON.parse(String(registerInit?.body))).toEqual({
+      userid: 'Avalon',
+      password: 'new-avalon-password',
+      session_kind: 'game',
+      background: 'lord',
+    })
+  })
+
+  it('lets unowned existing player IDs claim an account from the enter page', async () => {
+    window.history.replaceState(null, '', '/enter')
+
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('Player ID'), { target: { value: 'Rook' } })
+    expect(await screen.findByText(/Rook is known in Kyrandia and can be claimed/i)).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Lord' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Claim Player-ID' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'rook-secret' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Claim Player-ID' }))
+
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(([url]) => String(url).endsWith('/auth/register'))
+      ).toBe(true)
+    )
+    const registerCall = mockFetch.mock.calls.find(([url]) =>
+      String(url).endsWith('/auth/register')
+    )
+    const registerInit = registerCall?.[1] as RequestInit | undefined
+    expect(JSON.parse(String(registerInit?.body))).toEqual({
+      userid: 'Rook',
+      password: 'rook-secret',
+      session_kind: 'game',
+    })
+  })
+
+  it('explains when account creation cannot reach the registration endpoint', async () => {
+    window.history.replaceState(null, '', '/enter')
+
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('Player ID'), { target: { value: 'Necrox' } })
+    expect(await screen.findByText(/Necrox is yours to claim, if you wish!/i)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'necrox-secret' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Character...' }))
+
+    expect(
+      await screen.findByText(/Account creation is unavailable/i)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Necrox's password was not saved/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Unable to create Necrox/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Not Found$/i)).not.toBeInTheDocument()
+
+    const registerCall = mockFetch.mock.calls.find(([url, init]) => {
+      if (!String(url).endsWith('/auth/register')) return false
+      const body = JSON.parse(String((init as RequestInit | undefined)?.body ?? '{}')) as {
+        userid?: string
+      }
+      return body.userid === 'Necrox'
+    })
+    const registerInit = registerCall?.[1] as RequestInit | undefined
+    expect(JSON.parse(String(registerInit?.body))).toEqual({
+      userid: 'Necrox',
+      password: 'necrox-secret',
+      session_kind: 'game',
+      background: 'lord',
+    })
   })
 
   it('does not reuse a stale player ID lookup while checking the next name', async () => {
@@ -252,6 +418,9 @@ describe('public site routes', () => {
 
     const playerId = screen.getByLabelText('Player ID')
     fireEvent.change(playerId, { target: { value: 'Hero' } })
+    fireEvent.change(await screen.findByLabelText('Password'), {
+      target: { value: 'swordfish' },
+    })
 
     expect(await screen.findByRole('button', { name: 'Login as Hero' })).toBeEnabled()
 
@@ -269,9 +438,18 @@ describe('public site routes', () => {
     render(<App />)
 
     fireEvent.change(screen.getByLabelText('Player ID'), { target: { value: 'Glitch' } })
+    fireEvent.change(await screen.findByLabelText('Password'), {
+      target: { value: 'swordfish' },
+    })
 
     expect(await screen.findByText(/can't check that name right now/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Try Login' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try Login' }))
+
+    expect(await screen.findByText(/No saved account matched Glitch/i)).toBeInTheDocument()
+    expect(screen.getByText(/remember that password/i)).toBeInTheDocument()
+    expect(screen.queryByText(/^Not Found$/i)).not.toBeInTheDocument()
   })
 
   it('renders a clean player console on play and keeps admin tools on admin', async () => {
@@ -292,7 +470,7 @@ describe('public site routes', () => {
     expect(screen.queryByText('Fantasy world console')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /play kyrandia/i })).not.toBeInTheDocument()
     expect(screen.queryByText(/The realm opens through the same MUD console/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/rest for about 30 seconds/i)).toBeInTheDocument()
+    expect(screen.queryByText(/rest for about 30 seconds/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('game-panel-fire-border')).toBeInTheDocument()
     expect(screen.getByLabelText('Player ID')).toBeInTheDocument()
     expect(screen.queryByLabelText('Claim new Player-ID')).not.toBeInTheDocument()
@@ -362,6 +540,11 @@ describe('public site routes', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: /leaderboard/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /The most powerful wizards in all of Kyrandia are known to everyone\. May you one day achieve such glory!/i
+      )
+    ).toBeInTheDocument()
     expect(await screen.findByText('Zed Alt')).toBeInTheDocument()
     expect(screen.getByText('19 spells')).toBeInTheDocument()
     expect(
