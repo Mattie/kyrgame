@@ -23,7 +23,7 @@ export default defineConfig({
       ? {
           allowedHosts: tunnelAllowedHosts,
           proxy: {
-            '^/(auth|admin|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|$)': {
+            '^/(auth|admin|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\\?|$)': {
               target: backendProxyTarget,
               changeOrigin: true,
               ws: true,

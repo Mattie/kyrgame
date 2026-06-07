@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -62,10 +63,21 @@ def test_cloudflared_ingress_routes_to_frontend_loopback_for_dashboard_parity():
 
 def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     text = (REPO_ROOT / "frontend" / "vite.config.ts").read_text(encoding="utf-8")
+    source_proxy_pattern = (
+        "^/(auth|admin|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\\\\?|$)"
+    )
+    runtime_proxy_pattern = re.compile(
+        r"^/(auth|admin|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\?|$)"
+    )
 
     assert "KYRGAME_BACKEND_PROXY_TARGET" in text
     assert "http://backend:8000" in text
-    assert "^/(auth|admin|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|$)" in text
+    assert source_proxy_pattern in text
+    assert runtime_proxy_pattern.match("/auth/register")
+    assert runtime_proxy_pattern.match("/world/locations")
+    assert runtime_proxy_pattern.match("/ws?token=game-session")
+    assert runtime_proxy_pattern.match("/ws/admin/scry?player=Hero")
+    assert not runtime_proxy_pattern.match("/assets/ws?token=game-session")
     assert "ws: true" in text
     assert "KYRGAME_VITE_ALLOWED_HOSTS" in text
     assert "allowedHosts: tunnelAllowedHosts" in text
