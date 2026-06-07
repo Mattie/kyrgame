@@ -150,6 +150,20 @@ def test_runtime_in_memory_migration_keeps_followup_session_lifecycle_columns():
         engine.dispose()
 
 
+def test_account_session_metadata_migration_adds_account_foreign_key_for_non_sqlite():
+    migration_text = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "0003_accounts_and_session_metadata.py"
+    ).read_text(encoding="utf-8")
+
+    assert "fk_player_sessions_account_id" in migration_text
+    assert "create_foreign_key" in migration_text
+    assert "drop_constraint" in migration_text
+    assert 'bind.dialect.name != "sqlite"' in migration_text
+
+
 def test_wait_for_database_retries_transient_operational_errors(monkeypatch):
     sleeps: list[float] = []
 

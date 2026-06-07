@@ -24,7 +24,7 @@ services:
     command: uvicorn kyrgame.webapp:create_app --factory --host 0.0.0.0 --port 8000
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-kyrgame}:${POSTGRES_PASSWORD:-kyrgame}@db:5432/${POSTGRES_DB:-kyrgame}
-      KYRGAME_ADMIN_TOKEN: ${KYRGAME_ADMIN_TOKEN:-dev-admin-token}
+      KYRGAME_ADMIN_TOKEN: ${KYRGAME_ADMIN_TOKEN:-}
       KYRGAME_ADMIN_ALLOWLIST_PATH: ${KYRGAME_ADMIN_ALLOWLIST_PATH:-/config/admin-allowlist.yaml}
       KYRGAME_CORS_ORIGINS: ${KYRGAME_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       KYRGAME_RESET_ON_BOOT: ${KYRGAME_RESET_ON_BOOT:-0}
@@ -54,6 +54,7 @@ services:
       VITE_WS_URL: ${VITE_WS_URL:-}
       KYRGAME_ALLOW_CLOUDFLARE_TUNNEL: ${KYRGAME_ALLOW_CLOUDFLARE_TUNNEL:-0}
       KYRGAME_BACKEND_PROXY_TARGET: ${KYRGAME_BACKEND_PROXY_TARGET:-http://backend:8000}
+      KYRGAME_VITE_ALLOWED_HOSTS: ${KYRGAME_VITE_ALLOWED_HOSTS:-willow.eventscripts.com}
       KYRGAME_VITE_USE_POLLING: ${KYRGAME_VITE_USE_POLLING:-1}
     ports:
       - "${FRONTEND_PORT:-5173}:5173"

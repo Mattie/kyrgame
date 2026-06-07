@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -7,7 +8,7 @@ from sqlalchemy import select
 from starlette.websockets import WebSocketState
 
 from kyrgame import models, repositories
-from kyrgame.webapp import _publish_scry_event, create_app
+from kyrgame.webapp import _load_account_admin_grants, _publish_scry_event, create_app
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -177,6 +178,44 @@ admins:
 
 
 @pytest.mark.anyio
+async def test_allowlisted_game_session_token_cannot_use_admin_endpoints(
+    monkeypatch, tmp_path, account_env
+):
+    allowlist_path = tmp_path / "admin-allowlist.yaml"
+    allowlist_path.write_text(
+        """
+admins:
+  opal:
+    roles: [player_admin]
+    flags: [allow_delete_players]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KYRGAME_ADMIN_ALLOWLIST_PATH", str(allowlist_path))
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            registered = await client.post(
+                "/auth/register",
+                json={
+                    "userid": "Opal",
+                    "password": "correct horse battery staple",
+                    "session_kind": "game",
+                },
+            )
+            token = registered.json()["session"]["token"]
+            admin_resp = await client.get("/admin/players", headers=_auth(token))
+
+        assert registered.status_code == 201
+        assert registered.json()["session"]["session_kind"] == "game"
+        assert registered.json()["session"]["admin_grants"] == {"roles": [], "flags": []}
+        assert admin_resp.status_code == 403
+
+
+@pytest.mark.anyio
 async def test_non_allowlisted_admin_login_cannot_use_admin_endpoints(account_env):
     app = create_app()
     transport = httpx.ASGITransport(app=app)
@@ -197,6 +236,36 @@ async def test_non_allowlisted_admin_login_cannot_use_admin_endpoints(account_en
         assert registered.status_code == 201
         assert registered.json()["session"]["admin_grants"] == {"roles": [], "flags": []}
         assert admin_resp.status_code == 403
+
+
+def test_admin_allowlist_filters_non_string_roles_and_flags(monkeypatch, tmp_path):
+    allowlist_path = tmp_path / "admin-allowlist.yaml"
+    allowlist_path.write_text(
+        """
+admins:
+  Opal:
+    roles:
+      - player_admin
+      - {bad: value}
+      - 42
+      - " content_admin "
+    flags: allow_delete_players
+  Broken:
+    roles:
+      nested: value
+    flags:
+      - [bad]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KYRGAME_ADMIN_ALLOWLIST_PATH", str(allowlist_path))
+
+    grants = _load_account_admin_grants()
+
+    assert grants["opal"].roles == {"player_admin", "content_admin"}
+    assert grants["opal"].flags == {"allow_delete_players"}
+    assert grants["broken"].roles == set()
+    assert grants["broken"].flags == set()
 
 
 @pytest.mark.anyio
@@ -223,6 +292,27 @@ async def test_telemetry_records_player_input_output_events(monkeypatch, tmp_pat
     lines = [json.loads(line) for line in log_files[0].read_text(encoding="utf-8").splitlines()]
     assert [line["event_type"] for line in lines] == ["input", "output"]
     assert lines[0]["payload"] == {"command": "look"}
+
+
+@pytest.mark.anyio
+async def test_telemetry_record_offloads_disk_write_to_worker_thread(monkeypatch, tmp_path):
+    from kyrgame import telemetry
+    from kyrgame.telemetry import TelemetryEventSink
+
+    to_thread_calls = []
+
+    async def fake_to_thread(func, *args, **kwargs):
+        to_thread_calls.append((func, args, kwargs))
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(telemetry, "asyncio", SimpleNamespace(to_thread=fake_to_thread), raising=False)
+    sink = TelemetryEventSink(tmp_path / "telemetry")
+
+    await sink.record(userid="Hero", event_type="input", payload={"command": "look"})
+
+    assert len(to_thread_calls) == 1
+    log_file = tmp_path / "telemetry" / "hero.jsonl"
+    assert log_file.exists()
 
 
 @pytest.mark.anyio

@@ -5,7 +5,7 @@ This runbook keeps the local Docker Desktop alpha stack running with the named C
 Run commands from the repository root:
 
 ```powershell
-Set-Location -LiteralPath 'C:\Users\matti\Documents\kyrgame'
+Set-Location -LiteralPath '<path-to-kyrgame>'
 ```
 
 ## URLs
@@ -26,11 +26,14 @@ Expected local values:
 CLOUDFLARE_TUNNEL_TOKEN=<token from Cloudflare>
 KYRGAME_ALLOW_CLOUDFLARE_TUNNEL=1
 KYRGAME_BACKEND_PROXY_TARGET=http://backend:8000
+KYRGAME_VITE_ALLOWED_HOSTS=willow.eventscripts.com
+KYRGAME_ADMIN_TOKEN=<private admin token, if emergency token auth is needed>
 VITE_API_BASE_URL=
 VITE_WS_URL=
 ```
 
 The blank `VITE_API_BASE_URL` and `VITE_WS_URL` make the browser use same-origin paths. Vite proxies backend HTTP and WebSocket routes to the backend container.
+Keep `KYRGAME_ADMIN_TOKEN` blank unless a private emergency token is needed. Account-backed admin login should use the private admin allowlist file mounted through `local-docker/admin-allowlist.yaml`.
 
 ## Start Or Recreate The Alpha Stack
 
@@ -40,11 +43,14 @@ Use the private env file every time the tunnel profile is involved:
 docker compose --env-file .env.docker.local -p kyrgame-local --profile tunnel up -d --build
 ```
 
-Equivalent Make wrapper:
+Equivalent Make wrappers:
 
 ```powershell
+make ENV_FILE=.env.docker.local up
 make ENV_FILE=.env.docker.local tunnel-up
 ```
+
+Run `up` first for the database, backend, and frontend. Run `tunnel-up` after those services are healthy to attach `cloudflared` to the frontend network namespace.
 
 The Compose services use `restart: unless-stopped`, so Docker Desktop will keep them running after ordinary process exits and restart them when Docker starts again, unless the containers were explicitly stopped.
 
@@ -163,12 +169,13 @@ Remove the database and app data volumes only when an alpha reset is intentional
 docker compose --env-file .env.docker.local -p kyrgame-local --profile tunnel down -v
 ```
 
-## Local Dev Server Registry
+## Local Port Checks
 
-The running alpha ports should be tracked by the shared local-dev-servers registry:
+Confirm Docker owns the expected local ports:
 
 ```powershell
-python.exe C:\Users\matti\.agents\skills\local-dev-servers\scripts\devservers.py status --refresh --scan-ports
+docker compose --env-file .env.docker.local -p kyrgame-local ps
+Get-NetTCPConnection -LocalPort 8000,5173 -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess
 ```
 
 The expected tracked ports are:

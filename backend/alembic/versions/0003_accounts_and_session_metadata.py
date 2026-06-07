@@ -23,6 +23,10 @@ def _column_names(bind, table_name: str) -> set[str]:
     return {column["name"] for column in sa.inspect(bind).get_columns(table_name)}
 
 
+def _foreign_key_names(bind, table_name: str) -> set[str | None]:
+    return {fk["name"] for fk in sa.inspect(bind).get_foreign_keys(table_name)}
+
+
 def upgrade():
     bind = op.get_bind()
     tables = _table_names(bind)
@@ -55,6 +59,7 @@ def upgrade():
             sa.UniqueConstraint("userid_norm", name="uq_accounts_userid_norm"),
         )
         op.create_index(op.f("ix_accounts_userid_norm"), "accounts", ["userid_norm"], unique=True)
+        tables.add("accounts")
 
     columns = _column_names(bind, "player_sessions")
     if "account_id" not in columns:
@@ -64,6 +69,21 @@ def upgrade():
             "player_sessions",
             ["account_id"],
             unique=False,
+        )
+        columns.add("account_id")
+    if (
+        bind.dialect.name != "sqlite"
+        and "accounts" in tables
+        and "account_id" in columns
+        and "fk_player_sessions_account_id" not in _foreign_key_names(bind, "player_sessions")
+    ):
+        op.create_foreign_key(
+            "fk_player_sessions_account_id",
+            "player_sessions",
+            "accounts",
+            ["account_id"],
+            ["id"],
+            ondelete="SET NULL",
         )
     if "session_kind" not in columns:
         op.add_column(
@@ -88,6 +108,16 @@ def downgrade():
         if "session_kind" in columns:
             op.drop_column("player_sessions", "session_kind")
         if "account_id" in columns:
+            if (
+                bind.dialect.name != "sqlite"
+                and "fk_player_sessions_account_id"
+                in _foreign_key_names(bind, "player_sessions")
+            ):
+                op.drop_constraint(
+                    "fk_player_sessions_account_id",
+                    "player_sessions",
+                    type_="foreignkey",
+                )
             op.drop_index(op.f("ix_player_sessions_account_id"), table_name="player_sessions")
             op.drop_column("player_sessions", "account_id")
 

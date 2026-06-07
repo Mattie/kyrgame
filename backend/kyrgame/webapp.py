@@ -382,10 +382,20 @@ def _load_account_admin_grants() -> dict[str, AdminGrant]:
     for userid, settings in admins.items():
         if not isinstance(settings, dict):
             continue
-        roles = set(settings.get("roles", []))
-        flags = set(settings.get("flags", []))
+        roles = _admin_grant_string_set(settings.get("roles", []))
+        flags = _admin_grant_string_set(settings.get("flags", []))
         grants[accounts.normalize_userid(str(userid))] = AdminGrant(roles=roles, flags=flags)
     return grants
+
+
+def _admin_grant_string_set(value: object) -> set[str]:
+    if isinstance(value, str):
+        candidates = [value]
+    elif isinstance(value, (list, tuple, set)):
+        candidates = value
+    else:
+        return set()
+    return {item.strip() for item in candidates if isinstance(item, str) and item.strip()}
 
 
 def _account_grant_for_token(app: FastAPI, token: str) -> tuple[AdminGrant | None, bool]:
@@ -397,6 +407,8 @@ def _account_grant_for_token(app: FastAPI, token: str) -> tuple[AdminGrant | Non
         session_record = repositories.PlayerSessionRepository(db).get_by_token(token)
         if session_record is None or session_record.account_id is None:
             return None, session_record is not None
+        if session_record.session_kind != SESSION_KIND_ADMIN:
+            return None, True
         account = db.get(models.Account, session_record.account_id)
         if account is None:
             return None, True

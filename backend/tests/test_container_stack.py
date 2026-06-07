@@ -24,6 +24,7 @@ def test_compose_dev_stack_wires_backend_frontend_postgres_and_tunnel_profile():
     assert "--reload" not in services["backend"]["command"]
     assert "postgresql+psycopg://" in services["backend"]["environment"]["DATABASE_URL"]
     assert "@db:5432/" in services["backend"]["environment"]["DATABASE_URL"]
+    assert services["backend"]["environment"]["KYRGAME_ADMIN_TOKEN"] == "${KYRGAME_ADMIN_TOKEN:-}"
     assert services["backend"]["environment"]["KYRGAME_ADMIN_ALLOWLIST_PATH"]
     assert services["backend"]["environment"]["KYRGAME_TELEMETRY_DIR"] == "${KYRGAME_TELEMETRY_DIR:-/data/telemetry}"
     assert services["backend"]["environment"]["KYRGAME_DB_CONNECT_ATTEMPTS"] == "${KYRGAME_DB_CONNECT_ATTEMPTS:-30}"
@@ -37,6 +38,9 @@ def test_compose_dev_stack_wires_backend_frontend_postgres_and_tunnel_profile():
     assert services["frontend"]["environment"]["VITE_WS_URL"] == "${VITE_WS_URL:-}"
     assert services["frontend"]["environment"]["KYRGAME_BACKEND_PROXY_TARGET"] == (
         "${KYRGAME_BACKEND_PROXY_TARGET:-http://backend:8000}"
+    )
+    assert services["frontend"]["environment"]["KYRGAME_VITE_ALLOWED_HOSTS"] == (
+        "${KYRGAME_VITE_ALLOWED_HOSTS:-willow.eventscripts.com}"
     )
     assert services["frontend"]["environment"]["KYRGAME_VITE_USE_POLLING"] == "${KYRGAME_VITE_USE_POLLING:-1}"
 
@@ -63,6 +67,9 @@ def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     assert "http://backend:8000" in text
     assert "^/(auth|admin|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|$)" in text
     assert "ws: true" in text
+    assert "KYRGAME_VITE_ALLOWED_HOSTS" in text
+    assert "allowedHosts: tunnelAllowedHosts" in text
+    assert "allowedHosts: true" not in text
 
 
 def test_root_docker_env_example_includes_local_only_admin_and_tunnel_controls():
@@ -73,8 +80,11 @@ def test_root_docker_env_example_includes_local_only_admin_and_tunnel_controls()
     assert "KYRGAME_DB_CONNECT_ATTEMPTS=30" in text
     assert "KYRGAME_DB_CONNECT_RETRY_SECONDS=1" in text
     assert "KYRGAME_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173" in text
+    assert "KYRGAME_ADMIN_TOKEN=\n" in text
+    assert "dev-admin-token" not in text
     assert "CLOUDFLARE_TUNNEL_TOKEN=" in text
     assert "KYRGAME_BACKEND_PROXY_TARGET=http://backend:8000" in text
+    assert "KYRGAME_VITE_ALLOWED_HOSTS=willow.eventscripts.com" in text
     assert "KYRGAME_VITE_USE_POLLING=1" in text
     assert "VITE_API_BASE_URL=\n" in text
     assert "VITE_WS_URL=\n" in text
@@ -90,6 +100,17 @@ def test_makefile_exposes_documented_ops_targets():
     assert "$(COMPOSE) --env-file $(ENV_FILE) --profile tunnel up -d cloudflared" in text
     assert "-m kyrgame.scripts.seed_db" in text
     assert "-m kyrgame.scripts.package_content" in text
+
+
+def test_alpha_runbook_uses_portable_paths_and_distinct_tunnel_steps():
+    text = (REPO_ROOT / "docs" / "ALPHA_TESTING_RUNBOOK.md").read_text(encoding="utf-8")
+
+    assert "C:\\Users\\matti" not in text
+    assert ".agents\\skills\\local-dev-servers" not in text
+    assert "Set-Location -LiteralPath '<path-to-kyrgame>'" in text
+    assert "make ENV_FILE=.env.docker.local up" in text
+    assert "make ENV_FILE=.env.docker.local tunnel-up" in text
+    assert "docker compose --env-file .env.docker.local -p kyrgame-local ps" in text
 
 
 def test_root_dockerignore_keeps_local_credentials_and_build_outputs_out_of_context():

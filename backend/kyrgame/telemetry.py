@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -43,13 +44,19 @@ class TelemetryEventSink:
         if self.root is None:
             return
 
-        self.root.mkdir(parents=True, exist_ok=True)
-        target = self.root / f"{_safe_userid_filename(userid)}.jsonl"
         event = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "userid": userid,
             "event_type": event_type,
             "payload": _redacted_payload(payload),
         }
+        await asyncio.to_thread(self._write_event, userid, event)
+
+    def _write_event(self, userid: str, event: dict[str, Any]) -> None:
+        if self.root is None:
+            return
+
+        self.root.mkdir(parents=True, exist_ok=True)
+        target = self.root / f"{_safe_userid_filename(userid)}.jsonl"
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event, sort_keys=True) + "\n")
