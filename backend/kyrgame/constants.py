@@ -28,7 +28,8 @@ STUMPI_MAX = 12
 MACROS_MIN = 0
 MACROS_MAX = 19
 BIRTHSTONE_MIN = 0
-BIRTHSTONE_MAX = 12
+# initgp() calls genrdn(0,12), whose upper bound is exclusive in legacy call sites.
+BIRTHSTONE_MAX = 11
 SPELL_ID_MIN = 0
 SPELL_ID_MAX = NGSPLS - 1
 

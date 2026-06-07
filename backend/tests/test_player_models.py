@@ -57,6 +57,14 @@ def test_player_model_rejects_spell_ids_out_of_range():
         models.PlayerModel(**payload)
 
 
+def test_player_model_rejects_elixir_as_birthstone():
+    payload = _player_payload()
+    payload["stones"] = [0, 1, 2, 12]
+
+    with pytest.raises(ValidationError):
+        models.PlayerModel(**payload)
+
+
 def test_player_model_rejects_spell_slot_overflow():
     payload = _player_payload()
     payload["spells"] = list(range(constants.MAXSPL + 1))
