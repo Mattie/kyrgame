@@ -973,6 +973,11 @@ def _matches_player_name(target: str, player: models.PlayerModel) -> bool:
     return _legacy_prefix_match(target_lower, player.attnam)
 
 
+def _matches_self_look_target(target: str, player: models.PlayerModel) -> bool:
+    # Self look also accepts the exact true Player-ID so transformed players can inspect themselves.
+    return _matches_player_name(target, player) or target.strip().lower() == player.plyrid.lower()
+
+
 def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> bool:
     if target is viewer:
         return True
@@ -2820,7 +2825,7 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
             return CommandResult(state=state, events=events)
 
         target_player = None
-        if _matches_player_name(raw, state.player):
+        if _matches_self_look_target(raw, state.player):
             target_player = state.player
         elif state.presence and state.player_lookup:
             occupants = await _ordered_players_in_room(state, state.player.gamloc)

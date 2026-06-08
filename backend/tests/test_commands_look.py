@@ -277,6 +277,27 @@ async def test_look_self_allows_invisible_description():
 
 
 @pytest.mark.anyio
+async def test_look_self_allows_true_id_when_transformed():
+    player = _build_player(
+        plyrid="necro",
+        altnam="Some willowisp",
+        attnam="willowisp",
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    state = _build_state(player, [])
+    location = state.locations[player.gamloc]
+    state.locations[player.gamloc] = location.model_copy(update={"objects": [], "nlobjs": 0})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "necro"}, state)
+
+    message_ids = {event.get("message_id") for event in result.events}
+    assert "WILDES" in message_ids
+    assert "KRD000" not in message_ids
+
+
+@pytest.mark.anyio
 async def test_look_invisible_player_falls_back_to_room_description():
     other = _build_player(
         plyrid="ghost",
