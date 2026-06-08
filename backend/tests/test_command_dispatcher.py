@@ -209,6 +209,11 @@ def test_command_vocabulary_normalizes_articles_and_prepositions_for_non_chat():
     assert parsed.verb == "put"
     assert parsed.args["raw"] == "sword rock"
 
+    parsed = vocabulary.parse_text("put key in crevice")
+
+    assert parsed.verb == "put"
+    assert parsed.args["raw"] == "key crevice"
+
 
 def test_command_vocabulary_preserves_chat_text():
     vocabulary = commands.CommandVocabulary(

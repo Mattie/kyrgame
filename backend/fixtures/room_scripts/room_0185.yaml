@@ -2,12 +2,12 @@
 id: 185
 name: waller
 spoiler_summary: "Sealed wall with a crevice that opens after the opensesame chant."
-spoiler_interaction: "Chant opensesame to awaken the wall; drop the key into the crevice to teleport in a golden flash."
+spoiler_interaction: "Chant opensesame to awaken the wall; drop/insert/put/stick/thrust the key into the crevice to teleport in a golden flash."
 legacy_ref: "legacy/KYRROUS.C:939-960"
 state:
   sesame: 0
 triggers:
-  - verbs: [drop, throw, toss]
+  - verbs: [drop, insert, put, stick, thrust]
     arg_at: {index: 1, value: crevice}
     actions:
       - type: conditional
