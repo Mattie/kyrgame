@@ -14,6 +14,19 @@ class FakePresence:
         return set(self.rooms.get(room_id, set()))
 
 
+class ReverseIterSet(set):
+    def __iter__(self):
+        return iter(sorted(list(super().__iter__()), reverse=True))
+
+
+class ReversePresence:
+    def __init__(self, occupants: set[str]):
+        self.occupants = ReverseIterSet(occupants)
+
+    async def players_in_room(self, room_id: int) -> set[str]:  # noqa: ARG002
+        return self.occupants
+
+
 def _build_state(player, other_players):
     locations = {location.id: location for location in fixtures.load_locations()}
     objects = {obj.id: obj for obj in fixtures.load_objects()}
@@ -299,6 +312,35 @@ async def test_get_resolves_visible_player_before_room_object_by_legacy_prefix_m
     assert 2 not in state.player.gpobjs
     assert result.events[0]["message_id"] == "GETLOC1"
     assert "Galen Alt" in result.events[0]["text"]
+
+
+@pytest.mark.anyio
+async def test_get_prefix_player_match_uses_deterministic_occupant_order():
+    alice = _build_player(
+        plyrid="alice",
+        attnam="Alaric",
+        altnam="Alaric Alt",
+    )
+    zara = _build_player(
+        plyrid="zara",
+        attnam="Alice",
+        altnam="Alice Alt",
+    )
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [alice, zara])
+    state.presence = ReversePresence({player.plyrid, alice.plyrid, zara.plyrid})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("grab", {"target": "al", "verb": "grab"}, state)
+
+    target_event = next(event for event in result.events if event.get("message_id") == "GETLOC2")
+    assert target_event["player"] == "alice"
 
 
 @pytest.mark.anyio

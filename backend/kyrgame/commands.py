@@ -674,7 +674,7 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
     location = state.locations[state.player.gamloc]
     objects = state.objects or {}
     if state.presence and state.player_lookup:
-        occupants = await state.presence.players_in_room(location.id)
+        occupants = await _ordered_players_in_room(state, location.id)
         target_player = None
         for occupant_id in occupants:
             if occupant_id == state.player.plyrid:
@@ -986,12 +986,20 @@ def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> b
     return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
 
 
+async def _ordered_players_in_room(state: GameState, room_id: int) -> list[str]:
+    if not state.presence:
+        return []
+    # Legacy findgp scans a stable gmparr; the port's presence layer exposes a set,
+    # so sort ids before first-hit prefix matching. See legacy/KYRUTIL.C:472-484.
+    return sorted(await state.presence.players_in_room(room_id))
+
+
 async def _find_player_by_name(
     state: GameState, target_name: str, *, include_self: bool = True
 ) -> models.PlayerModel | None:
     if not state.presence or not state.player_lookup:
         return None
-    occupants = await state.presence.players_in_room(state.player.gamloc)
+    occupants = await _ordered_players_in_room(state, state.player.gamloc)
     for occupant_id in occupants:
         candidate = state.player_lookup(occupant_id)
         if not candidate:
@@ -1025,7 +1033,7 @@ async def _find_player_in_room(
 ) -> models.PlayerModel | None:
     if not state.presence or not state.player_lookup:
         return None
-    occupants = await state.presence.players_in_room(state.player.gamloc)
+    occupants = await _ordered_players_in_room(state, state.player.gamloc)
     for occupant_id in occupants:
         candidate = state.player_lookup(occupant_id)
         # Legacy findgp() only returns attnam matches that pass ckinvs() visibility checks.
@@ -2817,7 +2825,7 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
         if _matches_player_name(raw, state.player):
             target_player = state.player
         elif state.presence and state.player_lookup:
-            occupants = await state.presence.players_in_room(state.player.gamloc)
+            occupants = await _ordered_players_in_room(state, state.player.gamloc)
             for occupant_id in occupants:
                 if occupant_id == state.player.plyrid:
                     continue
