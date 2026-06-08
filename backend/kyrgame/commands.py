@@ -674,13 +674,15 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
     location = state.locations[state.player.gamloc]
     objects = state.objects or {}
     if state.presence and state.player_lookup:
-        occupants = await state.presence.players_in_room(location.id)
+        occupants = await _ordered_players_in_room(state, location.id)
         target_player = None
         for occupant_id in occupants:
-            if occupant_id == state.player.plyrid:
-                continue
             candidate = state.player_lookup(occupant_id)
-            if candidate and _matches_player_name(target, candidate):
+            if (
+                candidate
+                and _matches_player_name(target, candidate)
+                and _can_see_player(state.player, candidate)
+            ):
                 target_player = candidate
                 break
         if target_player:
@@ -708,9 +710,10 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
                 ],
             )
 
-    object_id = _find_object_in_location(location, objects, target)
-    if object_id is None:
+    object_index = _find_object_slot_in_location(location, objects, target)
+    if object_index is None:
         raise CommandError(f"No {target} here", message_id=message_id)
+    object_id = location.objects[object_index]
 
     if len(state.player.gpobjs) >= constants.MXPOBS:
         raise CommandError("You cannot carry any more", message_id=message_id)
@@ -739,7 +742,14 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
             ],
         )
 
-    remaining_objects = [oid for oid in location.objects if oid != object_id]
+    # Legacy fgmlobj records objno, then getloc calls tgmlobj(objno), which
+    # removes one lcobjs slot via taklobj. See legacy/KYRCMDS.C:713-730 and
+    # legacy/KYRUTIL.C:568-582.
+    remaining_objects = list(location.objects)
+    last_index = len(remaining_objects) - 1
+    if object_index != last_index:
+        remaining_objects[object_index] = remaining_objects[last_index]
+    remaining_objects.pop()
     location = location.model_copy(
         update={"objects": remaining_objects, "nlobjs": len(remaining_objects)}
     )
@@ -957,25 +967,10 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
     )
 
 
-def _matches_player_name(
-    target: str,
-    player: models.PlayerModel,
-    *,
-    viewer: models.PlayerModel | None = None,
-) -> bool:
-    target_lower = target.lower()
+def _matches_player_name(target: str, player: models.PlayerModel) -> bool:
+    target_lower = target.strip().lower()
     # Legacy: findgp matches against attnam only (KYRUTIL.C 472-484).
-    if target_lower == player.attnam.lower():
-        return True
-    # Legacy whoub (spl065) reveals true plyrid while FIRPRO is active on the viewer
-    # for ALTNAM-masked targets (legacy/KYRSPEL.C:1208-1223).
-    if (
-        viewer
-        and viewer.charms[constants.CharmSlot.FIRE_PROTECTION] > 0
-        and player.charms[constants.CharmSlot.ALTERNATE_NAME] > 0
-    ):
-        return target_lower == player.plyrid.lower()
-    return False
+    return _legacy_prefix_match(target_lower, player.attnam)
 
 
 def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> bool:
@@ -989,19 +984,27 @@ def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> b
     return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
 
 
+async def _ordered_players_in_room(state: GameState, room_id: int) -> list[str]:
+    if not state.presence:
+        return []
+    # Legacy findgp scans a stable gmparr; the port's presence layer exposes a set,
+    # so sort ids before first-hit prefix matching. See legacy/KYRUTIL.C:472-484.
+    return sorted(await state.presence.players_in_room(room_id))
+
+
 async def _find_player_by_name(
     state: GameState, target_name: str, *, include_self: bool = True
 ) -> models.PlayerModel | None:
     if not state.presence or not state.player_lookup:
         return None
-    occupants = await state.presence.players_in_room(state.player.gamloc)
+    occupants = await _ordered_players_in_room(state, state.player.gamloc)
     for occupant_id in occupants:
         candidate = state.player_lookup(occupant_id)
         if not candidate:
             continue
         if not include_self and candidate.plyrid == state.player.plyrid:
             continue
-        if _matches_player_name(target_name, candidate, viewer=state.player) and _can_see_player(
+        if _matches_player_name(target_name, candidate) and _can_see_player(
             state.player, candidate
         ):
             return candidate
@@ -1028,12 +1031,16 @@ async def _find_player_in_room(
 ) -> models.PlayerModel | None:
     if not state.presence or not state.player_lookup:
         return None
-    occupants = await state.presence.players_in_room(state.player.gamloc)
+    occupants = await _ordered_players_in_room(state, state.player.gamloc)
     for occupant_id in occupants:
         candidate = state.player_lookup(occupant_id)
         # Legacy findgp() only returns attnam matches that pass ckinvs() visibility checks.
         # (legacy/KYRUTIL.C:472-478)
-        if candidate and _matches_player_name(target_name, candidate, viewer=state.player) and _can_see_player(state.player, candidate):
+        if (
+            candidate
+            and _matches_player_name(target_name, candidate)
+            and _can_see_player(state.player, candidate)
+        ):
             return candidate
     return None
 
@@ -2813,17 +2820,17 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
             return CommandResult(state=state, events=events)
 
         target_player = None
-        if _matches_player_name(raw, state.player, viewer=state.player):
+        if _matches_player_name(raw, state.player):
             target_player = state.player
         elif state.presence and state.player_lookup:
-            occupants = await state.presence.players_in_room(state.player.gamloc)
+            occupants = await _ordered_players_in_room(state, state.player.gamloc)
             for occupant_id in occupants:
                 if occupant_id == state.player.plyrid:
                     continue
                 if target_player:
                     break
                 other = state.player_lookup(occupant_id)
-                if other and _matches_player_name(raw, other, viewer=state.player):
+                if other and _matches_player_name(raw, other):
                     if _can_see_player(state.player, other):
                         target_player = other
 
@@ -2879,7 +2886,7 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
             )
             return CommandResult(state=state, events=events)
 
-        if target == "brief":
+        if _legacy_prefix_match(target, "brief"):
             looker_text = _format_message(state, "LOOKER5", location.brfdes)
             events.append(_message_event("player", "LOOKER5", looker_text, command_id))
             events.append(
@@ -2890,7 +2897,7 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
                 events.append(occupants_event)
             return CommandResult(state=state, events=events)
 
-        if target == "spellbook":
+        if _legacy_prefix_match(target, "spellbook"):
             return _handle_spellbook(state, args)
 
     description_id, long_description = _location_description(state, location)
@@ -3262,26 +3269,39 @@ def _object_with_article(obj: models.GameObjectModel) -> str:
     return f"{article} {obj.name}"
 
 
+def _find_object_slot_in_location(
+    location: models.LocationModel, objects: dict[int, models.GameObjectModel], target: str
+) -> int | None:
+    for index, obj_id in enumerate(location.objects):
+        obj = objects.get(obj_id)
+        if obj and _legacy_prefix_match(target, obj.name):
+            return index
+    return None
+
+
 def _find_object_in_location(
     location: models.LocationModel, objects: dict[int, models.GameObjectModel], target: str
 ) -> int | None:
-    target_lower = target.lower()
-    for obj_id in location.objects:
-        obj = objects.get(obj_id)
-        if obj and obj.name.lower() == target_lower:
-            return obj_id
-    return None
+    index = _find_object_slot_in_location(location, objects, target)
+    if index is None:
+        return None
+    return location.objects[index]
 
 
 def _find_inventory_index(
     player: models.PlayerModel, target: str, objects: dict[int, models.GameObjectModel]
 ) -> int | None:
-    target_lower = target.lower()
     for idx, obj_id in enumerate(player.gpobjs):
         obj = objects.get(obj_id)
-        if obj and obj.name.lower() == target_lower:
+        if obj and _legacy_prefix_match(target, obj.name):
             return idx
     return None
+
+
+def _legacy_prefix_match(shorts: str, longs: str) -> bool:
+    # MajorBBS sameto(shorts, longs): case-insensitive prefix matching.
+    target = shorts.strip().lower()
+    return bool(target) and longs.lower().startswith(target)
 
 
 def _handle_stub(state: GameState, args: dict) -> CommandResult:  # noqa: ARG001

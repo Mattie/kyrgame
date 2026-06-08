@@ -231,6 +231,27 @@ async def test_memorize_requires_owned_spell_and_emits_kspm09():
 
 
 @pytest.mark.anyio
+async def test_memorize_spell_name_keeps_legacy_exact_lookup():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        offspls=0,
+        defspls=0,
+        othspls=0,
+        spells=[],
+        nspells=0,
+    )
+    _set_owned_spells(player, [0])
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("memorize", {"raw": "abbr"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["KSPM09"]
+    assert state.player.spells == []
+
+
+@pytest.mark.anyio
 async def test_memorize_at_maxspl_evicts_last_slot_and_broadcasts_memspl():
     spells = fixtures.load_spells()
     overflow_spell = spells[10]

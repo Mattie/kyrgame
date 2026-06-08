@@ -8,7 +8,22 @@
 
 # Motivation & Context
 
+## Intent
+
+<!--
+Tell the story of this change first: what user-facing feature, gameplay behavior,
+workflow, or reviewable outcome are we trying to enable? Explain what is at stake
+for players, admins, maintainers, or porting parity so reviewers can judge whether
+the implementation protects the right behavior.
+-->
+
+- ...
+
+## Context
+
 - Issue / ticket: <!-- e.g. Fixes #123 -->
+- Legacy parity / constraints / related work:
+  - ...
 
 # Legacy code being ported
 

@@ -44,6 +44,19 @@ class TrackingPresence:
         return self._occupants
 
 
+class ReverseIterSet(set):
+    def __iter__(self):
+        return iter(sorted(list(super().__iter__()), reverse=True))
+
+
+class ReversePresence:
+    def __init__(self, occupants: set[str]):
+        self._occupants = ReverseIterSet(occupants)
+
+    async def players_in_room(self, room_id: int) -> set[str]:  # noqa: ARG002
+        return self._occupants
+
+
 class RoomPresence:
     def __init__(self, occupants_by_room: dict[int, set[str]]):
         self._occupants_by_room = occupants_by_room
@@ -99,6 +112,24 @@ async def test_cast_rejects_non_memorized_spells_with_broadcast():
 
     assert [event["message_id"] for event in result.events] == ["NOTMEM", "SPFAIL"]
     assert result.events[1]["exclude_player"] == state.player.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_spell_name_keeps_legacy_exact_match():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[64],
+        nspells=1,
+    )
+    state = _build_state(player)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "whou target"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["NOTMEM", "SPFAIL"]
 
 
 @pytest.mark.anyio
@@ -277,7 +308,7 @@ async def test_cast_target_missing_emits_phantom_failure():
 
 
 @pytest.mark.anyio
-async def test_cast_target_object_emits_kspm_resist_messages():
+async def test_cast_target_object_prefix_emits_kspm_resist_messages():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
         level=25,
@@ -294,7 +325,7 @@ async def test_cast_target_object_emits_kspm_resist_messages():
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
 
-    result = await dispatcher.dispatch("cast", {"raw": "bookworm pearl"}, state)
+    result = await dispatcher.dispatch("cast", {"raw": "bookworm pea"}, state)
 
     assert [event["message_id"] for event in result.events] == ["KSPM00", "KSPM01"]
 
@@ -977,6 +1008,107 @@ async def test_cast_whoub_reveals_target_true_identity():
 
 
 @pytest.mark.anyio
+async def test_cast_targeted_spell_uses_legacy_attnam_prefix_match():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[64],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="truth",
+        attnam="Mirror Mask",
+        altnam="A Willowisp",
+        gamloc=player.gamloc,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    target.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    state = _build_state(player)
+    state.presence = TrackingPresence({player.plyrid, target.plyrid})
+    state.player_lookup = lambda pid: target if pid == target.plyrid else player
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "whoub mir"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["S65M00", "S65M01", "S65M02"]
+    assert "truth" in result.events[0]["text"]
+    assert result.events[1]["player"] == target.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_prefix_player_match_uses_deterministic_occupant_order():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[64],
+        nspells=1,
+    )
+    alice = _build_player(
+        plyrid="alice",
+        attnam="Alaric",
+        altnam="A Willowisp",
+        gamloc=player.gamloc,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    zara = _build_player(
+        plyrid="zara",
+        attnam="Alice",
+        altnam="A Willowisp",
+        gamloc=player.gamloc,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    alice.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    zara.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    players = {player.plyrid: player, alice.plyrid: alice, zara.plyrid: zara}
+    state = _build_state(player)
+    state.presence = ReversePresence(set(players))
+    state.player_lookup = players.get
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "whoub al"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["S65M00", "S65M01", "S65M02"]
+    assert result.events[1]["player"] == "alice"
+
+
+@pytest.mark.anyio
+async def test_cast_true_id_does_not_bypass_legacy_attnam_matching():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        spells=[64],
+        nspells=1,
+    )
+    player.charms[constants.CharmSlot.FIRE_PROTECTION] = 3
+    target = _build_player(
+        plyrid="truth",
+        attnam="Mirror Mask",
+        altnam="A Willowisp",
+        gamloc=player.gamloc,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    target.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    state = _build_state(player)
+    state.presence = TrackingPresence({player.plyrid, target.plyrid})
+    state.player_lookup = lambda pid: target if pid == target.plyrid else player
+
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "whoub truth"}, state)
+
+    assert result.events[0]["message_id"] == "KSPM02"
+    assert result.events[1]["scope"] == "room"
+
+
+@pytest.mark.anyio
 async def test_cast_peepint_uses_legacy_global_player_lookup_for_target_notification():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
@@ -1010,6 +1142,32 @@ async def test_cast_peepint_uses_legacy_global_player_lookup_for_target_notifica
     assert result.events[1]["room_id"] == target.gamloc
     assert result.events[2]["scope"] == "room"
     assert result.events[2]["exclude_player"] == player.plyrid
+
+
+@pytest.mark.anyio
+async def test_cast_peepint_keeps_legacy_exact_true_id_lookup():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=7,
+        spells=[45],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="Target Mask",
+        altnam="Target Mask",
+        gamloc=12,
+    )
+    state = _build_state(player)
+    state.global_player_lookup = lambda name: target if name == target.plyrid else None
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("cast", {"raw": "peepint tar"}, state)
+
+    assert [event["message_id"] for event in result.events] == ["KSPM03", "KSPM07"]
 
 
 @pytest.mark.anyio

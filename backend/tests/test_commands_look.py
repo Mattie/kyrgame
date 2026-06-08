@@ -11,6 +11,19 @@ class FakePresence:
         return set(self.rooms.get(room_id, set()))
 
 
+class ReverseIterSet(set):
+    def __iter__(self):
+        return iter(sorted(list(super().__iter__()), reverse=True))
+
+
+class ReversePresence:
+    def __init__(self, occupants: set[str]):
+        self.occupants = ReverseIterSet(occupants)
+
+    async def players_in_room(self, room_id: int) -> set[str]:  # noqa: ARG002
+        return self.occupants
+
+
 def _build_state(player, other_players):
     locations = {location.id: location for location in fixtures.load_locations()}
     objects = {obj.id: obj for obj in fixtures.load_objects()}
@@ -59,6 +72,25 @@ async def test_look_room_object_emits_description_and_looker1():
 
 
 @pytest.mark.anyio
+async def test_look_room_object_uses_legacy_prefix_match():
+    player = _build_player(flags=0)
+    state = _build_state(player, [])
+    location = state.locations[player.gamloc]
+    state.locations[player.gamloc] = location.model_copy(
+        update={"objects": [2], "nlobjs": 1}
+    )
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "g"}, state)
+
+    message_ids = {event.get("message_id") for event in result.events}
+    assert "KID002" in message_ids
+    room_event = next(event for event in result.events if event.get("message_id") == "LOOKER1")
+    assert "garnet" in room_event["text"]
+
+
+@pytest.mark.anyio
 async def test_look_inventory_object_emits_description_and_looker2():
     obj_id = 1
     player = _build_player(
@@ -79,6 +111,28 @@ async def test_look_inventory_object_emits_description_and_looker2():
     assert "LOOKER2" in message_ids
     room_event = next(event for event in result.events if event.get("message_id") == "LOOKER2")
     assert room_event.get("exclude_player") == player.plyrid
+
+
+@pytest.mark.anyio
+async def test_look_inventory_object_uses_legacy_prefix_match():
+    player = _build_player(
+        flags=0,
+        gpobjs=[2],
+        obvals=[0],
+        npobjs=1,
+    )
+    state = _build_state(player, [])
+    location = state.locations[player.gamloc]
+    state.locations[player.gamloc] = location.model_copy(update={"objects": [], "nlobjs": 0})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "g"}, state)
+
+    message_ids = {event.get("message_id") for event in result.events}
+    assert "KID002" in message_ids
+    room_event = next(event for event in result.events if event.get("message_id") == "LOOKER2")
+    assert "garnet" in room_event["text"]
 
 
 @pytest.mark.anyio
@@ -109,6 +163,62 @@ async def test_look_player_emits_description_inventory_and_room_broadcasts():
     assert "LOOKER4" in message_ids
     room_event = next(event for event in result.events if event.get("message_id") == "LOOKER4")
     assert room_event.get("exclude_players") == [player.plyrid, other.plyrid]
+
+
+@pytest.mark.anyio
+async def test_look_player_uses_legacy_attnam_prefix_match():
+    other = _build_player(
+        plyrid="buddy",
+        attnam="Galen",
+        altnam="Galen Alt",
+        nmpdes=1,
+        flags=0,
+    )
+    player = _build_player(flags=0)
+    state = _build_state(player, [other])
+    location = state.locations[player.gamloc]
+    state.locations[player.gamloc] = location.model_copy(update={"objects": [], "nlobjs": 0})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "g"}, state)
+
+    description_event = next(
+        event for event in result.events if event.get("message_id") == "MDES01"
+    )
+    assert "spellbook" in description_event.get("text", "")
+    target_event = next(event for event in result.events if event.get("message_id") == "LOOKER3")
+    assert target_event["player"] == "buddy"
+
+
+@pytest.mark.anyio
+async def test_look_prefix_player_match_uses_deterministic_occupant_order():
+    alice = _build_player(
+        plyrid="alice",
+        attnam="Alaric",
+        altnam="Alaric Alt",
+        nmpdes=1,
+        flags=0,
+    )
+    zara = _build_player(
+        plyrid="zara",
+        attnam="Alice",
+        altnam="Alice Alt",
+        nmpdes=1,
+        flags=0,
+    )
+    player = _build_player(flags=0)
+    state = _build_state(player, [alice, zara])
+    state.presence = ReversePresence({player.plyrid, alice.plyrid, zara.plyrid})
+    location = state.locations[player.gamloc]
+    state.locations[player.gamloc] = location.model_copy(update={"objects": [], "nlobjs": 0})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "al"}, state)
+
+    target_event = next(event for event in result.events if event.get("message_id") == "LOOKER3")
+    assert target_event["player"] == "alice"
 
 
 @pytest.mark.anyio
@@ -265,7 +375,7 @@ async def test_look_keeps_transform_description_when_viewer_has_whoub_charm():
 
 
 @pytest.mark.anyio
-async def test_look_whoub_charm_allows_plyrid_targeting_without_changing_description_path():
+async def test_look_true_id_does_not_bypass_legacy_attnam_matching():
     other = _build_player(
         plyrid="truth",
         attnam="Mirror Mask",
@@ -282,8 +392,10 @@ async def test_look_whoub_charm_allows_plyrid_targeting_without_changing_descrip
 
     result = await dispatcher.dispatch("look", {"raw": "truth"}, state)
 
-    description_event = next(event for event in result.events if event.get("scope") == "player")
-    assert description_event["message_id"] == "WILDES"
+    description_event = next(
+        event for event in result.events if event.get("type") == "location_description"
+    )
+    assert description_event["message_id"] == "KRD000"
 
 
 @pytest.mark.anyio
@@ -310,7 +422,7 @@ async def test_look_whoub_reveal_still_requires_invisibility_visibility():
 
 
 @pytest.mark.anyio
-async def test_look_whoub_reveal_expires_when_fire_protection_timer_ends():
+async def test_look_true_id_stays_hidden_after_fire_protection_timer_changes():
     other = _build_player(
         plyrid="truth",
         attnam="Mirror Mask",
@@ -324,14 +436,10 @@ async def test_look_whoub_reveal_expires_when_fire_protection_timer_ends():
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
 
-    state.player.charms[constants.CharmSlot.FIRE_PROTECTION] = 1
-    reveal_result = await dispatcher.dispatch("look", {"raw": "truth"}, state)
-    reveal_message_ids = {event.get("message_id") for event in reveal_result.events}
-    assert "WILDES" in reveal_message_ids
-
-    state.player.charms[constants.CharmSlot.FIRE_PROTECTION] = 0
-    masked_result = await dispatcher.dispatch("look", {"raw": "truth"}, state)
-    description_event = next(
-        event for event in masked_result.events if event.get("type") == "location_description"
-    )
-    assert description_event["message_id"] == "KRD000"
+    for timer_value in (1, 0):
+        state.player.charms[constants.CharmSlot.FIRE_PROTECTION] = timer_value
+        result = await dispatcher.dispatch("look", {"raw": "truth"}, state)
+        description_event = next(
+            event for event in result.events if event.get("type") == "location_description"
+        )
+        assert description_event["message_id"] == "KRD000"

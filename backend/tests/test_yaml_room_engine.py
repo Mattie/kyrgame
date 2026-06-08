@@ -242,6 +242,23 @@ def test_buyspl_respects_prices_and_sets_spell_bits(room_engine, base_player):
     direct_texts = [evt["text"] for evt in purchase.events if evt["scope"] == "direct"]
     assert room_engine.messages.messages["BUYM02"] in direct_texts
 
+    base_player.gold = 200
+    base_player.offspls = 0
+
+    partial_purchase = room_engine.handle(
+        player=base_player,
+        room_id=9,
+        command="buy",
+        args=["za"],
+    )
+
+    assert base_player.gold == 200
+    assert not base_player.offspls
+    partial_direct_texts = [
+        evt["text"] for evt in partial_purchase.events if evt["scope"] == "direct"
+    ]
+    assert room_engine.messages.messages["BUYM04"] in partial_direct_texts
+
     base_player.gold = 10
     base_player.offspls = 0
 

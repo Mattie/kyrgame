@@ -14,6 +14,19 @@ class FakePresence:
         return set(self.rooms.get(room_id, set()))
 
 
+class ReverseIterSet(set):
+    def __iter__(self):
+        return iter(sorted(list(super().__iter__()), reverse=True))
+
+
+class ReversePresence:
+    def __init__(self, occupants: set[str]):
+        self.occupants = ReverseIterSet(occupants)
+
+    async def players_in_room(self, room_id: int) -> set[str]:  # noqa: ARG002
+        return self.occupants
+
+
 def _build_state(player, other_players):
     locations = {location.id: location for location in fixtures.load_locations()}
     objects = {obj.id: obj for obj in fixtures.load_objects()}
@@ -121,6 +134,114 @@ async def test_get_pickup_emits_room_broadcast_getloc7():
 
 
 @pytest.mark.anyio
+async def test_get_resolves_room_object_by_legacy_prefix_match():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    location = _place_object_in_room(state, 2)  # garnet
+    assert state.objects[location.objects[0]].name == "garnet"
+
+    result = await dispatcher.dispatch("grab", {"target": "g", "verb": "grab"}, state)
+
+    assert 2 in state.player.gpobjs
+    assert 2 not in state.locations[player.gamloc].objects
+    room_event = next(event for event in result.events if event.get("message_id") == "GETLOC7")
+    assert "garnet" in room_event["text"]
+
+
+def test_legacy_prefix_match_ignores_blank_targets():
+    assert commands._legacy_prefix_match("   ", "garnet") is False
+
+
+@pytest.mark.anyio
+async def test_get_prefix_removes_only_first_duplicate_room_object_slot():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    location = state.locations[player.gamloc]
+    updated = location.model_copy(update={"objects": [2, 2, 2, 2], "nlobjs": 4})
+    state.locations[location.id] = updated
+
+    result = await dispatcher.dispatch("grab", {"target": "g", "verb": "grab"}, state)
+
+    assert state.player.gpobjs == [2]
+    assert state.locations[player.gamloc].objects == [2, 2, 2]
+    room_objects = next(event for event in result.events if event.get("type") == "room_objects")
+    assert room_objects["objects"] == [
+        {"id": 2, "name": "garnet"},
+        {"id": 2, "name": "garnet"},
+        {"id": 2, "name": "garnet"},
+    ]
+
+
+@pytest.mark.anyio
+async def test_get_prefix_uses_legacy_slot_swap_for_mixed_room_objects():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    location = state.locations[player.gamloc]
+    updated = location.model_copy(update={"objects": [2, 0, 1], "nlobjs": 3})
+    state.locations[location.id] = updated
+
+    result = await dispatcher.dispatch("grab", {"target": "g", "verb": "grab"}, state)
+
+    assert state.player.gpobjs == [2]
+    assert state.locations[player.gamloc].objects == [1, 0]
+    room_objects = next(event for event in result.events if event.get("type") == "room_objects")
+    assert [obj["id"] for obj in room_objects["objects"]] == [1, 0]
+
+
+@pytest.mark.anyio
+async def test_get_true_id_does_not_bypass_legacy_attnam_matching():
+    other = _build_player(
+        plyrid="truth",
+        attnam="Mirror Mask",
+        altnam="A Willowisp",
+        gamloc=0,
+        flags=int(constants.PlayerFlag.WILLOW),
+    )
+    other.charms[constants.CharmSlot.ALTERNATE_NAME] = 6
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    player.charms[constants.CharmSlot.FIRE_PROTECTION] = 3
+    state = _build_state(player, [other])
+    location = state.locations[player.gamloc]
+    state.locations[player.gamloc] = location.model_copy(update={"objects": [], "nlobjs": 0})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    with pytest.raises(commands.CommandError) as exc_info:
+        await dispatcher.dispatch("grab", {"target": "truth", "verb": "grab"}, state)
+
+    assert str(exc_info.value) == "No truth here"
+
+
+@pytest.mark.anyio
 async def test_get_non_pickup_emits_room_broadcast_getloc5():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
@@ -166,6 +287,83 @@ async def test_get_player_target_emits_room_broadcast_excluding_target():
     room_event = next(event for event in result.events if event.get("message_id") == "GETLOC3")
     assert room_event.get("exclude_player") == other.plyrid
     assert room_event.get("exclude_players") == [player.plyrid, other.plyrid]
+
+
+@pytest.mark.anyio
+async def test_get_resolves_visible_player_before_room_object_by_legacy_prefix_match():
+    other = _build_player(
+        plyrid="guest",
+        attnam="Galen",
+        altnam="Galen Alt",
+    )
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [other])
+    _place_object_in_room(state, 2)  # garnet
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("grab", {"target": "g", "verb": "grab"}, state)
+
+    assert 2 not in state.player.gpobjs
+    assert result.events[0]["message_id"] == "GETLOC1"
+    assert "Galen Alt" in result.events[0]["text"]
+
+
+@pytest.mark.anyio
+async def test_get_resolves_self_prefix_before_room_object_by_legacy_findgp_order():
+    player = _build_player(
+        attnam="Galen",
+        altnam="Galen Alt",
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [])
+    _place_object_in_room(state, 2)  # garnet
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("grab", {"target": "g", "verb": "grab"}, state)
+
+    assert state.player.gpobjs == []
+    assert state.locations[player.gamloc].objects == [2]
+    assert result.events[0]["message_id"] == "GETLOC1"
+    assert "Galen Alt" in result.events[0]["text"]
+
+
+@pytest.mark.anyio
+async def test_get_prefix_player_match_uses_deterministic_occupant_order():
+    alice = _build_player(
+        plyrid="alice",
+        attnam="Alaric",
+        altnam="Alaric Alt",
+    )
+    zara = _build_player(
+        plyrid="zara",
+        attnam="Alice",
+        altnam="Alice Alt",
+    )
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [alice, zara])
+    state.presence = ReversePresence({player.plyrid, alice.plyrid, zara.plyrid})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("grab", {"target": "al", "verb": "grab"}, state)
+
+    target_event = next(event for event in result.events if event.get("message_id") == "GETLOC2")
+    assert target_event["player"] == "alice"
 
 
 @pytest.mark.anyio

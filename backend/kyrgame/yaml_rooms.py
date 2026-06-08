@@ -582,13 +582,21 @@ class YamlRoomEngine:
         target_idx = action.get("target_arg", 0)
         requested = args[target_idx].lower() if len(args) > target_idx else None
 
-        stock = {entry["name"].lower(): entry["price"] for entry in action.get("stock", [])}
-        if not requested or requested not in stock or requested not in self.spells_by_name:
+        stock_entries = action.get("stock", [])
+        stock = {entry["name"].lower(): entry["price"] for entry in stock_entries}
+        matched_name = (
+            self._legacy_spell_purchase_key(requested, stock.keys()) if requested else None
+        )
+        if (
+            not matched_name
+            or matched_name not in stock
+            or matched_name not in self.spells_by_name
+        ):
             self._execute_actions(action.get("missing", []), player, [], context, events, room_id)
             return
 
-        price = stock[requested]
-        spell = self.spells_by_name[requested]
+        price = stock[matched_name]
+        spell = self.spells_by_name[matched_name]
         if player.gold < price:
             self._execute_actions(
                 action.get("insufficient", []), player, [], context, events, room_id
@@ -602,6 +610,17 @@ class YamlRoomEngine:
         context["spell_price"] = price
         context["spell_name"] = spell.name
         self._execute_actions(action.get("success", []), player, [], context, events, room_id)
+
+    @staticmethod
+    def _legacy_spell_purchase_key(input_text: str, keys: Iterable[str]) -> str | None:
+        # Legacy buyspl calls sameto(stocked spell name, input). See legacy/KYRROUS.C:249-250.
+        target = input_text.strip().lower()
+        if not target:
+            return None
+        for key in keys:
+            if target.startswith(key.lower()):
+                return key
+        return None
 
     def _action_level_gate(
         self,
