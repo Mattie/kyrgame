@@ -72,7 +72,7 @@
 - [x] Aligned targeted spell casting (bookworm/dumdum/howru/saywhat) with `chkstf` target resolution and `sndbt2`-style broadcasts.
 - [x] Added spellbook forgetting helpers plus effect-engine integration for `dumdum`/`saywhat` (IDs 12/50) to keep memorized spell loss centralized.
 - [x] Verified `saywhat` (spl051) OBJPRO/empty-spellbook failures and msgutl3-style broadcasts with targeted cast coverage in tests.
-- [x] Verified spell lookup boundaries: `cast`/`memorize` spell names remain exact-name paths (`splchk`/`fsbspl`), current-room spell targets use legacy `findgp` attention-name prefixes plus room/inventory object prefixes via `chkstf`, room 9 `buyspl` accepts legacy spell-name prefixes via `sameto`, and `peepint` is the legacy remote-room viewing path by exact global player id.
+- [x] Verified spell lookup boundaries: `cast`/`memorize` spell names remain exact-name paths (`splchk`/`fsbspl`), current-room spell targets use legacy `findgp` attention-name prefixes plus room/inventory object prefixes via `chkstf`, room 9 `buyspl` preserves its reversed `sameto(stocked_spell_name, input)` match boundary, and `peepint` is the legacy remote-room viewing path by exact global player id.
 - [x] Prioritized room routine handling ahead of command registry dispatch to mirror `kyra()` flow in `KYRCMDS.C`.
 - [x] Restored temple room-first handling for the exact `TEMPLE` phrase (`glory be to tashanna`) after legacy-style article stripping, so it reaches the level-3 gate before command dispatch; added legacy command-table alias audit coverage.
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
