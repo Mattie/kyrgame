@@ -515,6 +515,7 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     state.player.pgploc = state.player.gamloc
     state.player.gamloc = target_id
+    _persist_player_location(state, state.player)
 
     # Mirrors movutl/entrgp in legacy/KYRCMDS.C and KYRUTIL.C for movement flow.【F:legacy/KYRCMDS.C†L328-L366】【F:legacy/KYRUTIL.C†L236-L255】
     arrival_phrase = _arrival_text(direction)
@@ -748,6 +749,7 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
     state.player.gpobjs.append(object_id)
     state.player.obvals.append(0)
     state.player.npobjs = len(state.player.gpobjs)
+    _persist_player_inventory(state, state.player)
 
     return CommandResult(
         state=state,
@@ -923,6 +925,7 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
         raise CommandError("You are not carrying that", message_id=message_id)
 
     object_id, _ = pop_inventory_index(state.player, inventory_index)
+    _persist_player_inventory(state, state.player)
 
     updated_objects = list(location.objects) + [object_id]
     location = location.model_copy(
@@ -3011,6 +3014,20 @@ def _persist_player_inventory(state: GameState, player: models.PlayerModel):
     record.gpobjs = list(player.gpobjs)
     record.obvals = list(player.obvals)
     record.npobjs = player.npobjs
+    state.db_session.commit()
+
+
+def _persist_player_location(state: GameState, player: models.PlayerModel):
+    """Persist player location changes without overwriting unrelated state."""
+    if not state.db_session:
+        return
+    record = state.db_session.scalar(
+        select(models.Player).where(models.Player.plyrid == player.plyrid)
+    )
+    if not record:
+        return
+    record.gamloc = player.gamloc
+    record.pgploc = player.pgploc
     state.db_session.commit()
 
 

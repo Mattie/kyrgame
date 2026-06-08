@@ -60,4 +60,18 @@ describe('Vite config', () => {
       'preview.eventscripts.com',
     ])
   })
+
+  it('serves the admin page route through Vite while proxying admin APIs', async () => {
+    const config = await loadConfig()
+    const proxyPatterns = Object.keys(config.server?.proxy ?? {}).map(
+      (pattern) => new RegExp(pattern),
+    )
+    const isProxied = (path: string) =>
+      proxyPatterns.some((pattern) => pattern.test(path))
+
+    expect(isProxied('/admin')).toBe(false)
+    expect(isProxied('/admin?panel=players')).toBe(false)
+    expect(isProxied('/admin/fixtures')).toBe(true)
+    expect(isProxied('/admin/players/Necro')).toBe(true)
+  })
 })
