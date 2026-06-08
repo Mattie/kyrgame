@@ -315,6 +315,29 @@ async def test_get_resolves_visible_player_before_room_object_by_legacy_prefix_m
 
 
 @pytest.mark.anyio
+async def test_get_resolves_self_prefix_before_room_object_by_legacy_findgp_order():
+    player = _build_player(
+        attnam="Galen",
+        altnam="Galen Alt",
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [])
+    _place_object_in_room(state, 2)  # garnet
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("grab", {"target": "g", "verb": "grab"}, state)
+
+    assert state.player.gpobjs == []
+    assert state.locations[player.gamloc].objects == [2]
+    assert result.events[0]["message_id"] == "GETLOC1"
+    assert "Galen Alt" in result.events[0]["text"]
+
+
+@pytest.mark.anyio
 async def test_get_prefix_player_match_uses_deterministic_occupant_order():
     alice = _build_player(
         plyrid="alice",

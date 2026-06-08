@@ -677,8 +677,6 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
         occupants = await _ordered_players_in_room(state, location.id)
         target_player = None
         for occupant_id in occupants:
-            if occupant_id == state.player.plyrid:
-                continue
             candidate = state.player_lookup(occupant_id)
             if (
                 candidate
