@@ -12,6 +12,7 @@ triggers:
     actions:
       - type: conditional
         conditions:
+          - arg_at: {index: 0, value: key}
           - room_state_gte: {key: sesame, value: 1}
           - has_item: key
         then:

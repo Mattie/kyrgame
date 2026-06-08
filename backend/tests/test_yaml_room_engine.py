@@ -970,6 +970,27 @@ def test_waller_put_key_crevice_requires_sesame(room_engine, base_player):
     assert room_engine.messages.messages["WALM01"] in direct_texts
 
 
+def test_waller_wrong_object_crevice_fails_even_when_carrying_key(room_engine, base_player):
+    key_id = room_engine.objects_by_name["key"].id
+    player = base_player.model_copy(update={"gpobjs": [key_id], "obvals": [0], "npobjs": 1})
+    room_engine.get_room_state(185)["sesame"] = 1
+
+    result = room_engine.handle(
+        player=player,
+        room_id=185,
+        command="put",
+        args=["sword", "crevice"],
+    )
+
+    assert result.handled is True
+    assert player.gamloc == 0
+    assert key_id in player.gpobjs
+    assert not [evt for evt in result.events if evt.get("event") == "room_transfer"]
+    direct_texts = [evt["text"] for evt in result.events if evt["scope"] == "direct"]
+    assert room_engine.messages.messages["WALM01"] in direct_texts
+    assert room_engine.messages.messages["WALM00"] not in direct_texts
+
+
 def test_waller_say_opensesame_arms_insert_key_crevice(room_engine, base_player):
     key_id = room_engine.objects_by_name["key"].id
     player = base_player.model_copy(update={"gpobjs": [key_id], "obvals": [0], "npobjs": 1})
