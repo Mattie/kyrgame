@@ -79,7 +79,7 @@
 - [x] Audited room broadcast recipient splits against legacy `msgutl2`/`sndoth`/`sndbt2`/`sndloc`, aligning Python room routines, YAML room scripts, command room events, and frontend filtering for actor-excluding, target-excluding, and sender-inclusive cases.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Matched MajorBBS `sameto` prefix lookup for generic current-room/player/object targets: `get`/`grab` resolves visible player `attnam` prefixes before room objects, `look` checks room objects before inventory objects before visible players, and matching keeps legacy first-hit/no-ambiguity behavior.
-- [x] Preserved self-look by exact Player-ID for transformed players while keeping other-player true IDs hidden behind legacy `attnam` lookup.
+- [x] Preserved transformed-player look targeting through legacy `attnam` lookup, including transformed self-look via names like `willowisp`.
 - [x] Preserved duplicate room-object slots during legacy prefix pickup: `get`/`grab` removes only the matched `lcobjs` slot, matching `fgmlobj` + `tgmlobj(objno)` behavior.
 - [x] Fixed room 32 bubbling spring rose pickup parity so full inventories emit `GROSE3`/`GROSE4` and successful pickups grant object 40 before `GROSE1`/`GROSE2`, matching `rosutl()` (`legacy/KYRROUS.C:742-753`).
 - [x] Restored room 185 smooth-walled alcove key/crevice verb parity so `waller()` uses legacy `drpwrds` (`drop`/`insert`/`put`/`stick`/`thrust`) after `bagprep()` strips prepositions, matching `legacy/KYRROUS.C:109-115` and `legacy/KYRROUS.C:939-960`.
