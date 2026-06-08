@@ -71,7 +71,10 @@ describe('Vite config', () => {
 
     expect(isProxied('/admin')).toBe(false)
     expect(isProxied('/admin?panel=players')).toBe(false)
+    expect(isProxied('/admin/')).toBe(false)
+    expect(isProxied('/admin/?panel=players')).toBe(false)
     expect(isProxied('/admin/fixtures')).toBe(true)
+    expect(isProxied('/admin/fixtures?reload=1')).toBe(true)
     expect(isProxied('/admin/players/Necro')).toBe(true)
   })
 })

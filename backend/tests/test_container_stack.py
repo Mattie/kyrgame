@@ -64,10 +64,10 @@ def test_cloudflared_ingress_routes_to_frontend_loopback_for_dashboard_parity():
 def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     text = (REPO_ROOT / "frontend" / "vite.config.ts").read_text(encoding="utf-8")
     source_proxy_pattern = (
-        "^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\\\\?|$)|^/admin/"
+        "^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\\\\?|$)|^/admin/(?!($|\\\\?))"
     )
     runtime_proxy_pattern = re.compile(
-        r"^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\?|$)|^/admin/"
+        r"^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\?|$)|^/admin/(?!($|\?))"
     )
 
     assert "KYRGAME_BACKEND_PROXY_TARGET" in text
@@ -76,7 +76,10 @@ def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     assert runtime_proxy_pattern.match("/auth/register")
     assert not runtime_proxy_pattern.match("/admin")
     assert not runtime_proxy_pattern.match("/admin?panel=players")
+    assert not runtime_proxy_pattern.match("/admin/")
+    assert not runtime_proxy_pattern.match("/admin/?panel=players")
     assert runtime_proxy_pattern.match("/admin/fixtures")
+    assert runtime_proxy_pattern.match("/admin/fixtures?reload=1")
     assert runtime_proxy_pattern.match("/world/locations")
     assert runtime_proxy_pattern.match("/ws?token=game-session")
     assert runtime_proxy_pattern.match("/ws/admin/scry?player=Hero")

@@ -539,6 +539,15 @@ async def test_get_location_object_persists_player_inventory(tmp_path, base_stat
         session.add(models.Location(**location.model_dump()))
         session.commit()
         base_state.db_session = session
+        commit_count = 0
+        original_commit = session.commit
+
+        def count_commit():
+            nonlocal commit_count
+            commit_count += 1
+            return original_commit()
+
+        session.commit = count_commit
 
         parsed = vocabulary.parse_text(f"get {pickup_name}")
         await dispatcher.dispatch_parsed(parsed, base_state)
@@ -547,11 +556,15 @@ async def test_get_location_object_persists_player_inventory(tmp_path, base_stat
         record = session.scalar(
             select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
         )
+        location_record = session.get(models.Location, location.id)
 
         assert record is not None
         assert record.gpobjs == base_state.player.gpobjs
         assert record.obvals == base_state.player.obvals
         assert record.npobjs == base_state.player.npobjs
+        assert location_record is not None
+        assert location_record.objects == base_state.locations[location.id].objects
+        assert commit_count == 2
 
 
 @pytest.mark.anyio
@@ -581,6 +594,15 @@ async def test_drop_location_object_persists_player_inventory(tmp_path, base_sta
         session.add(models.Location(**location.model_dump()))
         session.commit()
         base_state.db_session = session
+        commit_count = 0
+        original_commit = session.commit
+
+        def count_commit():
+            nonlocal commit_count
+            commit_count += 1
+            return original_commit()
+
+        session.commit = count_commit
 
         parsed = vocabulary.parse_text(f"drop {object_name}")
         await dispatcher.dispatch_parsed(parsed, base_state)
@@ -589,11 +611,15 @@ async def test_drop_location_object_persists_player_inventory(tmp_path, base_sta
         record = session.scalar(
             select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
         )
+        location_record = session.get(models.Location, location.id)
 
         assert record is not None
         assert record.gpobjs == base_state.player.gpobjs
         assert record.obvals == base_state.player.obvals
         assert record.npobjs == base_state.player.npobjs
+        assert location_record is not None
+        assert location_record.objects == base_state.locations[location.id].objects
+        assert commit_count == 2
 
 
 @pytest.mark.anyio
