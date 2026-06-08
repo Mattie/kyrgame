@@ -515,6 +515,7 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     state.player.pgploc = state.player.gamloc
     state.player.gamloc = target_id
+    _persist_player_location(state, state.player)
 
     # Mirrors movutl/entrgp in legacy/KYRCMDS.C and KYRUTIL.C for movement flow.【F:legacy/KYRCMDS.C†L328-L366】【F:legacy/KYRUTIL.C†L236-L255】
     arrival_phrase = _arrival_text(direction)
@@ -743,11 +744,13 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
         update={"objects": remaining_objects, "nlobjs": len(remaining_objects)}
     )
     state.locations[location.id] = location
-    _persist_location_objects(state, location.id, remaining_objects)
 
     state.player.gpobjs.append(object_id)
     state.player.obvals.append(0)
     state.player.npobjs = len(state.player.gpobjs)
+    _persist_location_objects_and_player_inventories(
+        state, location.id, remaining_objects, [state.player]
+    )
 
     return CommandResult(
         state=state,
@@ -876,8 +879,7 @@ async def _handle_get_from_player(
     state.player.gpobjs.append(obj_id)
     state.player.obvals.append(value)
     state.player.npobjs = len(state.player.gpobjs)
-    _persist_player_inventory(state, target_player)
-    _persist_player_inventory(state, state.player)
+    _persist_player_inventories(state, [target_player, state.player])
 
     actor_text = _format_message(state, "GETGP8")
     target_text = _format_message(state, "GETGP9", state.player.altnam, obj_name)
@@ -929,7 +931,9 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
         update={"objects": updated_objects, "nlobjs": len(updated_objects)}
     )
     state.locations[location.id] = location
-    _persist_location_objects(state, location.id, updated_objects)
+    _persist_location_objects_and_player_inventories(
+        state, location.id, updated_objects, [state.player]
+    )
 
     obj = objects.get(object_id)
 
@@ -2999,8 +3003,59 @@ def _persist_location_objects(state: GameState, location_id: int, object_ids: li
         state.db_session.commit()
 
 
+def _persist_location_objects_and_player_inventories(
+    state: GameState,
+    location_id: int,
+    object_ids: list[int],
+    players: list[models.PlayerModel],
+):
+    """Persist an item move between room objects and inventories in one commit."""
+    if not state.db_session:
+        return
+    location_repo = repositories.LocationRepository(state.db_session)
+    location_repo.update_objects(location_id, object_ids)
+    _stage_player_inventory_records(state, players)
+    state.db_session.commit()
+
+
+def _persist_player_inventories(state: GameState, players: list[models.PlayerModel]):
+    """Persist inventory changes for related players in one commit."""
+    if not state.db_session:
+        return
+    _stage_player_inventory_records(state, players)
+    state.db_session.commit()
+
+
 def _persist_player_inventory(state: GameState, player: models.PlayerModel):
     """Persist player inventory changes so multiplayer sessions stay consistent."""
+    if not state.db_session:
+        return
+    _stage_player_inventory_records(state, [player])
+    state.db_session.commit()
+
+
+def _stage_player_inventory_records(
+    state: GameState, players: list[models.PlayerModel]
+):
+    seen: set[str] = set()
+    if not state.db_session:
+        return
+    for player in players:
+        if player.plyrid in seen:
+            continue
+        seen.add(player.plyrid)
+        record = state.db_session.scalar(
+            select(models.Player).where(models.Player.plyrid == player.plyrid)
+        )
+        if not record:
+            continue
+        record.gpobjs = list(player.gpobjs)
+        record.obvals = list(player.obvals)
+        record.npobjs = player.npobjs
+
+
+def _persist_player_location(state: GameState, player: models.PlayerModel):
+    """Persist player location changes without overwriting unrelated state."""
     if not state.db_session:
         return
     record = state.db_session.scalar(
@@ -3008,9 +3063,8 @@ def _persist_player_inventory(state: GameState, player: models.PlayerModel):
     )
     if not record:
         return
-    record.gpobjs = list(player.gpobjs)
-    record.obvals = list(player.obvals)
-    record.npobjs = player.npobjs
+    record.gamloc = player.gamloc
+    record.pgploc = player.pgploc
     state.db_session.commit()
 
 
@@ -3977,8 +4031,9 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
                 update={"objects": updated_objects, "nlobjs": len(updated_objects)}
             )
             state.locations[location.id] = location
-            _persist_location_objects(state, location.id, updated_objects)
-            _persist_player_inventory(state, state.player)
+            _persist_location_objects_and_player_inventories(
+                state, location.id, updated_objects, [state.player]
+            )
             return CommandResult(
                 state=state,
                 events=[
@@ -4024,9 +4079,9 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
             update={"objects": updated_objects, "nlobjs": len(updated_objects)}
         )
         state.locations[location.id] = location
-        _persist_location_objects(state, location.id, updated_objects)
-        _persist_player_inventory(state, target_player)
-        _persist_player_inventory(state, state.player)
+        _persist_location_objects_and_player_inventories(
+            state, location.id, updated_objects, [target_player, state.player]
+        )
         return CommandResult(
             state=state,
             events=[
@@ -4086,8 +4141,7 @@ async def _handle_give(state: GameState, args: dict) -> CommandResult:
     target_player.obvals.append(value)
     target_player.npobjs = len(target_player.gpobjs)
     # Legacy giveru() mutates the giver and recipient inventory atomically (KYRCMDS.C:597-614).
-    _persist_player_inventory(state, state.player)
-    _persist_player_inventory(state, target_player)
+    _persist_player_inventories(state, [state.player, target_player])
     return CommandResult(
         state=state,
         events=[

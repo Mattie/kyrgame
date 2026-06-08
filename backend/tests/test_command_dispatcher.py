@@ -442,6 +442,187 @@ async def test_dispatch_macros_persistence_does_not_overwrite_fresher_player_rec
 
 
 @pytest.mark.anyio
+async def test_move_persists_player_location(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(
+            fixtures.load_commands(), fixtures.load_messages()
+        )
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.commit()
+        base_state.db_session = session
+
+        parsed = vocabulary.parse_text("north")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        session.expire_all()
+        record = session.scalar(
+            select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
+        )
+
+        assert record is not None
+        assert record.gamloc == base_state.player.gamloc
+        assert record.pgploc == base_state.player.pgploc
+
+
+@pytest.mark.anyio
+async def test_move_persistence_preserves_unrelated_player_fields(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(
+            fixtures.load_commands(), fixtures.load_messages()
+        )
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        persisted_player = base_state.player.model_copy(
+            update={
+                "macros": 18,
+                "gold": 73,
+                "gpobjs": [0, 1, 2],
+                "obvals": [10, 20, 30],
+                "npobjs": 3,
+            },
+            deep=True,
+        )
+        session.add(models.Player(**persisted_player.model_dump()))
+        session.commit()
+        base_state.db_session = session
+        base_state.player = base_state.player.model_copy(
+            update={"macros": 0, "gold": 1, "gpobjs": [], "obvals": [], "npobjs": 0},
+            deep=True,
+        )
+
+        parsed = vocabulary.parse_text("north")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        session.expire_all()
+        record = session.scalar(
+            select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
+        )
+
+        assert record is not None
+        assert record.gamloc == base_state.player.gamloc
+        assert record.pgploc == base_state.player.pgploc
+        assert record.macros == 19
+        assert record.gold == 73
+        assert record.gpobjs == [0, 1, 2]
+        assert record.obvals == [10, 20, 30]
+        assert record.npobjs == 3
+
+
+@pytest.mark.anyio
+async def test_get_location_object_persists_player_inventory(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(
+            fixtures.load_commands(), fixtures.load_messages()
+        )
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        base_state.player = base_state.player.model_copy(
+            update={"gpobjs": [], "obvals": [], "npobjs": 0},
+            deep=True,
+        )
+        location = base_state.locations[base_state.player.gamloc]
+        pickup_id = next(
+            object_id
+            for object_id in location.objects
+            if "PICKUP" in base_state.objects[object_id].flags
+        )
+        pickup_name = base_state.objects[pickup_id].name
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.add(models.Location(**location.model_dump()))
+        session.commit()
+        base_state.db_session = session
+        commit_count = 0
+        original_commit = session.commit
+
+        def count_commit():
+            nonlocal commit_count
+            commit_count += 1
+            return original_commit()
+
+        session.commit = count_commit
+
+        parsed = vocabulary.parse_text(f"get {pickup_name}")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        session.expire_all()
+        record = session.scalar(
+            select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
+        )
+        location_record = session.get(models.Location, location.id)
+
+        assert record is not None
+        assert record.gpobjs == base_state.player.gpobjs
+        assert record.obvals == base_state.player.obvals
+        assert record.npobjs == base_state.player.npobjs
+        assert location_record is not None
+        assert location_record.objects == base_state.locations[location.id].objects
+        assert commit_count == 2
+
+
+@pytest.mark.anyio
+async def test_drop_location_object_persists_player_inventory(tmp_path, base_state):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        vocabulary = commands.CommandVocabulary(
+            fixtures.load_commands(), fixtures.load_messages()
+        )
+        registry = commands.build_default_registry(vocabulary)
+        dispatcher = commands.CommandDispatcher(registry)
+        object_id = next(
+            obj.id for obj in base_state.objects.values() if "PICKUP" in obj.flags
+        )
+        object_name = base_state.objects[object_id].name
+        base_state.player = base_state.player.model_copy(
+            update={"gpobjs": [object_id], "obvals": [0], "npobjs": 1},
+            deep=True,
+        )
+        location = base_state.locations[base_state.player.gamloc].model_copy(
+            update={"objects": [], "nlobjs": 0},
+            deep=True,
+        )
+        base_state.locations[location.id] = location
+        session.add(models.Player(**base_state.player.model_dump()))
+        session.add(models.Location(**location.model_dump()))
+        session.commit()
+        base_state.db_session = session
+        commit_count = 0
+        original_commit = session.commit
+
+        def count_commit():
+            nonlocal commit_count
+            commit_count += 1
+            return original_commit()
+
+        session.commit = count_commit
+
+        parsed = vocabulary.parse_text(f"drop {object_name}")
+        await dispatcher.dispatch_parsed(parsed, base_state)
+
+        session.expire_all()
+        record = session.scalar(
+            select(models.Player).where(models.Player.plyrid == base_state.player.plyrid)
+        )
+        location_record = session.get(models.Location, location.id)
+
+        assert record is not None
+        assert record.gpobjs == base_state.player.gpobjs
+        assert record.obvals == base_state.player.obvals
+        assert record.npobjs == base_state.player.npobjs
+        assert location_record is not None
+        assert location_record.objects == base_state.locations[location.id].objects
+        assert commit_count == 2
+
+
+@pytest.mark.anyio
 async def test_dispatch_tired_blocks_handler(base_state):
     called = False
 
