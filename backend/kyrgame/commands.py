@@ -601,9 +601,10 @@ def _handle_exit(state: GameState, args: dict) -> CommandResult:
 
     # Legacy kyra() checks "x" before the command table and calls remvgp() before EXIKYR.
     # See legacy/KYRANDIA.C:192-196 and legacy/KYRUTIL.C:225-233.
-    state.player.pgploc = from_room
+    if from_room >= 0:
+        state.player.pgploc = from_room
     state.player.gamloc = -1
-    _persist_player_state(state, state.player)
+    _persist_player_location(state, state.player)
     events.append(
         _message_event(
             "player",
