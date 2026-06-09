@@ -519,7 +519,7 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
 
     # Mirrors movutl/entrgp in legacy/KYRCMDS.C and KYRUTIL.C for movement flow.【F:legacy/KYRCMDS.C†L328-L366】【F:legacy/KYRUTIL.C†L236-L255】
     arrival_phrase = _arrival_text(direction)
-    arrival_text = f"*** {state.player.plyrid} has just {arrival_phrase}!"
+    arrival_text = f"*** {state.player.altnam} has just {arrival_phrase}!"
 
     return CommandResult(
         state=state,
