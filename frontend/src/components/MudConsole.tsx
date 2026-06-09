@@ -1003,13 +1003,16 @@ export const MudConsole = () => {
     }
   }, [canFocusCommandInput, session?.token])
 
-  const handleGameFieldMouseDown = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!canFocusCommandInput) return
-      const target = event.target instanceof HTMLElement ? event.target : null
-      if (target?.closest(INTERACTIVE_FOCUS_SELECTOR)) return
-      inputRef.current?.focus()
-    },
+const handleGameFieldMouseDown = useCallback(
+  (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!canFocusCommandInput) return
+    if (event.button !== 0) return
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (target?.closest(INTERACTIVE_FOCUS_SELECTOR)) return
+    inputRef.current?.focus()
+  },
+  [canFocusCommandInput]
+)
     [canFocusCommandInput]
   )
 
