@@ -983,6 +983,26 @@ export const MudConsole = () => {
   const canFocusCommandInput =
     connectionStatus === 'connected' && Boolean(session) && !promptControlsDisabled
 
+  useEffect(() => {
+    if (!canFocusCommandInput) return
+
+    const focusCommandInput = () => inputRef.current?.focus()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        focusCommandInput()
+      }
+    }
+
+    focusCommandInput()
+    window.addEventListener('focus', focusCommandInput)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', focusCommandInput)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [canFocusCommandInput, session?.token])
+
   const handleGameFieldMouseDown = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       if (!canFocusCommandInput) return
