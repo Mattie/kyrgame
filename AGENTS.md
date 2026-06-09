@@ -14,10 +14,8 @@
 
 ## Local Live Server Operations
 
-- Before inspecting, starting, restarting, exposing, or stopping local servers, use the `local-dev-servers` skill and run the registry check from the repo root:
-  `python.exe C:\Users\matti\.agents\skills\local-dev-servers\scripts\devservers.py status --refresh --scan-ports`
-  If the ErrorHelp hook asks for wrapping, rerun it through:
-  `C:\Users\matti\.agents\skills\errorhelp\bin\ehx.cmd`.
+- Before inspecting, starting, restarting, exposing, or stopping local servers, use the `local-dev-servers` skill and run its registry check from the repo root:
+  `python.exe <local-dev-servers-skill>\scripts\devservers.py status --refresh --scan-ports`
 - The normal long-lived local instance is the Docker Compose project `kyrgame-local` from `compose.yaml`.
   Expected services:
   - `kyrgame-local-backend-1` on `http://127.0.0.1:8000`

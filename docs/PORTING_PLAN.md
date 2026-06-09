@@ -78,7 +78,7 @@
 - [x] Restored temple room-first handling for the exact `TEMPLE` phrase (`glory be to tashanna`) after legacy-style article stripping, so it reaches the level-3 gate before command dispatch; added legacy command-table alias audit coverage.
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
 - [x] Audited room broadcast recipient splits against legacy `msgutl2`/`sndoth`/`sndbt2`/`sndloc`, aligning Python room routines, YAML room scripts, command room events, and frontend filtering for actor-excluding, target-excluding, and sender-inclusive cases.
-- [x] Restored legacy `remvgp` departure fan-out for ordinary movement and in-game `x`, including source-room walk-out/sparkling-light messages, direct `EXIKYR`, session/presence deactivation, and persisted exit state.
+- [x] Restored legacy `remvgp` departure fan-out for ordinary movement and in-game `x`, including source-room walk-out/sparkling-light messages, direct `EXIKYR`, session/presence deactivation, persisted exit state, and `pgploc` re-entry after `gamloc=-1`.
 - [x] Deduped trimmed room occupant presence identifiers so room `look`/entry text cannot list the same player twice with trailing-space variants.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Matched MajorBBS `sameto` prefix lookup for generic current-room/player/object targets: `get`/`grab` resolves visible player `attnam` prefixes before room objects, `look` checks room objects before inventory objects before visible players, and matching keeps legacy first-hit/no-ambiguity behavior.
@@ -114,7 +114,7 @@
 - [x] Preserved the original `INTROD` version and designed/programmed-by credit block while appending the modernized porting credit block for first-login intro paging.
 - [x] Frontend first-login intro rendering through the existing console/session UI, including blank ENTER advancement, typed-input consumption during intro, WASD command gating, and room description suppression until lifecycle completion.
 - [x] Simulated MajorBBS-style screen-length paging for long first-login lifecycle output with `C` continue, `N` nonstop, and `Q` quit controls.
-- [x] In-game `x` exit parity: emit `EXIKYR`, broadcast sparkling-light departure, deactivate session/presence, and persist player state.
+- [x] In-game `x` exit parity: emit `EXIKYR`, broadcast sparkling-light departure, deactivate session/presence, persist player state, and re-enter fresh sessions from `pgploc` when `gamloc` is negative.
 - [ ] Frontend rendering for remaining exit lifecycle messages through the existing console/session UI.
 
 ### Release/Ops Cleanup (Final Porting Lane)

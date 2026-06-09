@@ -8,7 +8,7 @@ import uvicorn
 import websockets
 from sqlalchemy import func, select
 
-from kyrgame import constants, models
+from kyrgame import accounts, constants, models
 from kyrgame.webapp import create_app, _websocket_command_rate_limiter
 
 
@@ -127,6 +127,86 @@ async def test_explicit_first_login_claim_returns_legacy_intro_messages_and_init
             assert player.flags == int(constants.PlayerFlag.LOADED)
         finally:
             db.close()
+
+
+@pytest.mark.anyio
+async def test_fresh_session_reenters_previous_room_after_x_exit_state():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            player.gamloc = -1
+            player.pgploc = 12
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/auth/session", json={"player_id": "hero"})
+
+        assert response.status_code == 201
+        session = response.json()["session"]
+        assert session["room_id"] == 12
+        assert "hero" in await app.state.presence.players_in_room(12)
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            assert player.gamloc == 12
+            assert player.pgploc == 12
+            session_record = db.scalar(
+                select(models.PlayerSession).where(
+                    models.PlayerSession.session_token == session["token"]
+                )
+            )
+            assert session_record is not None
+            assert session_record.room_id == 12
+
+
+@pytest.mark.anyio
+async def test_account_login_reenters_previous_room_after_x_exit_state():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            player.gamloc = -1
+            player.pgploc = 24
+            db.add(
+                models.Account(
+                    userid="hero",
+                    userid_norm=accounts.normalize_userid("hero"),
+                    password_hash=accounts.hash_password("swordfish"),
+                    player_id=player.id,
+                )
+            )
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/auth/login", json={"userid": "hero", "password": "swordfish"}
+            )
+
+        assert response.status_code == 201
+        session = response.json()["session"]
+        assert session["room_id"] == 24
+        assert "hero" in await app.state.presence.players_in_room(24)
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            assert player.gamloc == 24
+            assert player.pgploc == 24
+            session_record = db.scalar(
+                select(models.PlayerSession).where(
+                    models.PlayerSession.session_token == session["token"]
+                )
+            )
+            assert session_record is not None
+            assert session_record.room_id == 24
 
 
 @pytest.mark.anyio

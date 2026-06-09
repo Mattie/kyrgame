@@ -1432,6 +1432,22 @@ def _pending_first_login_session(
     )
 
 
+def _entry_room_for_player(player: models.Player) -> int:
+    if player.gamloc >= 0:
+        return player.gamloc
+    if player.pgploc >= 0:
+        return player.pgploc
+    return 0
+
+
+def _set_player_entry_location(player: models.Player, room_id: int) -> None:
+    # Legacy remvgp() stores the previous room in pgploc before gamloc=-1, and
+    # login re-enters through entrgp(). See legacy/KYRUTIL.C:225-245 and
+    # legacy/KYRANDIA.C:204-209.
+    player.gamloc = room_id
+    player.pgploc = room_id
+
+
 async def _issue_player_session(
     *,
     request: Request,
@@ -1448,10 +1464,13 @@ async def _issue_player_session(
     status_code: int = status.HTTP_201_CREATED,
 ) -> JSONResponse:
     repo = repositories.PlayerSessionRepository(db)
-    target_room = player.gamloc if room_id is None else room_id
-    if session_kind == SESSION_KIND_GAME and room_id is not None:
-        player.gamloc = room_id
-        player.pgploc = room_id
+    target_room = _entry_room_for_player(player) if room_id is None else room_id
+    if session_kind == SESSION_KIND_GAME and (
+        room_id is not None
+        or player.gamloc != target_room
+        or player.pgploc != target_room
+    ):
+        _set_player_entry_location(player, target_room)
 
     replaced_tokens: list[str] = []
     if not hasattr(request.app.state, "session_replacement_lock"):
@@ -1467,8 +1486,7 @@ async def _issue_player_session(
                 lifecycle_state = pending_lifecycle.lifecycle_state
                 lifecycle_step = pending_lifecycle.lifecycle_step
                 target_room = pending_lifecycle.room_id
-                player.gamloc = target_room
-                player.pgploc = target_room
+                _set_player_entry_location(player, target_room)
                 lifecycle_messages = _current_first_login_lifecycle_messages(
                     request.app.state.fixture_cache["messages"],
                     player.plyrid,
@@ -1738,10 +1756,9 @@ async def start_session(
                     detail="Player-ID not found. Create Character to claim it.",
                 )
             elif payload.room_id is not None:
-                player.gamloc = payload.room_id
-                player.pgploc = payload.room_id
+                _set_player_entry_location(player, payload.room_id)
 
-        room_id = player.gamloc
+        room_id = _entry_room_for_player(player)
 
         replaced_tokens: list[str] = []
         session_record: models.PlayerSession | None = None
@@ -1783,8 +1800,7 @@ async def start_session(
                     lifecycle_state = pending_lifecycle.lifecycle_state
                     lifecycle_step = pending_lifecycle.lifecycle_step
                     room_id = pending_lifecycle.room_id
-                    player.gamloc = room_id
-                    player.pgploc = room_id
+                    _set_player_entry_location(player, room_id)
                     lifecycle_messages = _current_first_login_lifecycle_messages(
                         request.app.state.fixture_cache["messages"],
                         player.plyrid,
@@ -1793,6 +1809,7 @@ async def start_session(
                     )
                 replaced_tokens = repo.deactivate_all(player.id, session_kind=SESSION_KIND_GAME)
                 token = secrets.token_urlsafe(24)
+                _set_player_entry_location(player, room_id)
                 session_record = repo.create_session(
                     player_id=player.id,
                     session_token=token,
