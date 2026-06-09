@@ -227,6 +227,40 @@ describe('MudConsole', () => {
     expect(screen.getByText('This line should appear immediately.')).toBeInTheDocument()
   })
 
+  it('focuses the command input when the connected game field is clicked', () => {
+    const { container } = render(<MudConsole />)
+
+    const gameField = container.querySelector<HTMLElement>('.crt')
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    const input = screen.getByLabelText('command input')
+
+    expect(gameField).toBeInTheDocument()
+    navButton.focus()
+    expect(navButton).toHaveFocus()
+
+    fireEvent.mouseDown(gameField as HTMLElement)
+
+    expect(input).toHaveFocus()
+  })
+
+  it('leaves focus alone when the disconnected game field is clicked', () => {
+    navigatorState.connectionStatus = 'disconnected'
+    const { container } = render(<MudConsole />)
+
+    const gameField = container.querySelector<HTMLElement>('.crt')
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    const input = screen.getByLabelText('command input')
+
+    expect(gameField).toBeInTheDocument()
+    navButton.focus()
+    expect(navButton).toHaveFocus()
+
+    fireEvent.mouseDown(gameField as HTMLElement)
+
+    expect(navButton).toHaveFocus()
+    expect(input).not.toHaveFocus()
+  })
+
   it('streams one console line at a time when modem mode is enabled', () => {
     vi.useFakeTimers()
     window.history.replaceState(
