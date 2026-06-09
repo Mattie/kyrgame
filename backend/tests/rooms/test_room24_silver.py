@@ -25,6 +25,11 @@ class FakeGateway:
 
 
 @pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture
 async def engine_and_gateway():
     scheduler = SchedulerService()
     await scheduler.start()
@@ -100,7 +105,7 @@ async def test_silver_sequence_awards_hotseat_when_ready(engine_and_gateway):
 
 
 @pytest.mark.anyio
-async def test_silver_wrong_offering_resets_progress(engine_and_gateway):
+async def test_silver_wrong_offering_preserves_progress(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
 
@@ -130,7 +135,7 @@ async def test_silver_wrong_offering_resets_progress(engine_and_gateway):
         player=player,
     )
 
-    assert player.gemidx == 0
+    assert player.gemidx == 1
     assert "99" not in map(str, player.gpobjs)
 
     direct_texts = [
@@ -139,6 +144,16 @@ async def test_silver_wrong_offering_resets_progress(engine_and_gateway):
         if msg.get("scope") == "direct" and msg.get("player") == "hero"
     ]
     assert messages.messages["SILVM4"] in direct_texts
+
+    await engine.handle_command(
+        "hero",
+        24,
+        command="offer",
+        args=[str(player.stones[1])],
+        player_level=player.level,
+        player=player,
+    )
+    assert player.gemidx == 2
 
 
 @pytest.mark.anyio
