@@ -4,6 +4,9 @@
 # Local project TODO tracking (intentionally untracked)
 .todo/
 
+# Local database dumps and one-off operational backups
+.local-backups/
+
 ### C ###
 # Prerequisites
 *.d
