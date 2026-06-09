@@ -343,9 +343,7 @@ def _temple_on_enter(messages: MessageBundleModel) -> RoomCallback:
             context.schedule(
                 "prayer_prompt",
                 0.05,
-                lambda: _broadcast_message(
-                    context, "ambient", messages.messages.get("TMPRAY", "")
-                ),
+                lambda: _broadcast_room_message(context, messages.messages.get("TMPRAY", "")),
                 interval=30.0,
             )
 
@@ -454,12 +452,14 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             chant_count += 1
             context.state.flags["chantd"] = chant_count
 
-            if chant_count == 1:
-                await context.broadcast("ambient",
-                                      text="*** The altar begins to glow dimly.")
-            else:
-                await context.broadcast("ambient",
-                                      text="*** The altar glows even brighter!")
+            # Legacy sends direct terminal text through sndloc(7), then animat()
+            # clears chantd on the next animation tick. Source: legacy/KYRROUS.C:319-330.
+            text = (
+                "*** The altar begins to glow dimly."
+                if chant_count == 1
+                else "*** The altar glows even brighter!"
+            )
+            await context.broadcast("room_message", type="room_message", text=text)
             return True
 
         temple_phrase = messages.messages.get("TEMPLE", "glory be to tashanna").lower()
@@ -492,9 +492,7 @@ def _spring_on_enter(messages: MessageBundleModel) -> RoomCallback:
             context.schedule(
                 "spring_ambience",
                 0.05,
-                lambda: _broadcast_message(
-                    context, "ambient", messages.messages.get("KRD032", "")
-                ),
+                lambda: _broadcast_room_message(context, messages.messages.get("KRD032", "")),
                 interval=20.0,
             )
 
@@ -561,9 +559,7 @@ def _fountain_on_enter(messages: MessageBundleModel) -> RoomCallback:
             context.schedule(
                 "fountain_ambience",
                 0.05,
-                lambda: _broadcast_message(
-                    context, "ambient", messages.messages.get("KRD038", "")
-                ),
+                lambda: _broadcast_room_message(context, messages.messages.get("KRD038", "")),
                 interval=25.0,
             )
 
@@ -869,8 +865,8 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     return _handler
 
 
-async def _broadcast_message(context: RoomContext, event: str, text: str):
-    await context.broadcast(event, text=text)
+async def _broadcast_room_message(context: RoomContext, text: str):
+    await context.broadcast("room_message", type="room_message", text=text)
 
 
 def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallback:

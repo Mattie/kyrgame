@@ -389,12 +389,21 @@ async def bootstrap_app(app: FastAPI):
     zar_routine.initialize(app.state.animation_tick_system.state)
     app.state.animation_tick_system.persist_state()
 
+    hardcoded_room_flags = {(7, "chantd")}
+
     def _get_room_flag(room_id: int, key: str) -> int:
+        # Legacy `chantd` is owned by the hardcoded temple handler.
+        # Source: legacy/KYRROUS.C:319-330 and legacy/KYRANIM.C:140-143.
+        if (room_id, key) in hardcoded_room_flags:
+            return int(app.state.room_scripts.get_room_state(room_id).flags.get(key, 0))
         if not app.state.room_scripts.yaml_engine:
             return 0
         return int(app.state.room_scripts.yaml_engine.get_room_state(room_id).get(key, 0))
 
     def _set_room_flag(room_id: int, key: str, value: int) -> None:
+        if (room_id, key) in hardcoded_room_flags:
+            app.state.room_scripts.get_room_state(room_id).flags[key] = value
+            return
         if not app.state.room_scripts.yaml_engine:
             return
         app.state.room_scripts.yaml_engine.get_room_state(room_id)[key] = value
