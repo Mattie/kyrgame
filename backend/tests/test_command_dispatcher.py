@@ -209,6 +209,11 @@ def test_command_vocabulary_normalizes_articles_and_prepositions_for_non_chat():
     assert parsed.verb == "put"
     assert parsed.args["raw"] == "sword rock"
 
+    parsed = vocabulary.parse_text("put key in crevice")
+
+    assert parsed.verb == "put"
+    assert parsed.args["raw"] == "key crevice"
+
 
 def test_command_vocabulary_preserves_chat_text():
     vocabulary = commands.CommandVocabulary(
@@ -1118,6 +1123,33 @@ async def test_whisper_emits_target_and_room_events(base_state):
 
 
 @pytest.mark.anyio
+async def test_level_three_player_can_whisper_normally(base_state):
+    """Legacy whispr() gates WATCHIT on MajorBBS pfnlvl.
+
+    Character level 3 still follows the normal whisper branch.
+    See legacy/KYRCMDS.C:274-292.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    target = base_state.player.model_copy(
+        update={"plyrid": "seer", "attnam": "seer", "altnam": "Seer", "gamloc": base_state.player.gamloc}
+    )
+    players = {base_state.player.plyrid: base_state.player, target.plyrid: target}
+
+    base_state.player.level = 3
+    base_state.presence = StubPresence({base_state.player.plyrid, target.plyrid})
+    base_state.player_lookup = players.get
+
+    parsed = vocabulary.parse_text('whisper seer "keep quiet"')
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert all(evt.get("message_id") != "WATCHIT" for evt in result.events)
+    assert any(evt.get("scope") == "target" and evt.get("message_id") == "WHISPR1" for evt in result.events)
+    assert any(evt.get("scope") == "room" and evt.get("message_id") == "WHISPR3" for evt in result.events)
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "raw_command,expected_message_id",
     [
@@ -1305,6 +1337,26 @@ async def test_say_room_broadcast_includes_player_context(base_state):
 
 
 @pytest.mark.anyio
+async def test_level_three_player_can_say_normally(base_state):
+    """Legacy speakr() gates NOWNOW on MajorBBS pfnlvl.
+
+    Character level 3 still follows the normal speech branch.
+    See legacy/KYRCMDS.C:248-261.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.player.level = 3
+
+    parsed = vocabulary.parse_text("say hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert all(evt.get("message_id") != "NOWNOW" for evt in result.events)
+    assert result.events[0]["message_id"] == "SAIDIT"
+    assert any(evt.get("message_id") == "SPEAK3" for evt in result.events)
+
+
+@pytest.mark.anyio
 async def test_yell_room_broadcast_includes_player_context(base_state):
     """Legacy yeller() sends YELLER4 (actor context) + YELLER5 (text) via sndoth().
 
@@ -1323,6 +1375,25 @@ async def test_yell_room_broadcast_includes_player_context(base_state):
     room_text = room_events[0].get("text") or ""
     assert base_state.player.altnam in room_text
     assert "HELLO WORLD" in room_text
+
+
+@pytest.mark.anyio
+async def test_level_three_player_can_yell_normally(base_state):
+    """Legacy yeller() checks MajorBBS pfnlvl before suppressing room fan-out.
+
+    See legacy/KYRCMDS.C:313-322.
+    """
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry)
+    base_state.player.level = 3
+
+    parsed = vocabulary.parse_text("yell hello world")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert result.events[0]["message_id"] == "YELLER3"
+    assert any(evt.get("scope") == "room" and evt.get("message_id") == "YELLER5" for evt in result.events)
+    assert any(evt.get("scope") == "nearby_room" and evt.get("message_id") == "YELLER6" for evt in result.events)
 
 
 @pytest.mark.anyio

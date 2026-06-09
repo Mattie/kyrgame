@@ -3,6 +3,7 @@ import {
   Fragment,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -36,6 +37,8 @@ import {
 } from './CrtFireBorder'
 
 const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
+const INTERACTIVE_FOCUS_SELECTOR =
+  'button, a[href], input, textarea, select, summary, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
 
 const formatLegacyRoomLines = (
   entry: ActivityEntry,
@@ -890,9 +893,7 @@ export const MudConsole = () => {
 
     const handleLifecycleKeyDown = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null
-      const interactiveTarget = target?.closest(
-        'button, a[href], input, textarea, select, summary, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
-      )
+      const interactiveTarget = target?.closest(INTERACTIVE_FOCUS_SELECTOR)
 
       if (activeTerminalPagerLineId) {
         const command = event.key === 'Enter' ? '' : event.key
@@ -979,6 +980,41 @@ export const MudConsole = () => {
       ? 'Enter'
       : 'Send'
   const promptControlsDisabled = lifecycleAdvancePending && !activeTerminalPagerLineId
+  const canFocusCommandInput =
+    connectionStatus === 'connected' && Boolean(session) && !promptControlsDisabled
+
+  useEffect(() => {
+    if (!canFocusCommandInput) return
+
+    const focusCommandInput = () => inputRef.current?.focus()
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        focusCommandInput()
+      }
+    }
+
+    focusCommandInput()
+    window.addEventListener('focus', focusCommandInput)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', focusCommandInput)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [canFocusCommandInput, session?.token])
+
+const handleGameFieldMouseDown = useCallback(
+  (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!canFocusCommandInput) return
+    if (event.button !== 0) return
+    const target = event.target instanceof HTMLElement ? event.target : null
+    if (target?.closest(INTERACTIVE_FOCUS_SELECTOR)) return
+    inputRef.current?.focus()
+  },
+  [canFocusCommandInput]
+)
+    [canFocusCommandInput]
+  )
 
   const handleLineDone = (lineId: string) => {
     const completedLine = consoleLines.find((line) => line.id === lineId)
@@ -1091,7 +1127,12 @@ export const MudConsole = () => {
             </div>
           </header>
 
-          <div className="crt" ref={logRef} aria-live={streamConfig.enabled ? 'off' : 'polite'}>
+          <div
+            className="crt"
+            ref={logRef}
+            aria-live={streamConfig.enabled ? 'off' : 'polite'}
+            onMouseDown={handleGameFieldMouseDown}
+          >
             <div className="crt-glow" />
             <div className="crt-lines">
               {consoleLines.map((line) => renderLine(line))}

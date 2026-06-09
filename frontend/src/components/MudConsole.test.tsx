@@ -227,6 +227,88 @@ describe('MudConsole', () => {
     expect(screen.getByText('This line should appear immediately.')).toBeInTheDocument()
   })
 
+  it('focuses the command input when the connected game field is clicked', () => {
+    const { container } = render(<MudConsole />)
+
+    const gameField = container.querySelector<HTMLElement>('.crt')
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    const input = screen.getByLabelText('command input')
+
+    expect(gameField).toBeInTheDocument()
+    navButton.focus()
+    expect(navButton).toHaveFocus()
+
+    fireEvent.mouseDown(gameField as HTMLElement)
+
+    expect(input).toHaveFocus()
+  })
+
+  it('leaves focus alone when the disconnected game field is clicked', () => {
+    navigatorState.connectionStatus = 'disconnected'
+    const { container } = render(<MudConsole />)
+
+    const gameField = container.querySelector<HTMLElement>('.crt')
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    const input = screen.getByLabelText('command input')
+
+    expect(gameField).toBeInTheDocument()
+    navButton.focus()
+    expect(navButton).toHaveFocus()
+
+    fireEvent.mouseDown(gameField as HTMLElement)
+
+    expect(navButton).toHaveFocus()
+    expect(input).not.toHaveFocus()
+  })
+
+  it('focuses the command input when the session connects', () => {
+    navigatorState.session = null
+    navigatorState.connectionStatus = 'connecting'
+    const { rerender } = render(<MudConsole />)
+
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    const input = screen.getByLabelText('command input')
+
+    navButton.focus()
+    expect(navButton).toHaveFocus()
+
+    navigatorState.session = { token: 'new-token', playerId: 'Hero', roomId: 0 }
+    navigatorState.connectionStatus = 'connected'
+    rerender(<MudConsole />)
+
+    expect(input).toHaveFocus()
+  })
+
+  it('focuses the command input when the connected tab regains focus', () => {
+    render(<MudConsole />)
+
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    const input = screen.getByLabelText('command input')
+
+    navButton.focus()
+    expect(navButton).toHaveFocus()
+
+    window.dispatchEvent(new Event('focus'))
+
+    expect(input).toHaveFocus()
+  })
+
+  it('leaves focus alone when the disconnected tab regains focus', () => {
+    navigatorState.connectionStatus = 'disconnected'
+    render(<MudConsole />)
+
+    const navButton = screen.getByRole('button', { name: /toggle navigation mode/i })
+    const input = screen.getByLabelText('command input')
+
+    navButton.focus()
+    expect(navButton).toHaveFocus()
+
+    window.dispatchEvent(new Event('focus'))
+
+    expect(navButton).toHaveFocus()
+    expect(input).not.toHaveFocus()
+  })
+
   it('streams one console line at a time when modem mode is enabled', () => {
     vi.useFakeTimers()
     window.history.replaceState(

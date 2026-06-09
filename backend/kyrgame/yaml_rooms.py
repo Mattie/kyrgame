@@ -562,7 +562,8 @@ class YamlRoomEngine:
     ):
         conditions = action.get("conditions", [])
         if all(
-            self._evaluate_condition(cond, player, context, room_id) for cond in conditions
+            self._evaluate_condition(cond, player, args, context, room_id)
+            for cond in conditions
         ):
             self._execute_actions(
                 action.get("then", []), player, args, context, events, room_id
@@ -658,8 +659,17 @@ class YamlRoomEngine:
             self._execute_actions(action.get("on_too_low", []), player, [], context, events, room_id)
 
     def _evaluate_condition(
-        self, condition: dict, player: models.PlayerModel, context: dict[str, Any], room_id: int | None
+        self,
+        condition: dict,
+        player: models.PlayerModel,
+        args: list[str],
+        context: dict[str, Any],
+        room_id: int | None,
     ) -> bool:
+        if "arg_at" in condition:
+            index = int(condition["arg_at"].get("index", 0))
+            value = str(condition["arg_at"].get("value", "")).lower()
+            return len(args) > index and args[index].lower() == value
         if "gold_lt" in condition:
             return player.gold < int(condition["gold_lt"])
         if "context_lt" in condition:

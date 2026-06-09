@@ -62,6 +62,7 @@
 - [x] Wired `bootstrap_app`/`shutdown_app` to own `TickScheduler` lifecycle (env-driven `KYRGAME_TICK_SECONDS`, timer registration, and cleanup before scheduler shutdown).
 - [x] Added `RuntimeTickCoordinator` to centralize recurring timer registration (spell/animation now, future timers later) and lifecycle hooks in `bootstrap_app`/`shutdown_app`.
 - [x] Ported `splrtk` into a stateless `SpellTickSystem` with scheduler registration, macro reset, +2 spell-point regen cap, and ALTNAM expiry/reversion side effects (`backend/kyrgame/spells/tick_system.py`).
+- [x] Persisted JSON-backed charm timer decrements from `SpellTickSystem` so ALTNAM transformations such as `weewillo` expire across database-backed ticks.
 
 - [x] Documented runtime tick-scheduler usage (`KYRGAME_TICK_SECONDS`, registration helpers, shutdown cleanup) in backend architecture/development docs for future timer ports.
 
@@ -79,11 +80,15 @@
 - [x] Audited room broadcast recipient splits against legacy `msgutl2`/`sndoth`/`sndbt2`/`sndloc`, aligning Python room routines, YAML room scripts, command room events, and frontend filtering for actor-excluding, target-excluding, and sender-inclusive cases.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Matched MajorBBS `sameto` prefix lookup for generic current-room/player/object targets: `get`/`grab` resolves visible player `attnam` prefixes before room objects, `look` checks room objects before inventory objects before visible players, and matching keeps legacy first-hit/no-ambiguity behavior.
+- [x] Preserved transformed-player look targeting through legacy `attnam` lookup, including transformed self-look via names like `willowisp`.
 - [x] Preserved duplicate room-object slots during legacy prefix pickup: `get`/`grab` removes only the matched `lcobjs` slot, matching `fgmlobj` + `tgmlobj(objno)` behavior.
 - [x] Fixed room 32 bubbling spring rose pickup parity so full inventories emit `GROSE3`/`GROSE4` and successful pickups grant object 40 before `GROSE1`/`GROSE2`, matching `rosutl()` (`legacy/KYRROUS.C:742-753`).
+- [x] Restored room 185 smooth-walled alcove key/crevice verb parity so `waller()` uses legacy `drpwrds` (`drop`/`insert`/`put`/`stick`/`thrust`) after `bagprep()` strips prepositions, matching `legacy/KYRROUS.C:109-115` and `legacy/KYRROUS.C:939-960`.
+- [x] Preserved room 185 `waller()` offered-object gating so only `key` succeeds at the crevice; wrong offerings still emit `WALM01`/`WALM02`.
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).
 - [x] Normalize non-chat command tokenization to strip articles/prepositions per `GAMUTILS.C` (`gi_bagthe`/`bagprep`).
 - [x] Preserve full whisper payloads for `whisper <target> <message...>` parsing so `whispr` receives complete `margv[2]` text (including quoted multi-word content).
+- [x] Audited legacy MajorBBS `pfnlvl` profanity-filter branches and kept them separate from character level, restoring normal level-3 `say`/`whisper`/`yell` behavior.
 - [x] Preserve CRLF line breaks from the legacy `.MSG` files in the message bundle fixtures for accurate display formatting.
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
 - [x] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling. *(Response contract now includes `expires_at`/`expires_in_seconds`, `backend/tests/test_api_contract_gaps.py` covers create/validate/resume, and the navigator displays expiry plus a fresh-token reconnect action.)* [Tracker: `docs/legacy_command_porting.md`]

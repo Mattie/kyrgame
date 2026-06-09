@@ -21,7 +21,7 @@
 - **Room 182 — `refpoo` (reflection pool):** Toss dagger into pool transforms it into sword; looking at pool prints descriptive message.【F:legacy/KYRROUS.C†L859-L880】
 - **Room 183 — `panthe` (pantheon chamber):** Speaking full multi-word phrase awards amulet item if inventory space; seeing symbols/pillars prints description.【F:legacy/KYRROUS.C†L882-L911】
 - **Room 184 — `portal` (portal hub):** Entering the portal plays randomized descriptive sequence and broadcasts entrance to others.【F:legacy/KYRROUS.C†L913-L932】
-- **Room 185 — `waller` (wall event):** Dropping a key into crevice after sesame chant teleports player to room 186; wrong actions give guidance; chanting “open sesame” arms the wall event.【F:legacy/KYRROUS.C†L934-L961】
+- **Room 185 — `waller` (wall event):** Using the legacy `drpwrds` verbs (`drop`/`insert`/`put`/`stick`/`thrust`) with a key and crevice after sesame chant teleports player to room 186; wrong actions give guidance; chanting “open sesame” arms the wall event.【F:legacy/KYRROUS.C†L934-L961】
 - **Room 186 — `slotma` (slot machine cave):** Dropping a garnet into the slot consumes it; ~18% chance to award random gem, otherwise loss message.【F:legacy/KYRROUS.C†L963-L988】
 - **Room 188 — `mistyr` (misty ridge):** Touch/get orb teleports to room 34; thinking/meditating on orb grants an orb object if space; dropping dagger on orb (with level 8 gate) consumes dagger and levels up.【F:legacy/KYRROUS.C†L990-L1030】
 - **Room 189 — `sanman` (sandman encounter):** Digging sand has 10% chance to grant 1 gold; otherwise nothing.【F:legacy/KYRROUS.C†L1032-L1049】

@@ -111,11 +111,14 @@ class SpellTickSystem:
         max_spell_points = 2 * player.level
         player.spts = min(player.spts + 2, max_spell_points)
 
-        for index, timer in enumerate(player.charms):
+        charms = list(player.charms)
+        charms_changed = False
+        for index, timer in enumerate(charms):
             if timer <= 0:
                 continue
             next_timer = timer - 1
-            player.charms[index] = next_timer
+            charms[index] = next_timer
+            charms_changed = True
             if next_timer != 0:
                 continue
 
@@ -128,6 +131,9 @@ class SpellTickSystem:
 
             if index == self._constants.alt_name_slot:
                 self._expire_alt_name(player)
+
+        if charms_changed:
+            player.charms = charms
 
     def _expire_alt_name(self, player: models.Player) -> None:
         # Legacy parity: ALTNAM expiration clears morph flags and reverts player

@@ -3,7 +3,15 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from kyrgame.spells.tick_system import SpellTickConstants, SpellTickSystem
+from sqlalchemy import select
+
+from kyrgame import constants, fixtures, models
+from kyrgame.database import create_session_factory, get_engine, init_db_schema
+from kyrgame.spells.tick_system import (
+    SQLAlchemySpellTickPlayerRepository,
+    SpellTickConstants,
+    SpellTickSystem,
+)
 
 
 @dataclass
@@ -89,6 +97,43 @@ def test_spell_tick_resets_macros_regens_spts_and_decrements_charms():
     assert player.charms == [0, 0, 1, 0, 0, 0]
     assert messages.direct == [("hero", "BASMSG", "BASMSG")]
     assert session.commits == 1
+
+
+def test_spell_tick_persists_json_charm_timer_decrements():
+    engine = get_engine("sqlite+pysqlite:///:memory:")
+    init_db_schema(engine)
+    session_factory = create_session_factory(engine)
+    player = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "Necro",
+            "altnam": "Some willowisp",
+            "attnam": "willowisp",
+            "level": 10,
+            "spts": 20,
+            "macros": 0,
+            "gamloc": 187,
+            "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.WILLOW),
+            "charms": [0, 0, 0, 0, 0, 4],
+        }
+    )
+    with session_factory() as session:
+        session.add(models.Player(**player.model_dump()))
+        session.commit()
+
+    system = SpellTickSystem(
+        session_factory=session_factory,
+        player_repository_factory=lambda db: SQLAlchemySpellTickPlayerRepository(db),
+        messaging=StubMessaging(),
+        constants=SpellTickConstants(),
+        message_lookup=lambda key: key,
+    )
+
+    system.tick()
+
+    with session_factory() as session:
+        record = session.scalar(select(models.Player).where(models.Player.plyrid == "Necro"))
+        assert record is not None
+        assert record.charms[constants.ALTNAM] == 3
 
 
 def test_spell_tick_handles_altname_expiry_and_reverts_identity_flags():
