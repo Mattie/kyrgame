@@ -3716,9 +3716,9 @@ def _handle_pray(state: GameState, args: dict) -> CommandResult:
 async def _handle_whisper(state: GameState, args: dict) -> CommandResult:
     """Port of whispr() targeted private speech.
 
-    Validates minimum argument shape, enforces the level-3 gag branch, and then
-    sends WHISPR1 to target, WHISPR2 to actor, and WHISPR3 to the room excluding
-    the target (legacy sndbt2-style fan-out).
+    Validates minimum argument shape, then sends WHISPR1 to target, WHISPR2 to
+    actor, and WHISPR3 to the room excluding the target (legacy sndbt2-style
+    fan-out).
     See legacy/KYRCMDS.C:266-296.
     """
     command_id = args.get("command_id")
@@ -3726,8 +3726,6 @@ async def _handle_whisper(state: GameState, args: dict) -> CommandResult:
     text = _unquote_text((args.get("text") or "").strip())
     if not target_name or not text:
         return CommandResult(state=state, events=[_message_event("player", "WHAT", _format_message(state, "WHAT"), command_id)])
-    if state.player.level == 3:
-        return CommandResult(state=state, events=[_message_event("player", "WATCHIT", _format_message(state, "WATCHIT"), command_id)])
 
     target_player = await _find_player_in_room(state, target_name)
     if not target_player:
@@ -3756,8 +3754,7 @@ async def _handle_whisper(state: GameState, args: dict) -> CommandResult:
 def _handle_say(state: GameState, args: dict) -> CommandResult:
     """Port of speakr() normal speech mode for say/comment/note.
 
-    This handler models the direct speech branch (non-empty text and non-gagged
-    player) with legacy message IDs.
+    This handler models the direct speech branch with legacy message IDs.
     See legacy/KYRCMDS.C:241-264.
     """
     command_id = args.get("command_id")
@@ -3765,8 +3762,6 @@ def _handle_say(state: GameState, args: dict) -> CommandResult:
     text = _unquote_text((args.get("text") or "").strip())
     if not text:
         return CommandResult(state=state, events=[_message_event("player", "HUH", _format_message(state, "HUH"), command_id)])
-    if state.player.level == 3:
-        return CommandResult(state=state, events=[_message_event("player", "NOWNOW", _format_message(state, "NOWNOW"), command_id)])
     # Legacy speakr(): SPEAK1 (actor context) and SPEAK2 (text) are sent together
     # via sndoth() to the room, and SPEAK3 via sndnear() to adjacent rooms.
     # See legacy/KYRCMDS.C:254-261.
@@ -3831,24 +3826,23 @@ def _handle_yell(state: GameState, args: dict) -> CommandResult:
     # Legacy yeller(): YELLER3 to player, YELLER4+YELLER5 to room, YELLER6 to nearby.
     # See legacy/KYRCMDS.C:311-322.
     events = [_message_event("player", "YELLER3", _format_message(state, "YELLER3"), command_id)]
-    if state.player.level < 3:
-        up = text.upper()
-        yeller4 = _format_message(state, "YELLER4", state.player.altnam, verb) or ""
-        yeller5 = _format_message(state, "YELLER5", up)
-        room_text = f"{yeller4}{yeller5 if yeller5 is not None else up}"
-        events.append(_message_event("room", "YELLER5", room_text, command_id, exclude_player=state.player.plyrid))
-        # Legacy yeller(): sndnear() broadcasts YELLER6 to adjacent rooms.
-        nearby_text = _format_message(state, "YELLER6", up)
-        for room_id in _adjacent_room_ids(state):
-            events.append({
-                "scope": "nearby_room",
-                "room_id": room_id,
-                "event": "room_message",
-                "type": "room_message",
-                "text": nearby_text,
-                "message_id": "YELLER6",
-                "command_id": command_id,
-            })
+    up = text.upper()
+    yeller4 = _format_message(state, "YELLER4", state.player.altnam, verb) or ""
+    yeller5 = _format_message(state, "YELLER5", up)
+    room_text = f"{yeller4}{yeller5 if yeller5 is not None else up}"
+    events.append(_message_event("room", "YELLER5", room_text, command_id, exclude_player=state.player.plyrid))
+    # Legacy yeller(): sndnear() broadcasts YELLER6 to adjacent rooms.
+    nearby_text = _format_message(state, "YELLER6", up)
+    for room_id in _adjacent_room_ids(state):
+        events.append({
+            "scope": "nearby_room",
+            "room_id": room_id,
+            "event": "room_message",
+            "type": "room_message",
+            "text": nearby_text,
+            "message_id": "YELLER6",
+            "command_id": command_id,
+        })
     return CommandResult(state=state, events=events)
 
 

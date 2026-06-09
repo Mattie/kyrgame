@@ -88,6 +88,7 @@
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).
 - [x] Normalize non-chat command tokenization to strip articles/prepositions per `GAMUTILS.C` (`gi_bagthe`/`bagprep`).
 - [x] Preserve full whisper payloads for `whisper <target> <message...>` parsing so `whispr` receives complete `margv[2]` text (including quoted multi-word content).
+- [x] Audited legacy MajorBBS `pfnlvl` profanity-filter branches and kept them separate from character level, restoring normal level-3 `say`/`whisper`/`yell` behavior.
 - [x] Preserve CRLF line breaks from the legacy `.MSG` files in the message bundle fixtures for accurate display formatting.
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
 - [x] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling. *(Response contract now includes `expires_at`/`expires_in_seconds`, `backend/tests/test_api_contract_gaps.py` covers create/validate/resume, and the navigator displays expiry plus a fresh-token reconnect action.)* [Tracker: `docs/legacy_command_porting.md`]
