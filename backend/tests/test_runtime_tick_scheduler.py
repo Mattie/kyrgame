@@ -88,6 +88,44 @@ async def test_animation_tick_callback_syncs_room_flags_and_clears_one_shots(mon
 
 
 @pytest.mark.anyio
+async def test_animation_tick_callback_clears_hardcoded_temple_chantd(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+
+    app.state.room_scripts.get_room_state(7).flags["chantd"] = 6
+    broadcasts: list[tuple[int, dict]] = []
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+        broadcasts.append((room_id, message))
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.animation_tick_callback()
+
+    assert app.state.room_scripts.get_room_state(7).flags["chantd"] == 0
+    temple_messages = [
+        message["payload"]
+        for room_id, message in broadcasts
+        if room_id == 7 and message.get("payload", {}).get("animation_flag") == "chantd"
+    ]
+    assert temple_messages == [
+        {
+            "event": "room_message",
+            "scope": "room",
+            "type": "room_message",
+            "message_id": None,
+            "text": "***\rThe altar stops glowing.\r",
+            "animation_flag": "chantd",
+        }
+    ]
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
 async def test_animation_npcs_only_affect_active_players(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")

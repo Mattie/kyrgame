@@ -217,6 +217,116 @@ async def test_temple_put_requires_exact_five_chants():
 
 
 @pytest.mark.anyio
+async def test_temple_chant_tashanna_broadcasts_room_message_text_and_counts():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player()
+
+    for _ in range(5):
+        handled = await engine.handle_command(
+            "hero", 7, command="chant", args=["tashanna"], player=player
+        )
+        assert handled is True
+
+    assert engine.get_room_state(7).flags["chantd"] == 5
+    altar_payloads = [
+        msg.get("payload", {})
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("text", "").startswith("*** The altar")
+    ]
+    assert altar_payloads[0] == {
+        "event": "room_message",
+        "scope": "broadcast",
+        "type": "room_message",
+        "text": "*** The altar begins to glow dimly.",
+    }
+    assert [payload["text"] for payload in altar_payloads[1:]] == [
+        "*** The altar glows even brighter!",
+        "*** The altar glows even brighter!",
+        "*** The altar glows even brighter!",
+        "*** The altar glows even brighter!",
+    ]
+
+
+@pytest.mark.anyio
+async def test_temple_five_chants_then_charm_levels_eligible_player():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"level": 8, "gpobjs": [18], "obvals": [0], "npobjs": 1}, deep=True
+    )
+
+    for _ in range(5):
+        await engine.handle_command("hero", 7, command="chant", args=["tashanna"], player=player)
+
+    handled = await engine.handle_command(
+        "hero", 7, command="put", args=["charm"], player=player
+    )
+
+    assert handled is True
+    assert player.level == 9
+    assert 18 not in player.gpobjs
+    assert any(
+        msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("message_id") == "LVL9M0"
+        for msg in gateway.messages
+    )
+
+
+@pytest.mark.anyio
+async def test_temple_six_chants_rejects_until_reset_allows_fresh_five_chants():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"level": 8, "gpobjs": [18], "obvals": [0], "npobjs": 1}, deep=True
+    )
+
+    for _ in range(6):
+        await engine.handle_command("hero", 7, command="chant", args=["tashanna"], player=player)
+
+    handled = await engine.handle_command(
+        "hero", 7, command="put", args=["charm"], player=player
+    )
+
+    assert handled is False
+    assert player.level == 8
+    assert 18 in player.gpobjs
+
+    engine.get_room_state(7).flags["chantd"] = 0
+    for _ in range(5):
+        await engine.handle_command("hero", 7, command="chant", args=["tashanna"], player=player)
+
+    handled = await engine.handle_command(
+        "hero", 7, command="put", args=["charm"], player=player
+    )
+
+    assert handled is True
+    assert player.level == 9
+    assert 18 not in player.gpobjs
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("command", "args"),
     [
@@ -435,13 +545,14 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
     await engine.exit_room("hero", 38)
     await scheduler.stop()
 
-    ambient_texts = [
+    room_message_texts = [
         msg.get("payload", {}).get("text")
         for msg in gateway.messages
-        if msg.get("payload", {}).get("event") == "ambient"
+        if msg.get("payload", {}).get("event") == "room_message"
+        and msg.get("payload", {}).get("type") == "room_message"
         and msg.get("payload", {}).get("scope") == "broadcast"
     ]
-    assert messages.messages["KRD038"] in ambient_texts
+    assert messages.messages["KRD038"] in room_message_texts
 
     direct_texts = [
         msg.get("payload", {}).get("text")
