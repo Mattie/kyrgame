@@ -15,6 +15,11 @@ from kyrgame.webapp import _room_occupants_event
 from session_test_helpers import create_seeded_app as create_app
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 @pytest.mark.anyio
 async def test_room_occupants_event_includes_player_flags_for_ui_styling():
     presence = PresenceService()
@@ -37,6 +42,28 @@ async def test_room_occupants_event_includes_player_flags_for_ui_styling():
             "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE),
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_room_occupants_event_deduplicates_trimmed_presence_ids():
+    presence = PresenceService()
+    await presence.set_location("Hero", 0, "hero-token")
+    await presence.set_location("Merlin", 0, "merlin-token")
+    await presence.set_location("Necro", 0, "necro-token")
+    await presence.set_location("Necro ", 0, "necro-stale-token")
+
+    event = await _room_occupants_event(
+        presence,
+        "Hero",
+        0,
+        fixtures.load_message_bundle(),
+        {"Necro": int(constants.PlayerFlag.LOADED)},
+    )
+
+    assert event is not None
+    assert event["occupants"] == ["Merlin", "Necro"]
+    assert "Merlin" in event["text"]
+    assert event["text"].count("Necro") == 1
 
 
 class DummyWebSocket:
@@ -69,6 +96,16 @@ async def _drain_pending_messages(websocket):
             await asyncio.wait_for(websocket.recv(), timeout=0.05)
         except asyncio.TimeoutError:
             break
+
+
+async def _wait_until(predicate, timeout: float = 1.5):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("Timed out waiting for condition")
 
 
 @pytest.mark.anyio
@@ -167,9 +204,15 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
                 assert seer_broadcast["room"] == 1
                 assert seer_broadcast["payload"]["player"] == "hero"
 
-                await _drain_pending_messages(rogue_ws)
-                with pytest.raises(asyncio.TimeoutError):
-                    await asyncio.wait_for(rogue_ws.recv(), timeout=0.3)
+                departure_notice = await _receive_until(
+                    rogue_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("event") == "room_message",
+                )
+                assert departure_notice["room"] == 0
+                assert departure_notice["payload"]["text"] == (
+                    "*** Hero Alt has just moved off to the north!"
+                )
 
                 chat_payload = {"type": "command", "command": "chat", "args": {"text": "hail"}}
                 await seer_ws.send(json.dumps(chat_payload))
@@ -185,6 +228,67 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
                 await _drain_pending_messages(rogue_ws)
                 with pytest.raises(asyncio.TimeoutError):
                     await asyncio.wait_for(rogue_ws.recv(), timeout=0.3)
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
+async def test_x_command_broadcasts_departure_and_deactivates_session():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+        hero_token = hero_session.json()["session"]["token"]
+        rogue_session = await client.post("/auth/session", json={"player_id": "rogue", "room_id": 0})
+        rogue_token = rogue_session.json()["session"]["token"]
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await _drain_pending_messages(hero_ws)
+
+            async with websockets.connect(uri_room0_rogue) as rogue_ws:
+                await asyncio.wait_for(rogue_ws.recv(), timeout=1)
+                await _drain_pending_messages(rogue_ws)
+                await _drain_pending_messages(hero_ws)
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "x"}))
+
+                exit_message = await _receive_until(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("message_id") == "EXIKYR",
+                )
+                assert exit_message["payload"]["text"] == "...Exiting Kyrandia..."
+
+                departure_notice = await _receive_until(
+                    rogue_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("event") == "room_message",
+                )
+                assert departure_notice["payload"]["text"] == (
+                    "*** Hero Alt has just vanished in sparkling light!"
+                )
+
+                await _wait_until(
+                    lambda: hero_token not in getattr(app.state, "active_player_sessions", {})
+                )
+                assert await app.state.presence.room_for_session(hero_token) is None
+
+                validate = await client.get(
+                    "/auth/session", headers={"Authorization": f"Bearer {hero_token}"}
+                )
+                assert validate.status_code == 401
 
     server.should_exit = True
     await server_task

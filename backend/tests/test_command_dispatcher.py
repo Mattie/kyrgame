@@ -98,8 +98,63 @@ async def test_move_arrival_notice_uses_transformed_player_name(base_state):
 
     result = await dispatcher.dispatch("move", {"direction": "north"}, base_state)
 
-    room_message = next(event for event in result.events if event["event"] == "room_message")
+    room_message = next(
+        event
+        for event in result.events
+        if event["event"] == "room_message" and event.get("to") == 1 and "room_id" not in event
+    )
     assert room_message["text"] == "*** Some willowisp has just appeared from the south!"
+
+
+@pytest.mark.anyio
+async def test_move_emits_legacy_departure_notice_for_source_room(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player.plyrid = "necro"
+    base_state.player.altnam = "Some willowisp"
+
+    result = await dispatcher.dispatch("move", {"direction": "north"}, base_state)
+
+    departure = next(
+        event
+        for event in result.events
+        if event.get("event") == "room_message"
+        and event.get("from") == 0
+        and event.get("to") == 1
+        and event.get("room_id") == 0
+    )
+    assert departure["text"] == "*** Some willowisp has just moved off to the north!"
+    assert departure["exclude_player"] == "necro"
+
+
+@pytest.mark.anyio
+async def test_x_exit_emits_legacy_departure_and_exit_events(base_state):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player.plyrid = "necro"
+    base_state.player.altnam = "Some willowisp"
+
+    parsed = vocabulary.parse_text("x")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    assert base_state.player.pgploc == 0
+    assert base_state.player.gamloc == -1
+    departure = next(
+        event for event in result.events if event.get("event") == "room_message"
+    )
+    assert departure["room_id"] == 0
+    assert departure["text"] == "*** Some willowisp has just vanished in sparkling light!"
+    assert departure["exclude_player"] == "necro"
+    exit_message = next(
+        event for event in result.events if event.get("message_id") == "EXIKYR"
+    )
+    assert exit_message["text"] == "...Exiting Kyrandia..."
+    assert any(event.get("event") == "session_exit" for event in result.events)
 
 
 @pytest.mark.anyio

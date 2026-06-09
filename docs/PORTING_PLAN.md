@@ -78,6 +78,8 @@
 - [x] Restored temple room-first handling for the exact `TEMPLE` phrase (`glory be to tashanna`) after legacy-style article stripping, so it reaches the level-3 gate before command dispatch; added legacy command-table alias audit coverage.
 - [x] Aligned GET command room broadcasts (GETLOC5/GETLOC7) and player-target exclusion with legacy `getloc()` sndoth/sndbt2 behavior.
 - [x] Audited room broadcast recipient splits against legacy `msgutl2`/`sndoth`/`sndbt2`/`sndloc`, aligning Python room routines, YAML room scripts, command room events, and frontend filtering for actor-excluding, target-excluding, and sender-inclusive cases.
+- [x] Restored legacy `remvgp` departure fan-out for ordinary movement and in-game `x`, including source-room walk-out/sparkling-light messages, direct `EXIKYR`, session/presence deactivation, and persisted exit state.
+- [x] Deduped trimmed room occupant presence identifiers so room `look`/entry text cannot list the same player twice with trailing-space variants.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Matched MajorBBS `sameto` prefix lookup for generic current-room/player/object targets: `get`/`grab` resolves visible player `attnam` prefixes before room objects, `look` checks room objects before inventory objects before visible players, and matching keeps legacy first-hit/no-ambiguity behavior.
 - [x] Preserved transformed-player look targeting through legacy `attnam` lookup, including transformed self-look via names like `willowisp`.
@@ -111,7 +113,7 @@
 - [x] Preserved the original `INTROD` version and designed/programmed-by credit block while appending the modernized porting credit block for first-login intro paging.
 - [x] Frontend first-login intro rendering through the existing console/session UI, including blank ENTER advancement, typed-input consumption during intro, WASD command gating, and room description suppression until lifecycle completion.
 - [x] Simulated MajorBBS-style screen-length paging for long first-login lifecycle output with `C` continue, `N` nonstop, and `Q` quit controls.
-- [ ] In-game `x` exit parity: emit `EXIKYR`, broadcast sparkling-light departure, deactivate session/presence, and persist player state.
+- [x] In-game `x` exit parity: emit `EXIKYR`, broadcast sparkling-light departure, deactivate session/presence, and persist player state.
 - [ ] Frontend rendering for remaining exit lifecycle messages through the existing console/session UI.
 
 ### Release/Ops Cleanup (Final Porting Lane)
@@ -121,8 +123,7 @@
 ## Remaining Implementation Task Plan
 
 1. **Legacy gameplay support gaps**
-   - Next meaty gameplay target: in-game `x` exit parity with `EXIKYR`, sparkling-light room fan-out, session deactivation, presence cleanup, and persisted player state.
-   - Follow with a focused frontend pass for exit message surfaces after the `x` path lands.
+   - Next meaty gameplay target: focused frontend pass for remaining exit message surfaces now that the backend `x` path has landed.
 2. **Documentation and tracker closure**
    - Keep `docs/PORTING_PLAN.md`, `docs/legacy_command_porting.md`, `docs/PORTING_PLAN_world_object_spell_gaps.md`, and `docs/solo_level_journey_checklist.md` aligned after each gameplay PR.
    - For every ported gameplay routine, include legacy source references and verify both C call sites and message catalog IDs.
@@ -175,7 +176,5 @@
 - **Admin endpoints:** Provide secured CRUD for player records and content, reflecting `KYRSYSP.C` behaviors. Tests cover authorization and validation, and a PATCH flow clamps level-derived HP/SP, gold caps, and spouse updates for tooling parity. Admin tokens now come from environment configuration (auto-loaded from `backend/.env`, or override with `KYRGAME_ENV_FILE`; see `backend/.env.example` and `backend/ADMINISTRATION.md`).
 
 ## Next Steps: Legacy Gameplay Support
-1. **Player lifecycle parity**
-   - Add the in-game `x` exit path with `EXIKYR`, sparkling-light room fan-out, session deactivation, presence cleanup, and persisted player state.
-2. **Frontend lifecycle surfaces**
-   - Verify exit messages render cleanly through the existing console/session UI after the `x` path lands.
+1. **Frontend lifecycle surfaces**
+   - Verify exit messages render cleanly through the existing console/session UI and cover any remaining disconnect prompts.

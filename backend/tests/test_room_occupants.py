@@ -10,6 +10,11 @@ import websockets
 from session_test_helpers import create_seeded_app as create_app
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 def _get_open_port() -> int:
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))

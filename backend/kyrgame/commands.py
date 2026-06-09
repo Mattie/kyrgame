@@ -433,6 +433,40 @@ def _arrival_text(direction: str) -> str:
     return "arrived"
 
 
+def _departure_text(direction: str) -> str:
+    """Return the legacy phrase used when a player leaves by walking."""
+
+    if direction in _DIRECTION_FIELDS:
+        return f"moved off to the {direction}"
+    return "left"
+
+
+def _room_departure_event(
+    state: GameState,
+    *,
+    from_room: int,
+    to_room: int | None,
+    command_id: int | None,
+    direction: str | None,
+    departure_text: str,
+) -> dict:
+    # Mirrors remvgp() source-room fan-out before gamloc changes in legacy/KYRUTIL.C:225-233.
+    return {
+        "scope": "room",
+        "room_id": from_room,
+        "event": "room_message",
+        "type": "room_message",
+        "player": state.player.plyrid,
+        "from": from_room,
+        "to": to_room,
+        "direction": direction,
+        "text": f"*** {state.player.altnam} has just {departure_text}!",
+        "message_id": None,
+        "command_id": command_id,
+        "exclude_player": state.player.plyrid,
+    }
+
+
 def _build_room_transition_events(
     state: GameState,
     *,
@@ -513,17 +547,26 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
             f"No exit {direction} from location {current.id}", message_id="MOVUTL"
         )
 
-    state.player.pgploc = state.player.gamloc
+    from_room = state.player.gamloc
+    state.player.pgploc = from_room
     state.player.gamloc = target_id
     _persist_player_location(state, state.player)
 
     # Mirrors movutl/entrgp in legacy/KYRCMDS.C and KYRUTIL.C for movement flow.【F:legacy/KYRCMDS.C†L328-L366】【F:legacy/KYRUTIL.C†L236-L255】
     arrival_phrase = _arrival_text(direction)
     arrival_text = f"*** {state.player.altnam} has just {arrival_phrase}!"
-
-    return CommandResult(
-        state=state,
-        events=_build_room_transition_events(
+    events = [
+        _room_departure_event(
+            state,
+            from_room=from_room,
+            to_room=target_id,
+            command_id=command_id,
+            direction=direction,
+            departure_text=_departure_text(direction),
+        )
+    ]
+    events.extend(
+        _build_room_transition_events(
             state,
             from_room=current.id,
             to_room=target_id,
@@ -531,8 +574,55 @@ def _handle_move(state: GameState, args: dict) -> CommandResult:
             message_id=message_id,
             direction=direction,
             arrival_text=arrival_text,
-        ),
+        )
     )
+
+    return CommandResult(
+        state=state,
+        events=events,
+    )
+
+
+def _handle_exit(state: GameState, args: dict) -> CommandResult:
+    command_id = args.get("command_id")
+    from_room = state.player.gamloc
+    events: list[dict] = []
+    if from_room >= 0:
+        events.append(
+            _room_departure_event(
+                state,
+                from_room=from_room,
+                to_room=None,
+                command_id=command_id,
+                direction=None,
+                departure_text="vanished in sparkling light",
+            )
+        )
+
+    # Legacy kyra() checks "x" before the command table and calls remvgp() before EXIKYR.
+    # See legacy/KYRANDIA.C:192-196 and legacy/KYRUTIL.C:225-233.
+    state.player.pgploc = from_room
+    state.player.gamloc = -1
+    _persist_player_state(state, state.player)
+    events.append(
+        _message_event(
+            "player",
+            "EXIKYR",
+            _format_message(state, "EXIKYR") or "...Exiting Kyrandia...",
+            command_id,
+        )
+    )
+    events.append(
+        {
+            "scope": "control",
+            "event": "session_exit",
+            "type": "session_exit",
+            "from": from_room,
+            "command_id": command_id,
+            "message_id": "EXIKYR",
+        }
+    )
+    return CommandResult(state=state, events=events)
 
 
 def _adjacent_room_ids(state: GameState) -> List[int]:
@@ -3166,11 +3256,33 @@ def _format_room_occupants(
     return f"{names} {suffix}", message_id
 
 
+def _dedupe_room_occupants(occupants: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for occupant in occupants:
+        display = str(occupant or "").strip()
+        if not display:
+            continue
+        key = display.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(display)
+    return unique
+
+
 async def _room_occupants_event(state: GameState, room_id: int) -> dict | None:
     if not state.presence:
         return None
     occupants = await state.presence.players_in_room(room_id)
-    others = sorted(occupant for occupant in occupants if occupant != state.player.plyrid)
+    self_key = state.player.plyrid.strip().casefold()
+    others = _dedupe_room_occupants(
+        sorted(
+            occupant
+            for occupant in occupants
+            if str(occupant or "").strip().casefold() != self_key
+        )
+    )
     text, message_id = _format_room_occupants(others, state.messages)
     if not text:
         return None
@@ -4413,6 +4525,7 @@ def build_default_registry(vocabulary: CommandVocabulary | None = None) -> Comma
         ),
         _handle_move,
     )
+    registry.register(CommandMetadata(verb="x"), _handle_exit)
     registry.register(CommandMetadata(verb="chat", cooldown_seconds=1.5), _handle_chat)
     for verb in sorted(_SAY_VERBS):
         registry.register(

@@ -2515,7 +2515,14 @@ async def _room_occupants_event(
     player_flags_by_id: dict[str, int] | None = None,
 ):
     occupants = await presence.players_in_room(room_id)
-    others = sorted(occupant for occupant in occupants if occupant != player_id)
+    player_key = player_id.strip().casefold()
+    others = commands._dedupe_room_occupants(
+        sorted(
+            occupant
+            for occupant in occupants
+            if str(occupant or "").strip().casefold() != player_key
+        )
+    )
     text, message_id = _format_room_occupants(others, messages)
     if not others or not text:
         return None
@@ -3111,6 +3118,8 @@ def create_app() -> FastAPI:
             target_room = state.player.gamloc
             if target_room == current_room:
                 return
+            if target_room < 0 or target_room not in state.locations:
+                return
             await gateway.register(target_room, websocket, announce=False)
             await provider.presence.set_location(player_id, target_room, session_token)
             with provider.scope.app.state.session_factory() as db:
@@ -3119,6 +3128,25 @@ def create_app() -> FastAPI:
                 repo.mark_seen(session_token)
                 db.commit()
             current_room = target_room
+
+        session_exit_started = False
+
+        async def _deactivate_current_session() -> None:
+            nonlocal session_exit_started
+            if session_exit_started:
+                return
+            session_exit_started = True
+            with provider.scope.app.state.session_factory() as db:
+                repo = repositories.PlayerSessionRepository(db)
+                repo.deactivate(session_token)
+                db.commit()
+            await provider.presence.remove(session_token)
+            await gateway.unregister(current_room, websocket)
+            if session_connections.get(session_token) is websocket:
+                session_connections.pop(session_token, None)
+            _remove_active_player_session(provider.scope.app, session_token, player_id)
+            if websocket.application_state == WebSocketState.CONNECTED:
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
 
         try:
             while True:
@@ -3174,7 +3202,12 @@ def create_app() -> FastAPI:
                     fatigue_bypass_requested = bool(
                         meta and meta.get(commands.FATIGUE_BYPASS_META_KEY)
                     )
-                    if (
+                    if parsed is not None and parsed.verb == "x":
+                        # Legacy kyra() handles `x` before the command-table fatigue path.
+                        # See legacy/KYRANDIA.C:192-196.
+                        parsed.args[commands.FATIGUE_CHECKED_ARG] = True
+                        fatigue_bypassed = True
+                    elif (
                         fatigue_bypass_requested
                         and parsed is not None
                         and commands.can_bypass_command_fatigue(parsed.verb, parsed.args)
@@ -3270,7 +3303,11 @@ def create_app() -> FastAPI:
                         for event in pending_events:
                             scope = event.get("scope", "player")
                             if scope == "room":
-                                envelope = {"type": "room_broadcast", "room": current_room, "payload": event}
+                                event_room_value = event.get("room_id")
+                                event_room = (
+                                    current_room if event_room_value is None else int(event_room_value)
+                                )
+                                envelope = {"type": "room_broadcast", "room": event_room, "payload": event}
                                 if meta:
                                     envelope["meta"] = meta
                                 excluded_player = event.get("exclude_player")
@@ -3287,7 +3324,7 @@ def create_app() -> FastAPI:
                                             excluded_sockets.add(target_socket)
                                 sender_socket = None if event.get("include_sender") else websocket
                                 await gateway.broadcast(
-                                    current_room,
+                                    event_room,
                                     envelope,
                                     sender=sender_socket,
                                     exclude=excluded_sockets,
@@ -3488,9 +3525,16 @@ def create_app() -> FastAPI:
                     )
                     continue
 
+                session_exit_requested = any(
+                    event.get("event") == "session_exit" for event in result.events
+                )
                 target_room = state.player.gamloc
                 occupant_event = None
-                if target_room != current_room:
+                if (
+                    not session_exit_requested
+                    and target_room != current_room
+                    and target_room in state.locations
+                ):
                     await gateway.register(target_room, websocket, announce=False)
                     await provider.presence.set_location(player_id, target_room, session_token)
                     with provider.scope.app.state.session_factory() as db:
@@ -3527,7 +3571,11 @@ def create_app() -> FastAPI:
                 for event in result.events:
                     scope = event.get("scope", "player")
                     if scope == "room":
-                        envelope = {"type": "room_broadcast", "room": current_room, "payload": event}
+                        event_room_value = event.get("room_id")
+                        event_room = (
+                            current_room if event_room_value is None else int(event_room_value)
+                        )
+                        envelope = {"type": "room_broadcast", "room": event_room, "payload": event}
                         if meta:
                             envelope["meta"] = meta
                         excluded_player = event.get("exclude_player")
@@ -3544,7 +3592,7 @@ def create_app() -> FastAPI:
                                     excluded_sockets.add(target_socket)
                         sender_socket = None if event.get("include_sender") else websocket
                         await gateway.broadcast(
-                            current_room,
+                            event_room,
                             envelope,
                             sender=sender_socket,
                             exclude=excluded_sockets,
@@ -3627,11 +3675,17 @@ def create_app() -> FastAPI:
                                     if meta:
                                         occupants_envelope["meta"] = meta
                                     await target_socket.send_json(occupants_envelope)
+                    elif scope == "control":
+                        if event.get("event") == "session_exit":
+                            session_exit_requested = True
                     else:
                         envelope = {"type": "command_response", "room": current_room, "payload": event}
                         if meta:
                             envelope["meta"] = meta
                         await send_player_json(envelope)
+                if session_exit_requested:
+                    await _deactivate_current_session()
+                    break
         except WebSocketDisconnect:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)

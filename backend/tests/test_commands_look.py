@@ -395,6 +395,24 @@ async def test_look_default_respects_brief_flag_and_emits_room_state():
 
 
 @pytest.mark.anyio
+async def test_look_room_occupants_deduplicates_trailing_space_presence_ids():
+    other = _build_player(plyrid="Necro", attnam="Necro", altnam="Necro")
+    player = _build_player(plyrid="Hero", flags=int(constants.PlayerFlag.BRFSTF))
+    state = _build_state(player, [other])
+    state.presence = FakePresence({player.gamloc: {"Hero", "Necro", "Necro "}})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": ""}, state)
+
+    occupants_event = next(
+        event for event in result.events if event.get("type") == "room_occupants"
+    )
+    assert occupants_event["occupants"] == ["Necro"]
+    assert occupants_event["text"].count("Necro") == 1
+
+
+@pytest.mark.anyio
 async def test_look_keeps_transform_description_when_viewer_has_whoub_charm():
     other = _build_player(
         plyrid="truth",
