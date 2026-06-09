@@ -89,6 +89,20 @@ async def test_move_tracks_previous_location(base_state):
 
 
 @pytest.mark.anyio
+async def test_move_arrival_notice_uses_transformed_player_name(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    base_state.player.plyrid = "necro"
+    base_state.player.altnam = "Some willowisp"
+
+    result = await dispatcher.dispatch("move", {"direction": "north"}, base_state)
+
+    room_message = next(event for event in result.events if event["event"] == "room_message")
+    assert room_message["text"] == "*** Some willowisp has just appeared from the south!"
+
+
+@pytest.mark.anyio
 async def test_move_blocks_missing_exit_and_sets_message_id(base_state):
     vocabulary = commands.CommandVocabulary(
         fixtures.load_commands(), fixtures.load_messages()
