@@ -687,7 +687,6 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         expected = gem_sequence[progress] if progress < len(gem_sequence) else None
 
         if offered is None or offered not in player.gpobjs:
-            player.stumpi = 0
             await context.direct_and_others(
                 player_id,
                 "room_message",
@@ -698,10 +697,12 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             )
             return True
 
+        # Legacy stumpr consumes the offered inventory object before validating
+        # level or sequence, and only resets stumpi on final chklvl failure.
+        # Source: legacy/KYRROUS.C:518-543.
         remove_inventory_item(player, offered)
 
         if level != 5:
-            player.stumpi = 0
             await context.direct_and_others(
                 player_id,
                 "room_message",
@@ -713,7 +714,6 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             return True
 
         if expected is None or offered != expected:
-            player.stumpi = 0
             await context.direct_and_others(
                 player_id,
                 "room_message",
@@ -737,16 +737,6 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     others_text=messages.messages.get("BGEM01", "") % display_name,
                     direct_message_id="BGEM00",
                     others_message_id="BGEM01",
-                )
-            else:
-                player.stumpi = 0
-                await context.direct_and_others(
-                    player_id,
-                    "room_message",
-                    direct_text=messages.messages.get("BGEM04", ""),
-                    others_text=messages.messages.get("BGEM03", "") % display_name,
-                    direct_message_id="BGEM04",
-                    others_message_id="BGEM03",
                 )
             return True
 
@@ -845,7 +835,9 @@ def _silver_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 )
                 return True
 
-            player.gemidx = 0
+            # Legacy silver leaves gemidx unchanged for wrong birthstones; the
+            # reset happens only after the fourth correct stone fails chklvl(4).
+            # Source: legacy/KYRROUS.C:564-583.
             await context.direct_and_others(
                 player_id,
                 "room_message",

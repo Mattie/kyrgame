@@ -25,6 +25,11 @@ class FakeGateway:
 
 
 @pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
+@pytest.fixture
 async def engine_and_gateway():
     scheduler = SchedulerService()
     await scheduler.start()
@@ -149,7 +154,7 @@ async def test_stump_broadcast_message_goes_only_to_others(engine_and_gateway):
 
 
 @pytest.mark.anyio
-async def test_stump_wrong_item_resets_progress(engine_and_gateway):
+async def test_stump_wrong_item_preserves_progress(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
 
@@ -178,7 +183,7 @@ async def test_stump_wrong_item_resets_progress(engine_and_gateway):
         player=player,
     )
 
-    assert player.stumpi == 0
+    assert player.stumpi == 1
     assert "99" not in map(str, player.gpobjs)
 
     direct_texts = [
@@ -195,14 +200,25 @@ async def test_stump_wrong_item_resets_progress(engine_and_gateway):
     ]
     assert messages.messages["BGEM03"] % player.altnam in broadcast_texts
 
+    await engine.handle_command(
+        "hero",
+        18,
+        command="offer",
+        args=[str(1)],
+        player_level=player.level,
+        player=player,
+    )
+    assert player.stumpi == 2
+
 
 @pytest.mark.anyio
-async def test_stump_requires_inventory(engine_and_gateway):
+async def test_stump_requires_inventory_preserves_progress(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
 
     player = _fresh_player()
     player.level = 5
+    player.stumpi = 1
     player.gpobjs.remove(0)
     player.obvals.pop(0)
     player.npobjs = len(player.gpobjs)
@@ -216,7 +232,7 @@ async def test_stump_requires_inventory(engine_and_gateway):
         player=player,
     )
 
-    assert player.stumpi == 0
+    assert player.stumpi == 1
     assert "0" not in map(str, player.gpobjs)
 
     direct_texts = [
@@ -235,24 +251,25 @@ async def test_stump_requires_inventory(engine_and_gateway):
 
 
 @pytest.mark.anyio
-async def test_stump_level_gate_resets(engine_and_gateway):
+async def test_stump_wrong_level_preserves_progress(engine_and_gateway):
     engine, gateway = engine_and_gateway
     messages = fixtures.load_messages()
 
     player = _fresh_player()
     player.level = 4
+    player.stumpi = 1
 
     await engine.handle_command(
         "hero",
         18,
         command="drop",
-        args=["0"],
+        args=["1"],
         player_level=player.level,
         player=player,
     )
 
-    assert player.stumpi == 0
-    assert "0" not in map(str, player.gpobjs)
+    assert player.stumpi == 1
+    assert "1" not in map(str, player.gpobjs)
 
     direct_texts = [
         msg.get("text")
