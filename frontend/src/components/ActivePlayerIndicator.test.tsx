@@ -8,6 +8,8 @@ const navigatorState = vi.hoisted(() => ({
     apiBaseUrl: 'http://api.local',
     connectionStatus: 'connected',
     adminToken: null as string | null,
+    session: null as { playerId: string; sessionKind?: 'game' | 'admin' } | null,
+    logoutSession: vi.fn(async () => {}),
   },
 }))
 
@@ -59,6 +61,8 @@ describe('ActivePlayerIndicator', () => {
       apiBaseUrl: 'http://api.local',
       connectionStatus: 'connected',
       adminToken: null,
+      session: null,
+      logoutSession: vi.fn(async () => {}),
     }
     MockWebSocket.instances.length = 0
   })
@@ -104,11 +108,35 @@ describe('ActivePlayerIndicator', () => {
     expect(screen.getByText('2m 15s').closest('time')).toHaveAttribute('dateTime', 'PT2M15S')
   })
 
+  it('logs out the active game session from the active-player popover', async () => {
+    const logoutSession = vi.fn(async () => {})
+    navigatorState.value = {
+      apiBaseUrl: 'http://api.local',
+      connectionStatus: 'connected',
+      adminToken: null,
+      session: { playerId: 'Hero', sessionKind: 'game' },
+      logoutSession,
+    }
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ active: [] }),
+    } as unknown as Response)
+
+    render(<ActivePlayerIndicator />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /active players: 0/i }))
+    fireEvent.click(screen.getByRole('button', { name: /log out hero/i }))
+
+    await waitFor(() => expect(logoutSession).toHaveBeenCalledTimes(1))
+  })
+
   it('opens and stops a SCRY observer socket for admins', async () => {
     navigatorState.value = {
       apiBaseUrl: 'http://api.local',
       connectionStatus: 'connected',
       adminToken: 'admin-session-token',
+      session: null,
+      logoutSession: vi.fn(async () => {}),
     }
     vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,

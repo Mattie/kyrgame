@@ -756,6 +756,13 @@
   line-height: 1;
 }
 
+.active-player-popover-header .logout-button {
+  width: auto;
+  padding: 0 0.55rem;
+  color: #f3c77a;
+  background: rgba(243, 199, 122, 0.1);
+}
+
 .active-player-popover ul {
   display: grid;
   gap: 0.55rem;
@@ -1438,8 +1445,13 @@ p {
   letter-spacing: 0.01em;
 }
 
-.gemstone-inline {
+.gemstone-inline,
+.ground-object-inline {
   white-space: nowrap;
+}
+
+.ground-object-inline {
+  font-weight: 700;
 }
 
 .creature-inline {
@@ -1454,6 +1466,22 @@ p {
 
 .player-wizard {
   color: #a78bfa;
+}
+
+.object-scroll {
+  color: #f6c96d;
+}
+
+.object-elixir {
+  color: #6ee7f9;
+}
+
+.object-codex {
+  color: #c084fc;
+}
+
+.object-pinecone {
+  color: #d4a373;
 }
 
 .creature-dragon {

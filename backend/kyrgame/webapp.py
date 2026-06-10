@@ -50,6 +50,7 @@ PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_MAX_EVENTS = 30
 PUBLIC_PLAYER_ID_LOOKUP_RATE_LIMIT_WINDOW_SECONDS = 60.0
 SESSION_RATE_LIMIT_MAX_EVENTS = 5
 SESSION_RATE_LIMIT_WINDOW_SECONDS = 1.0
+REMEMBERED_SESSION_EXPIRATION_HOURS = 24 * 30
 HTTP_RATE_LIMIT_MAX_CLIENT_KEYS = 1024
 HTTP_RATE_LIMIT_MAX_CLIENT_KEYS_ENV = "KYRGAME_HTTP_RATE_LIMIT_MAX_CLIENT_KEYS"
 TRUST_PROXY_HEADERS_ENV = "KYRGAME_TRUST_PROXY_HEADERS"
@@ -101,6 +102,7 @@ class AccountAuthRequest(BaseModel):
     background: str | None = None
     gender: str | None = None
     session_kind: str = SESSION_KIND_GAME
+    remember_me: bool = False
 
 
 class LifecycleAdvanceRequest(BaseModel):
@@ -1462,6 +1464,7 @@ async def _issue_player_session(
     first_login: bool = False,
     resumed: bool = False,
     status_code: int = status.HTTP_201_CREATED,
+    remember_me: bool = False,
 ) -> JSONResponse:
     repo = repositories.PlayerSessionRepository(db)
     target_room = _entry_room_for_player(player) if room_id is None else room_id
@@ -1500,11 +1503,17 @@ async def _issue_player_session(
         replaced_tokens = repo.deactivate_all(player.id, session_kind=session_kind)
         token = secrets.token_urlsafe(24)
         hidden_from_activity = session_kind != SESSION_KIND_GAME
+        expiration_hours = (
+            REMEMBERED_SESSION_EXPIRATION_HOURS
+            if session_kind == SESSION_KIND_GAME and remember_me
+            else repositories.DEFAULT_SESSION_EXPIRATION_HOURS
+        )
         session_record = repo.create_session(
             player_id=player.id,
             account_id=account.id if account is not None else None,
             session_token=token,
             room_id=target_room,
+            expiration_hours=expiration_hours,
             lifecycle_state=lifecycle_state,
             lifecycle_step=lifecycle_step,
             session_kind=session_kind,
@@ -1646,6 +1655,7 @@ async def register_account(
         lifecycle_step=lifecycle_step,
         lifecycle_messages=lifecycle_messages,
         first_login=first_login,
+        remember_me=payload.remember_me,
     )
 
 
@@ -1686,6 +1696,7 @@ async def login_account(
         account=account,
         session_kind=session_kind,
         room_id=payload.room_id,
+        remember_me=payload.remember_me,
     )
 
 
@@ -1762,6 +1773,7 @@ async def start_session(
 
         replaced_tokens: list[str] = []
         session_record: models.PlayerSession | None = None
+        session_account: models.Account | None = None
         resumed = False
         status_code = status.HTTP_201_CREATED
 
@@ -1769,6 +1781,8 @@ async def start_session(
             existing = repo.get_by_token(payload.resume_token)
             if not existing or existing.player_id != player.id:
                 raise HTTPException(status_code=404, detail="Session not found or expired")
+            if existing.account_id is not None:
+                session_account = db.get(models.Account, existing.account_id)
             repo.mark_seen(payload.resume_token)
             db.commit()
             if player_claim_lock_acquired:
@@ -1846,6 +1860,7 @@ async def start_session(
             resumed=resumed,
             replaced_sessions=len(replaced_tokens),
             lifecycle_messages=lifecycle_messages,
+            account=session_account,
         ),
     }
     return JSONResponse(content=body, status_code=status_code)
@@ -3070,6 +3085,9 @@ def create_app() -> FastAPI:
                         "location": location.id,
                         "message_id": description_id,
                         "text": long_description or location.brfdes,
+                        "objects": commands._room_object_entries(
+                            location, state.objects or {}
+                        ),
                     },
                 }
             )

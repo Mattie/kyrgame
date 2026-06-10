@@ -884,6 +884,26 @@ async def test_move_emits_room_objects_from_updated_state(base_state):
     assert all(obj["id"] != target_id for obj in object_events[0]["objects"])
 
 
+@pytest.mark.anyio
+async def test_move_location_description_carries_current_room_objects(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    destination = base_state.locations[1]
+    base_state.locations[1] = destination.model_copy(update={"objects": [1], "nlobjs": 1})
+
+    result = await dispatcher.dispatch("move", {"direction": "north"}, base_state)
+
+    description = next(
+        event for event in result.events if event.get("event") == "location_description"
+    )
+    object_events = [event for event in result.events if event.get("type") == "room_objects"]
+
+    assert object_events
+    assert description["objects"] == object_events[0]["objects"]
+    assert description["objects"] == [{"id": 1, "name": base_state.objects[1].name}]
+
+
 def test_vocabulary_maps_aliases_to_canonical_commands():
     vocabulary = commands.CommandVocabulary(
         fixtures.load_commands(), fixtures.load_messages()
