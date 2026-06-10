@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, Iterable, Optional
 
@@ -23,6 +24,9 @@ RoomCommandCallback = Callable[
     ["RoomContext", str, str, list[str], Optional[int], Optional[PlayerModel]],
     Awaitable[bool],
 ]
+RoomPicker = Callable[[int, int], int]
+RoomObjectsGetter = Callable[[int], list[int]]
+RoomObjectsSetter = Callable[[int, list[int]], None]
 
 
 @dataclass
@@ -113,11 +117,18 @@ class RoomScriptEngine:
         room_scripts: dict | None = None,
         objects: Iterable[GameObjectModel] | None = None,
         spells: Iterable[SpellModel] | None = None,
+        room_picker: RoomPicker | None = None,
+        room_objects_getter: RoomObjectsGetter | None = None,
+        room_objects_setter: RoomObjectsSetter | None = None,
     ):
         self.gateway = gateway
         self.scheduler = scheduler
         self.locations = {location.id: location for location in locations}
         self.messages = messages
+        self.objects = {obj.id: obj for obj in (objects or [])}
+        self.room_picker = room_picker or random.randrange
+        self.room_objects_getter = room_objects_getter
+        self.room_objects_setter = room_objects_setter
         self.routines: Dict[int, RoomRoutine] = build_default_routines(messages)
         self.states: Dict[int, RoomState] = {}
         self.players: Dict[str, PlayerModel] = {
@@ -129,7 +140,7 @@ class RoomScriptEngine:
             yaml_rooms.YamlRoomEngine(
                 definitions=room_scripts,
                 messages=messages,
-                objects=objects or [],
+                objects=self.objects.values(),
                 spells=spells or [],
                 locations=self.locations.values(),
             )
@@ -188,6 +199,46 @@ class RoomScriptEngine:
 
     def room_broadcast_envelope(self, room_id: int, payload: dict) -> dict:
         return {"type": "room_broadcast", "room": room_id, "payload": payload}
+
+    def get_room_objects(self, room_id: int) -> list[int]:
+        if self.room_objects_getter is not None:
+            return list(self.room_objects_getter(room_id))
+        location = self.locations.get(room_id)
+        return list(location.objects) if location else []
+
+    def set_room_objects(self, room_id: int, object_ids: list[int]) -> None:
+        object_ids = list(object_ids)
+        if self.room_objects_setter is not None:
+            self.room_objects_setter(room_id, object_ids)
+        location = self.locations.get(room_id)
+        if location is not None:
+            self.locations[room_id] = location.model_copy(
+                update={"objects": object_ids, "nlobjs": len(object_ids)}
+            )
+
+    def room_objects_payload(self, room_id: int, *, scope: str = "room") -> dict:
+        visible = []
+        for object_id in self.get_room_objects(room_id):
+            entry = {"id": object_id}
+            obj = self.objects.get(object_id)
+            if obj is not None:
+                entry["name"] = obj.name
+            visible.append(entry)
+        return {
+            "scope": scope,
+            "event": "room_objects",
+            "type": "room_objects",
+            "objects": visible,
+            "location": room_id,
+            "command_id": None,
+            "message_id": None,
+        }
+
+    async def broadcast_room_objects(self, room_id: int) -> None:
+        await self.gateway.broadcast(
+            room_id,
+            self.room_broadcast_envelope(room_id, self.room_objects_payload(room_id)),
+        )
 
     async def handle_command(
         self,
@@ -350,7 +401,12 @@ def _temple_on_enter(messages: MessageBundleModel) -> RoomCallback:
     return _handler
 
 
-_TEMPLE_ARTICLES = {"the", "a", "an"}
+_GI_BAGTHE_ARTICLES = {"the", "a", "an"}
+_TEMPLE_ARTICLES = _GI_BAGTHE_ARTICLES
+
+
+def _strip_gi_bagthe_articles(args: list[str]) -> list[str]:
+    return [arg for arg in args if arg.lower() not in _GI_BAGTHE_ARTICLES]
 
 
 def _temple_remainder_after_gi_bagthe(args: list[str]) -> str:
@@ -567,6 +623,10 @@ def _fountain_on_enter(messages: MessageBundleModel) -> RoomCallback:
 
 
 def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
+    objects = fixtures.load_objects()
+    objects_by_name = {obj.name.lower(): obj.id for obj in objects}
+    objects_by_id = {obj.id: obj for obj in objects}
+
     async def _handler(
         context: RoomContext,
         player_id: str,
@@ -575,26 +635,62 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         player_level: Optional[int],
         player: Optional[PlayerModel],
     ) -> bool:  # noqa: ARG001
-        if command.lower() != "toss" or not args:
+        verb = command.lower()
+        display_name = player.altnam if player is not None else player_id
+        phrase = " ".join([verb, *[arg.lower() for arg in args]]).strip()
+        if phrase == messages.messages.get("FOUNTI", ""):
+            if player is None:
+                return False
+            player.flags |= int(constants.PlayerFlag.BLESSD)
+            await context.direct(
+                player_id,
+                "room_message",
+                text="...The Goddess blesses you.\r",
+                message_id=None,
+            )
+            return True
+
+        if verb not in {"drop", "throw", "toss"} or player is None:
             return False
 
-        offering = args[0].lower()
+        # Legacy magicf() calls gi_bagthe() only, leaving the "in fountain"
+        # shape intact for the room routine.
+        # Source: legacy/KYRROUS.C:759-819.
+        stripped_args = _strip_gi_bagthe_articles(args)
+        if (
+            len(stripped_args) != 3
+            or stripped_args[1].lower() != "in"
+            or stripped_args[2].lower() != "fountain"
+        ):
+            return False
+
+        offered = _resolve_offering(
+            stripped_args[0], objects_by_name, player.gpobjs, objects_by_id
+        )
+        if offered is None or offered not in player.gpobjs:
+            return False
+
+        remove_inventory_item(player, offered)
         state = context.state
-        
-        # Legacy: case 32 (pinecone) - requires 3 donations to spawn scroll
-        if offering == "pinecone":
+
+        if offered == 32:
             scroll_count = state.flags.get("scroll_count", 0)
-            # Note: Legacy checks BLESSD flag for bonus increment; simplified here
-            scroll_count += 1
-            
-            if scroll_count >= 3:
+            if player.flags & constants.PlayerFlag.BLESSD:
+                scroll_count += 1
+
+            if scroll_count == 3:
                 state.flags["scroll_count"] = 0
-                # Legacy spawns scroll (object 35) at random location
+                scroll_room = context.engine.room_picker(0, 168)
+                room_objects = context.engine.get_room_objects(scroll_room)
+                if len(room_objects) < constants.MXLOBS:
+                    room_objects.append(35)
+                    context.engine.set_room_objects(scroll_room, room_objects)
+                    await context.engine.broadcast_room_objects(scroll_room)
                 await context.direct_and_others(
                     player_id,
                     "room_message",
                     direct_text=messages.messages["MAGF00"],
-                    others_text=messages.messages["MAGF01"] % player_id,
+                    others_text=messages.messages["MAGF01"] % display_name,
                     direct_message_id="MAGF00",
                     others_message_id="MAGF01",
                 )
@@ -604,25 +700,27 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     player_id,
                     "room_message",
                     direct_text=messages.messages["MAGF04"],
-                    others_text=messages.messages["MAGF07"] % player_id,
+                    others_text=messages.messages["MAGF07"] % display_name,
                     direct_message_id="MAGF04",
                     others_message_id="MAGF07",
                 )
             return True
 
-        # Legacy: case 43 (shard) - requires 6 donations to grant object 16
-        if offering == "shard":
+        if offered == 43:
             shard_count = state.flags.get("shard_count", 0)
             shard_count += 1
-            
-            if shard_count >= 6:
+
+            if shard_count == 6:
                 state.flags["shard_count"] = 0
-                # Legacy gives player object 16
+                if len(player.gpobjs) < constants.MXPOBS:
+                    player.gpobjs.append(16)
+                    player.obvals.append(0)
+                    player.npobjs = len(player.gpobjs)
                 await context.direct_and_others(
                     player_id,
                     "room_message",
                     direct_text=messages.messages["MAGF05"],
-                    others_text=messages.messages["MAGF03"] % player_id,
+                    others_text=messages.messages["MAGF03"] % display_name,
                     direct_message_id="MAGF05",
                     others_message_id="MAGF03",
                 )
@@ -632,7 +730,7 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                     player_id,
                     "room_message",
                     direct_text=messages.messages["MAGF06"],
-                    others_text=messages.messages["MAGF03"] % player_id,
+                    others_text=messages.messages["MAGF03"] % display_name,
                     direct_message_id="MAGF06",
                     others_message_id="MAGF03",
                 )
@@ -643,7 +741,7 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             player_id,
             "room_message",
             direct_text=messages.messages.get("MAGF02", ""),
-            others_text=messages.messages.get("MAGF03", "") % player_id,
+            others_text=messages.messages.get("MAGF03", "") % display_name,
             direct_message_id="MAGF02",
             others_message_id="MAGF03",
         )
@@ -934,10 +1032,26 @@ def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallb
     return _handler
 
 
-def _resolve_offering(candidate: str, mapping: dict[str, int]) -> int | None:
+def _legacy_prefix_match(shorts: str, longs: str) -> bool:
+    # MajorBBS sameto(shorts, longs): case-insensitive prefix matching.
+    target = shorts.strip().lower()
+    return bool(target) and longs.lower().startswith(target)
+
+
+def _resolve_offering(
+    candidate: str,
+    mapping: dict[str, int],
+    inventory: Iterable[int] | None = None,
+    objects_by_id: dict[int, GameObjectModel] | None = None,
+) -> int | None:
     try:
         return int(candidate)
     except ValueError:
+        if inventory is not None and objects_by_id is not None:
+            for object_id in inventory:
+                obj = objects_by_id.get(object_id)
+                if obj is not None and _legacy_prefix_match(candidate, obj.name):
+                    return object_id
         return mapping.get(candidate.lower())
 
 

@@ -517,7 +517,7 @@ async def test_willow_kneel_above_gate_reports_too_high():
 
 
 @pytest.mark.anyio
-async def test_fountain_routine_tracks_donations_and_schedules_ambience():
+async def test_fountain_routine_schedules_and_cleans_ambience():
     scheduler = SchedulerService()
     gateway = FakeGateway()
     messages = fixtures.load_messages()
@@ -526,24 +526,17 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
         scheduler=scheduler,
         locations=fixtures.load_locations(),
         messages=messages,
+        objects=fixtures.load_objects(),
     )
 
     await scheduler.start()
-    await engine.enter_room(player_id="hero", room_id=38)
-    await asyncio.sleep(0.07)
-
-    # Legacy: pinecone requires 3 donations to trigger MAGF00/MAGF01
-    await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
-    await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
-    await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
-    
-    # Legacy: shard requires 6 donations to trigger MAGF05
-    for _ in range(6):
-        await engine.handle_command("hero", 38, command="toss", args=["shard"])
-    
-    await asyncio.sleep(0.02)
-    await engine.exit_room("hero", 38)
-    await scheduler.stop()
+    try:
+        await engine.enter_room(player_id="hero", room_id=38)
+        await asyncio.sleep(0.07)
+        await engine.exit_room("hero", 38)
+        await asyncio.sleep(0.02)
+    finally:
+        await scheduler.stop()
 
     room_message_texts = [
         msg.get("payload", {}).get("text")
@@ -553,19 +546,387 @@ async def test_fountain_routine_tracks_donations_and_schedules_ambience():
         and msg.get("payload", {}).get("scope") == "broadcast"
     ]
     assert messages.messages["KRD038"] in room_message_texts
-
-    direct_texts = [
-        msg.get("payload", {}).get("text")
-        for msg in gateway.messages
-        if msg.get("payload", {}).get("scope") == "direct"
-        and msg.get("payload", {}).get("player") == "hero"
-    ]
-    # After 3 pinecones, should get success message
-    assert messages.messages["MAGF00"] in direct_texts
-    # After 6 shards, should get success message  
-    assert messages.messages["MAGF05"] in direct_texts
-
     assert not engine.get_room_state(38).timers
+
+
+@pytest.mark.anyio
+async def test_fountain_blessed_pinecone_cycle_consumes_inventory_and_spawns_scroll():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    room_objects = {44: []}
+    picker_calls: list[tuple[int, int]] = []
+
+    def pick_scroll_room(low: int, high: int) -> int:
+        picker_calls.append((low, high))
+        return 44
+
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+        room_picker=pick_scroll_room,
+        room_objects_getter=lambda room_id: list(room_objects.get(room_id, [])),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(
+            room_id, list(objects)
+        ),
+    )
+    player = fixtures.build_player().model_copy(
+        update={
+            "gpobjs": [32, 32, 32],
+            "obvals": [0, 0, 0],
+            "npobjs": 3,
+            "flags": int(constants.PlayerFlag.BLESSD),
+        },
+        deep=True,
+    )
+
+    for verb in ("drop", "throw", "toss"):
+        handled = await engine.handle_command(
+            "hero",
+            38,
+            command=verb,
+            args=["pinecone", "in", "fountain"],
+            player=player,
+        )
+        assert handled is True
+
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    direct_texts = [
+        payload.get("text")
+        for payload in payloads
+        if payload.get("scope") == "direct" and payload.get("player") == "hero"
+    ]
+    assert messages.messages["MAGF00"] in direct_texts
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert engine.get_room_state(38).flags.get("scroll_count") == 0
+    assert picker_calls == [(0, 168)]
+    assert room_objects[44] == [35]
+    assert any(
+        msg.get("room") == 44
+        and msg.get("payload", {}).get("event") == "room_objects"
+        and msg.get("payload", {}).get("objects") == [{"id": 35, "name": "scroll"}]
+        for msg in gateway.messages
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_blessed_pinecone_scroll_respects_full_room_capacity():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    full_room = list(range(constants.MXLOBS))
+    room_objects = {44: full_room.copy()}
+    picker_calls: list[tuple[int, int]] = []
+
+    def pick_scroll_room(low: int, high: int) -> int:
+        picker_calls.append((low, high))
+        return 44
+
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+        room_picker=pick_scroll_room,
+        room_objects_getter=lambda room_id: list(room_objects.get(room_id, [])),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(
+            room_id, list(objects)
+        ),
+    )
+    player = fixtures.build_player().model_copy(
+        update={
+            "gpobjs": [32, 32, 32],
+            "obvals": [0, 0, 0],
+            "npobjs": 3,
+            "flags": int(constants.PlayerFlag.BLESSD),
+        },
+        deep=True,
+    )
+
+    for _ in range(3):
+        handled = await engine.handle_command(
+            "hero",
+            38,
+            command="drop",
+            args=["pinecone", "in", "fountain"],
+            player=player,
+        )
+        assert handled is True
+
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "MAGF00"
+        for payload in payloads
+    )
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert picker_calls == [(0, 168)]
+    assert room_objects[44] == full_room
+    assert not any(
+        msg.get("room") == 44
+        and msg.get("payload", {}).get("event") == "room_objects"
+        for msg in gateway.messages
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_shard_cycle_consumes_shards_and_grants_object():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+    )
+    player = fixtures.build_player().model_copy(
+        update={
+            "gpobjs": [43, 43, 43, 43, 43, 43],
+            "obvals": [0, 0, 0, 0, 0, 0],
+            "npobjs": 6,
+        },
+        deep=True,
+    )
+
+    for _ in range(6):
+        handled = await engine.handle_command(
+            "hero",
+            38,
+            command="toss",
+            args=["shard", "in", "fountain"],
+            player=player,
+        )
+        assert handled is True
+
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert player.gpobjs == [16]
+    assert player.obvals == [0]
+    assert player.npobjs == 1
+    assert engine.get_room_state(38).flags.get("shard_count") == 0
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "MAGF05"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("message_id") == "MAGF03"
+        and payload.get("exclude_player") == "hero"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_default_gift_consumes_inventory_and_uses_generic_messages():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+    )
+    player = fixtures.build_player().model_copy(
+        update={"gpobjs": [0], "obvals": [10], "npobjs": 1},
+        deep=True,
+    )
+
+    handled = await engine.handle_command(
+        "hero",
+        38,
+        command="toss",
+        args=["ruby", "in", "fountain"],
+        player=player,
+    )
+
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert handled is True
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "MAGF02"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("message_id") == "MAGF03"
+        and payload.get("exclude_player") == "hero"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_offerings_accept_legacy_inventory_prefixes():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+    )
+    player = fixtures.build_player().model_copy(
+        update={
+            "gpobjs": [32, 43],
+            "obvals": [0, 0],
+            "npobjs": 2,
+            "flags": int(constants.PlayerFlag.BLESSD),
+        },
+        deep=True,
+    )
+
+    pinecone_handled = await engine.handle_command(
+        "hero",
+        38,
+        command="toss",
+        args=["pine", "in", "fountain"],
+        player=player,
+    )
+    shard_handled = await engine.handle_command(
+        "hero",
+        38,
+        command="toss",
+        args=["shar", "in", "fountain"],
+        player=player,
+    )
+
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert pinecone_handled is True
+    assert shard_handled is True
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "MAGF04"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "MAGF06"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_requires_inventory_and_in_fountain_target():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    room_objects = {44: []}
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+        room_picker=lambda low, high: 44,
+        room_objects_getter=lambda room_id: list(room_objects.get(room_id, [])),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(
+            room_id, list(objects)
+        ),
+    )
+    player = fixtures.build_player().model_copy(
+        update={
+            "gpobjs": [32],
+            "obvals": [0],
+            "npobjs": 1,
+            "flags": int(constants.PlayerFlag.BLESSD),
+        },
+        deep=True,
+    )
+
+    assert (
+        await engine.handle_command(
+            "hero", 38, command="toss", args=["pinecone"], player=player
+        )
+        is False
+    )
+    assert player.gpobjs == [32]
+
+    for bad_args in (
+        ["pinecone", "near", "fountain"],
+        ["pinecone", "in", "pond"],
+        ["pinecone", "in", "fountain", "now"],
+    ):
+        assert (
+            await engine.handle_command(
+                "hero", 38, command="drop", args=bad_args, player=player
+            )
+            is False
+        )
+        assert player.gpobjs == [32]
+        assert player.obvals == [0]
+        assert player.npobjs == 1
+
+    player = player.model_copy(update={"gpobjs": [], "obvals": [], "npobjs": 0})
+    assert (
+        await engine.handle_command(
+            "hero",
+            38,
+            command="drop",
+            args=["pinecone", "in", "fountain"],
+            player=player,
+        )
+        is False
+    )
+    assert room_objects[44] == []
+    assert not any(
+        msg.get("payload", {}).get("event") == "room_objects"
+        for msg in gateway.messages
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_blessing_phrase_sets_blessd_flag():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(update={"flags": 0}, deep=True)
+
+    handled = await engine.handle_command(
+        "hero",
+        38,
+        command="offer",
+        args=["true", "love", "to", "tashanna"],
+        player=player,
+    )
+
+    assert handled is True
+    assert player.flags & constants.PlayerFlag.BLESSD
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and "The Goddess blesses you." in payload.get("text", "")
+        for payload in (msg.get("payload", {}) for msg in gateway.messages)
+    )
 
 
 @pytest.mark.anyio
@@ -674,10 +1035,22 @@ async def test_fountain_donation_messages_exclude_actor_from_room_text():
         locations=fixtures.load_locations(),
         messages=messages,
     )
+    player = fixtures.build_player().model_copy(
+        update={"gpobjs": [32], "obvals": [0], "npobjs": 1, "flags": 0},
+        deep=True,
+    )
 
-    handled = await engine.handle_command("hero", 38, command="toss", args=["pinecone"])
+    handled = await engine.handle_command(
+        "hero",
+        38,
+        command="toss",
+        args=["pinecone", "in", "fountain"],
+        player=player,
+    )
 
     assert handled is True
+    assert player.gpobjs == []
+    assert engine.get_room_state(38).flags.get("scroll_count", 0) == 0
     payloads = [msg.get("payload", {}) for msg in gateway.messages]
     assert any(
         payload.get("scope") == "broadcast"
