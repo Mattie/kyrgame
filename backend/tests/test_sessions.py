@@ -80,6 +80,10 @@ async def test_session_creation_first_login_and_recovery():
             assert resumed["token"] == created["token"]
             assert resumed["resumed"] is True
             assert resumed["lifecycle"] == created["lifecycle"]
+            assert [
+                message["message_id"] for message in resumed["lifecycle_messages"]
+            ] == ["GOODPD"]
+            assert '"Rook"' in resumed["lifecycle_messages"][0]["text"]
 
 
 @pytest.mark.anyio

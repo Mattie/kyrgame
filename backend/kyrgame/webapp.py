@@ -1791,6 +1791,12 @@ async def start_session(
             room_id = existing.room_id
             token = existing.session_token
             session_record = existing
+            lifecycle_messages = _current_first_login_lifecycle_messages(
+                request.app.state.fixture_cache["messages"],
+                player.plyrid,
+                existing.lifecycle_state,
+                existing.lifecycle_step,
+            )
             resumed = True
             status_code = status.HTTP_200_OK
         else:
