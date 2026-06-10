@@ -80,6 +80,7 @@
 - [x] Audited room broadcast recipient splits against legacy `msgutl2`/`sndoth`/`sndbt2`/`sndloc`, aligning Python room routines, YAML room scripts, command room events, and frontend filtering for actor-excluding, target-excluding, and sender-inclusive cases.
 - [x] Restored legacy `remvgp` departure fan-out for ordinary movement and in-game `x`, including source-room walk-out/sparkling-light messages, direct `EXIKYR`, session/presence deactivation, persisted exit state, and `pgploc` re-entry after `gamloc=-1`.
 - [x] Deduped trimmed room occupant presence identifiers so room `look`/entry text cannot list the same player twice with trailing-space variants.
+- [x] Prevented the React console from rendering room occupants twice when explicit `room_occupants` events overlap with local room snapshot state, and centralized legacy KUTM11/KUTM12 suffix formatting across command, WebSocket, and runtime refresh paths.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Matched MajorBBS `sameto` prefix lookup for generic current-room/player/object targets: `get`/`grab` resolves visible player `attnam` prefixes before room objects, `look` checks room objects before inventory objects before visible players, and matching keeps legacy first-hit/no-ambiguity behavior.
 - [x] Preserved transformed-player look targeting through legacy `attnam` lookup, including transformed self-look via names like `willowisp`.

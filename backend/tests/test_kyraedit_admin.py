@@ -25,6 +25,20 @@ async def _recv_matching(ws, predicate, *, timeout: float = 1.0):
             return message
 
 
+async def _assert_no_matching(ws, predicate, *, timeout: float = 0.5):
+    deadline = asyncio.get_running_loop().time() + timeout
+    while True:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            return
+        try:
+            message = json.loads(await asyncio.wait_for(ws.recv(), timeout=remaining))
+        except asyncio.TimeoutError:
+            return
+        if predicate(message):
+            raise AssertionError(f"Unexpected message received: {message}")
+
+
 @pytest.mark.anyio
 async def test_single_admin_kyraedit_session_with_return(monkeypatch):
     monkeypatch.setenv("KYRGAME_ADMIN_TOKEN", "kyraedit-admin")
@@ -54,6 +68,10 @@ async def test_single_admin_kyraedit_session_with_return(monkeypatch):
             await _recv_matching(hero_ws, lambda msg: msg.get("type") == "command_response")
             async with websockets.connect(seer_uri) as seer_ws:
                 await _recv_matching(seer_ws, lambda msg: msg.get("type") == "command_response")
+                await _recv_matching(
+                    seer_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_occupants",
+                )
 
                 admin_uri = (
                     f"ws://{host}:{port}/ws/admin/kyraedit?session_token={hero_token}"
@@ -90,6 +108,16 @@ async def test_single_admin_kyraedit_session_with_return(monkeypatch):
                     and msg.get("payload", {}).get("event") == "player_enter",
                 )
                 assert return_broadcast["payload"]["player"] == "hero"
+                hero_occupants = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("event") == "room_occupants",
+                )
+                assert hero_occupants["payload"]["occupants"] == ["seer"]
+                await _assert_no_matching(
+                    seer_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_occupants",
+                )
 
     server.should_exit = True
     await server_task

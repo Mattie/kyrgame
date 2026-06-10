@@ -24,6 +24,9 @@ class _FakeSocket:
     async def send_json(self, message: dict) -> None:
         self.sent.append(message)
 
+    async def close(self) -> None:
+        self.application_state = WebSocketState.DISCONNECTED
+
 
 @pytest.mark.anyio
 async def test_bootstrap_initializes_tick_scheduler_and_shutdown_cancels_timers(monkeypatch):
@@ -275,6 +278,60 @@ async def test_animation_dispatch_keeps_target_only_payload_out_of_room_broadcas
     assert "target_player" not in room_payload
     assert "target_message_id" not in room_payload
     assert "target_text" not in room_payload
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_move_refresh_deduplicates_room_occupants(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    target_socket = _FakeSocket()
+    target_player = fixtures.build_player().model_copy(
+        update={"plyrid": "hero", "altnam": "Hero", "attnam": "Hero", "gamloc": 12}
+    )
+    app.state.session_connections = {"hero-token": target_socket}
+    app.state.active_players = {}
+    app.state.active_player_sessions = {"hero-token": target_player}
+    app.state.active_players["hero"] = target_player
+    await app.state.presence.set_location("hero", 12, "hero-token")
+    await app.state.presence.set_location("hero ", 7, "hero-stale-token")
+    await app.state.presence.set_location("Necro", 7, "necro-token")
+    await app.state.presence.set_location("Necro ", 7, "necro-stale-token")
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+        return None
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.dispatch_animation_event(
+        AnimationTickEvent(
+            flag="zarapp",
+            room_id=12,
+            message_id="ZMSG14",
+            message_text="Zar's magic carries Hero away.",
+            payload={
+                "target_player": "hero",
+                "target_message_id": "ZMSG13",
+                "target_text": "You vanish in a flash.",
+                "move_player_to": 7,
+            },
+        )
+    )
+
+    occupant_envelope = next(
+        message
+        for message in target_socket.sent
+        if message.get("payload", {}).get("event") == "room_occupants"
+    )
+    assert occupant_envelope["payload"]["occupants"] == ["Necro"]
+    assert occupant_envelope["payload"]["text"] == "Necro is here."
 
     await shutdown_app(app)
 

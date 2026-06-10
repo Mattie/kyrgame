@@ -36,6 +36,7 @@ async def test_room_occupants_event_includes_player_flags_for_ui_styling():
 
     assert event is not None
     assert event["occupants"] == ["Hero"]
+    assert event["text"] == "Hero is here."
     assert event["occupant_details"] == [
         {
             "player_id": "Hero",
@@ -62,6 +63,7 @@ async def test_room_occupants_event_deduplicates_trimmed_presence_ids():
 
     assert event is not None
     assert event["occupants"] == ["Merlin", "Necro"]
+    assert event["text"] == "Merlin and Necro are here."
     assert "Merlin" in event["text"]
     assert event["text"].count("Necro") == 1
 

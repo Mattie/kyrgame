@@ -2504,24 +2504,7 @@ def _format_room_occupants(occupants: list[str], messages: models.MessageBundleM
     in the room using the KUTM11/KUTM12 strings.【F:legacy/KYRUTIL.C†L271-L314】
     """
 
-    if not occupants:
-        return None, None
-
-    catalog = messages.messages if messages else {}
-    message_id = None
-
-    if len(occupants) == 1:
-        suffix = catalog.get("KUTM11", "is here.")
-        message_id = "KUTM11" if "KUTM11" in catalog else None
-        return f"{occupants[0]} {suffix}", message_id
-
-    suffix = catalog.get("KUTM12", "are here.")
-    message_id = "KUTM12" if "KUTM12" in catalog else None
-    if len(occupants) == 2:
-        names = f"{occupants[0]} and {occupants[1]}"
-    else:
-        names = ", ".join(occupants[:-1]) + f", and {occupants[-1]}"
-    return f"{names} {suffix}", message_id
+    return commands._format_room_occupants(occupants, messages)
 
 
 async def _room_occupants_event(
@@ -2791,10 +2774,17 @@ def create_app() -> FastAPI:
                 _active_player_flags(provider.scope.app),
             )
             if occupant_event:
-                await provider.gateway.broadcast(
-                    current_room,
-                    {"type": "room_broadcast", "room": current_room, "payload": occupant_event},
-                )
+                # Legacy entrgp() sends locogps() to the entering player before the room
+                # arrival broadcast (legacy/KYRUTIL.C:253-257).
+                player_socket = provider.scope.app.state.session_connections.get(session_token)
+                if player_socket and player_socket.application_state == WebSocketState.CONNECTED:
+                    await player_socket.send_json(
+                        {
+                            "type": "command_response",
+                            "room": current_room,
+                            "payload": occupant_event,
+                        }
+                    )
 
             async with provider.scope.app.state.kyraedit_lock:
                 provider.scope.app.state.kyraedit_session = None

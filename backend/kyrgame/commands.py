@@ -3246,7 +3246,7 @@ def _format_room_occupants(
     if len(occupants) == 1:
         suffix = catalog.get("KUTM11", "is here.")
         message_id = "KUTM11" if "KUTM11" in catalog else None
-        return f"{occupants[0]} {suffix}", message_id
+        return _join_room_occupant_suffix(occupants[0], suffix), message_id
 
     suffix = catalog.get("KUTM12", "are here.")
     message_id = "KUTM12" if "KUTM12" in catalog else None
@@ -3254,7 +3254,14 @@ def _format_room_occupants(
         names = f"{occupants[0]} and {occupants[1]}"
     else:
         names = ", ".join(occupants[:-1]) + f", and {occupants[-1]}"
-    return f"{names} {suffix}", message_id
+    return _join_room_occupant_suffix(names, suffix), message_id
+
+
+def _join_room_occupant_suffix(names: str, suffix: str) -> str:
+    # Legacy locogps() prints names, then appends KUTM11/KUTM12 directly.
+    # The catalog strings include their own leading space. (legacy/KYRUTIL.C:403-419)
+    separator = "" if suffix[:1].isspace() else " "
+    return f"{names}{separator}{suffix}"
 
 
 def _dedupe_room_occupants(occupants: list[str]) -> list[str]:

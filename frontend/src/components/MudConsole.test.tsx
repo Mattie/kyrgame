@@ -889,6 +889,30 @@ describe('MudConsole', () => {
     expect(screen.queryByText(/room_occupants.*KUTM11/)).toBeNull()
   })
 
+  it('renders one occupant line when room state and occupant activity overlap', () => {
+    navigatorState.occupants = ['Venjax']
+    navigatorState.activity = [
+      {
+        id: 'occupants-entry',
+        type: 'command_response',
+        summary: 'Venjax is here.',
+        payload: {
+          scope: 'player',
+          event: 'room_occupants',
+          type: 'room_occupants',
+          location: 0,
+          occupants: ['Venjax'],
+          text: 'Venjax is here.',
+          message_id: 'KUTM11',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    expect(screen.getAllByText('Venjax is here.')).toHaveLength(1)
+  })
+
   it('wraps the outer game shell with a decorative fire border canvas', () => {
     const { container } = render(<MudConsole />)
 

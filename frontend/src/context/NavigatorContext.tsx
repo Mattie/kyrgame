@@ -587,6 +587,35 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             break // Don't display this event - the message text comes separately
           }
 
+          if (normalizedPayload.event === 'room_occupants') {
+            const nextOccupants = Array.isArray(normalizedPayload.occupants)
+              ? (normalizedPayload.occupants as string[]).filter(Boolean)
+              : []
+            if (
+              nextOccupants.some(
+                (occupant) => normalizePlayerName(occupant) === currentPlayerName
+              )
+            ) {
+              break
+            }
+            const occupantDetails = Array.isArray(normalizedPayload.occupant_details)
+              ? (normalizedPayload.occupant_details as Array<{ player_id?: string; flags?: number | null }>)
+              : []
+            mergePlayerVisuals(occupantDetails)
+            updateOccupants(nextOccupants)
+            const occupantsText =
+              normalizedPayload.text ??
+              formatOccupantsLine(nextOccupants, currentPlayerId) ??
+              'No one else is here.'
+            appendActivity({
+              type: 'room_broadcast',
+              room: message.room,
+              summary: occupantsText,
+              payload: { ...normalizedPayload, occupants: nextOccupants, text: occupantsText },
+            })
+            break
+          }
+
           // Handle room_objects events - update world state when gems spawn or objects change
           // Legacy: gem spawns broadcast room_objects via room_broadcast_envelope (KYRANIM.C)
           if (normalizedPayload.event === 'room_objects') {
@@ -697,11 +726,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               worldRef.current?.objects ?? null,
               worldRef.current?.messages ?? null
             )
-            const occupantsLine = formatOccupantsLine(
-              occupantsRef.current,
-              session?.playerId ?? null
-            )
-            extraLines = [...objectLines, occupantsLine].filter(Boolean) as string[]
+            extraLines = objectLines
           } else if (message.payload?.event === 'location_update') {
             // Don't show location_update event separately - it will be followed by location_description
             handleRoomChange(message.payload.location ?? null, 'location_update')
