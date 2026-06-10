@@ -36,16 +36,13 @@ import {
   GamePanelFireBorder,
 } from './CrtFireBorder'
 
-const normalizeName = (name?: string | null) => (name ?? '').trim().toLowerCase()
 const INTERACTIVE_FOCUS_SELECTOR =
   'button, a[href], input, textarea, select, summary, [role="button"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
 
 const formatLegacyRoomLines = (
   entry: ActivityEntry,
   world: ReturnType<typeof useNavigator>['world'],
-  defaultRoom: number | null,
-  occupants: string[],
-  playerId: string | null
+  defaultRoom: number | null
 ): string[] => {
   if (!world) return []
   if (!entry.payload || typeof entry.payload !== 'object') return []
@@ -56,24 +53,7 @@ const formatLegacyRoomLines = (
   const location = world.locations.find((loc) => loc.id === locationId)
   if (!location) return []
 
-  const lines = formatLegacyRoomObjectLines(location, world.objects, world.messages)
-
-  const current = normalizeName(playerId)
-  const others = occupants
-    .map((name) => ({ raw: name, normalized: normalizeName(name) }))
-    .filter((entry) => entry.normalized && entry.normalized !== current)
-    .map((entry) => entry.raw)
-  // Mirrors locogps formatting from legacy/KYRUTIL.C lines 332-402 for players in the room.
-  if (others.length === 1) {
-    lines.push(`${others[0]} is here.`)
-  } else if (others.length === 2) {
-    lines.push(`${others[0]} and ${others[1]} are here.`)
-  } else if (others.length > 2) {
-    const [last, ...rest] = others.reverse()
-    lines.push(`${rest.reverse().join(', ')}, and ${last} are here.`)
-  }
-
-  return lines
+  return formatLegacyRoomObjectLines(location, world.objects, world.messages)
 }
 
 const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
@@ -269,7 +249,6 @@ export const MudConsole = () => {
     activity,
     connectionStatus,
     currentRoom,
-    occupants,
     playerVisuals,
     sendCommand,
     sendMove,
@@ -604,13 +583,11 @@ export const MudConsole = () => {
     entry.extraLines = formatLegacyRoomLines(
       entry,
       world,
-      location.id,
-      occupants,
-      session?.playerId ?? null
+      location.id
     )
 
     return entry
-  }, [hasLocationDescription, lifecycleIntroActive, location, occupants, session?.playerId, world])
+  }, [hasLocationDescription, lifecycleIntroActive, location, world])
 
   const entriesToRender = useMemo(
     () => (initialDescriptionEntry ? [initialDescriptionEntry, ...activity] : activity),
@@ -685,9 +662,7 @@ export const MudConsole = () => {
         formatLegacyRoomLines(
           entry,
           world,
-          currentRoom,
-          occupants,
-          session?.playerId ?? null
+          currentRoom
         )
 
       const isUserCommand =
@@ -733,7 +708,6 @@ export const MudConsole = () => {
     bannerLines,
     currentRoom,
     lifecycleIntroActive,
-    occupants,
     session?.playerId,
     terminalPagerPageRows,
     terminalPagerLineStates,

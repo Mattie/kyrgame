@@ -409,6 +409,7 @@ async def test_look_room_occupants_deduplicates_trailing_space_presence_ids():
         event for event in result.events if event.get("type") == "room_occupants"
     )
     assert occupants_event["occupants"] == ["Necro"]
+    assert occupants_event["text"] == "Necro is here."
     assert occupants_event["text"].count("Necro") == 1
 
 

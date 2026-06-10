@@ -435,7 +435,14 @@ async def bootstrap_app(app: FastAPI):
             commands._room_objects_event(location, objects_by_id, None, description_id),
         ]
         occupants = await app.state.presence.players_in_room(room_id)
-        others = sorted(occupant for occupant in occupants if occupant != player_id)
+        player_key = player_id.strip().casefold()
+        others = commands._dedupe_room_occupants(
+            sorted(
+                occupant
+                for occupant in occupants
+                if str(occupant or "").strip().casefold() != player_key
+            )
+        )
         text, message_id = commands._format_room_occupants(others, default_messages)
         if text:
             payloads.append(
