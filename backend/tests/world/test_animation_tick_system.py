@@ -155,7 +155,14 @@ def test_animation_tick_state_persists_through_sqlalchemy_store(tmp_path):
 def test_sqlalchemy_animation_state_store_skips_missing_runtime_state_table(tmp_path, monkeypatch):
     engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'missing-runtime-state.db'}")
     session_factory = database.create_session_factory(engine)
-    persistence = SQLAlchemyAnimationTickPersistence(session_factory)
+    session_factory_calls = 0
+
+    def _counted_session_factory():
+        nonlocal session_factory_calls
+        session_factory_calls += 1
+        return session_factory()
+
+    persistence = SQLAlchemyAnimationTickPersistence(_counted_session_factory)
     warnings: list[tuple[str, dict]] = []
     monkeypatch.setattr(
         animation_tick_system.logger,
@@ -169,6 +176,7 @@ def test_sqlalchemy_animation_state_store_skips_missing_runtime_state_table(tmp_
         "Animation tick persistence load failed; continuing with process-local state."
     ]
     assert "exc_info" in warnings[0][1]
+    assert session_factory_calls == 1
 
 
 def test_gemakr_uses_legacy_cadence_capacity_and_random_gem_every_11th_spawn():

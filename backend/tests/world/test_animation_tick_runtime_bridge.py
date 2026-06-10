@@ -129,3 +129,37 @@ def test_bridge_records_brownie_audit_when_dispatch_fails_before_audit_event():
             "dispatch_failure_count": 1,
         },
     )
+
+
+def test_bridge_propagates_dispatch_cancellation_without_audit_delay():
+    system = AnimationTickSystem(
+        persistence=InMemoryAnimationTickPersistence(),
+        routine_handlers={
+            "dryads": lambda state: [
+                AnimationTickEvent(flag="dryads", room_id=50, message_id="DMSG00")
+            ]
+        },
+    )
+    audit_records: list[tuple[str, dict]] = []
+
+    async def _cancel_dispatch(event):  # noqa: ARG001
+        import asyncio
+
+        raise asyncio.CancelledError()
+
+    bridge = AnimationTickRuntimeBridge(
+        system=system,
+        room_flag_getter=lambda room_id, key: 0,
+        room_flag_setter=lambda room_id, key, value: None,
+        message_lookup=lambda key: "",
+        event_dispatcher=_cancel_dispatch,
+        audit_recorder=lambda event_type, payload: audit_records.append((event_type, dict(payload))),
+    )
+
+    import asyncio
+    import pytest
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(bridge())
+
+    assert audit_records == []

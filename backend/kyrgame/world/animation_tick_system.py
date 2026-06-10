@@ -91,9 +91,11 @@ class SQLAlchemyAnimationTickPersistence:
     def __init__(self, session_factory: Callable[[], Any], *, key: str = "animation_tick") -> None:
         self._session_factory = session_factory
         self._key = key
-        self._warned_unavailable = False
+        self._unavailable = False
 
     def load(self) -> Mapping[str, object] | None:
+        if self._unavailable:
+            return None
         try:
             with self._session_factory() as session:
                 record = session.get(models.RuntimeState, self._key)
@@ -105,6 +107,8 @@ class SQLAlchemyAnimationTickPersistence:
             return None
 
     def save(self, payload: Mapping[str, object]) -> None:
+        if self._unavailable:
+            return
         try:
             with self._session_factory() as session:
                 record = session.get(models.RuntimeState, self._key)
@@ -119,9 +123,9 @@ class SQLAlchemyAnimationTickPersistence:
             return
 
     def _warn_unavailable(self, operation: str, exc: SQLAlchemyError) -> None:
-        if self._warned_unavailable:
+        if self._unavailable:
             return
-        self._warned_unavailable = True
+        self._unavailable = True
         logger.warning(
             "Animation tick persistence %s failed; continuing with process-local state.",
             operation,
@@ -1034,7 +1038,7 @@ class AnimationTickRuntimeBridge:
                 self._room_flag_setter(event.room_id, event.flag, 0)
                 await self._dispatch_event(event)
                 dispatched_event_count += 1
-        except BaseException as exc:  # pragma: no cover - exercised by failure-specific tests later.
+        except Exception as exc:
             raised = exc
             dispatch_failures.append(
                 {
@@ -1042,38 +1046,38 @@ class AnimationTickRuntimeBridge:
                     "error": str(exc),
                 }
             )
-        finally:
-            routine_event_count = sum(
-                1 for event in result.routine_events if not self._is_audit_only_event(event)
-            )
-            await self._record_audit(
-                "animation.tick",
-                {
-                    "trigger_source": trigger_source,
-                    "routine_name": result.routine_name,
-                    "routine_index_before": routine_index_before,
-                    "routine_index_after": self._system.state.routine_index,
-                    "routine_name_before": routine_name_before,
-                    "expected_interval_seconds": self._expected_interval_seconds,
-                    "observed_elapsed_seconds": observed_elapsed_seconds,
-                    "timed_flags_before": timed_flags_before,
-                    "timed_flags_after_sync": timed_flags_after_sync,
-                    "timed_flags_consumed": [event.flag for event in result.timed_events],
-                    "routine_event_count": routine_event_count,
-                    "timed_event_count": len(result.timed_events),
-                    "dispatched_event_count": dispatched_event_count,
-                    "dispatch_failure_count": len(dispatch_failures),
-                    "dispatch_failures": dispatch_failures,
-                    "brownie_path_index_before": brownie_path_index_before,
-                    "brownie_path_index_after": self._system.state.brownie_path_index,
-                },
-            )
-            dispatch_status = "failure" if dispatch_failures else "success"
-            for audit_event in audit_events:
-                audit_event.setdefault("trigger_source", trigger_source)
-                audit_event["dispatch_status"] = dispatch_status
-                audit_event["dispatch_failure_count"] = len(dispatch_failures)
-                await self._record_audit("animation.brownie_step", audit_event)
+
+        routine_event_count = sum(
+            1 for event in result.routine_events if not self._is_audit_only_event(event)
+        )
+        await self._record_audit(
+            "animation.tick",
+            {
+                "trigger_source": trigger_source,
+                "routine_name": result.routine_name,
+                "routine_index_before": routine_index_before,
+                "routine_index_after": self._system.state.routine_index,
+                "routine_name_before": routine_name_before,
+                "expected_interval_seconds": self._expected_interval_seconds,
+                "observed_elapsed_seconds": observed_elapsed_seconds,
+                "timed_flags_before": timed_flags_before,
+                "timed_flags_after_sync": timed_flags_after_sync,
+                "timed_flags_consumed": [event.flag for event in result.timed_events],
+                "routine_event_count": routine_event_count,
+                "timed_event_count": len(result.timed_events),
+                "dispatched_event_count": dispatched_event_count,
+                "dispatch_failure_count": len(dispatch_failures),
+                "dispatch_failures": dispatch_failures,
+                "brownie_path_index_before": brownie_path_index_before,
+                "brownie_path_index_after": self._system.state.brownie_path_index,
+            },
+        )
+        dispatch_status = "failure" if dispatch_failures else "success"
+        for audit_event in audit_events:
+            audit_event.setdefault("trigger_source", trigger_source)
+            audit_event["dispatch_status"] = dispatch_status
+            audit_event["dispatch_failure_count"] = len(dispatch_failures)
+            await self._record_audit("animation.brownie_step", audit_event)
 
         if raised is not None:
             raise raised

@@ -92,6 +92,21 @@ def test_fixture_reload_clears_runtime_animation_state(session):
     assert session.get(models.RuntimeState, "animation_tick") is None
 
 
+def test_fixture_reload_skips_runtime_state_when_table_is_absent(
+    alembic_config, database_url
+):
+    command.upgrade(alembic_config, "0003_accounts_session_metadata")
+    engine = database.get_engine(database_url, connect_args={"check_same_thread": False})
+    try:
+        session_factory = database.create_session_factory(engine)
+        with session_factory() as db_session:
+            loader.load_all_from_fixtures(db_session)
+
+        assert "runtime_state" not in inspect(engine).get_table_names()
+    finally:
+        engine.dispose()
+
+
 def test_initial_schema_revision_does_not_include_session_lifecycle_columns(
     alembic_config, database_url
 ):
