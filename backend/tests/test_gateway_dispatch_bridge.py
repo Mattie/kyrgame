@@ -87,6 +87,50 @@ def _seed_fountain_scroll_probe(
 
 
 @pytest.mark.anyio
+async def test_websocket_entry_location_description_uses_live_room_objects():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        with app.state.session_factory() as db:
+            location = db.get(models.Location, 0)
+            assert location is not None
+            location.objects = []
+            location.nlobjs = 0
+            db.commit()
+
+        app.state.location_index[0] = app.state.location_index[0].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 0}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+
+        uri = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        async with websockets.connect(uri) as hero_ws:
+            description = await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event")
+                == "location_description",
+            )
+
+        assert description["payload"]["objects"] == []
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_bridge_emits_legacy_command_metadata():
     app = create_app()
     host = "127.0.0.1"

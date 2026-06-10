@@ -8,11 +8,13 @@ import type {
   SessionRecord,
   WorldData,
 } from '../context/NavigatorContext'
+import { getGroundObjectVisual } from '../data/groundObjectVisuals'
 import { MudConsole } from './MudConsole'
 
 const mockSendCommand = vi.fn()
 const mockSendMove = vi.fn()
 const mockAdvanceLifecycle = vi.fn()
+const highlightedGroundObjectNames = ['scroll', 'elixir', 'codex', 'pinecone'] as const
 
 type MockNavigatorState = {
   apiBaseUrl: string
@@ -1156,6 +1158,42 @@ describe('MudConsole', () => {
     expect(dryadLine).toBeInTheDocument()
     expect(dryadLine.querySelector('.creature-dryad')).toHaveStyle({
       color: 'rgb(154, 205, 50)',
+    })
+  })
+
+  it('renders scroll, elixir, codex, and pinecone visuals in console ground object lines', () => {
+    navigatorState.world = {
+      locations: [
+        {
+          id: 0,
+          brfdes: 'A dark forest surrounds you in all directions.',
+          objlds: 'on the ground',
+          objects: [12, 32, 35, 36],
+        },
+      ],
+      objects: [
+        { id: 12, name: 'elixir', flags: ['VISIBL', 'NEEDAN'] },
+        { id: 32, name: 'pinecone', flags: ['VISIBL'] },
+        { id: 35, name: 'scroll', flags: ['VISIBL'] },
+        { id: 36, name: 'codex', flags: ['VISIBL'] },
+      ],
+      commands: [],
+      messages: {},
+    }
+    navigatorState.activity = []
+
+    render(<MudConsole />)
+
+    const line = getConsoleLine(
+      'There is an 🧪 elixir, a 🌰 pinecone, a 📜 scroll, and a 📖 codex lying on the ground.'
+    )
+    highlightedGroundObjectNames.forEach((name) => {
+      const visual = getGroundObjectVisual(name)!
+      const inlineObject = line.querySelector(`.${visual.className}`)
+
+      expect(inlineObject).toBeInTheDocument()
+      expect(inlineObject).toHaveTextContent(`${visual.emoji} ${name}`)
+      expect(inlineObject).toHaveStyle({ color: visual.color })
     })
   })
 

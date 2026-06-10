@@ -193,12 +193,23 @@ type AdminGrants = {
   flags: string[]
 }
 
+type RememberedSessionRecord = {
+  token: string
+  playerId: string
+  accountUserId?: string | null
+  sessionKind: SessionKind
+  roomId: number
+  expiresAt?: string | null
+}
+
 type StartSessionOptions = {
   createPlayer?: boolean
   background?: 'lord' | 'lady'
   password?: string
   authMode?: AccountAuthMode
   sessionKind?: SessionKind
+  rememberMe?: boolean
+  resumeToken?: string
 }
 
 type SendCommandOptions = {
@@ -234,11 +245,14 @@ type NavigatorContextValue = {
   triggerElf: (playerId: string, roomId: number) => Promise<AdminElfTriggerResponse>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   advanceLifecycle: (input: string) => Promise<void>
+  logoutSession: () => Promise<void>
+  resumeRememberedSession: () => Promise<boolean>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (command: string, options?: SendCommandOptions) => void
 }
 
 const NavigatorContext = createContext<NavigatorContextValue | undefined>(undefined)
+const REMEMBERED_SESSION_STORAGE_KEY = 'kyrgame.navigator.rememberedSession'
 
 const createActivityId = (() => {
   let counter = 0
@@ -247,6 +261,52 @@ const createActivityId = (() => {
     return `${Date.now()}-${counter}`
   }
 })()
+
+const readRememberedSession = (): RememberedSessionRecord | null => {
+  const raw = localStorage.getItem(REMEMBERED_SESSION_STORAGE_KEY)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<RememberedSessionRecord>
+    if (!parsed.token || !parsed.playerId || parsed.sessionKind !== 'game') {
+      localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+      return null
+    }
+    if (parsed.expiresAt && Date.parse(parsed.expiresAt) <= Date.now()) {
+      localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+      return null
+    }
+    return {
+      token: parsed.token,
+      playerId: parsed.playerId,
+      accountUserId: parsed.accountUserId ?? null,
+      sessionKind: 'game',
+      roomId: typeof parsed.roomId === 'number' ? parsed.roomId : 0,
+      expiresAt: parsed.expiresAt ?? null,
+    }
+  } catch {
+    localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+    return null
+  }
+}
+
+const writeRememberedSession = (record: SessionRecord) => {
+  if (record.sessionKind !== 'game') return
+  localStorage.setItem(
+    REMEMBERED_SESSION_STORAGE_KEY,
+    JSON.stringify({
+      token: record.token,
+      playerId: record.playerId,
+      accountUserId: record.accountUserId ?? null,
+      sessionKind: record.sessionKind ?? 'game',
+      roomId: record.roomId,
+      expiresAt: record.expiresAt ?? null,
+    } satisfies RememberedSessionRecord)
+  )
+}
+
+const clearRememberedSession = () => {
+  localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+}
 
 const articleizedName = (object: GameObject | undefined): string => {
   if (!object) return 'an object'
@@ -319,18 +379,23 @@ const formatVisibleRoomObjectsLine = (
 export const formatLegacyRoomObjectLines = (
   location: LocationRecord | null,
   objects: GameObject[] | null,
-  messages?: Record<string, string> | null
+  messages?: Record<string, string> | null,
+  objectSnapshot?: unknown
 ): string[] => {
   if (!location) return []
+  const displayLocation =
+    objectSnapshot === undefined
+      ? location
+      : { ...location, objects: extractObjectIds(objectSnapshot) }
 
   const lines = [
-    formatVisibleRoomObjectsLine(location, objects),
+    formatVisibleRoomObjectsLine(displayLocation, objects),
   ].filter(Boolean) as string[]
   const objectsById = new Map(objects?.map((obj) => [obj.id, obj]) ?? [])
 
   // Mirrors the hidden NPC presence append in legacy/KYRUTIL.C locobjs() lines 261-306.
   LEGACY_ROOM_PRESENCE_LINES.forEach((presence) => {
-    const hasPresenceObject = (location.objects ?? []).some((id) => {
+    const hasPresenceObject = (displayLocation.objects ?? []).some((id) => {
       const object = objectsById.get(id)
       return (
         id === presence.objectId ||
@@ -368,8 +433,11 @@ const formatOccupantsLine = (players: string[], currentPlayerId?: string | null)
 
 const extractObjectIds = (objects: unknown): number[] => {
   if (!Array.isArray(objects)) return []
-  return (objects as Array<{ id?: number; name?: string }>)
-    .map(obj => (typeof obj === 'object' && obj?.id !== undefined ? obj.id : null))
+  return (objects as Array<number | { id?: number; name?: string }>)
+    .map(obj => {
+      if (typeof obj === 'number') return obj
+      return typeof obj === 'object' && obj?.id !== undefined ? obj.id : null
+    })
     .filter((id): id is number => id !== null)
 }
 
@@ -444,6 +512,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const worldRef = useRef<WorldData | null>(null)
   const sessionRef = useRef<SessionRecord | null>(null)
   const occupantsRef = useRef<string[]>([])
+  const suppressSocketCloseRef = useRef(false)
 
   useEffect(() => {
     sessionRef.current = session
@@ -724,7 +793,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             const objectLines = formatLegacyRoomObjectLines(
               locationRecord,
               worldRef.current?.objects ?? null,
-              worldRef.current?.messages ?? null
+              worldRef.current?.messages ?? null,
+              message.payload?.objects
             )
             extraLines = objectLines
           } else if (message.payload?.event === 'location_update') {
@@ -839,6 +909,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       }
 
       socket.onclose = (event) => {
+        if (suppressSocketCloseRef.current) {
+          suppressSocketCloseRef.current = false
+          setConnectionStatus('idle')
+          return
+        }
         setConnectionStatus('disconnected')
         if (event.code !== 1000) {
           setError(event.reason || `WebSocket closed with code ${event.code}`)
@@ -1042,6 +1117,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         if (!useAccountAuth && options?.createPlayer) {
           payload.create_player = true
         }
+        if (!useAccountAuth && options?.resumeToken) {
+          payload.resume_token = options.resumeToken
+        }
+        if (useAccountAuth && options?.rememberMe) {
+          payload.remember_me = true
+        }
         if (options?.background) {
           payload.background = options.background
         }
@@ -1087,6 +1168,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           lifecycle,
         }
         setSession(record)
+        if (record.sessionKind === 'game' && (options?.rememberMe || options?.resumeToken)) {
+          writeRememberedSession(record)
+        } else if (useAccountAuth && record.sessionKind === 'game') {
+          clearRememberedSession()
+        }
         setPlayerVisuals({
           [record.playerId]: playerVisualFromFlags(playerFlags),
         })
@@ -1138,6 +1224,56 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       updateOccupants,
     ]
   )
+
+  const resumeRememberedSession = useCallback(async () => {
+    const remembered = readRememberedSession()
+    if (!remembered) return false
+
+    try {
+      await startSession(remembered.playerId, null, {
+        resumeToken: remembered.token,
+        sessionKind: 'game',
+      })
+      return true
+    } catch {
+      clearRememberedSession()
+      setError(null)
+      setConnectionStatus('idle')
+      return false
+    }
+  }, [startSession])
+
+  const logoutSession = useCallback(async () => {
+    const currentSession = sessionRef.current
+    clearRememberedSession()
+
+    try {
+      if (currentSession) {
+        await fetch(`${apiBaseUrl}/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${currentSession.token}` },
+        }).catch(() => undefined)
+      }
+    } finally {
+      const socket = socketRef.current
+      socketRef.current = null
+      if (socket && socket.readyState !== WebSocket.CLOSED) {
+        suppressSocketCloseRef.current = true
+        socket.close(1000, 'Logout')
+      } else {
+        suppressSocketCloseRef.current = false
+      }
+      setSession(null)
+      sessionRef.current = null
+      setAdminToken(null)
+      setCurrentRoom(null)
+      updateOccupants([])
+      setPlayerVisuals({})
+      setActivity([])
+      setError(null)
+      setConnectionStatus('idle')
+    }
+  }, [apiBaseUrl, updateOccupants])
 
   const advanceLifecycle = useCallback(
     async (input: string) => {
@@ -1329,6 +1465,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       triggerElf,
       applyAdminUpdate,
       advanceLifecycle,
+      logoutSession,
+      resumeRememberedSession,
       sendMove,
       sendCommand,
     }),
@@ -1343,8 +1481,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       error,
       fetchAdminMobs,
       fetchAdminPlayer,
+      logoutSession,
       occupants,
       playerVisuals,
+      resumeRememberedSession,
       setAdminToken,
       sendMove,
       sendCommand,

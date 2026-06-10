@@ -1,6 +1,10 @@
 import { ReactNode } from 'react'
 
 import { gemstonePalette, getGemstoneVisual } from '../data/gemstonePalette'
+import {
+  getGroundObjectVisual,
+  groundObjectVisualAliases,
+} from '../data/groundObjectVisuals'
 
 export type PlayerVisual = {
   emoji: string
@@ -34,6 +38,7 @@ export const GemstoneText = ({
 }): JSX.Element => {
   const gemstoneNames = Object.keys(gemstonePalette)
   const creatureNames = Object.keys(creaturePalette)
+  const groundObjectNames = groundObjectVisualAliases
   const playerEntries = Object.entries(playerVisuals)
   const playerVisualsByName = Object.fromEntries(
     playerEntries.map(([name, visual]) => [name.toLowerCase(), visual])
@@ -41,7 +46,7 @@ export const GemstoneText = ({
   const playerNames = playerEntries.map(([name]) => name)
   // Live Player-IDs are matched first; the backend reserves creature names
   // so "dragon" and "dryad" remain unambiguous in console text.
-  const inlineNames = [...playerNames, ...gemstoneNames, ...creatureNames]
+  const inlineNames = [...playerNames, ...groundObjectNames, ...gemstoneNames, ...creatureNames]
     .map(escapeRegex)
     .sort((left, right) => right.length - left.length)
 
@@ -89,19 +94,32 @@ export const GemstoneText = ({
           </span>
         )
       } else {
-        const creatureVisual = creaturePalette[matchedText.toLowerCase()]
-        if (creatureVisual) {
+        const groundObjectVisual = getGroundObjectVisual(matchedText)
+        if (groundObjectVisual) {
           parts.push(
             <span
-              key={`creature-${matchIndex}`}
-              className={`creature-inline ${creatureVisual.className}`}
-              style={{ color: creatureVisual.color }}
+              key={`ground-object-${matchIndex}`}
+              className={`ground-object-inline ${groundObjectVisual.className}`}
+              style={{ color: groundObjectVisual.color }}
             >
-              {creatureVisual.emoji} {matchedText}
+              {groundObjectVisual.emoji} {matchedText}
             </span>
           )
         } else {
-          parts.push(matchedText)
+          const creatureVisual = creaturePalette[matchedText.toLowerCase()]
+          if (creatureVisual) {
+            parts.push(
+              <span
+                key={`creature-${matchIndex}`}
+                className={`creature-inline ${creatureVisual.className}`}
+                style={{ color: creatureVisual.color }}
+              >
+                {creatureVisual.emoji} {matchedText}
+              </span>
+            )
+          } else {
+            parts.push(matchedText)
+          }
         }
       }
     }

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useNavigator } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
@@ -63,6 +63,7 @@ export const SessionForm = ({
     setAdminToken,
     session,
     currentRoom,
+    resumeRememberedSession,
   } = useNavigator()
   const [playerId, setPlayerId] = useState('')
   const [roomId, setRoomId] = useState('')
@@ -80,6 +81,8 @@ export const SessionForm = ({
     fallbackLegacyPlayerIdPrompt
   )
   const [submitting, setSubmitting] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
+  const autoResumeAttemptedRef = useRef(false)
   const isPlayerEntry = !showAdminFields
   const usesAccountAuth = isPlayerEntry || (showAdminFields && joinAsAdmin)
 
@@ -115,6 +118,13 @@ export const SessionForm = ({
     setJoinAsAdmin(storedAdminSession)
     setPassword('')
   }, [isPlayerEntry])
+
+  useEffect(() => {
+    if (!isPlayerEntry || session || autoResumeAttemptedRef.current) return
+    if (window.location.pathname !== '/play') return
+    autoResumeAttemptedRef.current = true
+    void resumeRememberedSession()
+  }, [isPlayerEntry, resumeRememberedSession, session])
 
   useEffect(() => {
     if (!isPlayerEntry) return
@@ -260,6 +270,7 @@ export const SessionForm = ({
               : 'login'
             : 'legacy',
           sessionKind: showAdminFields && joinAsAdmin ? 'admin' : 'game',
+          rememberMe: usesAccountAuth && isPlayerEntry ? rememberMe : false,
         }
       )
       onSessionStarted?.()
@@ -424,6 +435,18 @@ export const SessionForm = ({
                 required
               />
             </div>
+          )}
+
+          {usesAccountAuth && isPlayerEntry && (
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                name="remember-me"
+                checked={rememberMe}
+                onChange={event => setRememberMe(event.target.checked)}
+              />
+              Remember me
+            </label>
           )}
 
           {showRoomField && (

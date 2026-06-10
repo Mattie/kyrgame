@@ -65,7 +65,7 @@ const activePlayerSummariesEqual = (
   })
 
 export const ActivePlayerIndicator = () => {
-  const { apiBaseUrl, connectionStatus, adminToken } = useNavigator()
+  const { apiBaseUrl, connectionStatus, adminToken, session, logoutSession } = useNavigator()
   const wsBaseUrl = useMemo(() => getWebSocketUrl(), [])
   const [players, setPlayers] = useState<ActivePlayerSummary[]>([])
   const [open, setOpen] = useState(false)
@@ -172,6 +172,12 @@ export const ActivePlayerIndicator = () => {
     setScryEventCount(0)
   }, [])
 
+  const handleLogout = useCallback(async () => {
+    await logoutSession()
+    await loadPlayers()
+    closePopover()
+  }, [closePopover, loadPlayers, logoutSession])
+
   const startScry = useCallback(
     (player: ActivePlayerSummary) => {
       if (!adminToken) return
@@ -260,6 +266,16 @@ export const ActivePlayerIndicator = () => {
         <div className="active-player-popover" role="dialog" aria-label="Active players">
           <div className="active-player-popover-header">
             <span>Active players</span>
+            {session?.sessionKind === 'game' && (
+              <button
+                type="button"
+                className="logout-button"
+                aria-label={`Log out ${session.playerId}`}
+                onClick={() => void handleLogout()}
+              >
+                Logout
+              </button>
+            )}
             <button type="button" aria-label="Close active player list" onClick={closePopover}>
               X
             </button>

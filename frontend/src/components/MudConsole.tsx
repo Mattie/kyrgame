@@ -53,7 +53,12 @@ const formatLegacyRoomLines = (
   const location = world.locations.find((loc) => loc.id === locationId)
   if (!location) return []
 
-  return formatLegacyRoomObjectLines(location, world.objects, world.messages)
+  return formatLegacyRoomObjectLines(
+    location,
+    world.objects,
+    world.messages,
+    (entry.payload as Record<string, unknown>).objects
+  )
 }
 
 const directionByKey: Record<string, 'north' | 'south' | 'east' | 'west'> = {
