@@ -202,6 +202,23 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
     A fresh login for the same `player_id` replaces any existing active game session for that player.
     Bad explicit first-login names return `422` with legacy `BADPID` and `B4PLA2` messages; duplicate or reserved names return `409` with `NTGOOD` and `B4PLA2`.
 
+**Account register/login**
+
+- **Routes:** `POST /auth/register`, `POST /auth/login`
+- **Body:**
+
+  ```json
+  {
+    "userid": "hero",
+    "password": "secret",
+    "session_kind": "game",
+    "room_id": 7,
+    "remember_me": true
+  }
+  ```
+
+- `remember_me: true` creates a 30-day game session for browser-side token resume. Omitted or false account logins keep the standard 24-hour session expiry. Admin sessions keep the standard expiry.
+
 ```bash
 curl -X POST http://localhost:8000/auth/session \
   -H 'Content-Type: application/json' \
@@ -382,4 +399,21 @@ Chat fan-out swaps the movement fields for text and mode:
 ```
 
 Command acknowledgements are delivered privately to the sender in the same envelope shape but with `type: "command_response"` and a payload that echoes `command_id`/`message_id` for the initiating verb.
+
+Room refresh responses include `location_description` before `room_objects`. The description payload carries an `objects` array using the same `{id, name}` entries so clients can render the visible room-object line from the live snapshot that matched that description:
+
+```json
+{
+  "type": "command_response",
+  "room": 7,
+  "payload": {
+    "event": "location_description",
+    "type": "location_description",
+    "location": 7,
+    "message_id": "KRD007",
+    "text": "Edge of the Forest",
+    "objects": [{ "id": 0, "name": "ruby" }]
+  }
+}
+```
 

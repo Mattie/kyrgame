@@ -70,6 +70,8 @@ const maybeActivePlayerRosterFetch = (input: RequestInfo | URL) => {
     : null
 }
 
+const rememberedSessionStorageKey = 'kyrgame.navigator.rememberedSession'
+
 describe('Navigator flow', () => {
   const locations = [
     {
@@ -711,6 +713,417 @@ describe('Navigator flow', () => {
     )
   })
 
+  it('stores remembered session metadata when player login checks remember me', async () => {
+    window.history.replaceState(null, '', '/play')
+    vi.spyOn(global, 'fetch').mockImplementation((input, init) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/public/player-id/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            player_id: 'Hero',
+            canonical_player_id: 'Hero',
+            valid: true,
+            exists: true,
+            available: false,
+            reserved: false,
+            status: 'existing',
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/auth/login')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          userid: 'Hero',
+          password: 'secret-password',
+          session_kind: 'game',
+          remember_me: true,
+        })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'created',
+            session: {
+              token: 'remembered-token',
+              player_id: 'Hero',
+              account_userid: 'Hero',
+              session_kind: 'game',
+              room_id: 7,
+              expires_at: '2026-07-10T12:00:00+00:00',
+              expires_in_seconds: 2592000,
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({ ok: true, json: async () => ({ messages }) } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/^player id$/i), 'Hero')
+    await user.type(screen.getByLabelText(/^password$/i), 'secret-password')
+    await user.click(screen.getByRole('checkbox', { name: /remember me/i }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /login as hero/i })).toBeEnabled()
+    )
+    await user.click(screen.getByRole('button', { name: /login as hero/i }))
+
+    await waitFor(() => expect(MockWebSocket.instances[0]?.url).toContain('remembered-token'))
+    expect(JSON.parse(localStorage.getItem('kyrgame.navigator.rememberedSession') ?? '{}')).toEqual({
+      token: 'remembered-token',
+      playerId: 'Hero',
+      accountUserId: 'Hero',
+      sessionKind: 'game',
+      roomId: 7,
+      expiresAt: '2026-07-10T12:00:00+00:00',
+    })
+  })
+
+  it('continues player login when remembered-session storage cannot be written', async () => {
+    window.history.replaceState(null, '', '/play')
+    const originalSetItem = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key,
+      value
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalSetItem.call(this, key, value)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input, init) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/public/player-id/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            player_id: 'Hero',
+            canonical_player_id: 'Hero',
+            valid: true,
+            exists: true,
+            available: false,
+            reserved: false,
+            status: 'existing',
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/auth/login')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          userid: 'Hero',
+          password: 'secret-password',
+          session_kind: 'game',
+          remember_me: true,
+        })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'created',
+            session: {
+              token: 'remembered-token',
+              player_id: 'Hero',
+              account_userid: 'Hero',
+              session_kind: 'game',
+              room_id: 7,
+              expires_at: '2026-07-10T12:00:00+00:00',
+              expires_in_seconds: 2592000,
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ messages }),
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/^player id$/i), 'Hero')
+    await user.type(screen.getByLabelText(/^password$/i), 'secret-password')
+    await user.click(screen.getByRole('checkbox', { name: /remember me/i }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /login as hero/i })).toBeEnabled()
+    )
+    await user.click(screen.getByRole('button', { name: /login as hero/i }))
+
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0]?.url).toContain('remembered-token')
+    )
+    expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
+  })
+
+  it('auto-resumes a remembered player session on direct play load', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(
+      'kyrgame.navigator.rememberedSession',
+      JSON.stringify({
+        token: 'remembered-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input, init) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/auth/session')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          player_id: 'Hero',
+          resume_token: 'remembered-token',
+        })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'recovered',
+            session: {
+              token: 'remembered-token',
+              player_id: 'Hero',
+              account_userid: 'Hero',
+              session_kind: 'game',
+              room_id: 7,
+              expires_at: '2999-07-10T12:00:00+00:00',
+              expires_in_seconds: 2592000,
+              resumed: true,
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({ ok: true, json: async () => ({ messages }) } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        'http://api.local/auth/session',
+        expect.objectContaining({ method: 'POST' })
+      )
+    )
+    await waitFor(() => expect(MockWebSocket.instances[0]?.url).toContain('remembered-token'))
+    expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the play login form when remembered-session storage cannot be read', async () => {
+    window.history.replaceState(null, '', '/play')
+    const originalGetItem = Storage.prototype.getItem
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalGetItem.call(this, key)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      throw new Error(`Unexpected fetch call: ${String(input)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+    )
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('shows the play login form when corrupted remembered-session cleanup is blocked', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(rememberedSessionStorageKey, '{')
+    const originalRemoveItem = Storage.prototype.removeItem
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalRemoveItem.call(this, key)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      throw new Error(`Unexpected fetch call: ${String(input)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+    )
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('clears rejected remembered sessions and shows the play login form', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(
+      'kyrgame.navigator.rememberedSession',
+      JSON.stringify({
+        token: 'expired-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/auth/session')) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ detail: 'Session not found or expired' }),
+          text: async () => 'Session not found or expired',
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument())
+    expect(localStorage.getItem('kyrgame.navigator.rememberedSession')).toBeNull()
+  })
+
+  it('shows the play login form when rejected remembered-session cleanup is blocked', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(
+      rememberedSessionStorageKey,
+      JSON.stringify({
+        token: 'expired-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+    const originalRemoveItem = Storage.prototype.removeItem
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalRemoveItem.call(this, key)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/auth/session')) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ detail: 'Session not found or expired' }),
+          text: async () => 'Session not found or expired',
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+    )
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('keeps remembered session metadata when auto-resume hits a transient failure', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(
+      'kyrgame.navigator.rememberedSession',
+      JSON.stringify({
+        token: 'remembered-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/auth/session')) {
+        throw new Error('Temporary network failure')
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument())
+    expect(localStorage.getItem('kyrgame.navigator.rememberedSession')).toEqual(
+      JSON.stringify({
+        token: 'remembered-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+  })
+
   it('registers an available player account from the play screen', async () => {
     window.history.replaceState(null, '', '/play')
     const firstLoginMessages = {
@@ -1238,6 +1651,74 @@ describe('Navigator flow', () => {
     await waitFor(() =>
       expect(screen.getAllByText(/emerald/i).length).toBeGreaterThan(0)
     )
+  })
+
+  it('renders room descriptions from the live object snapshot on the payload', async () => {
+    const localLocations = [
+      {
+        id: 7,
+        brfdes: 'Edge of the forest',
+        objlds: 'on the ground',
+        objects: [0],
+        gi_north: -1,
+        gi_south: -1,
+        gi_east: -1,
+        gi_west: -1,
+      },
+    ]
+
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => localLocations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'location_description',
+          location: 7,
+          text: 'Edge of the forest',
+          objects: [{ id: '0', name: 'ruby' }],
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('There is nothing lying on the ground.')).toBeInTheDocument()
+    )
+    expect(queryConsoleLines('There is a ruby lying on the ground.')).toHaveLength(0)
+    expect(queryConsoleLines('There is an object lying on the ground.')).toHaveLength(0)
   })
 
   it('renders room_broadcast occupant updates as occupant text', async () => {

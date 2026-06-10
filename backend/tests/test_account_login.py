@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -90,6 +91,43 @@ async def test_login_reuses_account_character_without_manual_relink(account_env)
         assert session["token"] != first_token
         assert session["replaced_sessions"] == 1
         assert session["lifecycle"] == {"state": "first_login_intro", "step": 2}
+
+
+@pytest.mark.anyio
+async def test_account_remember_me_extends_only_checked_game_sessions(account_env):
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            registered = await client.post(
+                "/auth/register",
+                json={
+                    "userid": "Memory",
+                    "password": "correct horse battery staple",
+                    "remember_me": True,
+                },
+            )
+            logged_in = await client.post(
+                "/auth/login",
+                json={
+                    "userid": "memory",
+                    "password": "correct horse battery staple",
+                    "remember_me": False,
+                },
+            )
+
+    assert registered.status_code == 201
+    remembered_expiry = datetime.fromisoformat(
+        registered.json()["session"]["expires_at"]
+    )
+    remembered_remaining = remembered_expiry - datetime.now(timezone.utc)
+    assert timedelta(days=29, hours=23) <= remembered_remaining <= timedelta(days=30, minutes=5)
+
+    assert logged_in.status_code == 201
+    ordinary_expiry = datetime.fromisoformat(logged_in.json()["session"]["expires_at"])
+    ordinary_remaining = ordinary_expiry - datetime.now(timezone.utc)
+    assert timedelta(hours=23, minutes=55) <= ordinary_remaining <= timedelta(days=1, minutes=5)
 
 
 @pytest.mark.anyio
