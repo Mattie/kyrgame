@@ -1,4 +1,5 @@
 import {
+  ChangeEvent as ReactChangeEvent,
   CSSProperties,
   Fragment,
   FormEvent,
@@ -72,6 +73,8 @@ const TERMINAL_PAGER_DESKTOP_ROWS = 22
 const TERMINAL_PAGER_MIN_ROWS = 6
 const TERMINAL_PAGER_DEFAULT_LINE_HEIGHT_PX = 16
 const TERMINAL_PAGER_PROMPT = '(N)onstop, (Q)uit, or (C)ontinue?'
+const COMMAND_HISTORY_LIMIT = 200
+const CARDINAL_DIRECTIONS = ['north', 'east', 'west', 'south'] as const
 
 type ConsoleLine = {
   id: string
@@ -249,6 +252,16 @@ const formatTerminalPagerAnnouncement = (
     .join(' ')
 }
 
+const isCommandHistoryEligible = (command: string): boolean => {
+  const trimmed = command.trim()
+  if (!trimmed) return false
+  const firstToken = trimmed.split(/\s+/, 1)[0]?.toLowerCase() ?? ''
+  const isCardinalMove = CARDINAL_DIRECTIONS.some((direction) =>
+    direction.startsWith(firstToken)
+  )
+  return !isCardinalMove
+}
+
 export const MudConsole = () => {
   const {
     activity,
@@ -262,6 +275,8 @@ export const MudConsole = () => {
     world,
   } = useNavigator()
   const [input, setInput] = useState('')
+  const [commandHistory, setCommandHistory] = useState<string[]>([])
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null)
   const [navMode, setNavMode] = useState(false)
   const [fireEffectPresetId, setFireEffectPresetId] = useState(defaultFireBorderEffectPreset.id)
   const [fireRenderStyle, setFireRenderStyle] =
@@ -294,6 +309,7 @@ export const MudConsole = () => {
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vfxtune')
   const logRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const historyDraftRef = useRef('')
   const isConsoleFollowingRef = useRef(true)
   const lifecycleAdvancePendingRef = useRef(false)
   const isMountedRef = useRef(true)
@@ -918,19 +934,61 @@ export const MudConsole = () => {
         return
       }
 
-      if (!lifecycleIntroActive || event.key !== 'Enter') return
+      if (lifecycleIntroActive) {
+        if (event.key !== 'Enter') return
 
-      event.preventDefault()
-      advanceLifecycleFromPrompt(inputRef.current?.value ?? input)
+        event.preventDefault()
+        advanceLifecycleFromPrompt(inputRef.current?.value ?? input)
+        return
+      }
+
+      if (event.key === 'ArrowUp') {
+        if (commandHistory.length === 0) return
+
+        event.preventDefault()
+        const nextCursor =
+          historyCursor === null
+            ? commandHistory.length - 1
+            : Math.max(0, historyCursor - 1)
+        if (historyCursor === null) {
+          historyDraftRef.current = input
+        }
+        setHistoryCursor(nextCursor)
+        setInput(commandHistory[nextCursor])
+        return
+      }
+
+      if (event.key === 'ArrowDown') {
+        if (historyCursor === null) return
+
+        event.preventDefault()
+        const nextCursor = historyCursor + 1
+        if (nextCursor >= commandHistory.length) {
+          setHistoryCursor(null)
+          setInput(historyDraftRef.current)
+          return
+        }
+        setHistoryCursor(nextCursor)
+        setInput(commandHistory[nextCursor])
+      }
     },
     [
       activeTerminalPagerLineId,
       advanceLifecycleFromPrompt,
+      commandHistory,
       handleTerminalPagerCommand,
+      historyCursor,
       input,
       lifecycleIntroActive,
     ]
   )
+
+  const handlePromptChange = useCallback((event: ReactChangeEvent<HTMLInputElement>) => {
+    const nextInput = event.target.value
+    historyDraftRef.current = nextInput
+    setHistoryCursor(null)
+    setInput(nextInput)
+  }, [])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -949,6 +1007,13 @@ export const MudConsole = () => {
     if (!submitted) return
 
     sendCommand(submitted)
+    if (isCommandHistoryEligible(submitted)) {
+      setCommandHistory((current) =>
+        [...current, submitted].slice(-COMMAND_HISTORY_LIMIT)
+      )
+    }
+    historyDraftRef.current = ''
+    setHistoryCursor(null)
     setInput('')
   }
 
@@ -1180,7 +1245,7 @@ export const MudConsole = () => {
                 ref={inputRef}
                 aria-label="command input"
                 value={input}
-                onChange={(event) => setInput(event.target.value)}
+                onChange={handlePromptChange}
                 onKeyDown={handlePromptKeyDown}
                 onFocus={() => setNavMode(false)}
                 placeholder="Type commands like LOOK, SAY HELLO, or INVENTORY"

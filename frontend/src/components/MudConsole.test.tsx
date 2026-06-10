@@ -229,6 +229,133 @@ describe('MudConsole', () => {
     expect(screen.getByText('This line should appear immediately.')).toBeInTheDocument()
   })
 
+  it('recalls normal commands with shell-style history and restores the typed draft', () => {
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input') as HTMLInputElement
+    const form = input.closest('form') as HTMLFormElement
+
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'inventory' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'say hello' } })
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('look')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('inventory')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('look')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('inventory')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('look')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('say hello')
+
+    expect(mockSendCommand).toHaveBeenNthCalledWith(1, 'look')
+    expect(mockSendCommand).toHaveBeenNthCalledWith(2, 'inventory')
+    expect(mockSendCommand).toHaveBeenNthCalledWith(3, 'look')
+  })
+
+  it('uses manual edits as the current history draft', () => {
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input') as HTMLInputElement
+    const form = input.closest('form') as HTMLFormElement
+
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'inventory' } })
+    fireEvent.submit(form)
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('inventory')
+
+    fireEvent.change(input, { target: { value: 'say hello' } })
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('inventory')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('say hello')
+  })
+
+  it('excludes typed cardinal movement commands from command history while still sending them', () => {
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input') as HTMLInputElement
+    const form = input.closest('form') as HTMLFormElement
+
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(form)
+    const movementCommands = [
+      'n',
+      'no',
+      'north',
+      'e',
+      'eas',
+      'east',
+      'w',
+      'we',
+      'west',
+      's',
+      'sou',
+      'south',
+    ]
+    for (const command of movementCommands) {
+      fireEvent.change(input, { target: { value: command } })
+      fireEvent.submit(form)
+    }
+    fireEvent.change(input, { target: { value: 'news' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'say news travels fast' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'inventory' } })
+    fireEvent.submit(form)
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('inventory')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('say news travels fast')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('news')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('look')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('look')
+
+    expect(mockSendCommand).toHaveBeenCalledWith('n')
+    expect(mockSendCommand).toHaveBeenCalledWith('north')
+    expect(mockSendCommand).toHaveBeenCalledWith('e')
+    expect(mockSendCommand).toHaveBeenCalledWith('east')
+    expect(mockSendCommand).toHaveBeenCalledWith('w')
+    expect(mockSendCommand).toHaveBeenCalledWith('west')
+    expect(mockSendCommand).toHaveBeenCalledWith('s')
+    expect(mockSendCommand).toHaveBeenCalledWith('south')
+  })
+
+  it('keeps only the newest 200 command history entries', () => {
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input') as HTMLInputElement
+    const form = input.closest('form') as HTMLFormElement
+
+    for (let index = 0; index < 201; index += 1) {
+      fireEvent.change(input, { target: { value: `command-${index}` } })
+      fireEvent.submit(form)
+    }
+
+    for (let index = 0; index < 200; index += 1) {
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+    }
+    expect(input.value).toBe('command-1')
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('command-1')
+  })
+
   it('focuses the command input when the connected game field is clicked', () => {
     const { container } = render(<MudConsole />)
 
@@ -578,6 +705,30 @@ describe('MudConsole', () => {
     expect(mockSendCommand).not.toHaveBeenCalled()
   })
 
+  it('keeps first-login lifecycle prompt input out of command history', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+
+    const { rerender } = render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockAdvanceLifecycle).toHaveBeenCalledWith('look')
+    expect(mockSendCommand).not.toHaveBeenCalled()
+
+    navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
+    rerender(<MudConsole />)
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('')
+  })
+
   it('pauses long first-login text with a MajorBBS pager prompt', () => {
     setFirstLoginLifecycleText(24)
 
@@ -750,6 +901,22 @@ describe('MudConsole', () => {
     expect(screen.getByText(/Line 24/)).toBeInTheDocument()
     expect(screen.queryByText('(N)onstop, (Q)uit, or (C)ontinue?')).toBeNull()
     expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+  })
+
+  it('keeps first-login pager key commands out of command history', () => {
+    setFirstLoginLifecycleText(24)
+
+    const { rerender } = render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input') as HTMLInputElement
+    fireEvent.keyDown(input, { key: 'c' })
+    expect(mockAdvanceLifecycle).not.toHaveBeenCalled()
+
+    navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
+    rerender(<MudConsole />)
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('')
   })
 
   it('announces first-login pager advances when modem streaming is enabled', async () => {
