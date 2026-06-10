@@ -254,6 +254,18 @@ type NavigatorContextValue = {
 const NavigatorContext = createContext<NavigatorContextValue | undefined>(undefined)
 const REMEMBERED_SESSION_STORAGE_KEY = 'kyrgame.navigator.rememberedSession'
 
+class SessionStartError extends Error {
+  readonly endpoint: string
+  readonly status: number
+
+  constructor(message: string, endpoint: string, status: number) {
+    super(message)
+    this.name = 'SessionStartError'
+    this.endpoint = endpoint
+    this.status = status
+  }
+}
+
 const createActivityId = (() => {
   let counter = 0
   return () => {
@@ -310,6 +322,11 @@ const writeRememberedSession = (record: SessionRecord) => {
 const clearRememberedSession = () => {
   localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
 }
+
+const isRememberedResumeRejection = (err: unknown): boolean =>
+  err instanceof SessionStartError &&
+  err.endpoint === '/auth/session' &&
+  [401, 403, 404, 410].includes(err.status)
 
 const articleizedName = (object: GameObject | undefined): string => {
   if (!object) return 'an object'
@@ -1142,7 +1159,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           const message = useAccountAuth
             ? formatAccountAuthError(authMode, response.status, playerId, detail)
             : detail.trim() || 'Unable to start session'
-          throw new Error(message)
+          throw new SessionStartError(message, endpoint, response.status)
         }
         const data = await response.json()
         const sessionPayload = data.session
@@ -1238,8 +1255,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         sessionKind: 'game',
       })
       return true
-    } catch {
-      clearRememberedSession()
+    } catch (err) {
+      if (isRememberedResumeRejection(err)) {
+        clearRememberedSession()
+      }
       setError(null)
       setConnectionStatus('idle')
       return false

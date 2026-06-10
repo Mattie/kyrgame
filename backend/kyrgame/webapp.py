@@ -3085,7 +3085,7 @@ def create_app() -> FastAPI:
                         "location": location.id,
                         "message_id": description_id,
                         "text": long_description or location.brfdes,
-                        "objects": commands._room_object_entries(
+                        "objects": commands.room_object_entries(
                             location, state.objects or {}
                         ),
                     },

@@ -522,7 +522,7 @@ def _build_room_transition_events(
             "location": destination.id,
             "message_id": description_id,
             "text": long_description or destination.brfdes,
-            "objects": _room_object_entries(destination, state.objects or {}),
+            "objects": room_object_entries(destination, state.objects or {}),
         },
         # Mirror locobjs call in legacy entrgp to describe visible room objects on entry.【F:legacy/KYRUTIL.C†L248-L266】
         _room_objects_event(
@@ -1739,7 +1739,7 @@ def _location_refresh_events(
         "location": destination.id,
         "message_id": description_id,
         "text": long_description or destination.brfdes,
-        "objects": _room_object_entries(destination, state.objects or {}),
+        "objects": room_object_entries(destination, state.objects or {}),
     }
     objects_event = {
         **_room_objects_event(
@@ -3003,7 +3003,7 @@ async def _handle_look(state: GameState, args: dict) -> CommandResult:
             "location": location.id,
             "message_id": description_id,
             "text": description_text,
-            "objects": _room_object_entries(location, objects),
+            "objects": room_object_entries(location, objects),
         }
     )
     events.append(_room_objects_event(location, objects, command_id, message_id))
@@ -3205,7 +3205,7 @@ def _persist_player_state(state: GameState, player: models.PlayerModel):
     state.db_session.commit()
 
 
-def _room_object_entries(
+def room_object_entries(
     location: models.LocationModel,
     objects: dict[int, models.GameObjectModel],
 ) -> list[dict]:
@@ -3232,7 +3232,7 @@ def _room_objects_event(
         "scope": scope,
         "event": "room_objects",
         "type": "room_objects",
-        "objects": _room_object_entries(location, objects),
+        "objects": room_object_entries(location, objects),
         "location": location.id,
         "command_id": command_id,
         "message_id": message_id,

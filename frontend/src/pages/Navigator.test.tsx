@@ -894,6 +894,45 @@ describe('Navigator flow', () => {
     expect(localStorage.getItem('kyrgame.navigator.rememberedSession')).toBeNull()
   })
 
+  it('keeps remembered session metadata when auto-resume hits a transient failure', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(
+      'kyrgame.navigator.rememberedSession',
+      JSON.stringify({
+        token: 'remembered-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/auth/session')) {
+        throw new Error('Temporary network failure')
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument())
+    expect(localStorage.getItem('kyrgame.navigator.rememberedSession')).toEqual(
+      JSON.stringify({
+        token: 'remembered-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+  })
+
   it('registers an available player account from the play screen', async () => {
     window.history.replaceState(null, '', '/play')
     const firstLoginMessages = {
