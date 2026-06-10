@@ -271,9 +271,12 @@ const readRememberedSession = (): RememberedSessionRecord | null => {
       localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
       return null
     }
-    if (parsed.expiresAt && Date.parse(parsed.expiresAt) <= Date.now()) {
-      localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
-      return null
+    if (parsed.expiresAt) {
+      const expiresAtMs = Date.parse(parsed.expiresAt)
+      if (Number.isNaN(expiresAtMs) || expiresAtMs <= Date.now()) {
+        localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+        return null
+      }
     }
     return {
       token: parsed.token,
