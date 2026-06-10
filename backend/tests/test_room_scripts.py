@@ -773,6 +773,63 @@ async def test_fountain_default_gift_consumes_inventory_and_uses_generic_message
 
 
 @pytest.mark.anyio
+async def test_fountain_offerings_accept_legacy_inventory_prefixes():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+    )
+    player = fixtures.build_player().model_copy(
+        update={
+            "gpobjs": [32, 43],
+            "obvals": [0, 0],
+            "npobjs": 2,
+            "flags": int(constants.PlayerFlag.BLESSD),
+        },
+        deep=True,
+    )
+
+    pinecone_handled = await engine.handle_command(
+        "hero",
+        38,
+        command="toss",
+        args=["pine", "in", "fountain"],
+        player=player,
+    )
+    shard_handled = await engine.handle_command(
+        "hero",
+        38,
+        command="toss",
+        args=["shar", "in", "fountain"],
+        player=player,
+    )
+
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert pinecone_handled is True
+    assert shard_handled is True
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "MAGF04"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "hero"
+        and payload.get("message_id") == "MAGF06"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
 async def test_fountain_requires_inventory_and_in_fountain_target():
     scheduler = SchedulerService()
     gateway = FakeGateway()
@@ -811,6 +868,7 @@ async def test_fountain_requires_inventory_and_in_fountain_target():
     for bad_args in (
         ["pinecone", "near", "fountain"],
         ["pinecone", "in", "pond"],
+        ["pinecone", "in", "fountain", "now"],
     ):
         assert (
             await engine.handle_command(

@@ -623,7 +623,9 @@ def _fountain_on_enter(messages: MessageBundleModel) -> RoomCallback:
 
 
 def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
-    objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
+    objects = fixtures.load_objects()
+    objects_by_name = {obj.name.lower(): obj.id for obj in objects}
+    objects_by_id = {obj.id: obj for obj in objects}
 
     async def _handler(
         context: RoomContext,
@@ -656,13 +658,15 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         # Source: legacy/KYRROUS.C:759-819.
         stripped_args = _strip_gi_bagthe_articles(args)
         if (
-            len(stripped_args) < 3
+            len(stripped_args) != 3
             or stripped_args[1].lower() != "in"
             or stripped_args[2].lower() != "fountain"
         ):
             return False
 
-        offered = _resolve_offering(stripped_args[0], objects_by_name)
+        offered = _resolve_offering(
+            stripped_args[0], objects_by_name, player.gpobjs, objects_by_id
+        )
         if offered is None or offered not in player.gpobjs:
             return False
 
@@ -1028,10 +1032,26 @@ def _heart_and_soul_on_command(messages: MessageBundleModel) -> RoomCommandCallb
     return _handler
 
 
-def _resolve_offering(candidate: str, mapping: dict[str, int]) -> int | None:
+def _legacy_prefix_match(shorts: str, longs: str) -> bool:
+    # MajorBBS sameto(shorts, longs): case-insensitive prefix matching.
+    target = shorts.strip().lower()
+    return bool(target) and longs.lower().startswith(target)
+
+
+def _resolve_offering(
+    candidate: str,
+    mapping: dict[str, int],
+    inventory: Iterable[int] | None = None,
+    objects_by_id: dict[int, GameObjectModel] | None = None,
+) -> int | None:
     try:
         return int(candidate)
     except ValueError:
+        if inventory is not None and objects_by_id is not None:
+            for object_id in inventory:
+                obj = objects_by_id.get(object_id)
+                if obj is not None and _legacy_prefix_match(candidate, obj.name):
+                    return object_id
         return mapping.get(candidate.lower())
 
 
