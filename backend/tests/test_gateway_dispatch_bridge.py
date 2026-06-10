@@ -59,6 +59,33 @@ class _FixedAnimationRng:
         return self._randint_values.pop(0)
 
 
+def _seed_fountain_scroll_probe(
+    app,
+    *,
+    player_id: str,
+    target_room: int,
+    inventory: list[int],
+    room_objects: list[int],
+) -> None:
+    with app.state.session_factory() as db:
+        player = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
+        location = db.get(models.Location, target_room)
+        assert player is not None
+        assert location is not None
+        player.gpobjs = list(inventory)
+        player.obvals = [0 for _ in inventory]
+        player.npobjs = len(inventory)
+        player.flags = int(player.flags) & ~int(constants.PlayerFlag.BLESSD)
+        location.objects = list(room_objects)
+        location.nlobjs = len(room_objects)
+        db.commit()
+
+    app.state.location_index[target_room] = app.state.location_index[
+        target_room
+    ].model_copy(update={"objects": list(room_objects), "nlobjs": len(room_objects)})
+    app.state.room_scripts.room_picker = lambda low, high: target_room
+
+
 @pytest.mark.anyio
 async def test_websocket_bridge_emits_legacy_command_metadata():
     app = create_app()
@@ -449,6 +476,135 @@ async def test_websocket_give_overflow_broadcasts_room_objects_to_all_clients():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_fountain_pinecones_persist_scroll_spawn_and_refresh_target_room(
+    monkeypatch,
+):
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "10")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+    target_room = 44
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            _seed_fountain_scroll_probe(
+                app,
+                player_id="hero",
+                target_room=target_room,
+                inventory=[32, 32, 32],
+                room_objects=[],
+            )
+
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 38}
+            )
+            watcher_session = await client.post(
+                "/auth/session", json={"player_id": "watcher", "room_id": target_room}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            watcher_token = watcher_session.json()["session"]["token"]
+
+            hero_uri = f"ws://{host}:{port}/ws/rooms/38?token={hero_token}"
+            watcher_uri = (
+                f"ws://{host}:{port}/ws/rooms/{target_room}?token={watcher_token}"
+            )
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                for event_name in ("location_update", "location_description", "room_objects"):
+                    await _recv_matching(
+                        hero_ws,
+                        lambda msg, event_name=event_name: msg.get("payload", {}).get(
+                            "event"
+                        )
+                        == event_name,
+                    )
+                async with websockets.connect(watcher_uri) as watcher_ws:
+                    for event_name in (
+                        "location_update",
+                        "location_description",
+                        "room_objects",
+                    ):
+                        await _recv_matching(
+                            watcher_ws,
+                            lambda msg, event_name=event_name: msg.get(
+                                "payload", {}
+                            ).get("event")
+                            == event_name,
+                        )
+
+                    await hero_ws.send(
+                        json.dumps(
+                            {"type": "command", "command": "offer true love to tashanna"}
+                        )
+                    )
+                    await _recv_matching(
+                        hero_ws,
+                        lambda msg: "The Goddess blesses you."
+                        in msg.get("payload", {}).get("text", ""),
+                        timeout=2.0,
+                    )
+                    await _recv_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "command_response"
+                        and msg.get("payload", {}).get("verb") == "offer",
+                        timeout=2.0,
+                    )
+
+                    command_expectations = (
+                        ("drop pinecone in fountain", "MAGF04"),
+                        ("throw pinecone in fountain", "MAGF04"),
+                        ("toss pinecone in fountain", "MAGF00"),
+                    )
+                    for command_text, message_id in command_expectations:
+                        await hero_ws.send(
+                            json.dumps(
+                                {
+                                    "type": "command",
+                                    "command": command_text,
+                                }
+                            )
+                        )
+                        await _recv_matching(
+                            hero_ws,
+                            lambda msg: msg.get("payload", {}).get("message_id")
+                            == message_id,
+                            timeout=2.0,
+                        )
+
+                    room_objects = await _recv_matching(
+                        watcher_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("event") == "room_objects"
+                        and msg.get("payload", {}).get("location") == target_room,
+                        timeout=2.0,
+                    )
+
+                    assert room_objects["payload"]["objects"] == [
+                        {"id": 35, "name": "scroll"}
+                    ]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                location = db.get(models.Location, target_room)
+                assert hero is not None
+                assert location is not None
+                assert hero.gpobjs == []
+                assert hero.obvals == []
+                assert hero.npobjs == 0
+                assert location.objects == [35]
+                assert location.nlobjs == 1
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio

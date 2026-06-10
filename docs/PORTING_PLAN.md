@@ -87,6 +87,7 @@
 - [x] Preserved transformed-player look targeting through legacy `attnam` lookup, including transformed self-look via names like `willowisp`.
 - [x] Preserved duplicate room-object slots during legacy prefix pickup: `get`/`grab` removes only the matched `lcobjs` slot, matching `fgmlobj` + `tgmlobj(objno)` behavior.
 - [x] Fixed room 32 bubbling spring rose pickup parity so full inventories emit `GROSE3`/`GROSE4` and successful pickups grant object 40 before `GROSE1`/`GROSE2`, matching `rosutl()` (`legacy/KYRROUS.C:742-753`).
+- [x] Restored room 38 magic fountain offering parity so `drop`/`throw`/`toss <item> in fountain` consumes inventory, blessed pinecones spawn scroll object 35 in the live world every third offering, shards grant object 16 every sixth offering, and `FOUNTI` sets `BLESSD`, matching `magicf()` (`legacy/KYRROUS.C:759-819`).
 - [x] Restored room 185 smooth-walled alcove key/crevice verb parity so `waller()` uses legacy `drpwrds` (`drop`/`insert`/`put`/`stick`/`thrust`) after `bagprep()` strips prepositions, matching `legacy/KYRROUS.C:109-115` and `legacy/KYRROUS.C:939-960`.
 - [x] Preserved room 185 `waller()` offered-object gating so only `key` succeeds at the crevice; wrong offerings still emit `WALM01`/`WALM02`.
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).

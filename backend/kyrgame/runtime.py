@@ -392,6 +392,9 @@ async def bootstrap_app(app: FastAPI):
         room_scripts=fixtures.load_room_scripts(seed_root),
         objects=app.state.fixture_cache["objects"],
         spells=app.state.fixture_cache["spells"],
+        room_picker=_animation_chance_picker,
+        room_objects_getter=_animation_get_room_objects,
+        room_objects_setter=_animation_set_room_objects,
     )
     zar_routine.initialize(app.state.animation_tick_system.state)
     app.state.animation_tick_system.persist_state()
