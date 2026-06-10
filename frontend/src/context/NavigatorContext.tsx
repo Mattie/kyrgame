@@ -274,19 +274,46 @@ const createActivityId = (() => {
   }
 })()
 
+const readRememberedSessionRaw = (): string | null => {
+  try {
+    return localStorage.getItem(REMEMBERED_SESSION_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+const removeRememberedSession = () => {
+  try {
+    localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+  } catch {
+    // Browser storage may be unavailable in private/restricted contexts.
+  }
+}
+
+const storeRememberedSession = (record: RememberedSessionRecord) => {
+  try {
+    localStorage.setItem(
+      REMEMBERED_SESSION_STORAGE_KEY,
+      JSON.stringify(record)
+    )
+  } catch {
+    // Remember-me persistence is best-effort; the live session can continue.
+  }
+}
+
 const readRememberedSession = (): RememberedSessionRecord | null => {
-  const raw = localStorage.getItem(REMEMBERED_SESSION_STORAGE_KEY)
+  const raw = readRememberedSessionRaw()
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as Partial<RememberedSessionRecord>
     if (!parsed.token || !parsed.playerId || parsed.sessionKind !== 'game') {
-      localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+      removeRememberedSession()
       return null
     }
     if (parsed.expiresAt) {
       const expiresAtMs = Date.parse(parsed.expiresAt)
       if (Number.isNaN(expiresAtMs) || expiresAtMs <= Date.now()) {
-        localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+        removeRememberedSession()
         return null
       }
     }
@@ -299,28 +326,25 @@ const readRememberedSession = (): RememberedSessionRecord | null => {
       expiresAt: parsed.expiresAt ?? null,
     }
   } catch {
-    localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+    removeRememberedSession()
     return null
   }
 }
 
 const writeRememberedSession = (record: SessionRecord) => {
   if (record.sessionKind !== 'game') return
-  localStorage.setItem(
-    REMEMBERED_SESSION_STORAGE_KEY,
-    JSON.stringify({
-      token: record.token,
-      playerId: record.playerId,
-      accountUserId: record.accountUserId ?? null,
-      sessionKind: record.sessionKind ?? 'game',
-      roomId: record.roomId,
-      expiresAt: record.expiresAt ?? null,
-    } satisfies RememberedSessionRecord)
-  )
+  storeRememberedSession({
+    token: record.token,
+    playerId: record.playerId,
+    accountUserId: record.accountUserId ?? null,
+    sessionKind: record.sessionKind ?? 'game',
+    roomId: record.roomId,
+    expiresAt: record.expiresAt ?? null,
+  } satisfies RememberedSessionRecord)
 }
 
 const clearRememberedSession = () => {
-  localStorage.removeItem(REMEMBERED_SESSION_STORAGE_KEY)
+  removeRememberedSession()
 }
 
 const isRememberedResumeRejection = (err: unknown): boolean =>

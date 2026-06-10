@@ -70,6 +70,8 @@ const maybeActivePlayerRosterFetch = (input: RequestInfo | URL) => {
     : null
 }
 
+const rememberedSessionStorageKey = 'kyrgame.navigator.rememberedSession'
+
 describe('Navigator flow', () => {
   const locations = [
     {
@@ -791,6 +793,95 @@ describe('Navigator flow', () => {
     })
   })
 
+  it('continues player login when remembered-session storage cannot be written', async () => {
+    window.history.replaceState(null, '', '/play')
+    const originalSetItem = Storage.prototype.setItem
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key,
+      value
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalSetItem.call(this, key, value)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input, init) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/public/player-id/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            player_id: 'Hero',
+            canonical_player_id: 'Hero',
+            valid: true,
+            exists: true,
+            available: false,
+            reserved: false,
+            status: 'existing',
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/auth/login')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          userid: 'Hero',
+          password: 'secret-password',
+          session_kind: 'game',
+          remember_me: true,
+        })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'created',
+            session: {
+              token: 'remembered-token',
+              player_id: 'Hero',
+              account_userid: 'Hero',
+              session_kind: 'game',
+              room_id: 7,
+              expires_at: '2026-07-10T12:00:00+00:00',
+              expires_in_seconds: 2592000,
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ messages }),
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/^player id$/i), 'Hero')
+    await user.type(screen.getByLabelText(/^password$/i), 'secret-password')
+    await user.click(screen.getByRole('checkbox', { name: /remember me/i }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /login as hero/i })).toBeEnabled()
+    )
+    await user.click(screen.getByRole('button', { name: /login as hero/i }))
+
+    await waitFor(() =>
+      expect(MockWebSocket.instances[0]?.url).toContain('remembered-token')
+    )
+    expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
+  })
+
   it('auto-resumes a remembered player session on direct play load', async () => {
     window.history.replaceState(null, '', '/play')
     localStorage.setItem(
@@ -858,6 +949,59 @@ describe('Navigator flow', () => {
     expect(screen.queryByLabelText(/^player id$/i)).not.toBeInTheDocument()
   })
 
+  it('shows the play login form when remembered-session storage cannot be read', async () => {
+    window.history.replaceState(null, '', '/play')
+    const originalGetItem = Storage.prototype.getItem
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalGetItem.call(this, key)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      throw new Error(`Unexpected fetch call: ${String(input)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+    )
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('shows the play login form when corrupted remembered-session cleanup is blocked', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(rememberedSessionStorageKey, '{')
+    const originalRemoveItem = Storage.prototype.removeItem
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalRemoveItem.call(this, key)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      throw new Error(`Unexpected fetch call: ${String(input)}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+    )
+    expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
   it('clears rejected remembered sessions and shows the play login form', async () => {
     window.history.replaceState(null, '', '/play')
     localStorage.setItem(
@@ -892,6 +1036,53 @@ describe('Navigator flow', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument())
     expect(localStorage.getItem('kyrgame.navigator.rememberedSession')).toBeNull()
+  })
+
+  it('shows the play login form when rejected remembered-session cleanup is blocked', async () => {
+    window.history.replaceState(null, '', '/play')
+    localStorage.setItem(
+      rememberedSessionStorageKey,
+      JSON.stringify({
+        token: 'expired-token',
+        playerId: 'Hero',
+        accountUserId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2999-07-10T12:00:00+00:00',
+      })
+    )
+    const originalRemoveItem = Storage.prototype.removeItem
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(function (
+      this: Storage,
+      key
+    ) {
+      if (key === rememberedSessionStorageKey) {
+        throw new Error('Storage is unavailable')
+      }
+      return originalRemoveItem.call(this, key)
+    })
+    vi.spyOn(global, 'fetch').mockImplementation((input) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/auth/session')) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ detail: 'Session not found or expired' }),
+          text: async () => 'Session not found or expired',
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByLabelText(/^player id$/i)).toBeInTheDocument()
+    )
+    expect(MockWebSocket.instances).toHaveLength(0)
   })
 
   it('keeps remembered session metadata when auto-resume hits a transient failure', async () => {
