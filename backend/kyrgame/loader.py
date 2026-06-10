@@ -11,6 +11,7 @@ def _reset_tables(session: Session):
     session.query(models.SpellTimer).delete()
     session.query(models.PlayerInventory).delete()
     session.query(models.PlayerSession).delete()
+    session.query(models.RuntimeState).delete()
     session.query(models.Message).delete()
     session.query(models.Command).delete()
     session.query(models.Location).delete()

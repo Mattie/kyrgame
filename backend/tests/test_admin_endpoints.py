@@ -655,7 +655,7 @@ async def test_admin_elf_trigger_requires_admin_and_active_player(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_admin_elf_trigger_uses_session_scoped_active_player(monkeypatch):
+async def test_admin_elf_trigger_uses_session_scoped_active_player(monkeypatch, tmp_path):
     monkeypatch.setenv(
         ADMIN_MAP_ENV,
         json.dumps(
@@ -666,6 +666,7 @@ async def test_admin_elf_trigger_uses_session_scoped_active_player(monkeypatch):
             }
         ),
     )
+    monkeypatch.setenv("KYRGAME_TELEMETRY_DIR", str(tmp_path / "telemetry"))
 
     app = create_app()
     transport = httpx.ASGITransport(app=app)
@@ -682,6 +683,76 @@ async def test_admin_elf_trigger_uses_session_scoped_active_player(monkeypatch):
         app.state.active_player_sessions["hero-token"] = active_player
         target_socket = _FakeSocket()
         app.state.session_connections["hero-token"] = target_socket
+        await app.state.presence.set_location("hero", 7, "hero-token")
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/admin/mobs/elf/trigger",
+                headers=_auth("content-token"),
+                json={"player_id": "hero", "room_id": 7},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "triggered"
+        assert response.json()["outcome"] == "hint"
+        assert state.elf_last_room == 7
+        lines = [
+            json.loads(line)
+            for line in (tmp_path / "telemetry" / "system.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        admin_events = [
+            line for line in lines if line["event_type"] == "animation.admin_trigger"
+        ]
+        assert admin_events == [
+            {
+                "event_type": "animation.admin_trigger",
+                "payload": {
+                    "trigger_source": "admin",
+                    "routine_name": "elves",
+                    "room_id": 7,
+                    "player_id": "hero",
+                    "outcome": "hint",
+                    "event_count": 3,
+                },
+                "timestamp": admin_events[0]["timestamp"],
+                "userid": "__system__",
+            }
+        ]
+
+
+@pytest.mark.anyio
+async def test_admin_elf_trigger_ignores_system_audit_failures(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    class _FailingTelemetrySink:
+        async def record_system(self, *, event_type, payload):  # noqa: ARG002
+            raise OSError("telemetry path unavailable")
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.elf_last_room = None
+        state.elf_reward_next = 0
+        state.elf_hint_index = 0
+        app.state.telemetry_sink = _FailingTelemetrySink()
+
+        active_player = fixtures.build_player().model_copy(update={"gamloc": 7, "pgploc": 7})
+        app.state.active_players.clear()
+        app.state.active_player_sessions["hero-token"] = active_player
         await app.state.presence.set_location("hero", 7, "hero-token")
 
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

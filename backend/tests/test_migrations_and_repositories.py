@@ -64,6 +64,7 @@ def test_alembic_upgrade_creates_all_tables(migrated_engine):
         "player_inventories",
         "spell_timers",
         "room_occupants",
+        "runtime_state",
     }.issubset(table_names)
 
 
@@ -75,6 +76,20 @@ def test_message_text_column_has_no_legacy_catalog_length_cap(migrated_engine):
     }
 
     assert getattr(message_columns["text"]["type"], "length", None) is None
+
+
+def test_fixture_reload_clears_runtime_animation_state(session):
+    session.add(
+        models.RuntimeState(
+            key="animation_tick",
+            payload={"routine_index": 5, "brownie_path_index": 19},
+        )
+    )
+    session.commit()
+
+    loader.load_all_from_fixtures(session)
+
+    assert session.get(models.RuntimeState, "animation_tick") is None
 
 
 def test_initial_schema_revision_does_not_include_session_lifecycle_columns(
@@ -137,6 +152,10 @@ def test_runtime_in_memory_migration_keeps_followup_session_lifecycle_columns():
                 column["name"]: column
                 for column in inspector.get_columns("player_sessions")
             }
+            runtime_columns = {
+                column["name"]: column
+                for column in inspector.get_columns("runtime_state")
+            }
             version = connection.execute(
                 text("select version_num from alembic_version")
             ).scalar_one()
@@ -145,7 +164,9 @@ def test_runtime_in_memory_migration_keeps_followup_session_lifecycle_columns():
         assert session_columns["lifecycle_step"]["type"].python_type is int
         assert session_columns["session_kind"]["type"].length == 16
         assert session_columns["hidden_from_activity"]["type"].python_type is bool
-        assert version == "0003_accounts_session_metadata"
+        assert runtime_columns["key"]["type"].length == 64
+        assert "payload" in runtime_columns
+        assert version == "0004_runtime_state"
     finally:
         engine.dispose()
 

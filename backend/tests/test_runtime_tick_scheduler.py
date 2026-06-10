@@ -1,9 +1,12 @@
+import json
+
 import pytest
 from fastapi import FastAPI
 from starlette.websockets import WebSocketState
 
 from kyrgame import fixtures, models
 from kyrgame.runtime import bootstrap_app, shutdown_app
+from kyrgame.telemetry import TelemetryEventSink
 from kyrgame.world.animation_tick_system import AnimationTickEvent
 
 
@@ -124,6 +127,76 @@ async def test_animation_tick_callback_clears_hardcoded_temple_chantd(monkeypatc
             "animation_flag": "chantd",
         }
     ]
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_tick_callback_records_system_audit_for_brownie_step(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1.0")
+
+    app = FastAPI()
+    app.state.telemetry_sink = TelemetryEventSink(tmp_path / "telemetry")
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    active_player = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "hero",
+            "altnam": "Hero",
+            "gamloc": 71,
+            "pgploc": 71,
+            "gold": 9,
+            "gpobjs": [0, 1],
+            "obvals": [10, 20],
+            "npobjs": 2,
+        }
+    )
+    app.state.active_player_sessions = {"hero-token": active_player}
+    app.state.active_players = {}
+    app.state.animation_tick_system.state.routine_index = 5
+    app.state.animation_tick_system.state.brownie_path_index = 0
+
+    await app.state.animation_tick_callback()
+    await app.state.animation_tick_callback()
+
+    lines = [
+        json.loads(line)
+        for line in (tmp_path / "telemetry" / "system.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    tick_events = [line for line in lines if line["event_type"] == "animation.tick"]
+    brownie_events = [line for line in lines if line["event_type"] == "animation.brownie_step"]
+
+    assert [event["payload"]["trigger_source"] for event in tick_events] == [
+        "scheduled",
+        "scheduled",
+    ]
+    assert tick_events[0]["payload"]["routine_name"] == "browns"
+    assert tick_events[0]["payload"]["routine_index_before"] == 5
+    assert tick_events[0]["payload"]["routine_index_after"] == 0
+    assert tick_events[0]["payload"]["expected_interval_seconds"] == 15.0
+    assert tick_events[0]["payload"]["observed_elapsed_seconds"] is None
+    assert isinstance(tick_events[1]["payload"]["observed_elapsed_seconds"], float)
+    assert tick_events[0]["payload"]["dispatch_failure_count"] == 0
+    assert tick_events[0]["payload"]["routine_event_count"] == 3
+
+    assert len(brownie_events) == 1
+    brownie_payload = brownie_events[0]["payload"]
+    assert brownie_payload["trigger_source"] == "scheduled"
+    assert brownie_payload["dispatch_status"] == "success"
+    assert brownie_payload["branch"] == "gold"
+    assert brownie_payload["room_id"] == 71
+    assert brownie_payload["target_player"] == "hero"
+    assert brownie_payload["active_player_ids"] == ["hero"]
+    assert brownie_payload["gold_before"] == 9
+    assert brownie_payload["gold_after"] == 0
+    assert brownie_payload["message_ids"] == ["BMSG00", "BMSG02", "BMSG07"]
+    assert "authorization" not in brownie_payload
+    assert "admin_token" not in brownie_payload
 
     await shutdown_app(app)
 

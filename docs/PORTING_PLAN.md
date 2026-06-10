@@ -61,6 +61,7 @@
 
 - [x] Wired `bootstrap_app`/`shutdown_app` to own `TickScheduler` lifecycle (env-driven `KYRGAME_TICK_SECONDS`, timer registration, and cleanup before scheduler shutdown).
 - [x] Added `RuntimeTickCoordinator` to centralize recurring timer registration (spell/animation now, future timers later) and lifecycle hooks in `bootstrap_app`/`shutdown_app`.
+- [x] Aligned animation scheduler startup with `KYRANIM.C` first-delay parity (`rtkick(30)` then recurring `rtkick(15)`), persisted animation globals in DB-backed `runtime_state`, and added system telemetry audit events for animation ticks, brownie steps, and admin animation triggers.
 - [x] Ported `splrtk` into a stateless `SpellTickSystem` with scheduler registration, macro reset, +2 spell-point regen cap, and ALTNAM expiry/reversion side effects (`backend/kyrgame/spells/tick_system.py`).
 - [x] Persisted JSON-backed charm timer decrements from `SpellTickSystem` so ALTNAM transformations such as `weewillo` expire across database-backed ticks.
 
