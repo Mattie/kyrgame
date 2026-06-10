@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import asyncio
+import logging
+import time
 from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol, Sequence
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from .. import constants, models
 from ..player_lifecycle import reset_player_after_death
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(eq=True, frozen=True)
@@ -66,7 +73,7 @@ class AnimationTickStateStore(Protocol):
 
 
 class InMemoryAnimationTickPersistence:
-    """Process-local state store used until DB-backed world-state tables exist."""
+    """Process-local state store for isolated animation unit tests."""
 
     def __init__(self) -> None:
         self._payload: dict[str, object] | None = None
@@ -78,6 +85,54 @@ class InMemoryAnimationTickPersistence:
         self._payload = dict(payload)
 
 
+class SQLAlchemyAnimationTickPersistence:
+    """Persist KYRANIM.C animation globals in the runtime_state table."""
+
+    def __init__(self, session_factory: Callable[[], Any], *, key: str = "animation_tick") -> None:
+        self._session_factory = session_factory
+        self._key = key
+        self._unavailable = False
+
+    def load(self) -> Mapping[str, object] | None:
+        if self._unavailable:
+            return None
+        try:
+            with self._session_factory() as session:
+                record = session.get(models.RuntimeState, self._key)
+                if record is None:
+                    return None
+                return dict(record.payload)
+        except SQLAlchemyError as exc:
+            self._warn_unavailable("load", exc)
+            return None
+
+    def save(self, payload: Mapping[str, object]) -> None:
+        if self._unavailable:
+            return
+        try:
+            with self._session_factory() as session:
+                record = session.get(models.RuntimeState, self._key)
+                if record is None:
+                    record = models.RuntimeState(key=self._key, payload=dict(payload))
+                    session.add(record)
+                else:
+                    record.payload = dict(payload)
+                session.commit()
+        except SQLAlchemyError as exc:
+            self._warn_unavailable("save", exc)
+            return
+
+    def _warn_unavailable(self, operation: str, exc: SQLAlchemyError) -> None:
+        if self._unavailable:
+            return
+        self._unavailable = True
+        logger.warning(
+            "Animation tick persistence %s failed; continuing with process-local state.",
+            operation,
+            exc_info=exc,
+        )
+
+
 RoutineHandler = Callable[[AnimationTickState], Sequence[AnimationTickEvent] | None]
 MobUpdateHandler = Callable[[AnimationTickState], Sequence[AnimationTickEvent] | None]
 TimedFlagHandler = Callable[[AnimationTickState], AnimationTickEvent]
@@ -85,6 +140,7 @@ MessageLookup = Callable[[str], str | None]
 RoomFlagGetter = Callable[[int, str], int]
 RoomFlagSetter = Callable[[int, str, int], None]
 EventDispatcher = Callable[[AnimationTickEvent], Awaitable[None] | None]
+AuditRecorder = Callable[[str, Mapping[str, object]], Awaitable[None] | None]
 
 
 def _noop_handler(_: AnimationTickState) -> Sequence[AnimationTickEvent] | None:
@@ -615,11 +671,13 @@ class BrownieRoutine:
         self,
         *,
         player_getter: Callable[[int], Any | None],
+        player_ids_getter: Callable[[int], Sequence[str]] | None = None,
         player_persister: Callable[[Any], None],
         message_formatter: Callable[..., str],
         pronoun_lookup: Callable[[Any], str],
     ) -> None:
         self._player_getter = player_getter
+        self._player_ids_getter = player_ids_getter
         self._player_persister = player_persister
         self._message_formatter = message_formatter
         self._pronoun_lookup = pronoun_lookup
@@ -635,22 +693,40 @@ class BrownieRoutine:
     def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
         if state.brownie_path_index >= len(self._PATH):
             state.brownie_path_index = 0
+        path_index_before = state.brownie_path_index
         room_id = self._PATH[state.brownie_path_index]
         state.brownie_location = room_id
         state.brownie_path_index += 1
+        path_index_after = state.brownie_path_index
 
         player = self._player_getter(room_id)
         if player is None:
-            return []
+            return [
+                self._audit_event(
+                    room_id,
+                    {
+                        "branch": "none",
+                        "path_index_before": path_index_before,
+                        "path_index_after": path_index_after,
+                        "active_player_ids": self._player_ids(room_id),
+                        "target_player": None,
+                        "message_ids": [],
+                    },
+                )
+            ]
 
         events = [
             AnimationTickEvent(flag="browns", room_id=room_id, message_id="BMSG00")
         ]
         player_name = getattr(player, "altnam", getattr(player, "plyrid", "player"))
         player_id = getattr(player, "plyrid", player_name)
+        gold_before = int(getattr(player, "gold", 0))
+        inventory_before = list(getattr(player, "gpobjs", []))
+        inventory_count_before = int(getattr(player, "npobjs", len(inventory_before)))
 
         if getattr(player, "gold", 0) > 0:
             player.gold = 0
+            branch = "gold"
             target_message_id = "BMSG01"
             room_message_id = "BMSG02"
             target_text = self._message_formatter(target_message_id)
@@ -661,11 +737,13 @@ class BrownieRoutine:
             object.__setattr__(player, "gpobjs", [])
             object.__setattr__(player, "obvals", [])
             object.__setattr__(player, "npobjs", 0)
+            branch = "inventory"
             target_message_id = "BMSG03"
             room_message_id = "BMSG04"
             target_text = self._message_formatter(target_message_id)
             room_text = self._message_formatter(room_message_id, player_name)
         else:
+            branch = "taunt"
             target_message_id = "BMSG05"
             room_message_id = "BMSG06"
             target_text = self._message_formatter(target_message_id)
@@ -686,7 +764,47 @@ class BrownieRoutine:
             )
         )
         events.append(AnimationTickEvent(flag="browns", room_id=room_id, message_id="BMSG07"))
+        events.append(
+            self._audit_event(
+                room_id,
+                {
+                    "branch": branch,
+                    "path_index_before": path_index_before,
+                    "path_index_after": path_index_after,
+                    "active_player_ids": self._player_ids(room_id, fallback=[player_id]),
+                    "target_player": player_id,
+                    "gold_before": gold_before,
+                    "gold_after": int(getattr(player, "gold", 0)),
+                    "inventory_before": inventory_before,
+                    "inventory_after": list(getattr(player, "gpobjs", [])),
+                    "inventory_count_before": inventory_count_before,
+                    "inventory_count_after": int(
+                        getattr(player, "npobjs", len(getattr(player, "gpobjs", [])))
+                    ),
+                    "message_ids": ["BMSG00", room_message_id, "BMSG07"],
+                    "target_message_id": target_message_id,
+                },
+            )
+        )
         return events
+
+    def _player_ids(self, room_id: int, *, fallback: Sequence[str] = ()) -> list[str]:
+        if self._player_ids_getter is None:
+            return list(fallback)
+        return list(self._player_ids_getter(room_id))
+
+    def _audit_event(self, room_id: int, payload: Mapping[str, object]) -> AnimationTickEvent:
+        return AnimationTickEvent(
+            flag="browns",
+            room_id=room_id,
+            payload={
+                "audit_only": True,
+                "audit": {
+                    "room_id": room_id,
+                    **dict(payload),
+                },
+            },
+        )
 
 
 def _sesame_event(_: AnimationTickState) -> AnimationTickEvent:
@@ -871,25 +989,117 @@ class AnimationTickRuntimeBridge:
         room_flag_setter: RoomFlagSetter,
         message_lookup: MessageLookup,
         event_dispatcher: EventDispatcher,
+        audit_recorder: AuditRecorder | None = None,
+        expected_interval_seconds: float = 15.0,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self._system = system
         self._room_flag_getter = room_flag_getter
         self._room_flag_setter = room_flag_setter
         self._message_lookup = message_lookup
         self._event_dispatcher = event_dispatcher
+        self._audit_recorder = audit_recorder
+        self._expected_interval_seconds = expected_interval_seconds
+        self._clock = clock or time.monotonic
+        self._last_tick_at: float | None = None
 
-    async def __call__(self) -> None:
+    async def __call__(self, trigger_source: str = "scheduled") -> None:
+        tick_started_at = self._clock()
+        observed_elapsed_seconds = (
+            None
+            if self._last_tick_at is None
+            else max(0.0, tick_started_at - self._last_tick_at)
+        )
+        self._last_tick_at = tick_started_at
+        routine_index_before = self._system.state.routine_index
+        routine_name_before = self._system.next_routine_name()
+        timed_flags_before = dict(self._system.state.timed_flags)
+        brownie_path_index_before = self._system.state.brownie_path_index
+
         self._sync_flags_from_rooms()
+        timed_flags_after_sync = dict(self._system.state.timed_flags)
         result = self._system.tick()
-        for event in result.routine_events:
-            maybe_awaitable = self._event_dispatcher(event)
+        dispatch_failures: list[dict[str, object]] = []
+        audit_events = [
+            dict(event.payload.get("audit") or {})
+            for event in result.routine_events
+            if self._is_audit_only_event(event)
+        ]
+        dispatched_event_count = 0
+        raised: BaseException | None = None
+
+        try:
+            for event in result.routine_events:
+                if self._is_audit_only_event(event):
+                    continue
+                await self._dispatch_event(event)
+                dispatched_event_count += 1
+            for event in result.timed_events:
+                self._room_flag_setter(event.room_id, event.flag, 0)
+                await self._dispatch_event(event)
+                dispatched_event_count += 1
+        except Exception as exc:
+            raised = exc
+            dispatch_failures.append(
+                {
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                }
+            )
+
+        routine_event_count = sum(
+            1 for event in result.routine_events if not self._is_audit_only_event(event)
+        )
+        await self._record_audit(
+            "animation.tick",
+            {
+                "trigger_source": trigger_source,
+                "routine_name": result.routine_name,
+                "routine_index_before": routine_index_before,
+                "routine_index_after": self._system.state.routine_index,
+                "routine_name_before": routine_name_before,
+                "expected_interval_seconds": self._expected_interval_seconds,
+                "observed_elapsed_seconds": observed_elapsed_seconds,
+                "timed_flags_before": timed_flags_before,
+                "timed_flags_after_sync": timed_flags_after_sync,
+                "timed_flags_consumed": [event.flag for event in result.timed_events],
+                "routine_event_count": routine_event_count,
+                "timed_event_count": len(result.timed_events),
+                "dispatched_event_count": dispatched_event_count,
+                "dispatch_failure_count": len(dispatch_failures),
+                "dispatch_failures": dispatch_failures,
+                "brownie_path_index_before": brownie_path_index_before,
+                "brownie_path_index_after": self._system.state.brownie_path_index,
+            },
+        )
+        dispatch_status = "failure" if dispatch_failures else "success"
+        for audit_event in audit_events:
+            audit_event.setdefault("trigger_source", trigger_source)
+            audit_event["dispatch_status"] = dispatch_status
+            audit_event["dispatch_failure_count"] = len(dispatch_failures)
+            await self._record_audit("animation.brownie_step", audit_event)
+
+        if raised is not None:
+            raise raised
+
+    async def _dispatch_event(self, event: AnimationTickEvent) -> None:
+        maybe_awaitable = self._event_dispatcher(event)
+        if asyncio.iscoroutine(maybe_awaitable):
+            await maybe_awaitable
+
+    @staticmethod
+    def _is_audit_only_event(event: AnimationTickEvent) -> bool:
+        return bool(event.payload.get("audit_only"))
+
+    async def _record_audit(self, event_type: str, payload: Mapping[str, object]) -> None:
+        if self._audit_recorder is None:
+            return
+        try:
+            maybe_awaitable = self._audit_recorder(event_type, payload)
             if asyncio.iscoroutine(maybe_awaitable):
                 await maybe_awaitable
-        for event in result.timed_events:
-            self._room_flag_setter(event.room_id, event.flag, 0)
-            maybe_awaitable = self._event_dispatcher(event)
-            if asyncio.iscoroutine(maybe_awaitable):
-                await maybe_awaitable
+        except Exception:
+            return
 
     def _sync_flags_from_rooms(self) -> None:
         for flag, (room_id, room_key) in self._ROOM_FLAG_BINDINGS.items():

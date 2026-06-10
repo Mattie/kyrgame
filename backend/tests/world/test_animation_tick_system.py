@@ -1,6 +1,7 @@
 import pytest
 
-from kyrgame import constants, fixtures
+from kyrgame import constants, database, fixtures
+from kyrgame.world import animation_tick_system
 from kyrgame.world.animation_tick_system import (
     AnimationTickEvent,
     AnimationTickSystem,
@@ -9,6 +10,7 @@ from kyrgame.world.animation_tick_system import (
     ElfEncounterRoutine,
     GemSpawnRoutine,
     InMemoryAnimationTickPersistence,
+    SQLAlchemyAnimationTickPersistence,
     ZarDragonRoutine,
 )
 
@@ -108,6 +110,73 @@ def test_animation_tick_uses_initial_state_from_persistence_for_multiplayer_boot
     assert system.state.zar_location == 250
     assert system.state.zar_attack_index == 3
     assert system.state.timed_flags["sesame"] == 1
+
+
+def test_animation_tick_state_persists_through_sqlalchemy_store(tmp_path):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'runtime-state.db'}")
+    database.init_db_schema(engine)
+    session_factory = database.create_session_factory(engine)
+
+    system = AnimationTickSystem(
+        persistence=SQLAlchemyAnimationTickPersistence(session_factory),
+    )
+    system.state.routine_index = 5
+    system.state.zar_counter = 17
+    system.state.zar_location = 250
+    system.state.zar_attack_index = 3
+    system.state.timed_flags["chantd"] = 1
+    system.state.gem_counter = 9
+    system.state.dryad_location = 18
+    system.state.brownie_location = 0
+    system.state.brownie_path_index = 19
+    system.state.elf_last_room = 52
+    system.state.elf_reward_next = 1
+    system.state.elf_hint_index = 4
+    system.persist_state()
+
+    reloaded = AnimationTickSystem(
+        persistence=SQLAlchemyAnimationTickPersistence(session_factory),
+    )
+
+    assert reloaded.state.routine_index == 5
+    assert reloaded.state.zar_counter == 17
+    assert reloaded.state.zar_location == 250
+    assert reloaded.state.zar_attack_index == 3
+    assert reloaded.state.timed_flags["chantd"] == 1
+    assert reloaded.state.gem_counter == 9
+    assert reloaded.state.dryad_location == 18
+    assert reloaded.state.brownie_location == 0
+    assert reloaded.state.brownie_path_index == 19
+    assert reloaded.state.elf_last_room == 52
+    assert reloaded.state.elf_reward_next == 1
+    assert reloaded.state.elf_hint_index == 4
+
+
+def test_sqlalchemy_animation_state_store_skips_missing_runtime_state_table(tmp_path, monkeypatch):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'missing-runtime-state.db'}")
+    session_factory = database.create_session_factory(engine)
+    session_factory_calls = 0
+
+    def _counted_session_factory():
+        nonlocal session_factory_calls
+        session_factory_calls += 1
+        return session_factory()
+
+    persistence = SQLAlchemyAnimationTickPersistence(_counted_session_factory)
+    warnings: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        animation_tick_system.logger,
+        "warning",
+        lambda message, *args, **kwargs: warnings.append((message % args, kwargs)),
+    )
+
+    assert persistence.load() is None
+    persistence.save({"routine_index": 5, "brownie_path_index": 12})
+    assert [message for message, _ in warnings] == [
+        "Animation tick persistence load failed; continuing with process-local state."
+    ]
+    assert "exc_info" in warnings[0][1]
+    assert session_factory_calls == 1
 
 
 def test_gemakr_uses_legacy_cadence_capacity_and_random_gem_every_11th_spawn():
@@ -251,6 +320,61 @@ def test_brownie_routine_follows_path_and_steals_gold_then_inventory():
     assert inventory_events[1].message_id == "BMSG04"
     assert inventory_events[1].payload["target_message_id"] == "BMSG03"
     assert persisted == [(0, [0, 1]), (0, [])]
+
+
+def test_brownie_routine_emits_audit_events_for_empty_and_theft_steps():
+    player = _build_player(
+        plyrid="hero",
+        altnam="Hero",
+        gamloc=71,
+        gold=9,
+        gpobjs=[0, 1],
+        obvals=[10, 20],
+        npobjs=2,
+    )
+
+    routine_without_player = BrownieRoutine(
+        player_getter=lambda room_id: None,
+        player_ids_getter=lambda room_id: [],
+        player_persister=lambda updated: None,
+        message_formatter=_message_formatter,
+        pronoun_lookup=lambda updated: "him",
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+
+    empty_events = routine_without_player(state)
+
+    routine_with_player = BrownieRoutine(
+        player_getter=lambda room_id: player if player.gamloc == room_id else None,
+        player_ids_getter=lambda room_id: ["hero"] if player.gamloc == room_id else [],
+        player_persister=lambda updated: None,
+        message_formatter=_message_formatter,
+        pronoun_lookup=lambda updated: "him",
+    )
+    state.brownie_path_index = 0
+    theft_events = routine_with_player(state)
+
+    empty_audit = empty_events[0].payload["audit"]
+    theft_audit = theft_events[-1].payload["audit"]
+    assert empty_events[0].payload["audit_only"] is True
+    assert empty_audit["branch"] == "none"
+    assert empty_audit["room_id"] == 71
+    assert empty_audit["path_index_before"] == 0
+    assert empty_audit["path_index_after"] == 1
+    assert empty_audit["active_player_ids"] == []
+    assert empty_audit["message_ids"] == []
+
+    assert theft_events[-1].payload["audit_only"] is True
+    assert theft_audit["branch"] == "gold"
+    assert theft_audit["room_id"] == 71
+    assert theft_audit["target_player"] == "hero"
+    assert theft_audit["active_player_ids"] == ["hero"]
+    assert theft_audit["gold_before"] == 9
+    assert theft_audit["gold_after"] == 0
+    assert theft_audit["inventory_before"] == [0, 1]
+    assert theft_audit["inventory_after"] == [0, 1]
+    assert theft_audit["message_ids"] == ["BMSG00", "BMSG02", "BMSG07"]
+    assert theft_audit["target_message_id"] == "BMSG01"
 
 
 def _build_zar_routine(

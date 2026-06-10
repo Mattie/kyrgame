@@ -1,16 +1,21 @@
 from pathlib import Path
 from typing import Iterable
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from . import fixtures, models
 
 
 def _reset_tables(session: Session):
+    table_names = set(inspect(session.get_bind()).get_table_names())
+
     session.query(models.RoomOccupant).delete()
     session.query(models.SpellTimer).delete()
     session.query(models.PlayerInventory).delete()
     session.query(models.PlayerSession).delete()
+    if "runtime_state" in table_names:
+        session.query(models.RuntimeState).delete()
     session.query(models.Message).delete()
     session.query(models.Command).delete()
     session.query(models.Location).delete()

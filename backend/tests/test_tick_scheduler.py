@@ -43,7 +43,7 @@ def test_tick_scheduler_registers_spell_and_animation_ticks():
     assert scheduler.calls[0]["delay"] == 30.0
     assert scheduler.calls[0]["interval"] == 30.0
     assert scheduler.calls[0]["callback"] is spell_tick
-    assert scheduler.calls[1]["delay"] == 15.0
+    assert scheduler.calls[1]["delay"] == 30.0
     assert scheduler.calls[1]["interval"] == 15.0
     assert scheduler.calls[1]["callback"] is animation_tick
 

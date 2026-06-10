@@ -2070,6 +2070,22 @@ async def admin_trigger_elf(
     animation_system.persist_state()
     await _dispatch_animation_events(app, events)
     outcome = _elf_trigger_outcome(events)
+    telemetry_sink = getattr(app.state, "telemetry_sink", None)
+    if telemetry_sink is not None:
+        try:
+            await telemetry_sink.record_system(
+                event_type="animation.admin_trigger",
+                payload={
+                    "trigger_source": "admin",
+                    "routine_name": "elves",
+                    "room_id": payload.room_id,
+                    "player_id": payload.player_id,
+                    "outcome": outcome,
+                    "event_count": len(events),
+                },
+            )
+        except Exception:
+            pass
     return {
         "status": "triggered" if events else "no_active_player",
         "room_id": payload.room_id,

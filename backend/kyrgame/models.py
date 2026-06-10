@@ -308,6 +308,16 @@ class Message(Base):
     text = Column(Text, nullable=False)
 
 
+class RuntimeState(Base):
+    __tablename__ = "runtime_state"
+
+    key = Column(String(64), primary_key=True)
+    payload = Column(JSON, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class Account(Base):
     __tablename__ = "accounts"
 

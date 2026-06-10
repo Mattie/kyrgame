@@ -52,6 +52,9 @@ class TelemetryEventSink:
         }
         await asyncio.to_thread(self._write_event, userid, event)
 
+    async def record_system(self, *, event_type: str, payload: dict[str, Any]) -> None:
+        await self.record(userid="__system__", event_type=event_type, payload=payload)
+
     def _write_event(self, userid: str, event: dict[str, Any]) -> None:
         if self.root is None:
             return

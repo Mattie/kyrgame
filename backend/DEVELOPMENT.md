@@ -86,6 +86,10 @@ export KYRGAME_TICK_SECONDS=1.0
 
 When adding a new recurring gameplay timer, register it through `app.state.tick_scheduler` rather than scheduling raw seconds directly. This keeps all gameplay timers consistent with the legacy tick model and ensures they are cancelled during app shutdown.
 
+The animation helper intentionally has separate first-delay and recurring cadence: `register_animation_tick(callback)` schedules the first callback after 30 ticks, then repeats every 15 ticks to match `legacy/KYRANIM.C` (`inianm()` followed by `animat()`). Animation runtime state is stored in the `runtime_state` table so routine rotation and mob path indexes survive backend restarts.
+
+Set `KYRGAME_TELEMETRY_DIR` during live parity sessions to capture system audit logs. Animation callbacks write `animation.tick` entries to `system.jsonl`, and brownie passes add `animation.brownie_step` entries with room/path, branch, target, gold/inventory, message IDs, and dispatch status.
+
 Example pattern:
 
 ```python

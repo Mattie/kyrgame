@@ -50,10 +50,15 @@ class TickScheduler:
         name: str,
         interval_ticks: float,
         callback: Callback,
+        *,
+        initial_delay_ticks: float | None = None,
     ) -> ScheduledHandle:
+        delay_seconds = self.ticks_to_seconds(
+            initial_delay_ticks if initial_delay_ticks is not None else interval_ticks
+        )
         interval_seconds = self.ticks_to_seconds(interval_ticks)
         handle = self._scheduler.schedule(
-            interval_seconds, callback, interval=interval_seconds
+            delay_seconds, callback, interval=interval_seconds
         )
         self._handles[name] = handle
         return handle
@@ -70,11 +75,17 @@ class TickScheduler:
     def register_animation_tick(self, callback: Callback) -> ScheduledHandle:
         """Register the animation tick handler.
 
-        Mirrors KYRANIM.C inianm()/animat() rtkick(30/15, animat).
+        Mirrors KYRANIM.C inianm() first rtkick(30, animat), then animat()
+        recurring rtkick(15, animat).
         Legacy reference: legacy/KYRANIM.C lines 89-151.
         """
 
-        return self.register_recurring("animation_tick", 15, callback)
+        return self.register_recurring(
+            "animation_tick",
+            15,
+            callback,
+            initial_delay_ticks=30,
+        )
 
     def register_recurring_timer(
         self,

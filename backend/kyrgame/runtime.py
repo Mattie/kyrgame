@@ -24,6 +24,7 @@ from .spells.tick_system import (
     SpellTickConstants,
     SpellTickSystem,
 )
+from .telemetry import TelemetryEventSink
 from .timing.runtime import RuntimeTickCoordinator
 from .timing.scheduler import TickScheduler
 from .world.animation_tick_system import (
@@ -33,7 +34,7 @@ from .world.animation_tick_system import (
     DryadWanderRoutine,
     ElfEncounterRoutine,
     GemSpawnRoutine,
-    InMemoryAnimationTickPersistence,
+    SQLAlchemyAnimationTickPersistence,
     ZarDragonRoutine,
 )
 
@@ -152,6 +153,8 @@ async def bootstrap_app(app: FastAPI):
         app.state.scheduler,
         tick_seconds=_tick_seconds_from_env(),
     )
+    if not hasattr(app.state, "telemetry_sink"):
+        app.state.telemetry_sink = TelemetryEventSink.from_env()
     message_bundles = fixtures.load_message_bundles(seed_root)
     messages_catalog = message_bundles[fixtures.DEFAULT_LOCALE].messages
     app.state.spell_tick_system = SpellTickSystem(
@@ -276,6 +279,9 @@ async def bootstrap_app(app: FastAPI):
                 players_by_id.setdefault(player.plyrid, player)
         return sorted(players_by_id.values(), key=lambda player: (player.modno, player.plyrid))
 
+    def _animation_player_ids_getter(room_id: int) -> list[str]:
+        return [player.plyrid for player in _animation_players_getter(room_id)]
+
     def _animation_player_persister(player: models.PlayerModel) -> None:
         with session_factory() as db:
             record = db.scalar(select(models.Player).where(models.Player.plyrid == player.plyrid))
@@ -336,7 +342,7 @@ async def bootstrap_app(app: FastAPI):
         zar_location_setter=_set_zar_location,
     )
     app.state.animation_zar_routine = zar_routine
-    app.state.animation_tick_persistence = InMemoryAnimationTickPersistence()
+    app.state.animation_tick_persistence = SQLAlchemyAnimationTickPersistence(session_factory)
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence,
         routine_handlers={
@@ -359,6 +365,7 @@ async def bootstrap_app(app: FastAPI):
             ),
             "browns": BrownieRoutine(
                 player_getter=_animation_player_getter,
+                player_ids_getter=_animation_player_ids_getter,
                 player_persister=_animation_player_persister,
                 message_formatter=_animation_message_formatter,
                 pronoun_lookup=_animation_pronoun,
@@ -601,12 +608,20 @@ async def bootstrap_app(app: FastAPI):
 
     app.state.dispatch_animation_event = _dispatch_animation_event
 
+    async def _record_animation_audit(event_type: str, payload):
+        telemetry_sink = getattr(app.state, "telemetry_sink", None)
+        if telemetry_sink is None:
+            return
+        await telemetry_sink.record_system(event_type=event_type, payload=dict(payload))
+
     app.state.animation_tick_callback = AnimationTickRuntimeBridge(
         system=app.state.animation_tick_system,
         room_flag_getter=_get_room_flag,
         room_flag_setter=_set_room_flag,
         message_lookup=lambda key: messages_catalog.get(key, ""),
         event_dispatcher=_dispatch_animation_event,
+        audit_recorder=_record_animation_audit,
+        expected_interval_seconds=app.state.tick_scheduler.ticks_to_seconds(15),
     )
     app.state.tick_runtime = RuntimeTickCoordinator(
         tick_scheduler=app.state.tick_scheduler,
