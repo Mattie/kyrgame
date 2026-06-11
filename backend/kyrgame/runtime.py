@@ -445,9 +445,14 @@ async def bootstrap_app(app: FastAPI):
         return flags
 
     async def _room_occupants_refresh_payload(
-        player_id: str, room_id: int
+        player_id: str,
+        room_id: int,
+        *,
+        occupants: list[str] | None = None,
+        player_flags_by_id: dict[str, int] | None = None,
     ) -> dict | None:
-        occupants = await app.state.presence.players_in_room(room_id)
+        if occupants is None:
+            occupants = await app.state.presence.players_in_room(room_id)
         player_key = player_id.strip().casefold()
         others = commands._dedupe_room_occupants(
             sorted(
@@ -459,7 +464,8 @@ async def bootstrap_app(app: FastAPI):
         text, message_id = commands._format_room_occupants(others, default_messages)
         if not text:
             return None
-        player_flags_by_id = _runtime_active_player_flags()
+        if player_flags_by_id is None:
+            player_flags_by_id = _runtime_active_player_flags()
         return {
             "scope": "player",
             "event": "room_occupants",
@@ -548,8 +554,14 @@ async def bootstrap_app(app: FastAPI):
             occupants = commands._dedupe_room_occupants(
                 sorted(await app.state.presence.players_in_room(room_id))
             )
+            player_flags_by_id = _runtime_active_player_flags()
             for player_id in occupants:
-                payload = await _room_occupants_refresh_payload(player_id, room_id)
+                payload = await _room_occupants_refresh_payload(
+                    player_id,
+                    room_id,
+                    occupants=occupants,
+                    player_flags_by_id=player_flags_by_id,
+                )
                 if payload:
                     await _send_runtime_player_payload(player_id, room_id, payload)
 

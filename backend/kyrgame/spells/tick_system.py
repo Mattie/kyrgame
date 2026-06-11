@@ -142,10 +142,13 @@ class SpellTickSystem:
         return result
 
     def _tick_player(self, player: models.Player, result: SpellTickResult) -> None:
+        macros_changed = player.macros != 0
         player.macros = 0
 
         max_spell_points = 2 * player.level
-        player.spts = min(player.spts + 2, max_spell_points)
+        next_spell_points = min(player.spts + 2, max_spell_points)
+        spts_changed = next_spell_points != player.spts
+        player.spts = next_spell_points
 
         charms = list(player.charms)
         charms_changed = False
@@ -180,7 +183,8 @@ class SpellTickSystem:
 
         if charms_changed:
             player.charms = charms
-        result.touch_player(player.plyrid, player.gamloc)
+        if macros_changed or spts_changed or charms_changed:
+            result.touch_player(player.plyrid, player.gamloc)
 
     def _expire_alt_name(self, player: models.Player, result: SpellTickResult) -> None:
         # Legacy parity: ALTNAM expiration clears morph flags and reverts player

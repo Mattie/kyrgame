@@ -15,6 +15,7 @@ const mockSendCommand = vi.fn()
 const mockSendMove = vi.fn()
 const mockAdvanceLifecycle = vi.fn()
 const highlightedGroundObjectNames = ['scroll', 'elixir', 'codex', 'pinecone'] as const
+const completedStreamKeysStorageKey = 'kyrgame.mudConsole.completedStreamKeys'
 
 type MockNavigatorState = {
   apiBaseUrl: string
@@ -860,6 +861,23 @@ describe('MudConsole', () => {
       })
       vi.useRealTimers()
     }
+  })
+
+  it('limits completed stream keys restored from sessionStorage', () => {
+    const storedKeys = Array.from({ length: 1105 }, (_, index) => `stored-key-${index}`)
+    sessionStorage.setItem(completedStreamKeysStorageKey, JSON.stringify(storedKeys))
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = []
+
+    render(<MudConsole />)
+
+    const restoredKeys = JSON.parse(
+      sessionStorage.getItem(completedStreamKeysStorageKey) ?? '[]'
+    )
+    expect(restoredKeys).toHaveLength(1000)
+    expect(restoredKeys[0]).toBe('stored-key-105')
   })
 
   it('renders output received while the tab is hidden without replaying it', () => {

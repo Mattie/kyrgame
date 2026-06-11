@@ -145,7 +145,11 @@ const readCompletedStreamKeys = (): Set<string> => {
     if (!raw) return new Set()
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return new Set()
-    return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+    return new Set(
+      limitCompletedStreamKeys(
+        parsed.filter((value): value is string => typeof value === 'string')
+      )
+    )
   } catch {
     return new Set()
   }
