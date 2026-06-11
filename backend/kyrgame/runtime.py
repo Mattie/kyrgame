@@ -567,7 +567,6 @@ async def bootstrap_app(app: FastAPI):
 
     async def _spell_tick_callback():
         result = app.state.spell_tick_system.tick()
-        affected_room_ids = {message.room_id for message in result.room_messages}
 
         for touched in result.touched_players:
             sync_active_player_state_from_db(app, touched.player_id)
@@ -586,17 +585,22 @@ async def bootstrap_app(app: FastAPI):
             )
 
         session_connections = getattr(app.state, "session_connections", {})
+        affected_room_ids: set[int] = set()
         for room_message in result.room_messages:
             excluded_sockets = set()
             for token in await app.state.presence.sessions_for_player(
                 room_message.exclude_player_id
             ):
+                if await app.state.presence.room_for_session(token) != room_message.room_id:
+                    continue
                 target_socket = session_connections.get(token)
                 if not target_socket:
                     continue
                 if target_socket.application_state != WebSocketState.CONNECTED:
                     continue
                 excluded_sockets.add(target_socket)
+            if not excluded_sockets:
+                continue
             payload = {
                 "scope": "room",
                 "event": "room_message",
@@ -612,6 +616,7 @@ async def bootstrap_app(app: FastAPI):
                 exclude=excluded_sockets or None,
             )
             await _publish_runtime_scry_for_recipients(app, recipients, envelope)
+            affected_room_ids.add(room_message.room_id)
 
         if affected_room_ids:
             await _send_room_occupant_refreshes(affected_room_ids)

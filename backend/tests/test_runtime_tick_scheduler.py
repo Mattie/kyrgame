@@ -234,6 +234,75 @@ async def test_spell_tick_callback_fans_out_altname_expiry_and_syncs_live_player
 
 
 @pytest.mark.anyio
+async def test_spell_tick_callback_skips_room_broadcast_for_offline_altname_expiry(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    with app.state.session_factory() as session:
+        hero = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        hero.gamloc = 7
+        hero.pgploc = 7
+        hero.altnam = "Some willowisp"
+        hero.attnam = "willowisp"
+        hero.flags = int(constants.PlayerFlag.LOADED | constants.PlayerFlag.WILLOW)
+        hero.charms = [0, 0, 0, 0, 0, 1]
+        witness = fixtures.build_player().model_copy(
+            update={
+                "uidnam": "witness-user",
+                "plyrid": "witness",
+                "altnam": "Witness",
+                "attnam": "Witness",
+                "gamloc": 7,
+                "pgploc": 7,
+                "modno": 2,
+            }
+        )
+        session.add(models.Player(**witness.model_dump()))
+        session.commit()
+
+    witness_socket = _FakeSocket()
+    live_witness = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "witness",
+            "altnam": "Witness",
+            "attnam": "Witness",
+            "gamloc": 7,
+            "pgploc": 7,
+        }
+    )
+    app.state.session_connections = {"witness-token": witness_socket}
+    app.state.active_player_sessions = {"witness-token": live_witness}
+    app.state.active_players = {"witness": live_witness}
+    await app.state.presence.set_location("witness", 7, "witness-token")
+    await app.state.gateway.register(7, witness_socket, announce=False)
+
+    await app.state.spell_tick_callback()
+
+    assert not any(
+        message.get("payload", {}).get("message_id") == "RET2NM"
+        for message in witness_socket.sent
+    )
+    assert not any(
+        message.get("payload", {}).get("event") == "room_occupants"
+        for message in witness_socket.sent
+    )
+
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        assert refreshed.altnam == "hero"
+        assert refreshed.attnam == "hero"
+        assert refreshed.flags == int(constants.PlayerFlag.LOADED)
+        assert refreshed.charms[constants.ALTNAM] == 0
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
 async def test_spell_tick_callback_syncs_nonexpired_timer_decrements_to_live_players(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
