@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, ContextManager, Protocol
 
 from sqlalchemy import select
@@ -24,6 +24,40 @@ class SpellTickMessagingAdapter(Protocol):
         message_id: str,
         text: str,
     ) -> None: ...
+
+
+@dataclass(frozen=True)
+class SpellTickDirectMessage:
+    player_id: str
+    room_id: int
+    message_id: str
+    text: str
+
+
+@dataclass(frozen=True)
+class SpellTickRoomMessage:
+    room_id: int
+    exclude_player_id: str
+    message_id: str
+    text: str
+
+
+@dataclass(frozen=True)
+class SpellTickTouchedPlayer:
+    player_id: str
+    room_id: int
+
+
+@dataclass
+class SpellTickResult:
+    direct_messages: list[SpellTickDirectMessage] = field(default_factory=list)
+    room_messages: list[SpellTickRoomMessage] = field(default_factory=list)
+    touched_players: list[SpellTickTouchedPlayer] = field(default_factory=list)
+
+    def touch_player(self, player_id: str, room_id: int) -> None:
+        touched = SpellTickTouchedPlayer(player_id=player_id, room_id=room_id)
+        if touched not in self.touched_players:
+            self.touched_players.append(touched)
 
 
 @dataclass(frozen=True)
@@ -91,21 +125,23 @@ class SpellTickSystem:
         self._constants = constants
         self._message_lookup = message_lookup
 
-    def __call__(self) -> None:
-        self.tick()
+    def __call__(self) -> SpellTickResult:
+        return self.tick()
 
-    def tick(self) -> None:
+    def tick(self) -> SpellTickResult:
         # Legacy parity: KYRSPEL.C splrtk() iterates players each rtkick window and
         # updates macros/spts/charm timers before re-scheduling in insrtk/splrtk.
         # Ref: legacy/KYRSPEL.C lines 216-263.
+        result = SpellTickResult()
         with self._session_factory() as session:
             repo = self._player_repository_factory(session)
             players = repo.list_players_for_spell_tick()
             for player in players:
-                self._tick_player(player)
+                self._tick_player(player, result)
             session.commit()
+        return result
 
-    def _tick_player(self, player: models.Player) -> None:
+    def _tick_player(self, player: models.Player, result: SpellTickResult) -> None:
         player.macros = 0
 
         max_spell_points = 2 * player.level
@@ -123,19 +159,30 @@ class SpellTickSystem:
                 continue
 
             message_id = _base_charm_message_id(index)
+            text = self._message_lookup(message_id)
             self._messaging.send_direct(
                 player_id=player.plyrid,
                 message_id=message_id,
-                text=self._message_lookup(message_id),
+                text=text,
             )
+            result.direct_messages.append(
+                SpellTickDirectMessage(
+                    player_id=player.plyrid,
+                    room_id=player.gamloc,
+                    message_id=message_id,
+                    text=text,
+                )
+            )
+            result.touch_player(player.plyrid, player.gamloc)
 
             if index == self._constants.alt_name_slot:
-                self._expire_alt_name(player)
+                self._expire_alt_name(player, result)
 
         if charms_changed:
             player.charms = charms
+        result.touch_player(player.plyrid, player.gamloc)
 
-    def _expire_alt_name(self, player: models.Player) -> None:
+    def _expire_alt_name(self, player: models.Player, result: SpellTickResult) -> None:
         # Legacy parity: ALTNAM expiration clears morph flags and reverts player
         # identity fields after broadcasting RET2NM to room occupants.
         # Ref: legacy/KYRSPEL.C lines 245-253, legacy/KYRANDIA.H lines 80, 90-96.
@@ -152,6 +199,14 @@ class SpellTickSystem:
             exclude_player_id=player.plyrid,
             message_id="RET2NM",
             text=return_message,
+        )
+        result.room_messages.append(
+            SpellTickRoomMessage(
+                room_id=player.gamloc,
+                exclude_player_id=player.plyrid,
+                message_id="RET2NM",
+                text=return_message,
+            )
         )
 
         player.altnam = player.plyrid
