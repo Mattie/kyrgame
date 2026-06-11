@@ -1,25 +1,12 @@
-import { type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type FocusEvent, useCallback, useEffect, useMemo, useState } from 'react'
 
-import { getWebSocketUrl } from '../config/endpoints'
-import { useNavigator } from '../context/NavigatorContext'
-
-type ActivePlayerSummary = {
-  player_id: string
-  display_name: string
-  level: number
-  rank_title: string
-  wizard_symbol?: string | null
-  active: boolean
-  connected_at?: string | null
-  connection_duration_seconds?: number | null
-}
+import { type ActivePlayerSummary, useNavigator } from '../context/NavigatorContext'
 
 type PlayerActivityPayload = {
   active?: ActivePlayerSummary[]
 }
 
 const POLL_INTERVAL_MS = 30_000
-type ScryStatus = 'idle' | 'connecting' | 'active' | 'closed' | 'error'
 
 const formatConnectionDuration = (seconds: number | null | undefined) => {
   if (seconds === null || seconds === undefined) return 'just now'
@@ -65,16 +52,20 @@ const activePlayerSummariesEqual = (
   })
 
 export const ActivePlayerIndicator = () => {
-  const { apiBaseUrl, connectionStatus, adminToken, session, logoutSession } = useNavigator()
-  const wsBaseUrl = useMemo(() => getWebSocketUrl(), [])
+  const {
+    apiBaseUrl,
+    connectionStatus,
+    adminToken,
+    session,
+    scrySession,
+    startScry,
+    stopScry,
+    logoutSession,
+  } = useNavigator()
   const [players, setPlayers] = useState<ActivePlayerSummary[]>([])
   const [open, setOpen] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [dismissed, setDismissed] = useState(false)
-  const [scryTarget, setScryTarget] = useState<ActivePlayerSummary | null>(null)
-  const [scryStatus, setScryStatus] = useState<ScryStatus>('idle')
-  const [scryEventCount, setScryEventCount] = useState(0)
-  const scrySocketRef = useRef<WebSocket | null>(null)
   const visible = (open || hovered) && !dismissed
 
   const loadPlayers = useCallback(async (options?: { cancelled?: () => boolean; signal?: AbortSignal }) => {
@@ -161,68 +152,11 @@ export const ActivePlayerIndicator = () => {
     }
   }, [])
 
-  const stopScry = useCallback(() => {
-    const socket = scrySocketRef.current
-    scrySocketRef.current = null
-    if (socket && socket.readyState !== WebSocket.CLOSED) {
-      socket.close(1000, 'SCRY stopped')
-    }
-    setScryStatus('idle')
-    setScryTarget(null)
-    setScryEventCount(0)
-  }, [])
-
   const handleLogout = useCallback(async () => {
     await logoutSession()
     await loadPlayers()
     closePopover()
   }, [closePopover, loadPlayers, logoutSession])
-
-  const startScry = useCallback(
-    (player: ActivePlayerSummary) => {
-      if (!adminToken) return
-      const existingSocket = scrySocketRef.current
-      if (existingSocket && existingSocket.readyState !== WebSocket.CLOSED) {
-        existingSocket.close(1000, 'Switching SCRY target')
-      }
-      setScryTarget(player)
-      setScryStatus('connecting')
-      setScryEventCount(0)
-      const socket = new WebSocket(
-        `${wsBaseUrl}/admin/scry/${encodeURIComponent(player.player_id)}?token=${encodeURIComponent(
-          adminToken
-        )}`
-      )
-      scrySocketRef.current = socket
-      socket.onopen = () => setScryStatus('active')
-      socket.onmessage = () => setScryEventCount((count) => count + 1)
-      socket.onerror = () => setScryStatus('error')
-      socket.onclose = () => {
-        if (scrySocketRef.current === socket) {
-          scrySocketRef.current = null
-          setScryStatus((current) => (current === 'idle' ? current : 'closed'))
-        }
-      }
-    },
-    [adminToken, wsBaseUrl]
-  )
-
-  useEffect(() => {
-    if (!adminToken && scrySocketRef.current) {
-      stopScry()
-    }
-  }, [adminToken, stopScry])
-
-  useEffect(
-    () => () => {
-      const socket = scrySocketRef.current
-      scrySocketRef.current = null
-      if (socket && socket.readyState !== WebSocket.CLOSED) {
-        socket.close(1000, 'SCRY component unmounted')
-      }
-    },
-    []
-  )
 
   return (
     <div
@@ -251,11 +185,11 @@ export const ActivePlayerIndicator = () => {
         <span className="active-player-count">{sortedPlayers.length}</span>
         <span>active</span>
       </button>
-      {scryTarget && scryStatus !== 'idle' && (
+      {scrySession && (
         <div className="scry-banner" role="status" aria-label="SCRY session">
           <span>
-            SCRY {scryStatus}: {scryTarget.display_name}
-            {scryEventCount > 0 ? ` (${scryEventCount})` : ''}
+            SCRY {scrySession.status}: {scrySession.displayName}
+            {scrySession.eventCount > 0 ? ` (${scrySession.eventCount})` : ''}
           </span>
           <button type="button" onClick={stopScry}>
             Stop

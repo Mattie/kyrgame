@@ -55,9 +55,10 @@ class RoomGateway:
         message: dict,
         sender: WebSocket | None = None,
         exclude: Set[WebSocket] | None = None,
-    ):
+    ) -> list[WebSocket]:
         async with self._lock:
             recipients = list(self.rooms.get(room_id, set()))
+        sent: list[WebSocket] = []
         for connection in recipients:
             if sender is not None and connection is sender:
                 continue
@@ -66,6 +67,8 @@ class RoomGateway:
             if connection.application_state != WebSocketState.CONNECTED:
                 continue
             await connection.send_json(message)
+            sent.append(connection)
+        return sent
 
     async def direct(self, room_id: int, player_id: str, message: dict):
         await self.broadcast(room_id, {"player": player_id, **message})

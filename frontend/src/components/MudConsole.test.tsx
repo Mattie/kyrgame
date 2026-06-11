@@ -26,10 +26,19 @@ type MockNavigatorState = {
   activity: ActivityEntry[]
   connectionStatus: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
   error: string | null
+  scrySession: {
+    targetPlayerId: string
+    displayName: string
+    status: 'connecting' | 'active' | 'closed' | 'error'
+    eventCount: number
+    roomId?: number | null
+  } | null
   startSession: ReturnType<typeof vi.fn>
   adminToken: string | null
   setAdminToken: ReturnType<typeof vi.fn>
   applyAdminUpdate: ReturnType<typeof vi.fn>
+  startScry: ReturnType<typeof vi.fn>
+  stopScry: ReturnType<typeof vi.fn>
   advanceLifecycle: typeof mockAdvanceLifecycle
   sendMove: typeof mockSendMove
   sendCommand: typeof mockSendCommand
@@ -65,10 +74,13 @@ const navigatorState: MockNavigatorState = {
   ],
   connectionStatus: 'connected' as const,
   error: null,
+  scrySession: null,
   startSession: vi.fn(),
   adminToken: null,
   setAdminToken: vi.fn(),
   applyAdminUpdate: vi.fn(),
+  startScry: vi.fn(),
+  stopScry: vi.fn(),
   advanceLifecycle: mockAdvanceLifecycle,
   sendMove: mockSendMove,
   sendCommand: mockSendCommand,
@@ -176,6 +188,7 @@ describe('MudConsole', () => {
     navigatorState.occupants = []
     navigatorState.playerVisuals = {}
     navigatorState.connectionStatus = 'connected'
+    navigatorState.scrySession = null
     navigatorState.activity = [
       {
         id: 'test-entry',
@@ -205,6 +218,96 @@ describe('MudConsole', () => {
     expect(screen.queryByText('Kyrandia Line Interface')).toBeNull()
     expect(header).toHaveTextContent('Player Hero')
     expect(header).toHaveTextContent('connected')
+  })
+
+  it('keeps admin sessions out of game command and movement input', () => {
+    navigatorState.session = {
+      token: 'admin-token',
+      playerId: 'Opal',
+      roomId: 7,
+      sessionKind: 'admin',
+    }
+    navigatorState.connectionStatus = 'idle'
+    navigatorState.activity = []
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    expect(input).toBeDisabled()
+    expect(screen.getByRole('button', { name: /send/i })).toBeDisabled()
+    expect(screen.getAllByText(/admin session/i).length).toBeGreaterThan(0)
+
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+    expect(mockSendCommand).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle navigation mode/i }))
+    fireEvent.keyDown(window, { key: 'w' })
+    expect(mockSendMove).not.toHaveBeenCalled()
+  })
+
+  it('unlocks the game prompt after a SCRY session closes', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      sessionKind: 'game',
+    }
+    navigatorState.scrySession = {
+      targetPlayerId: 'opal',
+      displayName: 'Opal',
+      status: 'closed',
+      eventCount: 3,
+      roomId: 8,
+    }
+    navigatorState.activity = []
+
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input')
+    expect(input).toBeEnabled()
+    expect(screen.getByRole('button', { name: /send/i })).toBeEnabled()
+
+    fireEvent.change(input, { target: { value: 'look' } })
+    fireEvent.submit(input.closest('form') as HTMLFormElement)
+
+    expect(mockSendCommand).toHaveBeenCalledWith('look')
+  })
+
+  it('maps SCRY status text onto existing connection pill classes', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      sessionKind: 'game',
+    }
+    navigatorState.scrySession = {
+      targetPlayerId: 'opal',
+      displayName: 'Opal',
+      status: 'active',
+      eventCount: 1,
+      roomId: 8,
+    }
+    navigatorState.activity = []
+
+    const { container, rerender } = render(<MudConsole />)
+
+    let pill = container.querySelector('.connection-pill')
+    expect(pill).toHaveTextContent('active')
+    expect(pill).toHaveClass('connected')
+
+    navigatorState.scrySession = {
+      targetPlayerId: 'opal',
+      displayName: 'Opal',
+      status: 'closed',
+      eventCount: 1,
+      roomId: 8,
+    }
+    rerender(<MudConsole />)
+
+    pill = container.querySelector('.connection-pill')
+    expect(pill).toHaveTextContent('closed')
+    expect(pill).toHaveClass('disconnected')
   })
 
   it('renders text instantly when modem stream is disabled', () => {

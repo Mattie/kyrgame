@@ -39,6 +39,21 @@ from .world.animation_tick_system import (
 )
 
 
+async def _publish_runtime_scry_output(app: FastAPI, player_id: str | None, message: dict) -> None:
+    publisher = getattr(app.state, "scry_publish_output", None)
+    if publisher is None or not player_id:
+        return
+    await publisher(app, player_id, message)
+
+
+async def _publish_runtime_scry_for_recipients(
+    app: FastAPI, recipients: list, message: dict
+) -> None:
+    socket_players = getattr(app.state, "game_socket_players", {})
+    for recipient in recipients:
+        await _publish_runtime_scry_output(app, socket_players.get(recipient), message)
+
+
 @dataclass
 class RuntimeConfig:
     database_url: str
@@ -565,14 +580,15 @@ async def bootstrap_app(app: FastAPI):
                     continue
                 excluded_sockets.add(target_socket)
                 await target_socket.send_json(target_envelope)
+                await _publish_runtime_scry_output(app, target_player, target_envelope)
                 for followup_payload in followup_payloads:
-                    await target_socket.send_json(
-                        {
-                            "type": "command_response",
-                            "room": target_room,
-                            "payload": followup_payload,
-                        }
-                    )
+                    followup_envelope = {
+                        "type": "command_response",
+                        "room": target_room,
+                        "payload": followup_payload,
+                    }
+                    await target_socket.send_json(followup_envelope)
+                    await _publish_runtime_scry_output(app, target_player, followup_envelope)
 
         if target_only:
             return
@@ -603,11 +619,13 @@ async def bootstrap_app(app: FastAPI):
             "animation_flag": event.flag,
         }
         payload.update(room_event_payload)
-        await app.state.gateway.broadcast(
+        envelope = app.state.room_scripts.room_broadcast_envelope(event.room_id, payload)
+        recipients = await app.state.gateway.broadcast(
             event.room_id,
-            app.state.room_scripts.room_broadcast_envelope(event.room_id, payload),
+            envelope,
             exclude=excluded_sockets or None,
         )
+        await _publish_runtime_scry_for_recipients(app, recipients, envelope)
 
     app.state.dispatch_animation_event = _dispatch_animation_event
 

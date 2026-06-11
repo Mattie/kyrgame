@@ -10,9 +10,11 @@ vi.mock('../config/endpoints', () => ({
 }))
 
 class MockWebSocket {
+  static CLOSED = 3
   static instances: MockWebSocket[] = []
   url: string
   sent: string[] = []
+  readyState = 0
   onmessage: ((event: { data: string }) => void) | null = null
   onopen: (() => void) | null = null
   onclose: ((event: { code: number; reason: string }) => void) | null = null
@@ -21,6 +23,7 @@ class MockWebSocket {
     this.url = url
     MockWebSocket.instances.push(this)
     setTimeout(() => {
+      this.readyState = 1
       this.onopen?.()
     }, 0)
   }
@@ -30,6 +33,7 @@ class MockWebSocket {
   }
 
   close(code = 1000, reason = '') {
+    this.readyState = MockWebSocket.CLOSED
     this.onclose?.({ code, reason })
   }
 
@@ -2142,7 +2146,24 @@ describe('Navigator flow', () => {
         ok: true,
         json: async () => ({
           status: 'created',
-          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'admin',
+          },
+        }),
+      },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'game-token',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'game',
+          },
         }),
       },
       { ok: true, json: async () => locations },
@@ -2312,6 +2333,174 @@ describe('Navigator flow', () => {
     await screen.findByText(/Admin update saved/i)
   })
 
+  it('keeps admin login playable and renders SCRY output in the main console', async () => {
+    window.history.replaceState(null, '', '/admin?modem=off')
+    const fetchMock = vi
+      .spyOn(global, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/public/player-activity')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              active: [
+                {
+                  player_id: 'hero',
+                  display_name: 'Hero',
+                  level: 12,
+                  rank_title: 'Wizard',
+                  active: true,
+                  connection_duration_seconds: 10,
+                },
+              ],
+              recent: [],
+            }),
+          } as unknown as Response)
+        }
+        if (url.endsWith('/auth/login')) {
+          const body = JSON.parse(init?.body as string)
+          if (body.session_kind === 'game') {
+            expect(body).toMatchObject({
+              userid: 'opal',
+              password: 'dev-admin-password',
+              session_kind: 'game',
+            })
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                status: 'created',
+                session: {
+                  token: 'game-token',
+                  player_id: 'Opal',
+                  room_id: 7,
+                  session_kind: 'game',
+                },
+              }),
+            } as unknown as Response)
+          }
+          expect(body).toMatchObject({
+            userid: 'opal',
+            password: 'dev-admin-password',
+            session_kind: 'admin',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'created',
+              session: {
+                token: 'admin-token',
+                player_id: 'Opal',
+                room_id: 7,
+                session_kind: 'admin',
+                admin_grants: { roles: ['player_admin'], flags: [] },
+              },
+            }),
+          } as unknown as Response)
+        }
+        if (url.endsWith('/locations')) {
+          return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+        }
+        if (url.endsWith('/objects')) {
+          return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+        }
+        if (url.endsWith('/commands')) {
+          return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+        }
+        if (url.endsWith('/messages')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ messages }),
+          } as unknown as Response)
+        }
+        if (url.endsWith('/auth/logout')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ status: 'logged_out' }),
+          } as unknown as Response)
+        }
+        throw new Error(`Unexpected fetch call: ${url}`)
+      })
+
+    render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'opal')
+      await user.click(screen.getByRole('checkbox', { name: /admin session/i }))
+      await user.type(screen.getByLabelText(/admin password/i), 'dev-admin-password')
+      await user.click(screen.getByRole('button', { name: /admin login/i }))
+    })
+
+    const roomSocket = await waitFor(() =>
+      MockWebSocket.instances.find((socket) => socket.url.includes('/rooms/7'))
+    )
+    expect(roomSocket?.url).toBe('ws://ws.local/rooms/7?token=game-token')
+    expect(screen.getByLabelText('command input')).toBeEnabled()
+    expect(queryConsoleLines('WebSocket not connected')).toHaveLength(0)
+
+    fireEvent.click(await screen.findByRole('button', { name: /active players: 1/i }))
+    fireEvent.click(screen.getByRole('button', { name: /start scry for hero/i }))
+
+    const scrySocket = await waitFor(() =>
+      MockWebSocket.instances.find((socket) => socket.url.includes('/admin/scry/hero'))
+    )
+    expect(scrySocket?.url).toBe('ws://ws.local/admin/scry/hero?token=admin-token')
+
+    act(() => {
+      scrySocket?.triggerMessage({
+        type: 'scry_started',
+        player_id: 'Hero',
+        display_name: 'Hero',
+        room: 7,
+      })
+      scrySocket?.triggerMessage({
+        type: 'scry_event',
+        player_id: 'Hero',
+        event: {
+          event_type: 'output',
+          payload: {
+            type: 'command_response',
+            room: 7,
+            payload: {
+              scope: 'player',
+              event: 'location_description',
+              type: 'location_description',
+              location: 7,
+              text: 'A long description of the temple.',
+              objects: [],
+            },
+          },
+        },
+      })
+      scrySocket?.triggerMessage({
+        type: 'scry_event',
+        player_id: 'Hero',
+        event: {
+          event_type: 'input',
+          payload: { command: 'look' },
+        },
+      })
+    })
+
+    expect(
+      (await screen.findAllByText('A long description of the temple.')).length
+    ).toBeGreaterThan(0)
+    expect(getConsoleLines('> look')).toHaveLength(1)
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /log out opal/i }))
+    })
+
+    await waitFor(() => {
+      const logoutHeaders = fetchMock.mock.calls
+        .filter(([input]) => String(input).endsWith('/auth/logout'))
+        .map(([, init]) => (init?.headers as Record<string, string> | undefined)?.Authorization)
+      expect(logoutHeaders).toEqual(
+        expect.arrayContaining(['Bearer game-token', 'Bearer admin-token'])
+      )
+    })
+  })
+
   it('keeps an admin account token available when the session pauses for intro', async () => {
     const adminPlayer = {
       uidnam: 'HeroicUser',
@@ -2349,7 +2538,32 @@ describe('Navigator flow', () => {
         if (rosterResponse) return rosterResponse
         const url = String(input)
         if (url.includes('/auth/login')) {
-          expect(JSON.parse(String(init?.body))).toEqual({
+          const body = JSON.parse(String(init?.body))
+          if (body.session_kind === 'game') {
+            expect(body).toEqual({
+              userid: 'hero',
+              password: 'dev-admin-password',
+              session_kind: 'game',
+            })
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                status: 'created',
+                session: {
+                  token: 'game-intro-token',
+                  player_id: 'hero',
+                  account_userid: 'hero',
+                  session_kind: 'game',
+                  room_id: 0,
+                  lifecycle: { state: 'first_login_intro', step: 2 },
+                  lifecycle_messages: [
+                    { message_id: 'GOODPD', text: 'Press ENTER to begin' },
+                  ],
+                },
+              }),
+            } as unknown as Response)
+          }
+          expect(body).toEqual({
             userid: 'hero',
             password: 'dev-admin-password',
             session_kind: 'admin',
@@ -2521,7 +2735,24 @@ describe('Navigator flow', () => {
         ok: true,
         json: async () => ({
           status: 'created',
-          session: { token: 'abc123', player_id: canonical, room_id: 7 },
+          session: {
+            token: 'abc123',
+            player_id: canonical,
+            room_id: 7,
+            session_kind: 'admin',
+          },
+        }),
+      },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'game-token',
+            player_id: canonical,
+            room_id: 7,
+            session_kind: 'game',
+          },
         }),
       },
       { ok: true, json: async () => locations },
@@ -2654,7 +2885,24 @@ describe('Navigator flow', () => {
         ok: true,
         json: async () => ({
           status: 'created',
-          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'admin',
+          },
+        }),
+      },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'game-token',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'game',
+          },
         }),
       },
       { ok: true, json: async () => locations },
@@ -2800,7 +3048,24 @@ describe('Navigator flow', () => {
         ok: true,
         json: async () => ({
           status: 'created',
-          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'admin',
+          },
+        }),
+      },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'game-token',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'game',
+          },
         }),
       },
       { ok: true, json: async () => locations },
@@ -2920,7 +3185,24 @@ describe('Navigator flow', () => {
         ok: true,
         json: async () => ({
           status: 'created',
-          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'admin',
+          },
+        }),
+      },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'game-token',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'game',
+          },
         }),
       },
       { ok: true, json: async () => locations },
@@ -3028,7 +3310,24 @@ describe('Navigator flow', () => {
         ok: true,
         json: async () => ({
           status: 'created',
-          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'admin',
+          },
+        }),
+      },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'game-token',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'game',
+          },
         }),
       },
       { ok: true, json: async () => locations },
@@ -3110,7 +3409,24 @@ describe('Navigator flow', () => {
         ok: true,
         json: async () => ({
           status: 'created',
-          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'admin',
+          },
+        }),
+      },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'game-token',
+            player_id: 'hero',
+            room_id: 7,
+            session_kind: 'game',
+          },
         }),
       },
       { ok: true, json: async () => locations },

@@ -78,6 +78,27 @@ export type ActivityEntry = {
   meta?: Record<string, unknown>
 }
 
+export type ActivePlayerSummary = {
+  player_id: string
+  display_name: string
+  level?: number
+  rank_title?: string
+  wizard_symbol?: string | null
+  active?: boolean
+  connected_at?: string | null
+  connection_duration_seconds?: number | null
+}
+
+export type ScryStatus = 'connecting' | 'active' | 'closed' | 'error'
+
+export type ScrySession = {
+  targetPlayerId: string
+  displayName: string
+  status: ScryStatus
+  eventCount: number
+  roomId?: number | null
+}
+
 export type AdminUpdatePayload = {
   altnam?: string
   attnam?: string
@@ -233,6 +254,7 @@ type NavigatorContextValue = {
   activity: ActivityEntry[]
   connectionStatus: ConnectionStatus
   error: string | null
+  scrySession: ScrySession | null
   startSession: (
     playerId: string,
     roomId?: number | null,
@@ -244,6 +266,8 @@ type NavigatorContextValue = {
   fetchAdminMobs: () => Promise<AdminMobSnapshot>
   triggerElf: (playerId: string, roomId: number) => Promise<AdminElfTriggerResponse>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
+  startScry: (player: ActivePlayerSummary) => void
+  stopScry: () => void
   advanceLifecycle: (input: string) => Promise<void>
   logoutSession: () => Promise<void>
   resumeRememberedSession: () => Promise<boolean>
@@ -551,16 +575,24 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [error, setError] = useState<string | null>(null)
   const [occupants, setOccupants] = useState<string[]>([])
   const [playerVisuals, setPlayerVisuals] = useState<Record<string, PlayerVisual>>({})
-  const [adminToken, setAdminToken] = useState<string | null>(null)
+  const [adminToken, setAdminTokenState] = useState<string | null>(null)
+  const [scrySession, setScrySession] = useState<ScrySession | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
+  const scrySocketRef = useRef<WebSocket | null>(null)
   const worldRef = useRef<WorldData | null>(null)
   const sessionRef = useRef<SessionRecord | null>(null)
+  const adminTokenRef = useRef<string | null>(null)
   const occupantsRef = useRef<string[]>([])
   const suppressSocketCloseRef = useRef(false)
 
   useEffect(() => {
     sessionRef.current = session
   }, [session])
+
+  const setAdminToken = useCallback((token: string | null) => {
+    adminTokenRef.current = token
+    setAdminTokenState(token)
+  }, [])
 
   const resetSocket = useCallback(() => {
     if (socketRef.current) {
@@ -617,14 +649,24 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const handleIncoming = useCallback(
     // WebSocket payloads are legacy-shaped event envelopes; narrow individual fields as used.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (message: any) => {
+    (
+      message: any,
+      perspective?: { playerId?: string | null; roomId?: number | null; readOnly?: boolean }
+    ) => {
       if (!message || typeof message !== 'object') return
       const meta = message.meta ?? {}
       const hidden = Boolean(meta?.silent)
+      const readOnlyPerspective = Boolean(perspective?.readOnly)
+      const perspectivePlayerId =
+        perspective?.playerId ?? sessionRef.current?.playerId ?? session?.playerId ?? null
+      const perspectiveRoomId =
+        perspective?.roomId ?? currentRoom ?? sessionRef.current?.roomId ?? session?.roomId ?? null
       switch (message.type) {
         case 'room_welcome':
         case 'room_change': {
-          handleRoomChange(message.room ?? null, message.type)
+          if (!readOnlyPerspective) {
+            handleRoomChange(message.room ?? null, message.type)
+          }
           break
         }
         case 'room_broadcast': {
@@ -632,8 +674,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
           const excludedPlayer = payload.exclude_player ?? payload.excludePlayer
           const excludedPlayers = payload.exclude_players ?? payload.excludePlayers
-          const currentPlayerId = sessionRef.current?.playerId ?? session?.playerId ?? null
-          const currentPlayerName = normalizePlayerName(currentPlayerId)
+          const currentPlayerName = normalizePlayerName(perspectivePlayerId)
           const directPlayer = payload.player ?? payload.player_id ?? payload.playerId
           if (
             (payload.scope === 'direct' &&
@@ -690,7 +731,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           if (normalizedPayload.event === 'player_enter' && normalizedPayload.player) {
             const enteringPlayer = normalizedPayload.player
             // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
-            if (normalizePlayerName(enteringPlayer) !== normalizePlayerName(session?.playerId)) {
+            if (
+              !readOnlyPerspective &&
+              normalizePlayerName(enteringPlayer) !== normalizePlayerName(perspectivePlayerId)
+            ) {
               setOccupants((current) => {
                 const next = Array.from(new Set([...(current || []), enteringPlayer]))
                 occupantsRef.current = next
@@ -714,11 +758,13 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             const occupantDetails = Array.isArray(normalizedPayload.occupant_details)
               ? (normalizedPayload.occupant_details as Array<{ player_id?: string; flags?: number | null }>)
               : []
-            mergePlayerVisuals(occupantDetails)
-            updateOccupants(nextOccupants)
+            if (!readOnlyPerspective) {
+              mergePlayerVisuals(occupantDetails)
+              updateOccupants(nextOccupants)
+            }
             const occupantsText =
               normalizedPayload.text ??
-              formatOccupantsLine(nextOccupants, currentPlayerId) ??
+              formatOccupantsLine(nextOccupants, perspectivePlayerId) ??
               'No one else is here.'
             appendActivity({
               type: 'room_broadcast',
@@ -732,6 +778,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           // Handle room_objects events - update world state when gems spawn or objects change
           // Legacy: gem spawns broadcast room_objects via room_broadcast_envelope (KYRANIM.C)
           if (normalizedPayload.event === 'room_objects') {
+            if (readOnlyPerspective) {
+              break
+            }
             const locationId = normalizedPayload.location
             const newObjects = extractObjectIds(normalizedPayload.objects)
 
@@ -797,11 +846,13 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             const occupantDetails = Array.isArray(message.payload?.occupant_details)
               ? (message.payload?.occupant_details as Array<{ player_id?: string; flags?: number | null }>)
               : []
-            mergePlayerVisuals(occupantDetails)
-            updateOccupants(occupants)
+            if (!readOnlyPerspective) {
+              mergePlayerVisuals(occupantDetails)
+              updateOccupants(occupants)
+            }
             summary =
               message.payload?.text ??
-              formatOccupantsLine(occupants, session?.playerId ?? null) ??
+              formatOccupantsLine(occupants, perspectivePlayerId) ??
               'No one else is here.'
             payload = { ...message.payload, occupants }
             appendActivity({
@@ -817,7 +868,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             // Look up the full description from world.messages using message_id, just like RoomPanel does
             let text = message.payload?.text ?? message.payload?.description
             const locationId =
-              message.payload?.location ?? currentRoom ?? session?.roomId ?? null
+              message.payload?.location ?? perspectiveRoomId
 
             // Use worldRef for immediate access to loaded data (avoids race condition on first load)
             if (message.payload?.message_id && worldRef.current?.messages) {
@@ -843,7 +894,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             extraLines = objectLines
           } else if (message.payload?.event === 'location_update') {
             // Don't show location_update event separately - it will be followed by location_description
-            handleRoomChange(message.payload.location ?? null, 'location_update')
+            if (!readOnlyPerspective) {
+              handleRoomChange(message.payload.location ?? null, 'location_update')
+            }
             break // Skip adding this event to activity
           } else if (message.payload?.verb === 'move') {
             // Don't show move acknowledgment - just skip it
@@ -866,6 +919,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             summary = inventoryText
             payload = { ...message.payload, inventory: inventoryList, text: inventoryText }
           } else if (message.payload?.event === 'room_objects') {
+            if (readOnlyPerspective) {
+              break
+            }
             // Update world state with new room objects list
             const locationId = message.payload?.location
             const newObjects = extractObjectIds(message.payload?.objects)
@@ -983,6 +1039,166 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     [appendActivity, handleIncoming, resetSocket, wsBaseUrl]
   )
 
+  const closeScrySocket = useCallback((reason: string) => {
+    const socket = scrySocketRef.current
+    scrySocketRef.current = null
+    if (socket && socket.readyState !== WebSocket.CLOSED) {
+      socket.close(1000, reason)
+    }
+  }, [])
+
+  const stopScry = useCallback(() => {
+    closeScrySocket('SCRY stopped')
+    setScrySession(null)
+  }, [closeScrySocket])
+
+  const startScry = useCallback(
+    (player: ActivePlayerSummary) => {
+      if (!adminToken) {
+        appendActivity({
+          type: 'command_error',
+          summary: 'Admin token required for SCRY',
+        })
+        return
+      }
+
+      closeScrySocket('Switching SCRY target')
+      const initialTargetId = player.player_id
+      const initialDisplayName = player.display_name || player.player_id
+      setScrySession({
+        targetPlayerId: initialTargetId,
+        displayName: initialDisplayName,
+        status: 'connecting',
+        eventCount: 0,
+      })
+
+      const socket = new WebSocket(
+        `${wsBaseUrl}/admin/scry/${encodeURIComponent(initialTargetId)}?token=${encodeURIComponent(
+          adminToken
+        )}`
+      )
+      scrySocketRef.current = socket
+
+      socket.onopen = () => {
+        setScrySession((current) =>
+          scrySocketRef.current === socket && current
+            ? { ...current, status: 'active' }
+            : current
+        )
+      }
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data)
+          if (!message || typeof message !== 'object') return
+
+          if (message.type === 'scry_started') {
+            const targetPlayerId =
+              typeof message.player_id === 'string' ? message.player_id : initialTargetId
+            const displayName =
+              typeof message.display_name === 'string' && message.display_name.trim()
+                ? message.display_name
+                : initialDisplayName
+            const roomId = typeof message.room === 'number' ? message.room : null
+            setScrySession((current) =>
+              scrySocketRef.current === socket && current
+                ? {
+                    ...current,
+                    targetPlayerId,
+                    displayName,
+                    roomId,
+                    status: 'active',
+                  }
+                : current
+            )
+            return
+          }
+
+          if (message.type === 'scry_event') {
+            const targetPlayerId =
+              typeof message.player_id === 'string' ? message.player_id : initialTargetId
+            const scryEvent = message.event ?? {}
+            setScrySession((current) =>
+              scrySocketRef.current === socket && current
+                ? {
+                    ...current,
+                    targetPlayerId,
+                    eventCount: current.eventCount + 1,
+                    status: current.status === 'connecting' ? 'active' : current.status,
+                  }
+                : current
+            )
+
+            if (scryEvent.event_type === 'input') {
+              const command =
+                typeof scryEvent.payload?.command === 'string' ? scryEvent.payload.command : ''
+              if (command.trim()) {
+                appendActivity({
+                  type: 'scry_input',
+                  summary: `> ${command.trim()}`,
+                  payload: {
+                    event: 'scry_input',
+                    player_id: targetPlayerId,
+                    command: command.trim(),
+                  },
+                })
+              }
+              return
+            }
+
+            if (scryEvent.event_type === 'output' && scryEvent.payload) {
+              const outputRoomId =
+                typeof scryEvent.payload?.room === 'number'
+                  ? scryEvent.payload.room
+                  : typeof scryEvent.payload?.payload?.location === 'number'
+                    ? scryEvent.payload.payload.location
+                    : null
+              handleIncoming(scryEvent.payload, {
+                playerId: targetPlayerId,
+                roomId: outputRoomId,
+                readOnly: true,
+              })
+            }
+            return
+          }
+
+          if (message.type === 'scry_read_only') {
+            appendActivity({
+              type: 'command_error',
+              summary: message.detail ?? 'SCRY is read-only',
+              payload: message,
+            })
+          }
+        } catch (err) {
+          appendActivity({
+            type: 'parse_error',
+            summary: err instanceof Error ? err.message : 'Invalid SCRY message',
+          })
+        }
+      }
+
+      socket.onerror = () => {
+        setScrySession((current) =>
+          scrySocketRef.current === socket && current
+            ? { ...current, status: 'error' }
+            : current
+        )
+      }
+
+      socket.onclose = () => {
+        setScrySession((current) =>
+          scrySocketRef.current === socket && current
+            ? { ...current, status: current.status === 'error' ? 'error' : 'closed' }
+            : current
+        )
+        if (scrySocketRef.current === socket) {
+          scrySocketRef.current = null
+        }
+      }
+    },
+    [adminToken, appendActivity, closeScrySocket, handleIncoming, wsBaseUrl]
+  )
+
   const fetchJson = useCallback(async (url: string, init?: RequestInit) => {
     const response = await fetch(url, init)
     if (!response.ok) {
@@ -991,6 +1207,17 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     }
     return response.json()
   }, [])
+
+  const logoutToken = useCallback(
+    async (token: string | null | undefined) => {
+      if (!token) return
+      await fetch(`${apiBaseUrl}/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => undefined)
+    },
+    [apiBaseUrl]
+  )
 
   const parseSessionError = useCallback(async (response: Response) => {
     const contentType = response.headers?.get?.('content-type') ?? ''
@@ -1139,6 +1366,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       setActivity([])
       setPlayerVisuals({})
       resetSocket()
+      setAdminToken(null)
+      let elevatedAdminToken: string | null = null
       try {
         const authMode: AccountAuthMode =
           options?.authMode ?? (options?.password ? 'login' : 'legacy')
@@ -1173,20 +1402,45 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         if (roomId !== undefined && roomId !== null && !Number.isNaN(roomId)) {
           payload.room_id = roomId
         }
-        const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        if (!response.ok) {
-          const detail = await parseSessionError(response)
-          const message = useAccountAuth
-            ? formatAccountAuthError(authMode, response.status, playerId, detail)
-            : detail.trim() || 'Unable to start session'
-          throw new SessionStartError(message, endpoint, response.status)
+
+        const requestSessionPayload = async (
+          requestEndpoint: string,
+          requestPayload: Record<string, string | number | boolean | null | undefined>,
+          requestAuthMode: AccountAuthMode
+        ) => {
+          const response = await fetch(`${apiBaseUrl}${requestEndpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload),
+          })
+          if (!response.ok) {
+            const detail = await parseSessionError(response)
+            const message = useAccountAuth
+              ? formatAccountAuthError(requestAuthMode, response.status, playerId, detail)
+              : detail.trim() || 'Unable to start session'
+            throw new SessionStartError(message, requestEndpoint, response.status)
+          }
+          const data = await response.json()
+          return data.session
         }
-        const data = await response.json()
-        const sessionPayload = data.session
+
+        let sessionPayload = await requestSessionPayload(endpoint, payload, authMode)
+        const responseSessionKind = parseSessionKind(
+          sessionPayload.session_kind ?? options?.sessionKind ?? 'game'
+        )
+        if (useAccountAuth && responseSessionKind === 'admin') {
+          elevatedAdminToken =
+            typeof sessionPayload.token === 'string' ? sessionPayload.token : null
+          const playablePayload = {
+            ...payload,
+            session_kind: 'game',
+          }
+          sessionPayload = await requestSessionPayload(
+            '/auth/login',
+            playablePayload,
+            'login'
+          )
+        }
         const playerFlags =
           typeof sessionPayload.player_flags === 'number' ? sessionPayload.player_flags : null
         const lifecycle = parseSessionLifecycle(sessionPayload.lifecycle)
@@ -1210,6 +1464,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           sessionKind,
           adminGrants: parseAdminGrants(sessionPayload.admin_grants),
           lifecycle,
+        }
+        if (elevatedAdminToken) {
+          setAdminToken(elevatedAdminToken)
         }
         setSession(record)
         if (record.sessionKind === 'game' && (options?.rememberMe || options?.resumeToken)) {
@@ -1253,6 +1510,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         connectWebSocket(record.token, record.roomId)
       } catch (err) {
+        if (elevatedAdminToken) {
+          await logoutToken(elevatedAdminToken)
+          setAdminToken(null)
+        }
         setConnectionStatus('error')
         setError(err instanceof Error ? err.message : 'Unknown error')
         throw err
@@ -1263,8 +1524,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       appendActivity,
       connectWebSocket,
       loadWorldData,
+      logoutToken,
       parseSessionError,
       resetSocket,
+      setAdminToken,
       updateOccupants,
     ]
   )
@@ -1289,18 +1552,24 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     }
   }, [startSession])
 
+  useEffect(() => {
+    if (!adminToken && scrySocketRef.current) {
+      stopScry()
+    }
+  }, [adminToken, stopScry])
+
   const logoutSession = useCallback(async () => {
     const currentSession = sessionRef.current
+    const logoutTokens = Array.from(
+      new Set([currentSession?.token, adminTokenRef.current].filter(Boolean))
+    )
     clearRememberedSession()
 
     try {
-      if (currentSession) {
-        await fetch(`${apiBaseUrl}/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${currentSession.token}` },
-        }).catch(() => undefined)
-      }
+      await Promise.all(logoutTokens.map((token) => logoutToken(token)))
     } finally {
+      closeScrySocket('Logout')
+      setScrySession(null)
       const socket = socketRef.current
       socketRef.current = null
       if (socket && socket.readyState !== WebSocket.CLOSED) {
@@ -1319,7 +1588,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       setError(null)
       setConnectionStatus('idle')
     }
-  }, [apiBaseUrl, updateOccupants])
+  }, [closeScrySocket, logoutToken, setAdminToken, updateOccupants])
 
   const advanceLifecycle = useCallback(
     async (input: string) => {
@@ -1438,6 +1707,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       if (isIntroLifecycle(sessionRef.current?.lifecycle)) {
         return
       }
+      if (sessionRef.current?.sessionKind === 'admin') {
+        return
+      }
       if (!socketRef.current) {
         appendActivity({
           type: 'command_error',
@@ -1460,6 +1732,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         return
       }
       if (trimmed === '') return
+      if (sessionRef.current?.sessionKind === 'admin') {
+        return
+      }
       if (!socketRef.current) {
         appendActivity({
           type: 'command_error',
@@ -1503,6 +1778,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       activity,
       connectionStatus,
       error,
+      scrySession,
       startSession,
       adminToken,
       setAdminToken,
@@ -1510,6 +1786,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       fetchAdminMobs,
       triggerElf,
       applyAdminUpdate,
+      startScry,
+      stopScry,
       advanceLifecycle,
       logoutSession,
       resumeRememberedSession,
@@ -1531,11 +1809,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       occupants,
       playerVisuals,
       resumeRememberedSession,
+      scrySession,
       setAdminToken,
       sendMove,
       sendCommand,
       session,
       startSession,
+      startScry,
+      stopScry,
       triggerElf,
       world,
     ]
