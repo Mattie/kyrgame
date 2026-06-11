@@ -4,9 +4,14 @@ from datetime import datetime, timedelta, timezone
 import httpx
 import pytest
 from sqlalchemy import select
+from sqlalchemy.dialects import sqlite
 
-from kyrgame import constants, fixtures, models
-from kyrgame.webapp import PUBLIC_RECENT_PLAYER_SCAN_LIMIT, create_app
+from kyrgame import constants, fixtures, models, webapp
+from kyrgame.webapp import (
+    PUBLIC_LEADERBOARD_LIMIT,
+    PUBLIC_RECENT_PLAYER_SCAN_LIMIT,
+    create_app,
+)
 
 
 def _spell_bits(spells: list[models.SpellModel], sbkref: int, count: int) -> int:
@@ -324,6 +329,63 @@ async def test_public_player_activity_groups_sessions_active_players_and_recent_
 
 
 @pytest.mark.anyio
+async def test_public_summaries_use_player_id_for_out_of_game_display_names(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        with app.state.session_factory() as db:
+            active_record, active_model = _add_player(
+                db, "willow", level=13, spells=spells, owned=2
+            )
+            active_record.altnam = "Some willowisp"
+            active_model.altnam = "Some willowisp"
+            _add_session(
+                db,
+                active_record,
+                token="willow-old-session",
+                last_seen=now - timedelta(minutes=3),
+            )
+            app.state.active_player_sessions["willow-token"] = active_model
+            app.state.active_player_connected_at["willow-token"] = now - timedelta(minutes=1)
+
+            recent_record, _ = _add_player(db, "cedar", level=12, spells=spells, owned=1)
+            recent_record.altnam = "Some willowisp"
+            _add_session(
+                db,
+                recent_record,
+                token="cedar-session",
+                last_seen=now - timedelta(minutes=2),
+            )
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            activity_response = await client.get("/public/player-activity")
+            leaderboard_response = await client.get("/public/leaderboard")
+
+        assert activity_response.status_code == 200
+        activity = activity_response.json()
+        assert activity["active"][0]["player_id"] == "willow"
+        assert activity["active"][0]["display_name"] == "willow"
+        assert activity["recent"][0]["player_id"] == "cedar"
+        assert activity["recent"][0]["display_name"] == "cedar"
+
+        assert leaderboard_response.status_code == 200
+        leaderboard_by_id = {
+            player["player_id"]: player
+            for player in leaderboard_response.json()["players"]
+            if player["player_id"] in {"willow", "cedar"}
+        }
+        assert leaderboard_by_id["willow"]["display_name"] == "willow"
+        assert leaderboard_by_id["cedar"]["display_name"] == "cedar"
+
+
+@pytest.mark.anyio
 async def test_public_player_activity_excludes_runtime_active_players_before_recent_cap(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
@@ -511,3 +573,60 @@ async def test_public_leaderboard_ranks_spellbooks_before_payload_slice(monkeypa
         assert response.status_code == 200
         players = response.json()["players"]
         assert players[0]["player_id"] == "zzzz"
+
+
+def test_public_leaderboard_statement_orders_and_limits_in_sql():
+    statement = webapp._public_leaderboard_player_statement(fixtures.load_spells())
+    compiled = str(
+        statement.compile(
+            dialect=sqlite.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
+    normalized_sql = " ".join(compiled.split())
+
+    assert "FROM players" in normalized_sql
+    assert "ORDER BY players.level DESC" in normalized_sql
+    assert "public_spellbook_count DESC" in normalized_sql
+    assert "lower(players.plyrid) ASC, players.plyrid ASC" in normalized_sql
+    assert f"LIMIT {PUBLIC_LEADERBOARD_LIMIT}" in normalized_sql
+
+
+@pytest.mark.anyio
+async def test_public_leaderboard_builds_summaries_after_payload_slice(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    converted_player_ids: list[str] = []
+    original_player_model_from_record = webapp._player_model_from_record
+
+    def count_player_model_from_record(record: models.Player):
+        converted_player_ids.append(record.plyrid)
+        return original_player_model_from_record(record)
+
+    monkeypatch.setattr(webapp, "_player_model_from_record", count_player_model_from_record)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        with app.state.session_factory() as db:
+            low_spell_names = [
+                f"b{first}{second}{third}"
+                for first in string.ascii_lowercase
+                for second in string.ascii_lowercase
+                for third in string.ascii_lowercase
+            ][: PUBLIC_LEADERBOARD_LIMIT + 20]
+            for player_id in low_spell_names:
+                _add_player(db, player_id, level=25, spells=spells, owned=0)
+            _add_player(db, "zzzz", level=25, spells=spells, owned=6)
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/public/leaderboard")
+
+        assert response.status_code == 200
+        assert len(response.json()["players"]) == PUBLIC_LEADERBOARD_LIMIT
+        assert len(converted_player_ids) == PUBLIC_LEADERBOARD_LIMIT
+        assert converted_player_ids[0] == "zzzz"

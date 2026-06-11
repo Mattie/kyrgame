@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSock
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
@@ -866,7 +866,7 @@ def _public_player_summary(
         if normalized_connected_at is not None
         else None
     )
-    display_name = player.altnam.strip() or player.plyrid
+    display_name = player.plyrid.strip() or player.altnam.strip()
     return {
         "player_id": player.plyrid,
         "display_name": display_name,
@@ -895,6 +895,44 @@ def _latest_session_seen_by_player_id(
         if current is None or last_seen > current:
             latest[session.player_id] = last_seen
     return latest
+
+
+def _spellbook_count_sql_expression(
+    spells_catalog: list[models.SpellModel],
+):
+    terms = []
+    for catalog_spell in spells_catalog:
+        if catalog_spell.sbkref == constants.OFFENS:
+            ownership_field = models.Player.offspls
+        elif catalog_spell.sbkref == constants.DEFENS:
+            ownership_field = models.Player.defspls
+        else:
+            ownership_field = models.Player.othspls
+        terms.append(
+            case(
+                (ownership_field.op("&")(int(catalog_spell.bitdef)) != 0, 1),
+                else_=0,
+            )
+        )
+    return sum(terms, literal(0))
+
+
+def _public_leaderboard_player_statement(
+    spells_catalog: list[models.SpellModel],
+):
+    spellbook_count_expr = _spellbook_count_sql_expression(spells_catalog).label(
+        "public_spellbook_count"
+    )
+    return (
+        select(models.Player, spellbook_count_expr)
+        .order_by(
+            models.Player.level.desc(),
+            spellbook_count_expr.desc(),
+            func.lower(models.Player.plyrid).asc(),
+            models.Player.plyrid.asc(),
+        )
+        .limit(PUBLIC_LEADERBOARD_LIMIT)
+    )
 
 
 def _latest_session_seen_for_player_ids(
@@ -2499,11 +2537,12 @@ async def public_leaderboard(
 ):
     now = datetime.now(timezone.utc)
     spells_catalog = provider.cache["spells"]
-    player_records = list(
-        db.scalars(
-            select(models.Player).order_by(models.Player.level.desc(), models.Player.plyrid.asc())
+    player_records = [
+        record
+        for record, _spellbook_count in db.execute(
+            _public_leaderboard_player_statement(spells_catalog)
         ).all()
-    )
+    ]
     latest_seen = _latest_session_seen_for_player_ids(
         db, {int(record.id) for record in player_records if record.id is not None}
     )
@@ -2528,14 +2567,7 @@ async def public_leaderboard(
         )
         entries.append(summary)
 
-    entries.sort(
-        key=lambda player: (
-            -int(player["level"]),
-            -int(player["spellbook_count"]),
-            str(player["player_id"]).lower(),
-        )
-    )
-    return {"players": entries[:PUBLIC_LEADERBOARD_LIMIT]}
+    return {"players": entries}
 
 
 def _format_room_occupants(occupants: list[str], messages: models.MessageBundleModel | None):
