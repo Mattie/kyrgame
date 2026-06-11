@@ -166,11 +166,14 @@ async def test_spell_tick_callback_fans_out_altname_expiry_and_syncs_live_player
     await app.state.spell_tick_callback()
 
     for socket in (hero_socket, shadow_socket):
-        assert any(
-            message.get("type") == "command_response"
-            and message.get("payload", {}).get("message_id") == "BASMSG5"
+        direct_message = next(
+            message
             for message in socket.sent
+            if message.get("type") == "command_response"
+            and message.get("payload", {}).get("message_id") == "BASMSG5"
         )
+        assert direct_message["payload"]["player"] == "hero"
+        assert direct_message["payload"]["player_flags"] == int(constants.PlayerFlag.LOADED)
         assert not any(
             message.get("payload", {}).get("message_id") == "RET2NM"
             for message in socket.sent

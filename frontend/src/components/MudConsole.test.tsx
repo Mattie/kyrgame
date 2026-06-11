@@ -659,6 +659,54 @@ describe('MudConsole', () => {
     vi.useRealTimers()
   })
 
+  it('renders hydrated scrollback immediately while new modem output still streams', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'hydrated-scrollback-entry',
+        type: 'command_response',
+        summary: 'Restored scrollback line.',
+        payload: null,
+        meta: { hydratedScrollback: true },
+      },
+      {
+        id: 'fresh-after-hydration-entry',
+        type: 'command_response',
+        summary: 'Fresh post-reconnect line.',
+        payload: null,
+      },
+    ]
+
+    const { container } = render(<MudConsole />)
+    const visibleConsoleText = () =>
+      container.querySelector<HTMLElement>('.crt-lines')?.textContent ?? ''
+
+    expect(screen.getAllByText('Restored scrollback line.').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Fresh post-reconnect line.')).toBeNull()
+
+    act(() => vi.advanceTimersByTime(100))
+
+    expect(screen.getAllByText('Fresh post-reconnect line.').length).toBeGreaterThan(0)
+    expect(visibleConsoleText().indexOf('Restored scrollback line.')).toBeLessThan(
+      visibleConsoleText().indexOf('Fresh post-reconnect line.')
+    )
+
+    vi.useRealTimers()
+  })
+
   it('continues the active stream line when new prefix lines appear', () => {
     vi.useFakeTimers()
     window.history.replaceState(

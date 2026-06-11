@@ -87,6 +87,7 @@ type ConsoleLine = {
   promptSymbol?: boolean
   payloadText?: string
   pagerEligible?: boolean
+  hydratedScrollback?: boolean
 }
 
 type ScreenReaderConsoleLine = {
@@ -760,6 +761,7 @@ export const MudConsole = () => {
     })
 
     visibleEntries.forEach((entry) => {
+      const hydratedScrollback = Boolean(entry.meta?.hydratedScrollback)
       const payloadText = formatPayload(entry.payload)
       const legacyLines =
         entry.extraLines ??
@@ -796,6 +798,7 @@ export const MudConsole = () => {
         promptSymbol: isUserCommand,
         payloadText: payloadText ?? undefined,
         pagerEligible,
+        hydratedScrollback,
       })
 
       legacyLines?.forEach((line, lineIndex) => {
@@ -803,6 +806,7 @@ export const MudConsole = () => {
           id: `${entry.id}-extra-${lineIndex}`,
           text: line,
           className: `crt-line ${entry.type} detail`,
+          hydratedScrollback,
         })
       })
     })
@@ -826,6 +830,15 @@ export const MudConsole = () => {
   )
   const pagerLineKeys = useMemo(
     () => new Set(consoleLines.filter((line) => line.pagerEligible).map((line) => line.streamKey)),
+    [consoleLines]
+  )
+  const hydratedStreamKeys = useMemo(
+    () =>
+      new Set(
+        consoleLines
+          .filter((line) => line.hydratedScrollback)
+          .map((line) => line.streamKey)
+      ),
     [consoleLines]
   )
 
@@ -914,6 +927,13 @@ export const MudConsole = () => {
         })
       }
 
+      hydratedStreamKeys.forEach((key) => {
+        if (!next.has(key)) {
+          next.add(key)
+          changed = true
+        }
+      })
+
       const limited = limitCompletedStreamKeys(next)
       if (limited.length !== next.size) {
         changed = true
@@ -934,16 +954,25 @@ export const MudConsole = () => {
       })
       return changed ? next : current
     })
-  }, [consoleLineIds, consoleStreamKeys, isStreamPlaybackActive])
+  }, [consoleLineIds, consoleStreamKeys, hydratedStreamKeys, isStreamPlaybackActive])
 
   const activeStreamKey = useMemo(
     () =>
       isStreamPlaybackActive
         ? streamQueueKeys.find(
-            (key) => !completedStreamKeys.has(key) && !pagerLineKeys.has(key)
+            (key) =>
+              !completedStreamKeys.has(key) &&
+              !pagerLineKeys.has(key) &&
+              !hydratedStreamKeys.has(key)
           ) ?? null
         : null,
-    [completedStreamKeys, isStreamPlaybackActive, pagerLineKeys, streamQueueKeys]
+    [
+      completedStreamKeys,
+      hydratedStreamKeys,
+      isStreamPlaybackActive,
+      pagerLineKeys,
+      streamQueueKeys,
+    ]
   )
 
   const activeTerminalPagerLineId = useMemo(
@@ -1257,7 +1286,10 @@ export const MudConsole = () => {
   ])
 
   const renderLine = (line: ConsoleLine) => {
-    const isStreamComplete = completedStreamKeys.has(line.streamKey) || !isStreamPlaybackActive
+    const isStreamComplete =
+      completedStreamKeys.has(line.streamKey) ||
+      !isStreamPlaybackActive ||
+      Boolean(line.hydratedScrollback)
     const pagerInfo = getTerminalPagerRenderInfo(
       line,
       terminalPagerLineStates[line.id],

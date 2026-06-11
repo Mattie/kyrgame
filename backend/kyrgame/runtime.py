@@ -507,32 +507,15 @@ async def bootstrap_app(app: FastAPI):
             commands._room_objects_event(location, objects_by_id, None, description_id),
         ]
         occupants = await app.state.presence.players_in_room(room_id)
-        player_key = player_id.strip().casefold()
-        others = commands._dedupe_room_occupants(
-            sorted(
-                occupant
-                for occupant in occupants
-                if str(occupant or "").strip().casefold() != player_key
-            )
+        player_flags_by_id = _runtime_active_player_flags()
+        occupant_payload = await _room_occupants_refresh_payload(
+            player_id,
+            room_id,
+            occupants=occupants,
+            player_flags_by_id=player_flags_by_id,
         )
-        text, message_id = commands._format_room_occupants(others, default_messages)
-        if text:
-            player_flags_by_id = _runtime_active_player_flags()
-            payloads.append(
-                {
-                    "scope": "player",
-                    "event": "room_occupants",
-                    "type": "room_occupants",
-                    "location": room_id,
-                    "occupants": others,
-                    "occupant_details": [
-                        {"player_id": occupant, "flags": int(player_flags_by_id.get(occupant, 0))}
-                        for occupant in others
-                    ],
-                    "text": text,
-                    "message_id": message_id,
-                }
-            )
+        if occupant_payload:
+            payloads.append(occupant_payload)
         return payloads
 
     async def _send_runtime_player_payload(
@@ -571,17 +554,23 @@ async def bootstrap_app(app: FastAPI):
         for touched in result.touched_players:
             sync_active_player_state_from_db(app, touched.player_id)
 
+        player_flags_by_id = _runtime_active_player_flags()
         for direct_message in result.direct_messages:
+            player_flags = player_flags_by_id.get(direct_message.player_id)
+            payload = {
+                "scope": "player",
+                "event": "room_message",
+                "type": "room_message",
+                "message_id": direct_message.message_id,
+                "text": direct_message.text,
+                "player": direct_message.player_id,
+            }
+            if player_flags is not None:
+                payload["player_flags"] = int(player_flags)
             await _send_runtime_player_payload(
                 direct_message.player_id,
                 direct_message.room_id,
-                {
-                    "scope": "player",
-                    "event": "room_message",
-                    "type": "room_message",
-                    "message_id": direct_message.message_id,
-                    "text": direct_message.text,
-                },
+                payload,
             )
 
         session_connections = getattr(app.state, "session_connections", {})
