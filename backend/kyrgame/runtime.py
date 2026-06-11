@@ -410,6 +410,7 @@ async def bootstrap_app(app: FastAPI):
         room_picker=_animation_chance_picker,
         room_objects_getter=_animation_get_room_objects,
         room_objects_setter=_animation_set_room_objects,
+        room_players_getter=_animation_players_getter,
     )
     zar_routine.initialize(app.state.animation_tick_system.state)
     app.state.animation_tick_system.persist_state()

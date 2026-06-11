@@ -6,10 +6,10 @@ import httpx
 import pytest
 import uvicorn
 import websockets
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from kyrgame import constants, models
-from session_test_helpers import create_seeded_app as create_app
+from session_test_helpers import create_seeded_app as create_app, seed_returning_players
 
 
 @pytest.fixture
@@ -314,6 +314,135 @@ async def test_websocket_clutzopho_drop_lines_reach_caster_and_bystanders():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_temple_marry_uses_live_player_lookup_and_persists_spouse():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+    test_player_ids = ("zthero", "ztseer", "ztwitness")
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        seed_returning_players(app, test_player_ids)
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "zthero", "room_id": 7}
+            )
+            seer_session = await client.post(
+                "/auth/session", json={"player_id": "ztseer", "room_id": 7}
+            )
+            witness_session = await client.post(
+                "/auth/session", json={"player_id": "ztwitness", "room_id": 7}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            seer_token = seer_session.json()["session"]["token"]
+            witness_token = witness_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+                seer = db.scalar(select(models.Player).where(models.Player.plyrid == "ztseer"))
+                witness = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == "ztwitness")
+                )
+                assert hero is not None
+                assert seer is not None
+                assert witness is not None
+                hero.altnam = "ZtHero"
+                hero.attnam = "ZtHero"
+                hero.flags = int(constants.PlayerFlag.LOADED)
+                hero.spouse = ""
+                hero.gamloc = 7
+                hero.pgploc = 7
+                seer.altnam = "ZtSeer"
+                seer.attnam = "ZtSeer"
+                seer.flags = int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE)
+                seer.gamloc = 7
+                seer.pgploc = 7
+                witness.altnam = "ZtWitness"
+                witness.attnam = "ZtWitness"
+                witness.flags = int(constants.PlayerFlag.LOADED)
+                witness.gamloc = 7
+                witness.pgploc = 7
+                db.commit()
+
+            hero_uri = f"ws://{host}:{port}/ws/rooms/7?token={hero_token}"
+            seer_uri = f"ws://{host}:{port}/ws/rooms/7?token={seer_token}"
+            witness_uri = f"ws://{host}:{port}/ws/rooms/7?token={witness_token}"
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                async with websockets.connect(seer_uri) as seer_ws:
+                    await _recv_matching(
+                        seer_ws,
+                        lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                    )
+                    async with websockets.connect(witness_uri) as witness_ws:
+                        await _recv_matching(
+                            witness_ws,
+                            lambda msg: msg.get("payload", {}).get("event")
+                            == "location_update",
+                        )
+
+                        await hero_ws.send(
+                            json.dumps({"type": "command", "command": "marry ztseer"})
+                        )
+
+                        hero_direct = await _recv_matching(
+                            hero_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("message_id") == "MARRY4",
+                        )
+                        seer_direct = await _recv_matching(
+                            seer_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("message_id") == "MARRY5",
+                        )
+                        witness_room = await _recv_matching(
+                            witness_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("message_id") == "MARRY6",
+                        )
+
+                        assert hero_direct["payload"]["text"].endswith("ztseer.")
+                        assert seer_direct["payload"]["player"] == "ztseer"
+                        assert "ZtHero" in seer_direct["payload"]["text"]
+                        assert witness_room["payload"]["exclude_players"] == [
+                            "zthero",
+                            "ztseer",
+                        ]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+                assert hero is not None
+                assert hero.spouse == "ztseer"
+                assert hero.flags & int(constants.PlayerFlag.MARRYD)
+    finally:
+        if hasattr(app.state, "session_factory"):
+            with app.state.session_factory() as db:
+                players = db.scalars(
+                    select(models.Player).where(models.Player.plyrid.in_(test_player_ids))
+                ).all()
+                player_db_ids = [player.id for player in players]
+                if player_db_ids:
+                    db.execute(
+                        delete(models.PlayerSession).where(
+                            models.PlayerSession.player_id.in_(player_db_ids)
+                        )
+                    )
+                    db.execute(delete(models.Player).where(models.Player.id.in_(player_db_ids)))
+                    db.commit()
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio

@@ -11,6 +11,7 @@ from .models import (
     MessageBundleModel,
     PlayerModel,
     SpellModel,
+    possessive_pronoun,
 )
 from . import yaml_rooms
 from .messaging import build_direct_and_others_events
@@ -27,6 +28,7 @@ RoomCommandCallback = Callable[
 RoomPicker = Callable[[int, int], int]
 RoomObjectsGetter = Callable[[int], list[int]]
 RoomObjectsSetter = Callable[[int, list[int]], None]
+RoomPlayersGetter = Callable[[int], list[PlayerModel]]
 
 
 @dataclass
@@ -120,6 +122,7 @@ class RoomScriptEngine:
         room_picker: RoomPicker | None = None,
         room_objects_getter: RoomObjectsGetter | None = None,
         room_objects_setter: RoomObjectsSetter | None = None,
+        room_players_getter: RoomPlayersGetter | None = None,
     ):
         self.gateway = gateway
         self.scheduler = scheduler
@@ -129,6 +132,7 @@ class RoomScriptEngine:
         self.room_picker = room_picker or random.randrange
         self.room_objects_getter = room_objects_getter
         self.room_objects_setter = room_objects_setter
+        self.room_players_getter = room_players_getter
         self.routines: Dict[int, RoomRoutine] = build_default_routines(messages)
         self.states: Dict[int, RoomState] = {}
         self.players: Dict[str, PlayerModel] = {
@@ -152,6 +156,27 @@ class RoomScriptEngine:
         if room_id not in self.states:
             self.states[room_id] = RoomState(room_id=room_id)
         return self.states[room_id]
+
+    def players_in_room(
+        self, room_id: int, *, current_player: PlayerModel | None = None
+    ) -> list[PlayerModel]:
+        players_by_id: dict[str, PlayerModel] = {}
+        if self.room_players_getter is not None:
+            for player in self.room_players_getter(room_id):
+                if player.gamloc == room_id:
+                    players_by_id[player.plyrid] = player
+
+        occupants = self.get_room_state(room_id).occupants
+        for player in self.players.values():
+            if player.gamloc == room_id or player.plyrid in occupants:
+                players_by_id.setdefault(player.plyrid, player)
+
+        if current_player is not None and (
+            current_player.gamloc == room_id or current_player.plyrid in occupants
+        ):
+            players_by_id[current_player.plyrid] = current_player
+
+        return sorted(players_by_id.values(), key=lambda player: (player.modno, player.plyrid))
 
     async def enter_room(self, player_id: str, room_id: int):
         state = self.get_room_state(room_id)
@@ -421,6 +446,36 @@ def _temple_remainder_after_gi_bagthe(args: list[str]) -> str:
     return " ".join(normalized)
 
 
+def _format_catalog_message(catalog: dict[str, str], message_id: str, *args: object) -> str:
+    text = catalog.get(message_id, "")
+    if not args:
+        return text
+    return text % args
+
+
+def _can_see_room_player(viewer: PlayerModel, target: PlayerModel) -> bool:
+    if viewer.plyrid == target.plyrid:
+        return True
+    if not (target.flags & constants.PlayerFlag.INVISF):
+        return True
+    return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
+
+
+def _find_room_player(
+    context: RoomContext,
+    target_name: str,
+    viewer: PlayerModel,
+) -> PlayerModel | None:
+    # Legacy findgp() scans active players in the current room and compares
+    # target text to attnam with sameto() after ckinvs(). Source: legacy/KYRUTIL.C:472-484.
+    for candidate in context.engine.players_in_room(context.room_id, current_player=viewer):
+        if _legacy_prefix_match(target_name, candidate.attnam) and _can_see_room_player(
+            viewer, candidate
+        ):
+            return candidate
+    return None
+
+
 def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
     objects_by_name = {obj.name.lower(): obj.id for obj in fixtures.load_objects()}
 
@@ -534,6 +589,85 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
                 others_text=f"*** {display_name} is praying to the Goddess Tashanna.",
                 direct_message_id="TMPRAY",
                 others_message_id=None,
+            )
+            return True
+
+        # Legacy temple marriage handling sets only the actor's spouse state and
+        # fans out actor/target/bystander messages. Source: legacy/KYRROUS.C:348-373.
+        if verb in {"marry", "wed"}:
+            if player is None:
+                return False
+            target = _find_room_player(
+                context,
+                args[0] if args else "",
+                player,
+            )
+            if target is None:
+                await context.direct_and_others(
+                    player_id,
+                    "room_message",
+                    direct_text=messages.messages.get("MARRY7", ""),
+                    others_text=_format_catalog_message(
+                        messages.messages, "MARRY8", display_name
+                    ),
+                    direct_message_id="MARRY7",
+                    others_message_id="MARRY8",
+                )
+                return True
+            if player.flags & constants.PlayerFlag.MARRYD:
+                await context.direct_and_others(
+                    player_id,
+                    "room_message",
+                    direct_text=_format_catalog_message(
+                        messages.messages, "MARRY0", player.spouse
+                    ),
+                    others_text=_format_catalog_message(
+                        messages.messages, "MARRY1", display_name
+                    ),
+                    direct_message_id="MARRY0",
+                    others_message_id="MARRY1",
+                )
+                return True
+            if target.plyrid == player.plyrid:
+                await context.direct_and_others(
+                    player_id,
+                    "room_message",
+                    direct_text=messages.messages.get("MARRY2", ""),
+                    others_text=_format_catalog_message(
+                        messages.messages, "MARRY3", display_name
+                    ),
+                    direct_message_id="MARRY2",
+                    others_message_id="MARRY3",
+                )
+                return True
+
+            player.flags |= constants.PlayerFlag.MARRYD
+            player.spouse = target.plyrid
+            hisher = possessive_pronoun(player)
+            await context.direct(
+                player_id,
+                "room_message",
+                type="room_message",
+                text=_format_catalog_message(messages.messages, "MARRY4", target.plyrid),
+                message_id="MARRY4",
+            )
+            await context.direct(
+                target.plyrid,
+                "room_message",
+                type="room_message",
+                text=_format_catalog_message(messages.messages, "MARRY5", display_name, hisher),
+                message_id="MARRY5",
+            )
+            await context.broadcast(
+                "room_message",
+                type="room_message",
+                player=player_id,
+                text=_format_catalog_message(
+                    messages.messages, "MARRY6", display_name, hisher, target.altnam
+                ),
+                message_id="MARRY6",
+                exclude_player=target.plyrid,
+                exclude_players=[player_id, target.plyrid],
             )
             return True
 

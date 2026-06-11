@@ -193,6 +193,236 @@ async def test_temple_room_schedules_prayer_prompt_and_prayer_command():
 
 
 @pytest.mark.anyio
+async def test_temple_marry_sets_spouse_and_uses_legacy_fanout():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    actor = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "zthero",
+            "altnam": "ZtHero",
+            "attnam": "ZtHero",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.LOADED),
+            "spouse": "",
+        },
+        deep=True,
+    )
+    target = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "ztbeloved",
+            "altnam": "ZtBeloved",
+            "attnam": "ZtBeloved",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE),
+        },
+        deep=True,
+    )
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        players=[actor, target],
+    )
+
+    handled = await engine.handle_command(
+        "zthero", 7, command="marry", args=["ztbel"], player=actor
+    )
+
+    assert handled is True
+    assert actor.flags & constants.PlayerFlag.MARRYD
+    assert actor.spouse == "ztbeloved"
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "zthero"
+        and payload.get("message_id") == "MARRY4"
+        and payload.get("text") == messages.messages["MARRY4"] % "ztbeloved"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("player") == "ztbeloved"
+        and payload.get("message_id") == "MARRY5"
+        and payload.get("text") == messages.messages["MARRY5"] % ("ZtHero", "his")
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("message_id") == "MARRY6"
+        and payload.get("exclude_players") == ["zthero", "ztbeloved"]
+        and payload.get("text") == messages.messages["MARRY6"] % ("ZtHero", "his", "ZtBeloved")
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_temple_wed_rejects_existing_spouse_with_legacy_messages():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    actor = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "zthero",
+            "altnam": "ZtHero",
+            "attnam": "ZtHero",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.MARRYD),
+            "spouse": "ztjuliet",
+        },
+        deep=True,
+    )
+    target = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "ztbeloved",
+            "altnam": "ZtBeloved",
+            "attnam": "ZtBeloved",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.LOADED),
+        },
+        deep=True,
+    )
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        players=[actor, target],
+    )
+
+    handled = await engine.handle_command(
+        "zthero", 7, command="wed", args=["ztbeloved"], player=actor
+    )
+
+    assert handled is True
+    assert actor.spouse == "ztjuliet"
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(
+        payload.get("scope") == "direct"
+        and payload.get("message_id") == "MARRY0"
+        and payload.get("text") == messages.messages["MARRY0"] % "ztjuliet"
+        for payload in payloads
+    )
+    assert any(
+        payload.get("scope") == "broadcast"
+        and payload.get("message_id") == "MARRY1"
+        and payload.get("exclude_player") == "zthero"
+        and payload.get("text") == messages.messages["MARRY1"] % "ZtHero"
+        for payload in payloads
+    )
+
+
+@pytest.mark.anyio
+async def test_temple_marry_self_and_missing_target_use_legacy_messages():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    actor = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "zthero",
+            "altnam": "ZtHero",
+            "attnam": "ZtHero",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.LOADED),
+            "spouse": "",
+        },
+        deep=True,
+    )
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        players=[actor],
+    )
+
+    self_handled = await engine.handle_command(
+        "zthero", 7, command="marry", args=["zthero"], player=actor
+    )
+    missing_handled = await engine.handle_command(
+        "zthero", 7, command="marry", args=["ztnobody"], player=actor
+    )
+
+    assert self_handled is True
+    assert missing_handled is True
+    assert not actor.flags & constants.PlayerFlag.MARRYD
+    assert actor.spouse == ""
+    payloads = [msg.get("payload", {}) for msg in gateway.messages]
+    assert any(payload.get("message_id") == "MARRY2" for payload in payloads)
+    assert any(payload.get("message_id") == "MARRY3" for payload in payloads)
+    assert any(payload.get("message_id") == "MARRY7" for payload in payloads)
+    assert any(payload.get("message_id") == "MARRY8" for payload in payloads)
+
+
+@pytest.mark.anyio
+async def test_temple_marry_honors_invisible_target_visibility_gate():
+    scheduler = SchedulerService()
+    messages = fixtures.load_messages()
+    actor = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "zthero",
+            "altnam": "ZtHero",
+            "attnam": "ZtHero",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.LOADED),
+            "spouse": "",
+        },
+        deep=True,
+    )
+    target = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "ztbeloved",
+            "altnam": "ZtBeloved",
+            "attnam": "ZtBeloved",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.INVISF),
+        },
+        deep=True,
+    )
+    gateway = FakeGateway()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        players=[actor, target],
+    )
+
+    blocked = await engine.handle_command(
+        "zthero", 7, command="marry", args=["ztbeloved"], player=actor
+    )
+
+    assert blocked is True
+    assert not actor.flags & constants.PlayerFlag.MARRYD
+    assert actor.spouse == ""
+    assert any(
+        msg.get("payload", {}).get("message_id") == "MARRY7" for msg in gateway.messages
+    )
+
+    actor.charms[constants.CharmSlot.INVISIBILITY] = 1
+    gateway = FakeGateway()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+        players=[actor, target],
+    )
+
+    allowed = await engine.handle_command(
+        "zthero", 7, command="marry", args=["ztbeloved"], player=actor
+    )
+
+    assert allowed is True
+    assert actor.flags & constants.PlayerFlag.MARRYD
+    assert actor.spouse == "ztbeloved"
+    assert any(
+        msg.get("payload", {}).get("message_id") == "MARRY4" for msg in gateway.messages
+    )
+
+
+@pytest.mark.anyio
 async def test_temple_put_requires_exact_five_chants():
     scheduler = SchedulerService()
     gateway = FakeGateway()
