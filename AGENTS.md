@@ -11,6 +11,7 @@
 - For every change summary and PR description, include a dedicated **Manual E2E Demo Checklist** section listing realistic end-to-end human test steps that can be executed after submission (when applicable).
 - When porting legacy gameplay logic, add a short comment in the new code that points back to the legacy source location (file + line numbers) so reviewers can compare behavior quickly.
 - When porting legacy messaging, verify both the C call site and the message catalog before choosing `message_id`s. Some routines use inline `prf(...)`/char-buffer text or separate caster, target, and room-facing messages; tests should assert each recipient surface when behavior fans out differently.
+- Test users created for local/manual testing should have player IDs beginning with `zt` unless a specific test requires a different name. Delete those test users after the task that needed them is complete, and take care to delete or change only users that were specifically identified for that test cleanup.
 
 ## Local Live Server Operations
 
