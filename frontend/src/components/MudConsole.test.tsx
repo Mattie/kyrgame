@@ -143,6 +143,26 @@ const installConsoleScrollTo = (element: HTMLElement) => {
   return scrollTo
 }
 
+const setDocumentVisibility = (visibilityState: DocumentVisibilityState) => {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => visibilityState,
+  })
+}
+
+const setDocumentHasFocus = (hasFocus: boolean) => {
+  Object.defineProperty(document, 'hasFocus', {
+    configurable: true,
+    value: () => hasFocus,
+  })
+}
+
+const advanceModemTicks = (count: number) => {
+  for (let index = 0; index < count; index += 1) {
+    act(() => vi.advanceTimersByTime(100))
+  }
+}
+
 const makeLifecycleText = (lineCount: number) =>
   Array.from({ length: lineCount }, (_, index) => `Line ${index + 1}`).join('\r\n')
 
@@ -177,6 +197,7 @@ describe('MudConsole', () => {
     mockAdvanceLifecycle.mockReset()
     mockAdvanceLifecycle.mockImplementation(() => new Promise<void>(() => undefined))
     localStorage.clear()
+    sessionStorage.clear()
     navigatorState.session = { token: 'token', playerId: 'Hero', roomId: 0 }
     navigatorState.world = {
       locations: [{ id: 0, brfdes: 'A dark forest surrounds you in all directions.' }],
@@ -206,6 +227,8 @@ describe('MudConsole', () => {
       },
     ]
     window.history.replaceState(null, '', '/?modem=off')
+    setDocumentVisibility('visible')
+    setDocumentHasFocus(true)
   })
 
   it('keeps the MUD header compact for terminal rows', () => {
@@ -383,6 +406,37 @@ describe('MudConsole', () => {
     expect(input.value).toBe('inventory')
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     expect(input.value).toBe('say hello')
+  })
+
+  it('stores only one history entry for repeated identical commands', () => {
+    render(<MudConsole />)
+
+    const input = screen.getByLabelText('command input') as HTMLInputElement
+    const form = input.closest('form') as HTMLFormElement
+
+    fireEvent.change(input, { target: { value: 'grab pinecone' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'grab pinecone' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'grab pinecone' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'inventory' } })
+    fireEvent.submit(form)
+    fireEvent.change(input, { target: { value: 'grab pinecone' } })
+    fireEvent.submit(form)
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('grab pinecone')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('inventory')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('grab pinecone')
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(input.value).toBe('grab pinecone')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(input.value).toBe('inventory')
+
+    expect(mockSendCommand).toHaveBeenCalledTimes(5)
   })
 
   it('excludes typed cardinal movement commands from command history while still sending them', () => {
@@ -646,6 +700,215 @@ describe('MudConsole', () => {
     expect(screen.getAllByText('ABCD').length).toBeGreaterThan(0)
     expect(() => getConsoleLine('A dark forest surrounds you in all directions.')).toThrow()
 
+    vi.useRealTimers()
+  })
+
+  it('keeps completed modem history visible after the console remounts', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'remount-history-one',
+        type: 'command_response',
+        summary: 'First completed line.',
+        payload: null,
+      },
+      {
+        id: 'remount-history-two',
+        type: 'command_response',
+        summary: 'Second completed line.',
+        payload: null,
+      },
+    ]
+
+    const { unmount } = render(<MudConsole />)
+
+    advanceModemTicks(5)
+    expect(screen.getAllByText('First completed line.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Second completed line.').length).toBeGreaterThan(0)
+
+    unmount()
+    render(<MudConsole />)
+
+    expect(screen.getAllByText('First completed line.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Second completed line.').length).toBeGreaterThan(0)
+
+    vi.useRealTimers()
+  })
+
+  it('keeps completed modem history after a transient empty activity remount', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'hydrated-history-line',
+        type: 'command_response',
+        summary: 'Hydrated line.',
+        payload: null,
+      },
+    ]
+
+    const { unmount } = render(<MudConsole />)
+
+    advanceModemTicks(5)
+    expect(screen.getAllByText('Hydrated line.').length).toBeGreaterThan(0)
+
+    unmount()
+    navigatorState.activity = []
+    const view = render(<MudConsole />)
+
+    navigatorState.activity = [
+      {
+        id: 'hydrated-history-line',
+        type: 'command_response',
+        summary: 'Hydrated line.',
+        payload: null,
+      },
+    ]
+    view.rerender(<MudConsole />)
+
+    expect(screen.getAllByText('Hydrated line.').length).toBeGreaterThan(0)
+
+    vi.useRealTimers()
+  })
+
+  it('renders modem output immediately when mounted in an unfocused visible window', () => {
+    const originalHasFocus = document.hasFocus
+    Object.defineProperty(document, 'hasFocus', {
+      configurable: true,
+      value: () => false,
+    })
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'blurred-mount-line',
+        type: 'command_response',
+        summary: 'Blurred mount line.',
+        payload: null,
+      },
+    ]
+
+    try {
+      render(<MudConsole />)
+
+      expect(screen.getAllByText('Blurred mount line.').length).toBeGreaterThan(0)
+    } finally {
+      Object.defineProperty(document, 'hasFocus', {
+        configurable: true,
+        value: originalHasFocus,
+      })
+      vi.useRealTimers()
+    }
+  })
+
+  it('renders modem output when sessionStorage is unavailable during render', () => {
+    const originalSessionStorage = window.sessionStorage
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      get: () => {
+        throw new Error('sessionStorage unavailable')
+      },
+    })
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'storage-unavailable-line',
+        type: 'command_response',
+        summary: 'Storage unavailable line.',
+        payload: null,
+      },
+    ]
+
+    try {
+      expect(() => render(<MudConsole />)).not.toThrow()
+      advanceModemTicks(3)
+      expect(screen.getAllByText('Storage unavailable line.').length).toBeGreaterThan(0)
+    } finally {
+      Object.defineProperty(window, 'sessionStorage', {
+        configurable: true,
+        value: originalSessionStorage,
+      })
+      vi.useRealTimers()
+    }
+  })
+
+  it('renders output received while the tab is hidden without replaying it', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = null
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = [
+      {
+        id: 'hidden-history-one',
+        type: 'command_response',
+        summary: 'Visible line.',
+        payload: null,
+      },
+    ]
+
+    const { rerender } = render(<MudConsole />)
+
+    advanceModemTicks(4)
+    expect(screen.getAllByText('Visible line.').length).toBeGreaterThan(0)
+
+    act(() => {
+      setDocumentVisibility('hidden')
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    navigatorState.activity = [
+      ...navigatorState.activity,
+      {
+        id: 'hidden-history-two',
+        type: 'command_response',
+        summary: 'Background line.',
+        payload: null,
+      },
+    ]
+    rerender(<MudConsole />)
+
+    expect(screen.getAllByText('Background line.').length).toBeGreaterThan(0)
+
+    act(() => {
+      setDocumentVisibility('visible')
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    advanceModemTicks(4)
+    expect(screen.getAllByText('Background line.')).toHaveLength(1)
     vi.useRealTimers()
   })
 

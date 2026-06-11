@@ -75,9 +75,12 @@ const TERMINAL_PAGER_DEFAULT_LINE_HEIGHT_PX = 16
 const TERMINAL_PAGER_PROMPT = '(N)onstop, (Q)uit, or (C)ontinue?'
 const COMMAND_HISTORY_LIMIT = 200
 const CARDINAL_DIRECTIONS = ['north', 'east', 'west', 'south'] as const
+const COMPLETED_STREAM_KEYS_STORAGE_KEY = 'kyrgame.mudConsole.completedStreamKeys'
+const COMPLETED_STREAM_KEYS_LIMIT = 1000
 
 type ConsoleLine = {
   id: string
+  streamKey: string
   text: string
   className: string
   style?: CSSProperties
@@ -108,6 +111,65 @@ type TerminalPagerRenderInfo = {
 }
 
 const SCREEN_READER_STREAM_HISTORY_LIMIT = 20
+
+const hashString = (value: string): string => {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0
+  }
+  return Math.abs(hash).toString(36)
+}
+
+const createConsoleStreamKey = (line: Omit<ConsoleLine, 'streamKey'>): string =>
+  `${line.id}:${hashString(
+    [line.text, line.payloadText ?? '', line.promptSymbol ? 'prompt' : 'line'].join('\u001f')
+  )}`
+
+const limitCompletedStreamKeys = (keys: Iterable<string>) =>
+  Array.from(keys).slice(-COMPLETED_STREAM_KEYS_LIMIT)
+
+const getSessionStorage = (): Storage | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
+}
+
+const readCompletedStreamKeys = (): Set<string> => {
+  try {
+    const storage = getSessionStorage()
+    if (!storage) return new Set()
+    const raw = storage.getItem(COMPLETED_STREAM_KEYS_STORAGE_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((value): value is string => typeof value === 'string'))
+  } catch {
+    return new Set()
+  }
+}
+
+const writeCompletedStreamKeys = (keys: Set<string>) => {
+  try {
+    const storage = getSessionStorage()
+    if (!storage) return
+    storage.setItem(
+      COMPLETED_STREAM_KEYS_STORAGE_KEY,
+      JSON.stringify(limitCompletedStreamKeys(keys))
+    )
+  } catch {
+    // Browser storage can be unavailable or quota-limited.
+  }
+}
+
+const isBrowserTabActive = () => {
+  if (typeof document === 'undefined') return true
+  if (document.visibilityState !== 'visible') return false
+  if (typeof document.hasFocus === 'function') return document.hasFocus()
+  return true
+}
 
 const formatConsoleLineForAnnouncement = (line: ConsoleLine): string =>
   [line.promptSymbol ? 'Command.' : null, line.text, line.payloadText]
@@ -293,8 +355,11 @@ export const MudConsole = () => {
   const [burnPresetCopyStatus, setBurnPresetCopyStatus] = useState('')
   const [paletteCopyStatus, setPaletteCopyStatus] = useState('')
   const [streamConfig] = useState(() => getConsoleStreamConfig())
-  const [streamQueueIds, setStreamQueueIds] = useState<string[]>([])
-  const [completedStreamLineIds, setCompletedStreamLineIds] = useState<Set<string>>(() => new Set())
+  const [streamQueueKeys, setStreamQueueKeys] = useState<string[]>([])
+  const [completedStreamKeys, setCompletedStreamKeys] = useState<Set<string>>(
+    () => readCompletedStreamKeys()
+  )
+  const [isStreamPlaybackActive, setIsStreamPlaybackActive] = useState(() => isBrowserTabActive())
   const [terminalPagerLineStates, setTerminalPagerLineStates] = useState<
     Record<string, TerminalPagerLineState>
   >({})
@@ -312,8 +377,15 @@ export const MudConsole = () => {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const historyDraftRef = useRef('')
   const isConsoleFollowingRef = useRef(true)
+  const isStreamPlaybackActiveRef = useRef(isStreamPlaybackActive)
   const lifecycleAdvancePendingRef = useRef(false)
   const isMountedRef = useRef(true)
+
+  const updateStreamPlaybackActive = useCallback((nextActive: boolean) => {
+    if (isStreamPlaybackActiveRef.current === nextActive) return
+    isStreamPlaybackActiveRef.current = nextActive
+    setIsStreamPlaybackActive(nextActive)
+  }, [])
 
   useLayoutEffect(() => {
     const updatePagerRows = () => {
@@ -671,9 +743,12 @@ export const MudConsole = () => {
 
   const consoleLines = useMemo<ConsoleLine[]>(() => {
     const lines: ConsoleLine[] = []
+    const pushLine = (line: Omit<ConsoleLine, 'streamKey'>) => {
+      lines.push({ ...line, streamKey: createConsoleStreamKey(line) })
+    }
 
     bannerLines.forEach((line, index) => {
-      lines.push({
+      pushLine({
         id: `banner-${index}-${line}`,
         text: line,
         className: 'crt-line muted',
@@ -709,7 +784,7 @@ export const MudConsole = () => {
         terminalRowCount(entry.summary) > terminalPagerPageRows &&
         (lifecycleIntroActive || Boolean(pagerState))
 
-      lines.push({
+      pushLine({
         id: entry.id,
         text: entry.summary,
         className: `crt-line ${entry.type}`,
@@ -720,7 +795,7 @@ export const MudConsole = () => {
       })
 
       legacyLines?.forEach((line, lineIndex) => {
-        lines.push({
+        pushLine({
           id: `${entry.id}-extra-${lineIndex}`,
           text: line,
           className: `crt-line ${entry.type} detail`,
@@ -741,43 +816,106 @@ export const MudConsole = () => {
   ])
 
   const consoleLineIds = useMemo(() => consoleLines.map((line) => line.id), [consoleLines])
-  const pagerLineIds = useMemo(
-    () => new Set(consoleLines.filter((line) => line.pagerEligible).map((line) => line.id)),
+  const consoleStreamKeys = useMemo(
+    () => consoleLines.map((line) => line.streamKey),
+    [consoleLines]
+  )
+  const pagerLineKeys = useMemo(
+    () => new Set(consoleLines.filter((line) => line.pagerEligible).map((line) => line.streamKey)),
     [consoleLines]
   )
 
+  const markCurrentStreamKeysCompleted = useCallback(() => {
+    setCompletedStreamKeys((current) => {
+      let changed = false
+      const next = new Set(current)
+      consoleStreamKeys.forEach((key) => {
+        if (!next.has(key)) {
+          next.add(key)
+          changed = true
+        }
+      })
+      if (!changed) return current
+      return new Set(limitCompletedStreamKeys(next))
+    })
+  }, [consoleStreamKeys])
+
+  useEffect(() => {
+    writeCompletedStreamKeys(completedStreamKeys)
+  }, [completedStreamKeys])
+
+  useEffect(() => {
+    const handleInactive = () => {
+      updateStreamPlaybackActive(false)
+      markCurrentStreamKeysCompleted()
+    }
+
+    const handleFocus = () => {
+      if (isBrowserTabActive()) {
+        updateStreamPlaybackActive(true)
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (isBrowserTabActive()) {
+        updateStreamPlaybackActive(true)
+        return
+      }
+      handleInactive()
+    }
+
+    window.addEventListener('blur', handleInactive)
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('blur', handleInactive)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [markCurrentStreamKeysCompleted, updateStreamPlaybackActive])
+
   useEffect(() => {
     const currentLineIds = new Set(consoleLineIds)
+    const currentStreamKeys = new Set(consoleStreamKeys)
 
-    setStreamQueueIds((current) => {
-      const previousQueueIds = new Set(current)
-      const next = current.filter((id) => currentLineIds.has(id))
-      const nextQueueIds = new Set(next)
+    setStreamQueueKeys((current) => {
+      const previousQueueKeys = new Set(current)
+      const next = current.filter((key) => currentStreamKeys.has(key))
+      const nextQueueKeys = new Set(next)
 
-      consoleLineIds.forEach((id) => {
-        if (!previousQueueIds.has(id) && !nextQueueIds.has(id)) {
-          next.push(id)
-          nextQueueIds.add(id)
+      consoleStreamKeys.forEach((key) => {
+        if (!previousQueueKeys.has(key) && !nextQueueKeys.has(key)) {
+          next.push(key)
+          nextQueueKeys.add(key)
         }
       })
 
-      if (next.length === current.length && next.every((id, index) => id === current[index])) {
+      if (next.length === current.length && next.every((key, index) => key === current[index])) {
         return current
       }
       return next
     })
 
-    setCompletedStreamLineIds((current) => {
+    setCompletedStreamKeys((current) => {
       let changed = false
-      const next = new Set<string>()
-      current.forEach((id) => {
-        if (currentLineIds.has(id)) {
-          next.add(id)
-        } else {
-          changed = true
-        }
-      })
-      return changed ? next : current
+      const next = new Set(current)
+
+      if (!isStreamPlaybackActive) {
+        consoleStreamKeys.forEach((key) => {
+          if (!next.has(key)) {
+            next.add(key)
+            changed = true
+          }
+        })
+      }
+
+      const limited = limitCompletedStreamKeys(next)
+      if (limited.length !== next.size) {
+        changed = true
+      }
+
+      return changed ? new Set(limited) : current
     })
 
     setTerminalPagerLineStates((current) => {
@@ -792,13 +930,16 @@ export const MudConsole = () => {
       })
       return changed ? next : current
     })
-  }, [consoleLineIds])
+  }, [consoleLineIds, consoleStreamKeys, isStreamPlaybackActive])
 
-  const activeStreamLineId = useMemo(
+  const activeStreamKey = useMemo(
     () =>
-      streamQueueIds.find((id) => !completedStreamLineIds.has(id) && !pagerLineIds.has(id)) ??
-      null,
-    [completedStreamLineIds, pagerLineIds, streamQueueIds]
+      isStreamPlaybackActive
+        ? streamQueueKeys.find(
+            (key) => !completedStreamKeys.has(key) && !pagerLineKeys.has(key)
+          ) ?? null
+        : null,
+    [completedStreamKeys, isStreamPlaybackActive, pagerLineKeys, streamQueueKeys]
   )
 
   const activeTerminalPagerLineId = useMemo(
@@ -1014,9 +1155,10 @@ export const MudConsole = () => {
 
     sendCommand(submitted)
     if (isCommandHistoryEligible(submitted)) {
-      setCommandHistory((current) =>
-        [...current, submitted].slice(-COMMAND_HISTORY_LIMIT)
-      )
+      setCommandHistory((current) => {
+        if (current[current.length - 1] === submitted) return current
+        return [...current, submitted].slice(-COMMAND_HISTORY_LIMIT)
+      })
     }
     historyDraftRef.current = ''
     setHistoryCursor(null)
@@ -1079,14 +1221,12 @@ export const MudConsole = () => {
     [canFocusCommandInput]
   )
 
-  const handleLineDone = (lineId: string) => {
-    const completedLine = consoleLines.find((line) => line.id === lineId)
-
-    setCompletedStreamLineIds((current) => {
-      if (current.has(lineId)) return current
+  const handleLineDone = (completedLine: ConsoleLine) => {
+    setCompletedStreamKeys((current) => {
+      if (current.has(completedLine.streamKey)) return current
       const next = new Set(current)
-      next.add(lineId)
-      return next
+      next.add(completedLine.streamKey)
+      return new Set(limitCompletedStreamKeys(next))
     })
 
     if (!streamConfig.enabled || !completedLine) return
@@ -1095,8 +1235,8 @@ export const MudConsole = () => {
     if (!announcement) return
 
     setScreenReaderStreamLines((current) => {
-      if (current.some((line) => line.id === lineId)) return current
-      return [...current, { id: lineId, text: announcement }].slice(
+      if (current.some((line) => line.id === completedLine.streamKey)) return current
+      return [...current, { id: completedLine.streamKey, text: announcement }].slice(
         -SCREEN_READER_STREAM_HISTORY_LIMIT
       )
     })
@@ -1104,10 +1244,16 @@ export const MudConsole = () => {
 
   useEffect(() => {
     handleConsoleOutputProgress()
-  }, [activeStreamLineId, consoleLines, handleConsoleOutputProgress, terminalPagerLineStates])
+  }, [
+    activeStreamKey,
+    consoleLines,
+    handleConsoleOutputProgress,
+    isStreamPlaybackActive,
+    terminalPagerLineStates,
+  ])
 
   const renderLine = (line: ConsoleLine) => {
-    const isStreamComplete = completedStreamLineIds.has(line.id)
+    const isStreamComplete = completedStreamKeys.has(line.streamKey) || !isStreamPlaybackActive
     const pagerInfo = getTerminalPagerRenderInfo(
       line,
       terminalPagerLineStates[line.id],
@@ -1118,7 +1264,7 @@ export const MudConsole = () => {
 
     const renderedLine =
       !streamConfig.enabled || isStreamComplete || renderInstantly ? (
-        <p key={`${line.id}-text`} className={line.className} style={line.style}>
+        <p key={`${line.streamKey}-text`} className={line.className} style={line.style}>
           {line.promptSymbol ? (
             <span className="prompt-symbol" aria-hidden>
               &gt;
@@ -1131,7 +1277,7 @@ export const MudConsole = () => {
 
     if (renderedLine) {
       return (
-        <Fragment key={line.id}>
+        <Fragment key={line.streamKey}>
           {renderedLine}
           {pagerInfo?.paused && (
             <p className="crt-line command_response pager-prompt">
@@ -1142,9 +1288,9 @@ export const MudConsole = () => {
       )
     }
 
-    if (line.id === activeStreamLineId) {
+    if (line.streamKey === activeStreamKey) {
       return (
-        <p key={line.id} className={line.className} style={line.style}>
+        <p key={line.streamKey} className={line.className} style={line.style}>
           {line.promptSymbol ? (
             <span className="prompt-symbol" aria-hidden>
               &gt;
@@ -1156,7 +1302,7 @@ export const MudConsole = () => {
             charsPerSecond={streamConfig.charsPerSecond}
             charsPerTick={streamConfig.charsPerTick}
             onProgress={handleConsoleOutputProgress}
-            onDone={() => handleLineDone(line.id)}
+            onDone={() => handleLineDone(line)}
             playerVisuals={playerVisuals}
           />
           {line.payloadText && <span className="payload-inline">{line.payloadText}</span>}
