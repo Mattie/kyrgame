@@ -246,9 +246,6 @@ export const SessionForm = ({
       if (!showAdminFields) {
         setAdminToken(null)
       }
-      if (showAdminFields && !joinAsAdmin && trimmedStaticAdminToken !== '') {
-        setAdminToken(trimmedStaticAdminToken)
-      }
       persistPlayerId(trimmedPlayerId)
       if (showRoomField && !effectiveClaimNewPlayer) {
         persistRoomId(roomId)
@@ -273,6 +270,9 @@ export const SessionForm = ({
           rememberMe: usesAccountAuth && isPlayerEntry ? rememberMe : false,
         }
       )
+      if (showAdminFields && !joinAsAdmin && trimmedStaticAdminToken !== '') {
+        setAdminToken(trimmedStaticAdminToken)
+      }
       onSessionStarted?.()
     } catch {
       // startSession is responsible for updating shared error state.

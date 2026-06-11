@@ -1366,6 +1366,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       setActivity([])
       setPlayerVisuals({})
       resetSocket()
+      setAdminToken(null)
       let elevatedAdminToken: string | null = null
       try {
         const authMode: AccountAuthMode =

@@ -220,4 +220,24 @@ describe('NavigatorContext SCRY state handling', () => {
     )
     expect(screen.getByTestId('room')).toHaveTextContent('7')
   })
+
+  it('clears a stale admin token when starting a new game session', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /set admin/i }))
+    })
+    expect(screen.getByTestId('admin-token')).toHaveTextContent('admin-token')
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+
+    await screen.findByText('7')
+    expect(screen.getByTestId('admin-token')).toHaveTextContent('none')
+  })
 })

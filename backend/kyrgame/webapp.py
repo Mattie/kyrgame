@@ -965,6 +965,8 @@ async def _disconnect_sessions(app: FastAPI, tokens: list[str]):
     for token in tokens:
         _remove_active_player_session(app, token)
         socket = connections.pop(token, None)
+        if socket is not None:
+            getattr(app.state, "game_socket_players", {}).pop(socket, None)
         previous_room = await app.state.presence.remove(token)
         if previous_room is not None and socket is not None:
             await app.state.gateway.unregister(previous_room, socket)
@@ -1943,6 +1945,8 @@ async def logout(
     
     connections = request.app.state.session_connections
     active_socket = connections.pop(session_record.session_token, None)
+    if active_socket is not None:
+        getattr(request.app.state, "game_socket_players", {}).pop(active_socket, None)
     
     # Always clean up presence, even if socket operations fail
     try:
@@ -2599,6 +2603,45 @@ def _scry_event_payload(player_id: str, event: dict) -> dict:
     return {"type": "scry_event", "player_id": player_id, "event": event}
 
 
+def _game_socket_player_id(app: FastAPI, socket: WebSocket) -> str | None:
+    return getattr(app.state, "game_socket_players", {}).get(socket)
+
+
+async def _publish_scry_output(app: FastAPI, player_id: str | None, message: dict) -> None:
+    if not player_id:
+        return
+    await _publish_scry_event(
+        app,
+        player_id,
+        {"event_type": "output", "payload": message},
+    )
+
+
+async def _send_game_socket_json(
+    app: FastAPI,
+    socket: WebSocket,
+    message: dict,
+    *,
+    player_id: str | None = None,
+) -> None:
+    await socket.send_json(message)
+    await _publish_scry_output(app, player_id or _game_socket_player_id(app, socket), message)
+
+
+async def _broadcast_game_json(
+    app: FastAPI,
+    gateway: RoomGateway,
+    room_id: int,
+    message: dict,
+    *,
+    sender: WebSocket | None = None,
+    exclude: set[WebSocket] | None = None,
+) -> None:
+    recipients = await gateway.broadcast(room_id, message, sender=sender, exclude=exclude)
+    for recipient in recipients:
+        await _publish_scry_output(app, _game_socket_player_id(app, recipient), message)
+
+
 def _active_scry_target(app: FastAPI, target_player_id: str) -> models.PlayerModel | None:
     target_key = target_player_id.strip().casefold()
     if not target_key:
@@ -2729,6 +2772,8 @@ def create_app() -> FastAPI:
     app.state.account_admin_grants = _load_account_admin_grants()
     app.state.telemetry_sink = TelemetryEventSink.from_env()
     app.state.scry_subscribers = {}
+    app.state.game_socket_players = {}
+    app.state.scry_publish_output = _publish_scry_output
 
     cors_origins = _cors_origins_from_env()
     app.add_middleware(
@@ -2814,7 +2859,9 @@ def create_app() -> FastAPI:
         await websocket.accept()
 
         await provider.presence.remove(session_token)
-        await provider.gateway.broadcast(
+        await _broadcast_game_json(
+            provider.scope.app,
+            provider.gateway,
             current_room,
             {
                 "type": "room_broadcast",
@@ -2871,7 +2918,9 @@ def create_app() -> FastAPI:
                     await websocket.send_json({"type": "kyraedit_error", "detail": "Unknown command"})
         finally:
             await provider.presence.set_location(player_id, current_room, session_token)
-            await provider.gateway.broadcast(
+            await _broadcast_game_json(
+                provider.scope.app,
+                provider.gateway,
                 current_room,
                 {
                     "type": "room_broadcast",
@@ -2883,7 +2932,9 @@ def create_app() -> FastAPI:
                     },
                 },
             )
-            await provider.gateway.broadcast(
+            await _broadcast_game_json(
+                provider.scope.app,
+                provider.gateway,
                 current_room,
                 {
                     "type": "room_broadcast",
@@ -2906,7 +2957,9 @@ def create_app() -> FastAPI:
                 # arrival broadcast (legacy/KYRUTIL.C:253-257).
                 player_socket = provider.scope.app.state.session_connections.get(session_token)
                 if player_socket and player_socket.application_state == WebSocketState.CONNECTED:
-                    await player_socket.send_json(
+                    await _send_game_socket_json(
+                        provider.scope.app,
+                        player_socket,
                         {
                             "type": "command_response",
                             "room": current_room,
@@ -3091,20 +3144,22 @@ def create_app() -> FastAPI:
         existing_socket = session_connections.get(session_token)
         if existing_socket is not None and existing_socket.application_state == WebSocketState.CONNECTED:
             await gateway.unregister(current_room, existing_socket)
+            getattr(provider.scope.app.state, "game_socket_players", {}).pop(existing_socket, None)
             await existing_socket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         session_connections[session_token] = websocket
+        provider.scope.app.state.game_socket_players[websocket] = player_id
 
         async def send_player_json(message: dict) -> None:
-            await websocket.send_json(message)
+            await _send_game_socket_json(
+                provider.scope.app,
+                websocket,
+                message,
+                player_id=player_id,
+            )
             await provider.scope.app.state.telemetry_sink.record(
                 userid=player_id,
                 event_type="output",
                 payload=message,
-            )
-            await _publish_scry_event(
-                provider.scope.app,
-                player_id,
-                {"event_type": "output", "payload": message},
             )
 
         async def record_player_input(command_text: str) -> None:
@@ -3241,7 +3296,9 @@ def create_app() -> FastAPI:
                 }
             )
 
-        await gateway.broadcast(
+        await _broadcast_game_json(
+            provider.scope.app,
+            gateway,
             current_room,
             {
                 "type": "room_broadcast",
@@ -3254,7 +3311,9 @@ def create_app() -> FastAPI:
             },
             sender=websocket,
         )
-        await gateway.broadcast(
+        await _broadcast_game_json(
+            provider.scope.app,
+            gateway,
             current_room,
             {
                 "type": "room_broadcast",
@@ -3488,7 +3547,9 @@ def create_app() -> FastAPI:
                                         if target_socket:
                                             excluded_sockets.add(target_socket)
                                 sender_socket = None if event.get("include_sender") else websocket
-                                await gateway.broadcast(
+                                await _broadcast_game_json(
+                                    provider.scope.app,
+                                    gateway,
                                     event_room,
                                     envelope,
                                     sender=sender_socket,
@@ -3501,7 +3562,12 @@ def create_app() -> FastAPI:
                                 for target_socket in list(session_connections.values()):
                                     if target_socket.application_state != WebSocketState.CONNECTED:
                                         continue
-                                    await target_socket.send_json(envelope)
+                                    await _send_game_socket_json(
+                                        provider.scope.app,
+                                        target_socket,
+                                        envelope,
+                                        player_id=target_id,
+                                    )
                             elif scope == "target":
                                 target_id = event.get("player")
                                 if not target_id:
@@ -3528,7 +3594,12 @@ def create_app() -> FastAPI:
                                         continue
                                     if target_socket.application_state != WebSocketState.CONNECTED:
                                         continue
-                                    await target_socket.send_json(envelope)
+                                    await _send_game_socket_json(
+                                        provider.scope.app,
+                                        target_socket,
+                                        envelope,
+                                        player_id=target_id,
+                                    )
                             else:
                                 envelope = {"type": "command_response", "room": current_room, "payload": event}
                                 if meta:
@@ -3540,7 +3611,9 @@ def create_app() -> FastAPI:
                             leave_text = transfer_event.get("leave_text")
                             arrive_text = transfer_event.get("arrive_text")
                             if leave_text:
-                                await gateway.broadcast(
+                                await _broadcast_game_json(
+                                    provider.scope.app,
+                                    gateway,
                                     current_room,
                                     {
                                         "type": "room_broadcast",
@@ -3634,7 +3707,9 @@ def create_app() -> FastAPI:
                                     )
 
                             if arrive_text:
-                                await gateway.broadcast(
+                                await _broadcast_game_json(
+                                    provider.scope.app,
+                                    gateway,
                                     current_room,
                                     {
                                         "type": "room_broadcast",
@@ -3756,7 +3831,9 @@ def create_app() -> FastAPI:
                                 if target_socket:
                                     excluded_sockets.add(target_socket)
                         sender_socket = None if event.get("include_sender") else websocket
-                        await gateway.broadcast(
+                        await _broadcast_game_json(
+                            provider.scope.app,
+                            gateway,
                             event_room,
                             envelope,
                             sender=sender_socket,
@@ -3769,7 +3846,11 @@ def create_app() -> FastAPI:
                         for target_socket in list(session_connections.values()):
                             if target_socket.application_state != WebSocketState.CONNECTED:
                                 continue
-                            await target_socket.send_json(envelope)
+                            await _send_game_socket_json(
+                                provider.scope.app,
+                                target_socket,
+                                envelope,
+                            )
                     elif scope == "nearby_room":
                         # Legacy sndnear(): broadcast to players in adjacent rooms.
                         # See legacy/KYRUTIL.C:193-208.
@@ -3790,7 +3871,9 @@ def create_app() -> FastAPI:
                                     target_socket = session_connections.get(token)
                                     if target_socket:
                                         excluded_sockets.add(target_socket)
-                            await gateway.broadcast(
+                            await _broadcast_game_json(
+                                provider.scope.app,
+                                gateway,
                                 nearby_room_id,
                                 envelope,
                                 exclude=excluded_sockets or None,
@@ -3822,7 +3905,12 @@ def create_app() -> FastAPI:
                                     repo.set_room(token, location)
                                     repo.mark_seen(token)
                                     db.commit()
-                            await target_socket.send_json(envelope)
+                            await _send_game_socket_json(
+                                provider.scope.app,
+                                target_socket,
+                                envelope,
+                                player_id=target_id,
+                            )
                             if event.get("type") == "location_update" and isinstance(location, int):
                                 occupants_event = await _room_occupants_event(
                                     provider.presence,
@@ -3839,7 +3927,12 @@ def create_app() -> FastAPI:
                                     }
                                     if meta:
                                         occupants_envelope["meta"] = meta
-                                    await target_socket.send_json(occupants_envelope)
+                                    await _send_game_socket_json(
+                                        provider.scope.app,
+                                        target_socket,
+                                        occupants_envelope,
+                                        player_id=target_id,
+                                    )
                     elif scope == "control":
                         if event.get("event") == "session_exit":
                             session_exit_requested = True
@@ -3858,6 +3951,7 @@ def create_app() -> FastAPI:
             if session_connections.get(session_token) is websocket:
                 _remove_active_player_session(provider.scope.app, session_token, player_id)
                 session_connections.pop(session_token, None)
+            getattr(provider.scope.app.state, "game_socket_players", {}).pop(websocket, None)
             # Close the persistent database session
             if persistent_session:
                 persistent_session.close()

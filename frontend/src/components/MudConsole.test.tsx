@@ -274,6 +274,42 @@ describe('MudConsole', () => {
     expect(mockSendCommand).toHaveBeenCalledWith('look')
   })
 
+  it('maps SCRY status text onto existing connection pill classes', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      sessionKind: 'game',
+    }
+    navigatorState.scrySession = {
+      targetPlayerId: 'opal',
+      displayName: 'Opal',
+      status: 'active',
+      eventCount: 1,
+      roomId: 8,
+    }
+    navigatorState.activity = []
+
+    const { container, rerender } = render(<MudConsole />)
+
+    let pill = container.querySelector('.connection-pill')
+    expect(pill).toHaveTextContent('active')
+    expect(pill).toHaveClass('connected')
+
+    navigatorState.scrySession = {
+      targetPlayerId: 'opal',
+      displayName: 'Opal',
+      status: 'closed',
+      eventCount: 1,
+      roomId: 8,
+    }
+    rerender(<MudConsole />)
+
+    pill = container.querySelector('.connection-pill')
+    expect(pill).toHaveTextContent('closed')
+    expect(pill).toHaveClass('disconnected')
+  })
+
   it('renders text instantly when modem stream is disabled', () => {
     window.history.replaceState(null, '', '/?modem=off')
     navigatorState.session = {

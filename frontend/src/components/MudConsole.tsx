@@ -1041,6 +1041,12 @@ export const MudConsole = () => {
         ? `Player ${session.playerId}`
         : 'No session yet'
   const connectionDisplay = scrySession?.status ?? connectionStatus
+  const connectionClass =
+    scrySession?.status === 'active'
+      ? 'connected'
+      : scrySession?.status === 'closed'
+        ? 'disconnected'
+        : scrySession?.status ?? connectionStatus
 
   useEffect(() => {
     if (!canFocusCommandInput) return
@@ -1175,7 +1181,7 @@ export const MudConsole = () => {
             <p className="muted mud-session-line">
               <AnsiText text={sessionLineText} playerVisuals={playerVisuals} />
             </p>
-            <div className={`connection-pill ${connectionDisplay}`}>
+            <div className={`connection-pill ${connectionClass}`}>
               {connectionDisplay}
             </div>
           </header>

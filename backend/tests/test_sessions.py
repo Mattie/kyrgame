@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 
 from kyrgame import accounts, constants, models
 from kyrgame.webapp import create_app, _websocket_command_rate_limiter
+from session_test_helpers import seed_returning_players
 
 
 def _get_open_port() -> int:
@@ -709,6 +710,7 @@ admins:
     server_task = asyncio.create_task(server.serve())
     while not server.started:
         await asyncio.sleep(0.05)
+    seed_returning_players(app, ("seer",))
 
     try:
         async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
@@ -716,6 +718,10 @@ admins:
             assert player_resp.status_code == 201
             player_session = player_resp.json()["session"]
             canonical_player_id = player_session["player_id"]
+
+            witness_resp = await client.post("/auth/session", json={"player_id": "seer", "room_id": 7})
+            assert witness_resp.status_code == 201
+            witness_session = witness_resp.json()["session"]
 
             admin_resp = await client.post(
                 "/auth/register",
@@ -782,6 +788,47 @@ admins:
                         "player_id": canonical_player_id,
                         "event": {"event_type": "input", "payload": {"command": "look"}},
                     }
+
+                    witness_uri = (
+                        f"ws://{host}:{port}/ws/rooms/{witness_session['room_id']}"
+                        f"?token={witness_session['token']}"
+                    )
+                    async with websockets.connect(witness_uri) as witness_ws:
+                        await _receive_initial_room_payloads(witness_ws)
+                        player_enter = None
+                        for _ in range(8):
+                            candidate = json.loads(
+                                await asyncio.wait_for(scry_ws.recv(), timeout=1)
+                            )
+                            payload = candidate.get("event", {}).get("payload", {})
+                            if (
+                                candidate.get("event", {}).get("event_type") == "output"
+                                and payload.get("type") == "room_broadcast"
+                                and payload.get("payload", {}).get("event") == "player_enter"
+                            ):
+                                player_enter = candidate
+                                break
+                        assert player_enter is not None
+                        assert player_enter["player_id"] == canonical_player_id
+
+                        await witness_ws.send(
+                            json.dumps({"type": "command", "command": "whisper hero hush"})
+                        )
+                        target_whisper = None
+                        for _ in range(8):
+                            candidate = json.loads(
+                                await asyncio.wait_for(scry_ws.recv(), timeout=1)
+                            )
+                            payload = candidate.get("event", {}).get("payload", {})
+                            if (
+                                candidate.get("event", {}).get("event_type") == "output"
+                                and payload.get("type") == "command_response"
+                                and payload.get("payload", {}).get("message_id") == "WHISPR1"
+                            ):
+                                target_whisper = candidate
+                                break
+                        assert target_whisper is not None
+                        assert target_whisper["player_id"] == canonical_player_id
 
                     await scry_ws.send(json.dumps({"type": "command", "command": "look"}))
                     read_only = None
