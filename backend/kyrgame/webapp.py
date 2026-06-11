@@ -2588,11 +2588,102 @@ async def _publish_scry_event(app: FastAPI, player_id: str, event: dict) -> None
             stale.add(socket)
             continue
         try:
-            await socket.send_json({"type": "scry_event", "player_id": player_id, "event": event})
+            await socket.send_json(_scry_event_payload(player_id, event))
         except Exception:
             stale.add(socket)
     if stale and player_id in subscribers:
         subscribers[player_id].difference_update(stale)
+
+
+def _scry_event_payload(player_id: str, event: dict) -> dict:
+    return {"type": "scry_event", "player_id": player_id, "event": event}
+
+
+def _active_scry_target(app: FastAPI, target_player_id: str) -> models.PlayerModel | None:
+    target_key = target_player_id.strip().casefold()
+    if not target_key:
+        return None
+    for player in _active_player_sessions(app).values():
+        if player.plyrid.casefold() == target_key:
+            return player
+    for player in getattr(app.state, "active_players", {}).values():
+        if player.plyrid.casefold() == target_key:
+            return player
+    return None
+
+
+async def _initial_scry_output_messages(
+    provider: "FixtureProvider", target_player: models.PlayerModel
+) -> list[dict]:
+    room_id = target_player.gamloc
+    state = commands.GameState(
+        player=target_player,
+        locations=provider.location_index,
+        objects={obj.id: obj for obj in provider.cache["objects"]},
+        messages=provider.message_bundles.get("en-US"),
+        content_mappings=provider.content_mappings,
+        presence=provider.presence,
+    )
+    messages: list[dict] = [{"type": "room_welcome", "room": room_id}]
+    location = state.locations.get(room_id)
+    if location is not None:
+        description_id, long_description = commands._location_description(state, location)
+        messages.extend(
+            [
+                {
+                    "type": "command_response",
+                    "room": room_id,
+                    "payload": {
+                        "scope": "player",
+                        "event": "location_update",
+                        "type": "location_update",
+                        "location": location.id,
+                        "description": location.brfdes,
+                        "description_id": description_id,
+                        "long_description": long_description,
+                        "message_id": description_id,
+                    },
+                },
+                {
+                    "type": "command_response",
+                    "room": room_id,
+                    "payload": {
+                        "scope": "player",
+                        "event": "location_description",
+                        "type": "location_description",
+                        "location": location.id,
+                        "message_id": description_id,
+                        "text": long_description or location.brfdes,
+                        "objects": commands.room_object_entries(
+                            location, state.objects or {}
+                        ),
+                    },
+                },
+                {
+                    "type": "command_response",
+                    "room": room_id,
+                    "payload": commands._room_objects_event(
+                        location, state.objects or {}, None, description_id
+                    ),
+                },
+            ]
+        )
+    occupants_event = await _room_occupants_event(
+        provider.presence,
+        target_player.plyrid,
+        room_id,
+        state.messages,
+        _active_player_flags(provider.scope.app),
+    )
+    if occupants_event:
+        messages.append(
+            {
+                "type": "command_response",
+                "room": room_id,
+                "payload": occupants_event,
+            }
+        )
+    return messages
 
 
 def _entrance_room_message(
@@ -2844,11 +2935,35 @@ def create_app() -> FastAPI:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=exc.detail)
             return
 
+        target_player = _active_scry_target(provider.scope.app, target_player_id)
+        if target_player is None:
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="SCRY target is not active",
+            )
+            return
+        canonical_target_id = target_player.plyrid
+        display_name = target_player.altnam.strip() or canonical_target_id
+
         await websocket.accept()
         subscribers: dict[str, set[WebSocket]] = provider.scope.app.state.scry_subscribers
-        sockets = subscribers.setdefault(target_player_id, set())
+        sockets = subscribers.setdefault(canonical_target_id, set())
         sockets.add(websocket)
-        await websocket.send_json({"type": "scry_started", "player_id": target_player_id})
+        await websocket.send_json(
+            {
+                "type": "scry_started",
+                "player_id": canonical_target_id,
+                "display_name": display_name,
+                "room": target_player.gamloc,
+            }
+        )
+        for message in await _initial_scry_output_messages(provider, target_player):
+            await websocket.send_json(
+                _scry_event_payload(
+                    canonical_target_id,
+                    {"event_type": "output", "payload": message},
+                )
+            )
         try:
             while True:
                 incoming = await websocket.receive_json()
@@ -2862,8 +2977,11 @@ def create_app() -> FastAPI:
         finally:
             sockets.discard(websocket)
             if not sockets:
-                subscribers.pop(target_player_id, None)
-            if websocket.application_state == WebSocketState.CONNECTED:
+                subscribers.pop(canonical_target_id, None)
+            if (
+                websocket.application_state == WebSocketState.CONNECTED
+                and websocket.client_state == WebSocketState.CONNECTED
+            ):
                 await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
 
     @app.websocket("/ws/rooms/{room_id}")

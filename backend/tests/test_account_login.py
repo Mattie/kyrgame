@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -358,6 +359,11 @@ admins:
 
 
 def test_admin_allowlist_parse_errors_disable_optional_account_grants(monkeypatch, tmp_path, caplog):
+    webapp_logger = logging.getLogger("kyrgame.webapp")
+    monkeypatch.setattr(logging.root.manager, "disable", logging.NOTSET)
+    monkeypatch.setattr(webapp_logger, "disabled", False)
+    monkeypatch.setattr(webapp_logger, "propagate", True)
+    caplog.set_level(logging.WARNING, logger="kyrgame.webapp")
     allowlist_path = tmp_path / "admin-allowlist.yaml"
     allowlist_path.write_text("admins: [broken\n", encoding="utf-8")
     monkeypatch.setenv("KYRGAME_ADMIN_ALLOWLIST_PATH", str(allowlist_path))

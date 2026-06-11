@@ -272,6 +272,7 @@ export const MudConsole = () => {
     sendMove,
     advanceLifecycle,
     session,
+    scrySession,
     world,
   } = useNavigator()
   const [input, setInput] = useState('')
@@ -343,6 +344,9 @@ export const MudConsole = () => {
     return world.locations.find((loc) => loc.id === currentRoom) ?? null
   }, [currentRoom, world])
   const lifecycleIntroActive = session?.lifecycle?.state === 'first_login_intro'
+  const adminSessionActive = session?.sessionKind === 'admin'
+  const scryActive = scrySession?.status === 'connecting' || scrySession?.status === 'active'
+  const gamePromptReadOnly = adminSessionActive || scryActive
 
   const isConsoleNearBottom = useCallback((node: HTMLDivElement) => {
     return node.scrollHeight - node.scrollTop - node.clientHeight <= CONSOLE_BOTTOM_THRESHOLD_PX
@@ -388,7 +392,7 @@ export const MudConsole = () => {
   }, [isConsoleNearBottom])
 
   useEffect(() => {
-    if (!navMode) return
+    if (!navMode || gamePromptReadOnly) return
 
     const handleKeydown = (event: KeyboardEvent) => {
       if (lifecycleIntroActive) return
@@ -400,7 +404,7 @@ export const MudConsole = () => {
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [lifecycleIntroActive, navMode, sendMove])
+  }, [gamePromptReadOnly, lifecycleIntroActive, navMode, sendMove])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -1004,6 +1008,8 @@ export const MudConsole = () => {
       return
     }
 
+    if (gamePromptReadOnly) return
+
     if (!submitted) return
 
     sendCommand(submitted)
@@ -1023,9 +1029,18 @@ export const MudConsole = () => {
     : lifecycleIntroActive
       ? 'Enter'
       : 'Send'
-  const promptControlsDisabled = lifecycleAdvancePending && !activeTerminalPagerLineId
+  const promptControlsDisabled =
+    !activeTerminalPagerLineId && (lifecycleAdvancePending || gamePromptReadOnly)
   const canFocusCommandInput =
     connectionStatus === 'connected' && Boolean(session) && !promptControlsDisabled
+  const sessionLineText = scrySession
+    ? `SCRY ${scrySession.displayName}`
+    : adminSessionActive
+      ? `Admin session ${session?.playerId ?? ''}`.trim()
+      : session
+        ? `Player ${session.playerId}`
+        : 'No session yet'
+  const connectionDisplay = scrySession?.status ?? connectionStatus
 
   useEffect(() => {
     if (!canFocusCommandInput) return
@@ -1158,14 +1173,10 @@ export const MudConsole = () => {
         <div className="mud-window">
           <header className="mud-header">
             <p className="muted mud-session-line">
-              {session ? (
-                <AnsiText text={`Player ${session.playerId}`} playerVisuals={playerVisuals} />
-              ) : (
-                'No session yet'
-              )}
+              <AnsiText text={sessionLineText} playerVisuals={playerVisuals} />
             </p>
-            <div className={`connection-pill ${connectionStatus}`}>
-              {connectionStatus}
+            <div className={`connection-pill ${connectionDisplay}`}>
+              {connectionDisplay}
             </div>
           </header>
 
@@ -1235,6 +1246,7 @@ export const MudConsole = () => {
               type="button"
               aria-label={compassLabel}
               className={`compass ${navMode ? 'active' : ''}`}
+              disabled={promptControlsDisabled}
               onClick={() => setNavMode((prev) => !prev)}
             >
               *
@@ -1261,9 +1273,13 @@ export const MudConsole = () => {
             </button>
           </form>
           <p className="mode-hint">
-            {navMode
-              ? 'Navigation mode: WASD sends movement (click the prompt to exit).'
-              : 'Enter a command to interact. Click the compass for WASD navigation.'}
+            {scrySession
+              ? 'SCRY monitor is read-only.'
+              : adminSessionActive
+                ? 'Admin sessions use the tools panel and SCRY monitor.'
+                : navMode
+                  ? 'Navigation mode: WASD sends movement (click the prompt to exit).'
+                  : 'Enter a command to interact. Click the compass for WASD navigation.'}
           </p>
           {showVfxTuning && (
             <>

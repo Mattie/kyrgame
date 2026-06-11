@@ -44,6 +44,7 @@
 - [x] Added a WebSocket solo level journey test and checklist covering level-up commands from level 1 through 25, with quest-item acquisition commands for dagger, charm, tiara, wand, kyragem, key, and devotion tokens plus controlled setup for birthstones, stump gem sequencing, spouse state, and the truth-maze random branch. [Tracker: `docs/solo_level_journey_checklist.md`]
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization. *(Admin panel now includes a grant-all-spells admin toggle that also sets max level and max spell points for spell-testing workflows.)*
+- [x] Repaired read-only admin SCRY monitoring with account-admin authorization, case-insensitive active target lookup, initial room snapshots, main-console rendering, observed input lines, and playable admin console sessions that use separate admin and game tokens.
 - [x] Preserve non-editable player flags when applying admin editor updates to mirror `KYRSYSP.C` flag handling.
 - [x] Ensure LOOKER4 room broadcasts exclude the target player, mirroring legacy `sndbt2` behavior.
 - [x] Updated msgutl2 room scripts (rooms 34/35/36/182) to broadcast to other occupants only, matching legacy exclusion behavior.

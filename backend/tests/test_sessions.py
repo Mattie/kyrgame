@@ -684,6 +684,132 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
 
 
 @pytest.mark.anyio
+async def test_admin_scry_socket_streams_initial_snapshot_and_live_events(monkeypatch, tmp_path):
+    allowlist_path = tmp_path / "admin-allowlist.yaml"
+    allowlist_path.write_text(
+        """
+admins:
+  opal:
+    roles: [player_admin]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("KYRGAME_ADMIN_ALLOWLIST_PATH", str(allowlist_path))
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{tmp_path/'scry.db'}")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    monkeypatch.setenv("KYRGAME_TELEMETRY_DIR", str(tmp_path / "telemetry"))
+
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            player_resp = await client.post("/auth/session", json={"player_id": "Hero", "room_id": 7})
+            assert player_resp.status_code == 201
+            player_session = player_resp.json()["session"]
+            canonical_player_id = player_session["player_id"]
+
+            admin_resp = await client.post(
+                "/auth/register",
+                json={
+                    "userid": "Opal",
+                    "password": "correct horse battery staple",
+                    "session_kind": "admin",
+                },
+            )
+            assert admin_resp.status_code == 201
+            admin_session = admin_resp.json()["session"]
+
+            player_uri = (
+                f"ws://{host}:{port}/ws/rooms/{player_session['room_id']}"
+                f"?token={player_session['token']}"
+            )
+            async with websockets.connect(player_uri) as player_ws:
+                await _receive_initial_room_payloads(player_ws)
+
+                scry_uri = f"ws://{host}:{port}/ws/admin/scry/HeRo?token={admin_session['token']}"
+                async with websockets.connect(scry_uri) as scry_ws:
+                    started = json.loads(await asyncio.wait_for(scry_ws.recv(), timeout=1))
+                    assert started["type"] == "scry_started"
+                    assert started["player_id"] == canonical_player_id
+                    assert started["room"] == 7
+
+                    initial_events = []
+                    for _ in range(5):
+                        message = json.loads(await asyncio.wait_for(scry_ws.recv(), timeout=1))
+                        initial_events.append(message)
+                        event = message.get("event", {})
+                        payload = event.get("payload", {})
+                        if payload.get("payload", {}).get("event") == "location_description":
+                            break
+
+                    assert any(
+                        message.get("type") == "scry_event"
+                        and message.get("player_id") == canonical_player_id
+                        and message.get("event", {}).get("event_type") == "output"
+                        and message.get("event", {}).get("payload", {}).get("type") == "room_welcome"
+                        for message in initial_events
+                    )
+                    assert any(
+                        message.get("event", {})
+                        .get("payload", {})
+                        .get("payload", {})
+                        .get("event")
+                        == "location_description"
+                        for message in initial_events
+                    )
+
+                    await player_ws.send(json.dumps({"type": "command", "command": "look"}))
+                    live_input = None
+                    for _ in range(6):
+                        candidate = json.loads(
+                            await asyncio.wait_for(scry_ws.recv(), timeout=1)
+                        )
+                        if candidate.get("event", {}).get("event_type") == "input":
+                            live_input = candidate
+                            break
+                    assert live_input is not None
+                    assert live_input == {
+                        "type": "scry_event",
+                        "player_id": canonical_player_id,
+                        "event": {"event_type": "input", "payload": {"command": "look"}},
+                    }
+
+                    await scry_ws.send(json.dumps({"type": "command", "command": "look"}))
+                    read_only = None
+                    for _ in range(6):
+                        candidate = json.loads(
+                            await asyncio.wait_for(scry_ws.recv(), timeout=1)
+                        )
+                        if candidate.get("type") == "scry_read_only":
+                            read_only = candidate
+                            break
+                    assert read_only is not None
+                    assert read_only == {
+                        "type": "scry_read_only",
+                        "detail": "SCRY observers cannot send commands",
+                    }
+
+                game_scry_uri = (
+                    f"ws://{host}:{port}/ws/admin/scry/Hero?token={player_session['token']}"
+                )
+                with pytest.raises(websockets.InvalidStatusCode):
+                    async with websockets.connect(game_scry_uri):
+                        pass
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_first_login_blocks_room_socket_until_intro_finishes_and_enters_in_flash():
     app = create_app()
     host = "127.0.0.1"
