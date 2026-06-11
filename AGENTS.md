@@ -31,6 +31,7 @@
   `docker compose -p kyrgame-local restart backend`
   Existing WebSocket sessions may disconnect and should reconnect against the restarted backend.
 - Frontend Vite source changes usually hot-reload through the running frontend container. Restart `frontend` only for dependency, env, or server-process changes.
+- If `cloudflared` is running and `frontend` is restarted, restart `cloudflared` immediately afterward and verify the public URL. The tunnel uses `network_mode: service:frontend`, so a frontend container restart can leave the tunnel attached to an old network namespace and produce Cloudflare 502 responses until `cloudflared` rejoins the current frontend container namespace.
 - Verify the live server is in good shape with:
   - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8000/openapi.json`
   - `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5173/`
