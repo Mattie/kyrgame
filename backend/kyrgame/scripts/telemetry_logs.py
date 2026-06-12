@@ -92,12 +92,12 @@ def _source_lines(args: argparse.Namespace) -> Iterable[str]:
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip()
             raise SystemExit(f"Unable to read Docker telemetry log: {detail}")
-        return completed.stdout.splitlines()
+        yield from completed.stdout.splitlines()
+        return
 
     log_file = _resolve_log_file(args)
     with log_file.open("r", encoding="utf-8") as handle:
-        return list(handle)
-
+        yield from handle
 
 def _resolve_log_file(args: argparse.Namespace) -> Path:
     if args.file is not None:
