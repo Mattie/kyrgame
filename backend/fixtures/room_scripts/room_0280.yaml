@@ -1,12 +1,13 @@
 # Legacy: legacy/KYRROUS.C:1271-1290 (truthy)
 id: 280
 name: truthy
+allow_normalized_retry: false
 spoiler_summary: "Truth maze where seeking truth can wound or reward level 18 seekers."
-spoiler_interaction: "Seek truth to attempt the level 18 ascension if you hold the golden key; half the time the maze lashes back."
+spoiler_interaction: "Seek truth to attempt the level 18 ascension; half the time the maze lashes back."
 legacy_ref: "legacy/KYRROUS.C:1271-1290"
 triggers:
   - verbs: [seek]
-    arg_strip: [the]
+    arg_filters: [gi_bagthe]
     arg_matches:
       - index: 0
         value: truth
@@ -14,13 +15,7 @@ triggers:
       - type: level_gate
         target_level: 18
         level_up: false
-        requires_item: key
-        # Legacy chklvl gate (key + level 17) before random outcome. (legacy/KYRROUS.C:1275-1286)
-        on_missing_item:
-          - type: message
-            message_id: NPAY00
-            broadcast_message_id: NPAY01
-            broadcast_format: [player_altnam]
+        # Legacy chklvl gate (KYRKEY module entitlement + level 17) before random outcome. (legacy/KYRROUS.C:1275-1286)
         on_success:
           - type: random_chance
             probability: 0.5
@@ -28,7 +23,7 @@ triggers:
               # 50% damage branch: TRUM01 + hitoth(100). (legacy/KYRROUS.C:1277-1281)
               - type: message
                 message_id: TRUM01
-              - type: damage
+              - type: hitoth
                 amount: 100
             on_failure:
               # 50% reward branch: msgutl2(TRUM02, TRUM03) + glvutl(). (legacy/KYRROUS.C:1282-1285)

@@ -1,6 +1,7 @@
 # Legacy: legacy/KYRLOCS.C:349-356 (soulma); legacy/KYRROUS.C:1235-1251 (soulma)
 id: 291
 name: soulma
+allow_normalized_retry: false
 spoiler_summary: "Soul mastery chamber where ignoring time grants the level 16 trial."
 spoiler_interaction: "Ignore time to attempt the level 16 ascension."
 legacy_ref: "legacy/KYRROUS.C:1235-1251"
@@ -13,7 +14,8 @@ triggers:
       - type: level_gate
         target_level: 16
         level_up: false
-        # Legacy chklvl gate before reward. (legacy/KYRROUS.C:1238-1246)
+        # Legacy chklvl(16) checks KYRKEY/NORMAL module entitlement before reward.
+        # Source: legacy/KYRROUS.C:1238-1246, 1436-1456.
         on_success:
           # msgutl2(SOUL01, SOUL02) before ring reward + level-up. (legacy/KYRROUS.C:1239-1246)
           - type: message
@@ -27,6 +29,7 @@ triggers:
               # Legacy tgmpobj(0) drops oldest item when pack is full. (legacy/KYRROUS.C:1240-1243)
               - type: remove_inventory_index
                 index: 0
+                strategy: legacy_takpobj
               - type: message
                 message_id: SOUL03
           # Grant ring (gmobjs[39]) and then glvutl(). (legacy/KYRROUS.C:1245-1246)

@@ -222,6 +222,11 @@ class RoomScriptEngine:
         self.pending_events = []
         return events
 
+    def allows_normalized_retry(self, room_id: int) -> bool:
+        if self.yaml_engine is None:
+            return True
+        return self.yaml_engine.allows_normalized_retry(room_id)
+
     def room_broadcast_envelope(self, room_id: int, payload: dict) -> dict:
         return {"type": "room_broadcast", "room": room_id, "payload": payload}
 
@@ -276,8 +281,11 @@ class RoomScriptEngine:
     ) -> bool:
         # Try YAML engine first if available
         if self.yaml_engine:
-            player_obj = self.players.get(player_id) or player
+            # Legacy room routines read current gmpptr state after prior command/spell
+            # mutations in kyra(). See legacy/KYRCMDS.C:1251-1257.
+            player_obj = player or self.players.get(player_id)
             if player_obj:
+                self.players[player_id] = player_obj
                 result = self.yaml_engine.handle(
                     player=player_obj,
                     room_id=room_id,

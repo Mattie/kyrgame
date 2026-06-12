@@ -12,6 +12,11 @@ After level 25, the test resumes the player without a room override and verifies
 that level, room, inventory, and spellbook state persist through a fresh
 WebSocket connection.
 
+Legacy `chklvl()` checks `KYRKEY`, the MajorBBS module key named `NORMAL`.
+Modern active game sessions satisfy that entitlement. The physical Pantheon
+golden key remains object 14, used by room routines that explicitly check the
+carried `key`, such as the smooth-walled alcove crevice in room 185.
+
 | Target | Room | Command coverage | Setup / item path | Status |
 | --- | ---: | --- | --- | --- |
 | 2 | 0 | `kneel` | Start in willow room | Tested |
@@ -25,17 +30,17 @@ WebSocket connection.
 | 10 | 7 | Five `chant tashanna` commands, then `put tiara` | Wait for the altar glow to reset after level 9; get dagger in room 181 with `imagine dagger`; turn it into sword in room 182 with `toss dagger pool`; pray at room 27 rock; drop sword on rock to receive tiara | Tested |
 | 11 | 201 | `aim wand tree` | Get tulip in room 199 with `get tulip`; turn it into wand in room 213 with `cast zapher tulip` | Tested |
 | 12 | 213 | `offer kyragem` | Carry wand from level 11; break it in room 204 with `break wand` to receive kyragem | Tested |
-| 13 | 282 | `jump chasm` | Get golden key in room 183 with `say legends of the time and space are true forever and never die`; cast memorized `abbracada` for object protection | Tested |
-| 14 | 285 | `answer time` | Carry key from room 183 and broach from level 13 | Tested |
-| 15 | 288 | `offer heart Juliet` | Set spouse; carry key, broach, and pendant from level 14 | Tested |
-| 16 | 291 | `ignore time` | Carry key, broach, pendant, and locket from level 15 | Tested |
+| 13 | 282 | `jump chasm` | Cast memorized `abbracada` or `makemyd` for object protection; no physical key is carried | Tested |
+| 14 | 285 | `answer time` | Carry broach from level 13 | Tested |
+| 15 | 288 | `offer heart Juliet` | Set spouse; carry broach and pendant from level 14 | Tested |
+| 16 | 291 | `ignore time` | Carry broach, pendant, and locket from level 15 | Tested |
 | 17 | 295 | `devote` | Carry broach, pendant, locket, and ring earned by levels 13-16 | Tested |
-| 18 | 280 | `seek truth` | Carry key from room 183; deterministic successful truth roll | Tested |
-| 19 | 252 | `sing` | Carry key from room 183 | Tested |
-| 20 | 253 | `forget` | Carry key from room 183 | Tested |
-| 21 | 257 | `believe magic` | Carry key from room 183 | Tested |
-| 22 | 255 | `offer love` | Carry key from room 183 | Tested |
-| 23 | 264 | `wonder` | Carry key from room 183 | Tested |
+| 18 | 280 | `seek truth` | Deterministic successful truth roll; active session satisfies legacy `KYRKEY` entitlement | Tested |
+| 19 | 252 | `sing` | Active session satisfies legacy `KYRKEY` entitlement | Tested |
+| 20 | 253 | `forget` | Active session satisfies legacy `KYRKEY` entitlement | Tested |
+| 21 | 257 | `believe in magic` | Active session satisfies legacy `KYRKEY` entitlement | Tested |
+| 22 | 255 | `offer love` | Active session satisfies legacy `KYRKEY` entitlement | Tested |
+| 23 | 264 | `wonder` | Active session satisfies legacy `KYRKEY` entitlement | Tested |
 | 24 | 293 | `believe in fantasy` | Start in belief room | Tested |
 | 25 | 302 | `answer cast the spells and cross the seas, heart, soul, mind, and body are the keys` | Keep Zar room state at 302 | Tested |
 
@@ -59,7 +64,7 @@ WebSocket connection.
 - For level 6, grant only the next gem before each stump drop and confirm
   `stumpi` progresses through all 12 offerings.
 - For level 18, retry `seek truth` after a death branch by restoring the player
-  to level 17 with the golden key.
+  to level 17 with an active game session.
 - Reconnect after a late-game level-up and confirm the persisted player level,
   room, inventory, and spellbook state resume. Automated in
   `backend/tests/test_solo_level_journey.py`.

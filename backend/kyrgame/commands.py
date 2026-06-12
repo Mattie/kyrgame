@@ -168,7 +168,17 @@ class CommandDispatcher:
     async def dispatch(self, verb: str, args: dict, state: GameState) -> CommandResult:
         entry = self.registry.get(verb)
         if entry is None:
-            raise UnknownCommandError(verb)
+            command_id = args.get("command_id")
+            fatigue_checked = bool(args.get(FATIGUE_CHECKED_ARG))
+            fatigue_bypass_requested = bool(args.get(FATIGUE_BYPASS_ARG))
+            fatigue_bypassed = fatigue_bypass_requested and can_bypass_command_fatigue(
+                verb, args
+            )
+            if not fatigue_checked and not fatigue_bypassed:
+                fatigue_result = apply_command_fatigue_gate(state, command_id)
+                if fatigue_result is not None:
+                    return fatigue_result
+            return _legacy_unknown_command_result(state, verb, args)
 
         metadata = entry.metadata
         command_id = args.get("command_id")
@@ -1191,6 +1201,46 @@ def _sndutl_text(player: models.PlayerModel, template: str) -> str:
     if "%s" in template:
         template = template % _hisher(player)
     return f"*** {player.altnam} is {template}"
+
+
+def _legacy_unknown_command_result(
+    state: GameState, verb: str, args: dict
+) -> CommandResult:
+    command_id = args.get("command_id")
+    raw = str(args.get("fallback_raw") or args.get("raw") or "").strip()
+    phrase = " ".join(part for part in (verb, raw) if part).strip()
+    argc = len(phrase.split())
+    # Legacy kyra() restores the command string, emits KYRA5-KYRA9 by argc, then
+    # broadcasts sndutl("mumbling under %s breath."). (legacy/KYRCMDS.C:1278-1303)
+    if argc == 1:
+        message_id = "KYRA5"
+        text = _format_message(state, message_id, phrase)
+    elif argc == 2:
+        message_id = "KYRA6"
+        text = _format_message(state, message_id, phrase)
+    elif argc == 3:
+        message_id = "KYRA7"
+        text = _format_message(state, message_id, phrase)
+    elif argc == 4:
+        message_id = "KYRA8"
+        text = _format_message(state, message_id, phrase)
+    else:
+        message_id = "KYRA9"
+        text = _format_message(state, message_id)
+
+    return CommandResult(
+        state=state,
+        events=[
+            _message_event("player", message_id, text, command_id),
+            _message_event(
+                "room",
+                None,
+                _sndutl_text(state.player, "mumbling under %s breath."),
+                command_id,
+                exclude_player=state.player.plyrid,
+            ),
+        ],
+    )
 
 
 def _player_and_room_message_events(
@@ -4412,7 +4462,8 @@ class CommandVocabulary:
 
         tokens = raw.split()
         verb = tokens[0].lower()
-        remainder = " ".join(tokens[1:]).strip()
+        raw_remainder = " ".join(tokens[1:]).strip()
+        remainder = raw_remainder
         # Legacy cmpsmp()/smputl() delegates speaking emotes directly to speakr()
         # without gi_bagthe()/bagprep(), so preserve post-verb text for smparr verbs.
         # (legacy/KYRCMDS.C:1329-1353)
@@ -4518,7 +4569,13 @@ class CommandVocabulary:
 
         return ParsedCommand(
             verb=verb,
-            args={"raw": remainder},
+            # Legacy kyra() fallback restores the original command string for
+            # KYRA5-KYRA9, even when generic command parsing would strip words.
+            # Source: legacy/KYRCMDS.C:1278-1303.
+            args={
+                "raw": remainder,
+                **({"fallback_raw": raw_remainder} if command_entry is None else {}),
+            },
             command_id=command_id,
             message_id=message_id,
             pay_only=pay_only,

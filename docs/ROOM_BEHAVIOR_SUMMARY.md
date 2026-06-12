@@ -31,19 +31,19 @@
 - **Room 204 — `rainbo` (rainbow bridge):** Breaking wand consumes it; if player already has Kyragem flag set, gives messaging; else awards Kyragem object and sets flag.【F:legacy/KYRROUS.C†L1086-L1101】
 - **Room 213 — `sunshi` (sunshine chamber):** Casting `zapher` on tulip converts tulip to Kyragem shard; casting `zennyra` prints lore; offering Kyragem at level 12 triggers level-up messaging. `zennyra` is the hidden "spell that is not a spell" hinted by `EHINT6`: it is handled by this room routine instead of the spellbook table.【F:legacy/KYRROUS.C†L1103-L1131】
 - **Room 218 — `demong` (demon gate):** Dropping soulstone into niche teleports player to room 219 with messaging.【F:legacy/KYRROUS.C†L1133-L1149】
-- **Room 252 — `singer` (singing contest):** Singing/humming/whistling with level 19 gate levels up and prints success text.【F:legacy/KYRROUS.C†L1308-L1318】
-- **Room 253 — `forgtr` (forgetful NPC):** Saying “forget” checks level 20 gate to level up with messaging.【F:legacy/KYRROUS.C†L1320-L1329】
-- **Room 255 — `oflove` (goddess of love altar):** Offering love keyword at level 22 grants level-up messaging.【F:legacy/KYRROUS.C†L1331-L1340】
-- **Room 257 — `believ` (faith challenge):** Saying “believe in magic” at level 21 grants level-up messaging.【F:legacy/KYRROUS.C†L1342-L1353】
-- **Room 264 — `philos` (philosopher):** Saying “wonder”/“consider” at level 23 grants level-up messaging.【F:legacy/KYRROUS.C†L1355-L1364】
-- **Room 280 — `truthy` (truth maze):** “Seek truth” at level 18 either damages player for 100 HP (50% chance) or levels up with messaging.【F:legacy/KYRROUS.C†L1366-L1380】
-- **Room 282 — `bodyma` (body mastery):** Jump/leap chasm checks object protection charm; on success and level 13 gate grants object and level-up (dropping oldest item if full), otherwise deals 100 damage and failure text.【F:legacy/KYRROUS.C†L1155-L1180】
-- **Room 285 — `mindma` (mind mastery):** Answering “time” with level 14 gate grants bracelet object, optionally dropping oldest item if inventory full, then levels up.【F:legacy/KYRROUS.C†L1182-L1198】
-- **Room 288 — `heartm` (heart mastery):** Offering heart of spouse name with level 15 gate grants necklace object (dropping oldest if necessary) and levels up.【F:legacy/KYRROUS.C†L1200-L1216】
-- **Room 291 — `soulma` (soul mastery):** Ignoring time at level 16 grants ring object (dropping oldest if needed) and levels up.【F:legacy/KYRROUS.C†L1218-L1230】
-- **Room 293 — `fanbel` (faith and belief):** Saying the BELINF phrase at level 24 grants level-up messaging.【F:legacy/KYRROUS.C†L1377-L1392】
-- **Room 295 — `devote` (devotion trial):** Saying “devote” at level 17 checks for four jewelry items (broach, pendant, locket, ring); if all present, consumes them and levels up, else failure text.【F:legacy/KYRROUS.C†L1232-L1258】
-- **Room 302 — `wingam` (wing animation finale):** Answering the RIDDLE correctly in room 302 with level 25 gate triggers win broadcast and level-up reward path.【F:legacy/KYRROUS.C†L1394-L1410】
+- **Room 252 — `singer` (singing contest):** Singing/humming/whistling with level 19 gate levels up and prints success text.【F:legacy/KYRROUS.C†L1320-L1331】
+- **Room 253 — `forgtr` (forgetful NPC):** Saying “forget” checks level 20 gate to level up with messaging.【F:legacy/KYRROUS.C†L1334-L1344】
+- **Room 255 — `oflove` (goddess of love altar):** `offer` succeeds when raw token 1 or 2 is `love`; no article/preposition stripping occurs. Success at level 22 grants level-up messaging.【F:legacy/KYRROUS.C†L1347-L1358】
+- **Room 257 — `believ` (faith challenge):** Saying “believe in magic” at level 21 grants level-up messaging.【F:legacy/KYRROUS.C†L1361-L1372】
+- **Room 264 — `philos` (philosopher):** Saying “wonder”/“consider” at level 23 grants level-up messaging.【F:legacy/KYRROUS.C†L1374-L1385】
+- **Room 280 — `truthy` (truth maze):** `gi_bagthe()` permits article forms of “seek truth”; at level 18 the room either calls `hitoth(100)` (50% chance) or levels up with messaging.【F:legacy/KYRROUS.C†L1271-L1290】
+- **Room 282 — `bodyma` (body mastery):** `gi_bagthe()` plus `bagwrd("across")` permits jump/leap chasm forms; object protection enables the level 13 gate, broach reward, and level-up, while unprotected jumps call `hitoth(100)`.【F:legacy/KYRROUS.C†L1163-L1191】
+- **Room 285 — `mindma` (mind mastery):** Answering “time” with level 14 gate grants pendant object, optionally applying legacy full-inventory slot replacement, then levels up.【F:legacy/KYRROUS.C†L1193-L1210】
+- **Room 288 — `heartm` (heart mastery):** `bagprep()` permits preposition forms of `offer heart <spouse>` but requires exactly three legacy tokens; success grants locket object with legacy full-inventory slot replacement and levels up.【F:legacy/KYRROUS.C†L1213-L1232】
+- **Room 291 — `soulma` (soul mastery):** Ignoring time at level 16 grants ring object with legacy full-inventory slot replacement and levels up.【F:legacy/KYRROUS.C†L1235-L1251】
+- **Room 293 — `fanbel` (faith and belief):** The restored whole input must sameas-match the BELINF phrase at level 24 to grant level-up messaging.【F:legacy/KYRROUS.C†L1388-L1403】
+- **Room 295 — `devote` (devotion trial):** Saying “devote” at level 17 checks for four physical jewelry items (broach, pendant, locket, ring); if all present, consumes them and levels up, else failure text. `chklvl()` still uses the KYRKEY/NORMAL module entitlement.【F:legacy/KYRROUS.C†L1254-L1316】
+- **Room 302 — `wingam` (wing animation finale):** Answering the RIDDLE catalog phrase exactly after `answer` while Zar is in room 302 triggers win broadcast and the level 25 reward path.【F:legacy/KYRROUS.C†L1406-L1421】
 
 ## Feasibility of YAML-Driven Room Definitions
 

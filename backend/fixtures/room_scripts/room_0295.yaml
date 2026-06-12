@@ -10,6 +10,8 @@ triggers:
       - type: level_gate
         target_level: 17
         level_up: false
+        # Legacy chklvl() checks KYRKEY/NORMAL module entitlement; fouris()
+        # separately checks physical jewelry. Source: legacy/KYRROUS.C:1254-1316.
         on_success:
           - type: conditional
             conditions:
@@ -21,12 +23,16 @@ triggers:
               # Legacy fouris() consumes the four tokens before leveling. (legacy/KYRROUS.C:1294-1315)
               - type: remove_item
                 item: broach
+                strategy: legacy_takpobj
               - type: remove_item
                 item: pendant
+                strategy: legacy_takpobj
               - type: remove_item
                 item: locket
+                strategy: legacy_takpobj
               - type: remove_item
                 item: ring
+                strategy: legacy_takpobj
               - type: message
                 message_id: DEVM01
                 broadcast_message_id: DEVM02

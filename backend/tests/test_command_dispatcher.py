@@ -55,6 +55,25 @@ def test_registry_exposes_command_metadata():
     assert chat_entry.metadata.cooldown_seconds > 0
 
 
+@pytest.mark.anyio
+async def test_unknown_command_uses_legacy_kyra_fallback_and_room_mumbling(base_state):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    parsed = vocabulary.parse_text("jump into chasm")
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    direct = next(event for event in result.events if event["scope"] == "player")
+    room = next(event for event in result.events if event["scope"] == "room")
+    assert direct["message_id"] == "KYRA7"
+    assert direct["text"] == "...How do you plan to jump into chasm?"
+    assert "mumbling under" in room["text"]
+    assert room["exclude_player"] == base_state.player.plyrid
+
+
 @pytest.mark.parametrize(
     "verb,args,expected_location,expected_event_type",
     [

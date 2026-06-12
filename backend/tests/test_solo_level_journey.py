@@ -54,6 +54,9 @@ class LevelStep:
     prerequisites: tuple[CommandStep, ...] = ()
 
 
+PHYSICAL_KEY_OBJECT_ID = 14
+
+
 def _inventory(record: models.Player, *object_ids: int) -> None:
     record.gpobjs = list(object_ids)
     record.obvals = [0] * len(object_ids)
@@ -177,11 +180,6 @@ LEVEL_STEPS = [
         ("jump chasm",),
         "BODM01",
         prerequisites=(
-            CommandStep(
-                183,
-                "say legends of the time and space are true forever and never die",
-                "PANM00",
-            ),
             CommandStep(282, "cast abbracada", "SPM000"),
         ),
     ),
@@ -192,7 +190,7 @@ LEVEL_STEPS = [
     LevelStep(18, 280, ("seek truth",), "TRUM02"),
     LevelStep(19, 252, ("sing",), "LEVL19"),
     LevelStep(20, 253, ("forget",), "LEVL20"),
-    LevelStep(21, 257, ("believe magic",), "LEVL21"),
+    LevelStep(21, 257, ("believe in magic",), "LEVL21"),
     LevelStep(22, 255, ("offer love",), "LEVL22"),
     LevelStep(23, 264, ("wonder",), "LEVL23"),
     LevelStep(24, 293, ("believe in fantasy",), "LEVL24"),
@@ -340,12 +338,15 @@ async def test_solo_level_journey_reaches_level_25_with_in_game_commands(monkeyp
                     record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
                     assert record is not None
                     assert record.level == step.target_level
+                    if step.target_level == 13:
+                        assert PHYSICAL_KEY_OBJECT_ID not in record.gpobjs
 
             with app.state.session_factory() as db:
                 record = db.scalar(select(models.Player).where(models.Player.plyrid == player_id))
                 assert record is not None
                 assert record.level == 25
                 assert record.gamloc == 302
+                assert PHYSICAL_KEY_OBJECT_ID not in record.gpobjs
                 assert record.nspells == len(record.spells)
                 expected_spell_ids = list(record.spells[: record.nspells])
 

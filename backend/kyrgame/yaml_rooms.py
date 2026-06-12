@@ -10,6 +10,7 @@ import yaml
 from . import constants, models
 from .messaging import build_direct_and_others_events
 from .inventory import pop_inventory_index
+from .player_lifecycle import reset_player_after_death
 from .player_progression import level_up_player
 from .spellbook import add_spell_to_book, memorize_spell
 
@@ -108,6 +109,15 @@ class YamlRoomEngine:
 
         return RoomHandleResult(handled=False, events=events)
 
+    def allows_normalized_retry(self, room_id: int) -> bool:
+        # Strict legacy room routines use raw margv boundaries and GAMUTILS token
+        # macros, so some rooms opt out of the modern normalized retry path.
+        # See legacy/KYRCMDS.C:1251-1257 and legacy/GAMUTILS.C:55-106.
+        room = self.rooms.get(room_id)
+        if not room:
+            return True
+        return bool(room.get("allow_normalized_retry", True))
+
     def _matches_trigger(
         self,
         trigger: dict,
@@ -121,15 +131,23 @@ class YamlRoomEngine:
         if verbs and verb not in verbs:
             return False
 
+        filtered_args = self._apply_legacy_arg_filters(trigger, args)
         strip_tokens = {token.lower() for token in trigger.get("arg_strip", [])}
         filtered_args = (
-            [arg for arg in args if arg.lower() not in strip_tokens] if strip_tokens else args
+            [arg for arg in filtered_args if arg.lower() not in strip_tokens]
+            if strip_tokens
+            else filtered_args
         )
 
         def _normalize_phrase(text: str) -> str:
             lowered = text.lower()
             stripped = re.sub(r"[^a-z0-9\\s]", "", lowered)
             return " ".join(stripped.split())
+
+        def _sameas_phrase(text: str) -> str:
+            return " ".join(text.lower().split())
+
+        phrase_match = str(trigger.get("phrase_match", "normalized")).lower()
 
         required_state_equal = trigger.get("room_state_equals", {})
         if required_state_equal:
@@ -143,12 +161,16 @@ class YamlRoomEngine:
         if phrase_key:
             target_phrase = self.messages.messages.get(phrase_key, "")
             attempt = " ".join([command, *filtered_args])
+            if phrase_match == "sameas":
+                return _sameas_phrase(attempt) == _sameas_phrase(target_phrase)
             return _normalize_phrase(attempt) == _normalize_phrase(target_phrase)
 
         arg_phrase_key = trigger.get("arg_phrase_key")
         if arg_phrase_key:
             target_phrase = self.messages.messages.get(arg_phrase_key, "")
             attempt = " ".join(filtered_args)
+            if phrase_match == "sameas":
+                return _sameas_phrase(attempt) == _sameas_phrase(target_phrase)
             return _normalize_phrase(attempt) == _normalize_phrase(target_phrase)
 
         target_terms = {term.lower() for term in trigger.get("target_in", [])}
@@ -209,6 +231,45 @@ class YamlRoomEngine:
 
         return True
 
+    @staticmethod
+    def _remove_legacy_tokens_except_last(args: list[str], tokens: set[str]) -> list[str]:
+        # Mirrors the GAMUTILS.C bagging helpers: they scan before the final token,
+        # delete a matching word, then advance the index. Consecutive removable
+        # tokens can therefore leave the second token in place.
+        # Source: legacy/GAMUTILS.C:55-106.
+        filtered = args[:]
+        index = 0
+        while index < len(filtered) - 1:
+            if filtered[index].lower() in tokens:
+                del filtered[index]
+            index += 1
+        return filtered
+
+    def _apply_legacy_arg_filters(self, trigger: dict, args: list[str]) -> list[str]:
+        filtered = args[:]
+        for rule in trigger.get("arg_filters", []):
+            if isinstance(rule, str):
+                key = rule.lower()
+                if key == "gi_bagthe":
+                    # Legacy gi_bagthe() removes articles before the final token.
+                    # Source: legacy/GAMUTILS.C:55-68.
+                    filtered = self._remove_legacy_tokens_except_last(
+                        filtered, {"the", "a", "an"}
+                    )
+                elif key == "bagprep":
+                    # Legacy bagprep() removes common prepositions before the final token.
+                    # Source: legacy/GAMUTILS.C:72-90.
+                    filtered = self._remove_legacy_tokens_except_last(
+                        filtered, {"at", "to", "into", "through", "in"}
+                    )
+            elif isinstance(rule, dict) and "bag_word" in rule:
+                # Legacy bagwrd(word) removes one configured word before the final token.
+                # Source: legacy/GAMUTILS.C:94-106.
+                filtered = self._remove_legacy_tokens_except_last(
+                    filtered, {str(rule["bag_word"]).lower()}
+                )
+        return filtered
+
     def _execute_actions(
         self,
         actions: list[dict],
@@ -234,6 +295,8 @@ class YamlRoomEngine:
                 self._action_heal(action, player)
             elif action_type == "damage":
                 self._action_damage(action, player)
+            elif action_type == "hitoth":
+                self._action_hitoth(action, player, context, events)
             elif action_type == "grant_spell":
                 self._action_grant_spell(action, player, context)
             elif action_type == "random_chance":
@@ -322,7 +385,10 @@ class YamlRoomEngine:
 
         idx = self._find_inventory_index(player, obj_id)
         if idx is not None:
-            pop_inventory_index(player, idx)
+            if action.get("strategy") == "legacy_takpobj":
+                self._legacy_take_inventory_index(player, idx)
+            else:
+                pop_inventory_index(player, idx)
 
     def _action_add_gold(self, action: dict, player: models.PlayerModel, context: dict[str, Any]):
         amount = action.get("amount", 0)
@@ -461,6 +527,62 @@ class YamlRoomEngine:
     def _action_damage(self, action: dict, player: models.PlayerModel):
         amount = max(0, int(action.get("amount", 0)))
         player.hitpts = max(0, player.hitpts - amount)
+
+    def _action_hitoth(
+        self,
+        action: dict,
+        player: models.PlayerModel,
+        context: dict[str, Any],
+        events: list[dict],
+    ):
+        # Legacy hitoth() deducts hit points, then initgp()/entrgp() resets dead
+        # players to room 0 with DIEMSG/KILLED fan-out. Source: legacy/KYRSPEL.C:303-321.
+        amount = max(0, int(action.get("amount", 0)))
+        player.hitpts -= amount
+        if player.hitpts > 0:
+            return
+
+        old_room = player.gamloc
+        old_name = player.altnam
+        reset_player_after_death(player, self.rng.randrange)
+        context["death_old_room"] = old_room
+        context["death_old_name"] = old_name
+
+        events.append(
+            {
+                "scope": "direct",
+                "event": "room_message",
+                "message_id": "DIEMSG",
+                "text": self.messages.messages.get("DIEMSG", ""),
+                "player": player.plyrid,
+                "room_id": old_room,
+                "death_reset": True,
+            }
+        )
+        killed = self.messages.messages.get("KILLED", "")
+        if killed:
+            killed = killed % old_name
+        events.append(
+            {
+                "scope": "broadcast",
+                "event": "room_message",
+                "message_id": "KILLED",
+                "text": killed,
+                "player": player.plyrid,
+                "room_id": old_room,
+                "exclude_player": player.plyrid,
+            }
+        )
+        events.append(
+            {
+                "scope": "system",
+                "event": "room_transfer",
+                "player": player.plyrid,
+                "target_room": 0,
+                "arrive_text": f"*** {player.plyrid} has just appeared in a holy light!",
+                "death_reset": True,
+            }
+        )
 
     def _action_grant_spell(
         self, action: dict, player: models.PlayerModel, context: dict[str, Any]
@@ -801,10 +923,35 @@ class YamlRoomEngine:
         idx = int(index)
         if idx < 0 or idx >= len(player.gpobjs):
             return
-        pop_inventory_index(player, idx)
+        if action.get("strategy") == "legacy_takpobj":
+            self._legacy_take_inventory_index(player, idx)
+        else:
+            pop_inventory_index(player, idx)
 
     def _action_level_up(self, player: models.PlayerModel):
         level_up_player(player)
+
+    @staticmethod
+    def _legacy_take_inventory_index(player: models.PlayerModel, index: int) -> tuple[int, int]:
+        """Remove inventory with takpobj/tgmpobj last-slot replacement semantics.
+
+        Source: legacy/KYRUTIL.C:550-565.
+        """
+
+        object_id = player.gpobjs[index]
+        object_value = player.obvals[index] if index < len(player.obvals) else 0
+        last_index = len(player.gpobjs) - 1
+        if index != last_index:
+            player.gpobjs[index] = player.gpobjs[last_index]
+            if player.obvals:
+                if len(player.obvals) <= last_index:
+                    player.obvals.extend([0] * (last_index + 1 - len(player.obvals)))
+                player.obvals[index] = player.obvals[last_index]
+        player.gpobjs.pop()
+        if player.obvals:
+            player.obvals.pop()
+        player.npobjs = len(player.gpobjs)
+        return object_id, object_value
 
     @staticmethod
     def _resolve_player_flag(flag: Any) -> int | None:

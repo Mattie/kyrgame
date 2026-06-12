@@ -3510,7 +3510,8 @@ def create_app() -> FastAPI:
                             parsed.args[commands.FATIGUE_CHECKED_ARG] = True
 
                 if raw_tokens and provider.room_scripts and not fatigue_bypassed:
-                    # Legacy kyra() runs the room routine before the command table.【F:legacy/KYRCMDS.C†L1251-L1257】
+                    # Legacy kyra() runs the room routine before the command table.
+                    # See legacy/KYRCMDS.C:1251-1257.
                     handled = await provider.room_scripts.handle_command(
                         player_id,
                         current_room,
@@ -3518,7 +3519,14 @@ def create_app() -> FastAPI:
                         args=arg_list,
                         player=state.player,
                     )
-                    if not handled and tokens != raw_tokens:
+                    if (
+                        not handled
+                        and tokens != raw_tokens
+                        and provider.room_scripts.allows_normalized_retry(current_room)
+                    ):
+                        # Generic parser cleanup can help older YAML rooms, while strict
+                        # rooms opt out to preserve raw margv/GAMUTILS macro boundaries.
+                        # See legacy/GAMUTILS.C:55-106.
                         handled = await provider.room_scripts.handle_command(
                             player_id,
                             current_room,
@@ -3642,6 +3650,11 @@ def create_app() -> FastAPI:
                             target_room = int(transfer_event.get("target_room", current_room))
                             leave_text = transfer_event.get("leave_text")
                             arrive_text = transfer_event.get("arrive_text")
+                            death_reset = bool(transfer_event.get("death_reset"))
+                            # YAML hitoth() death resets mirror initgp()+entrgp(), so
+                            # every active session for the player must relocate and refresh.
+                            # Source: legacy/KYRSPEL.C:303-321, legacy/KYRANDIA.C:325-356,
+                            # and legacy/KYRUTIL.C:236-260.
                             if leave_text:
                                 await _broadcast_game_json(
                                     provider.scope.app,
@@ -3666,76 +3679,109 @@ def create_app() -> FastAPI:
                                 )
 
                             if target_room != current_room:
-                                await gateway.register(target_room, websocket, announce=False)
-                                await provider.presence.set_location(
-                                    player_id, target_room, session_token
-                                )
-                                with provider.scope.app.state.session_factory() as db:
-                                    repo = repositories.PlayerSessionRepository(db)
-                                    repo.set_room(session_token, target_room)
-                                    repo.mark_seen(session_token)
-                                    db.commit()
-                                current_room = target_room
+                                location = state.locations.get(target_room)
 
-                                location = state.locations.get(current_room)
-                                if location is not None:
+                                async def _send_transfer_refresh(
+                                    target_socket: WebSocket,
+                                ) -> None:
+                                    if location is None:
+                                        return
                                     description_id, long_description = commands._location_description(
                                         state, location
                                     )
-                                    await send_player_json(
+                                    refresh_events = [
                                         {
-                                            "type": "command_response",
-                                            "room": current_room,
-                                            "payload": {
-                                                "scope": "player",
-                                                "event": "location_update",
-                                                "type": "location_update",
-                                                "location": location.id,
-                                                "description": location.brfdes,
-                                                "description_id": description_id,
-                                                "long_description": long_description,
-                                                "message_id": description_id,
-                                            },
-                                        }
+                                            "scope": "player",
+                                            "event": "location_update",
+                                            "type": "location_update",
+                                            "location": location.id,
+                                            "description": location.brfdes,
+                                            "description_id": description_id,
+                                            "long_description": long_description,
+                                            "message_id": description_id,
+                                            **({"death_reset": True} if death_reset else {}),
+                                        },
+                                        {
+                                            "scope": "player",
+                                            "event": "location_description",
+                                            "type": "location_description",
+                                            "location": location.id,
+                                            "message_id": description_id,
+                                            "text": long_description or location.brfdes,
+                                            **({"death_reset": True} if death_reset else {}),
+                                        },
+                                    ]
+                                    room_objects_event = commands._room_objects_event(
+                                        location, state.objects or {}, None, description_id
                                     )
-                                    await send_player_json(
-                                        {
-                                            "type": "command_response",
-                                            "room": current_room,
-                                            "payload": {
-                                                "scope": "player",
-                                                "event": "location_description",
-                                                "type": "location_description",
-                                                "location": location.id,
-                                                "message_id": description_id,
-                                                "text": long_description or location.brfdes,
-                                            },
-                                        }
+                                    if death_reset:
+                                        room_objects_event["death_reset"] = True
+                                    refresh_events.append(room_objects_event)
+
+                                    occupant_event = await _room_occupants_event(
+                                        provider.presence,
+                                        player_id,
+                                        target_room,
+                                        state.messages,
+                                        _active_player_flags(provider.scope.app),
                                     )
-                                    await send_player_json(
-                                        {
+                                    if occupant_event:
+                                        refresh_events.append(occupant_event)
+
+                                    for refresh_event in refresh_events:
+                                        envelope = {
                                             "type": "command_response",
-                                            "room": current_room,
-                                            "payload": commands._room_objects_event(
-                                                location, state.objects or {}, None, description_id
-                                            ),
+                                            "room": target_room,
+                                            "payload": refresh_event,
                                         }
+                                        if meta:
+                                            envelope["meta"] = meta
+                                        await _send_game_socket_json(
+                                            provider.scope.app,
+                                            target_socket,
+                                            envelope,
+                                            player_id=player_id,
+                                        )
+
+                                transfer_tokens = {session_token}
+                                if death_reset:
+                                    transfer_tokens.update(
+                                        await provider.presence.sessions_for_player(player_id)
                                     )
 
-                                occupant_event = await _room_occupants_event(
-                                    provider.presence,
-                                    player_id,
-                                    current_room,
-                                    state.messages,
-                                    _active_player_flags(provider.scope.app),
-                                )
-                                if occupant_event:
-                                    await send_player_json(
-                                        {
-                                            "type": "command_response",
-                                            "room": current_room,
-                                            "payload": occupant_event,
-                                        }
+                                for target_token in transfer_tokens:
+                                    target_socket = session_connections.get(target_token)
+                                    if (
+                                        target_socket is not None
+                                        and target_socket.application_state
+                                        == WebSocketState.CONNECTED
+                                    ):
+                                        await gateway.register(
+                                            target_room, target_socket, announce=False
+                                        )
+
+                                    await provider.presence.set_location(
+                                        player_id, target_room, target_token
+                                    )
+                                    with provider.scope.app.state.session_factory() as db:
+                                        repo = repositories.PlayerSessionRepository(db)
+                                        repo.set_room(target_token, target_room)
+                                        repo.mark_seen(target_token)
+                                        db.commit()
+
+                                    if target_token == session_token:
+                                        current_room = target_room
+
+                                    if (
+                                        target_socket is not None
+                                        and target_socket.application_state
+                                        == WebSocketState.CONNECTED
+                                    ):
+                                        await _send_transfer_refresh(target_socket)
+
+                                if death_reset:
+                                    sync_active_player_state_from_db(
+                                        provider.scope.app, player_id
                                     )
 
                             if arrive_text:
