@@ -882,6 +882,79 @@ async def test_drop_places_object_in_room(base_state):
     object_events = [evt for evt in result.events if evt.get("type") == "room_objects"]
     assert object_events
     assert any(obj["id"] == target_id for obj in object_events[0]["objects"])
+    actor_event = next(evt for evt in result.events if evt.get("message_id") == "DROPIT2")
+    assert actor_event["scope"] == "player"
+    assert actor_event["text"] == "...Okay, done."
+    room_event = next(evt for evt in result.events if evt.get("message_id") == "DROPIT3")
+    assert room_event["scope"] == "room"
+    assert target_name in room_event["text"]
+    assert room_event["exclude_player"] == base_state.player.plyrid
+
+
+@pytest.mark.anyio
+async def test_drop_full_room_uses_dropit1_and_sndutl_room_line(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    location = base_state.locations[base_state.player.gamloc]
+    full_objects = list(range(constants.MXLOBS))
+    base_state.locations[location.id] = location.model_copy(
+        update={"objects": full_objects, "nlobjs": len(full_objects)}
+    )
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [2], "obvals": [0], "npobjs": 1}
+    )
+
+    result = await dispatcher.dispatch("drop", {"target": "garnet"}, base_state)
+
+    assert result.events[0]["message_id"] == "DROPIT1"
+    assert "supernatural force" in result.events[0]["text"]
+    room_event = next(event for event in result.events if event.get("scope") == "room")
+    assert room_event["message_id"] is None
+    assert room_event["text"] == f"*** {base_state.player.altnam} is struggling with the air!"
+    assert room_event["exclude_player"] == base_state.player.plyrid
+    assert base_state.player.gpobjs == [2]
+    assert base_state.locations[location.id].objects == full_objects
+
+
+@pytest.mark.anyio
+async def test_drop_missing_inventory_uses_dropit4_before_room_capacity(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    location = base_state.locations[base_state.player.gamloc]
+    full_objects = list(range(constants.MXLOBS))
+    base_state.locations[location.id] = location.model_copy(
+        update={"objects": full_objects, "nlobjs": len(full_objects)}
+    )
+    base_state.player = base_state.player.model_copy(
+        update={"gpobjs": [], "obvals": [], "npobjs": 0}
+    )
+
+    result = await dispatcher.dispatch("drop", {"target": "garnet"}, base_state)
+
+    assert result.events[0]["message_id"] == "DROPIT4"
+    assert "dont have one" in result.events[0]["text"]
+    room_event = next(event for event in result.events if event.get("scope") == "room")
+    assert room_event["message_id"] is None
+    assert room_event["text"] == f"*** {base_state.player.altnam} is acting very oddly."
+    assert room_event["exclude_player"] == base_state.player.plyrid
+    assert base_state.locations[location.id].objects == full_objects
+
+
+@pytest.mark.anyio
+async def test_drop_without_target_uses_dropit5_and_sndutl_room_line(base_state):
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    result = await dispatcher.dispatch("drop", {}, base_state)
+
+    assert result.events[0]["message_id"] == "DROPIT5"
+    assert "never knew" in result.events[0]["text"]
+    room_event = next(event for event in result.events if event.get("scope") == "room")
+    assert room_event["message_id"] is None
+    assert room_event["text"] == f"*** {base_state.player.altnam} is looking a little queer!"
+    assert room_event["exclude_player"] == base_state.player.plyrid
 
 
 @pytest.mark.anyio

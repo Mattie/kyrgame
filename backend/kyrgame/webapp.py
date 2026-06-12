@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Sequence
 
 import yaml
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
@@ -1100,6 +1100,25 @@ def _find_room_containing_object(provider: FixtureProvider, object_id: int) -> i
     return None
 
 
+def _ticks_until_next_routine(
+    sequence: Sequence[str], routine_index: int, target_name: str
+) -> int | None:
+    if not sequence:
+        return None
+    start = routine_index % len(sequence)
+    for offset in range(len(sequence)):
+        if sequence[(start + offset) % len(sequence)] == target_name:
+            return offset + 1
+    return None
+
+
+def _successful_gem_spawns_until_random(gem_counter: int) -> int:
+    # Legacy gemakr() randomizes only when gemctr is already 10 at the start
+    # of a successful placement. Source: legacy/KYRANIM.C:435-443.
+    normalized_counter = max(0, min(gem_counter, 10))
+    return max(1, 11 - normalized_counter)
+
+
 def _admin_mob_snapshot(provider: FixtureProvider):
     animation_system: AnimationTickSystem | None = getattr(
         provider.scope.app.state, "animation_tick_system", None
@@ -1111,9 +1130,18 @@ def _admin_mob_snapshot(provider: FixtureProvider):
     tick_scheduler = getattr(provider.scope.app.state, "tick_scheduler", None)
     tick_seconds = float(getattr(tick_scheduler, "tick_seconds", 1.0))
     routine_interval_seconds = 15.0 * tick_seconds
-    brownie_interval_seconds = (
-        routine_interval_seconds * len(AnimationTickSystem.routine_sequence())
+    routine_sequence = AnimationTickSystem.routine_sequence()
+    full_cycle_interval_seconds = routine_interval_seconds * len(routine_sequence)
+    brownie_interval_seconds = full_cycle_interval_seconds
+    next_gem_attempt_ticks = _ticks_until_next_routine(
+        routine_sequence, state.routine_index, "gemakr"
     )
+    next_gem_attempt_seconds = (
+        None
+        if next_gem_attempt_ticks is None
+        else routine_interval_seconds * next_gem_attempt_ticks
+    )
+    successful_spawns_until_random = _successful_gem_spawns_until_random(state.gem_counter)
     brownie_path = BrownieRoutine.path()
     next_brownie_room_id = BrownieRoutine.path_room(state.brownie_path_index)
 
@@ -1139,11 +1167,22 @@ def _admin_mob_snapshot(provider: FixtureProvider):
         "animation": {
             "routine_index": state.routine_index,
             "next_routine": animation_system.next_routine_name(),
-            "routine_sequence": list(AnimationTickSystem.routine_sequence()),
+            "routine_sequence": list(routine_sequence),
             "tick_seconds": tick_seconds,
             "animation_tick_interval_seconds": routine_interval_seconds,
             "brownie_routine_interval_seconds": brownie_interval_seconds,
             "brownie_full_path_interval_seconds": brownie_interval_seconds * len(brownie_path),
+            "gem_spawn_interval_seconds": full_cycle_interval_seconds,
+            "next_gem_spawn_attempt_seconds": next_gem_attempt_seconds,
+            "gem_counter": state.gem_counter,
+            "successful_spawns_until_random_gem": successful_spawns_until_random,
+            "next_successful_gem_is_random": state.gem_counter == 10,
+            "last_gem_attempt_room_id": state.gem_last_attempt_room_id,
+            "last_gem_attempt_status": state.gem_last_attempt_status,
+            "last_gem_attempt_object_count": state.gem_last_attempt_object_count,
+            "last_gem_spawn_room_id": state.gem_last_spawn_room_id,
+            "last_gem_spawn_object_id": state.gem_last_spawn_object_id,
+            "last_gem_spawn_object_name": state.gem_last_spawn_object_name,
             "legacy_source": "legacy/KYRANIM.C:116-133",
         },
         "mobs": [
@@ -1184,6 +1223,30 @@ def _admin_mob_snapshot(provider: FixtureProvider):
                 "next_outcome": "gold" if state.elf_reward_next else "hint",
                 "hint_index": state.elf_hint_index,
                 "legacy_source": "legacy/KYRANIM.C:352-389",
+            },
+            {
+                "id": "gem_spawner",
+                "name": "Gem spawner",
+                "kind": "world_spawn_routine",
+                "status": "next_tick" if next_gem_attempt_ticks == 1 else "waiting",
+                "room_id": state.gem_last_spawn_room_id,
+                "room": _admin_room_summary(provider, state.gem_last_spawn_room_id),
+                "gem_counter": state.gem_counter,
+                "next_attempt_seconds": next_gem_attempt_seconds,
+                "routine_interval_seconds": full_cycle_interval_seconds,
+                "successful_spawns_until_random_gem": successful_spawns_until_random,
+                "next_successful_gem_is_random": state.gem_counter == 10,
+                "last_attempt_room_id": state.gem_last_attempt_room_id,
+                "last_attempt_room": _admin_room_summary(
+                    provider, state.gem_last_attempt_room_id
+                ),
+                "last_attempt_status": state.gem_last_attempt_status,
+                "last_attempt_object_count": state.gem_last_attempt_object_count,
+                "last_spawn_room_id": state.gem_last_spawn_room_id,
+                "last_spawn_room": _admin_room_summary(provider, state.gem_last_spawn_room_id),
+                "last_spawn_object_id": state.gem_last_spawn_object_id,
+                "last_spawn_object_name": state.gem_last_spawn_object_name,
+                "legacy_source": "legacy/KYRANIM.C:429-449",
             },
             {
                 "id": "dragon",

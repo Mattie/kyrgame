@@ -814,11 +814,25 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
 
     object_index = _find_object_slot_in_location(location, objects, target)
     if object_index is None:
-        raise CommandError(f"No {target} here", message_id=message_id)
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "GETLOC4",
+                    _format_message(state, "GETLOC4", raw_target, location.objlds),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "beyond all hope."),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
     object_id = location.objects[object_index]
-
-    if len(state.player.gpobjs) >= constants.MXPOBS:
-        raise CommandError("You cannot carry any more", message_id=message_id)
 
     obj = objects.get(object_id)
     if obj is None or "PICKUP" not in obj.flags:
@@ -838,6 +852,26 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
                     "room",
                     "GETLOC5",
                     room_text,
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    if len(state.player.gpobjs) >= constants.MXPOBS:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "GETLOC6",
+                    _format_message(state, "GETLOC6"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "looking very greedy."),
                     command_id,
                     exclude_player=state.player.plyrid,
                 ),
@@ -869,6 +903,9 @@ async def _handle_get(state: GameState, args: dict) -> CommandResult:
         events=[
             _inventory_event(state, command_id, message_id),
             _room_objects_event(location, objects, command_id, message_id),
+            # Legacy sends the inline ITSYOURS CHAR_BUFFER before room fan-out.
+            # Source: legacy/KYRCMDS.C:237,730-733.
+            _message_event("player", "ITSYOURS", "...It's yours!", command_id),
             _message_event(
                 "room",
                 "GETLOC7",
@@ -1025,16 +1062,67 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
     target = (args.get("target") or "").strip().lower()
 
     if not target:
-        raise CommandError("Specify an item to drop", message_id=message_id)
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "DROPIT5",
+                    _format_message(state, "DROPIT5"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "looking a little queer!"),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
 
     objects = state.objects or {}
     location = state.locations[state.player.gamloc]
-    if len(location.objects) >= constants.MXLOBS:
-        raise CommandError("There is no room to drop that here", message_id=message_id)
-
     inventory_index = _find_inventory_index(state.player, target, objects)
     if inventory_index is None:
-        raise CommandError("You are not carrying that", message_id=message_id)
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "DROPIT4",
+                    _format_message(state, "DROPIT4"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "acting very oddly."),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
+
+    if len(location.objects) >= constants.MXLOBS:
+        return CommandResult(
+            state=state,
+            events=[
+                _message_event(
+                    "player",
+                    "DROPIT1",
+                    _format_message(state, "DROPIT1"),
+                    command_id,
+                ),
+                _message_event(
+                    "room",
+                    None,
+                    _sndutl_text(state.player, "struggling with the air!"),
+                    command_id,
+                    exclude_player=state.player.plyrid,
+                ),
+            ],
+        )
 
     object_id, _ = pop_inventory_index(state.player, inventory_index)
 
@@ -1054,6 +1142,28 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
         events=[
             _inventory_event(state, command_id, message_id),
             _room_objects_event(location, objects, command_id, message_id),
+            _message_event(
+                "player",
+                "DROPIT2",
+                _format_message(state, "DROPIT2"),
+                command_id,
+            ),
+            _message_event(
+                "room",
+                "DROPIT3",
+                # DROPIT3's catalog text consumes altnam, object name, and
+                # room landing; legacy prfmsg receives hisher too and ignores it.
+                # Source: legacy/KYRCMDS.C:875-877; legacy/Dist/ELWKYRM.MSG:4684.
+                _format_message(
+                    state,
+                    "DROPIT3",
+                    state.player.altnam,
+                    obj.name if obj else target,
+                    location.objlds,
+                ),
+                command_id,
+                exclude_player=state.player.plyrid,
+            ),
             {
                 "scope": "room",
                 "event": "drop",

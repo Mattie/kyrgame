@@ -51,6 +51,12 @@ class AnimationTickState:
         default_factory=lambda: {"sesame": 0, "chantd": 0, "rockpr": 0}
     )
     gem_counter: int = 0
+    gem_last_attempt_room_id: int | None = None
+    gem_last_attempt_status: str | None = None
+    gem_last_attempt_object_count: int | None = None
+    gem_last_spawn_room_id: int | None = None
+    gem_last_spawn_object_id: int | None = None
+    gem_last_spawn_object_name: str | None = None
     dryad_location: int = 0
     brownie_location: int = 0
     brownie_path_index: int = 0
@@ -83,6 +89,18 @@ class InMemoryAnimationTickPersistence:
 
     def save(self, payload: Mapping[str, object]) -> None:
         self._payload = dict(payload)
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 class SQLAlchemyAnimationTickPersistence:
@@ -471,11 +489,29 @@ class GemSpawnRoutine:
         self._message_formatter = message_formatter
 
     def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
+        # Legacy gemakr() uses genrdn(44,168), an exclusive upper bound, skips
+        # rooms with 4+ objects, and advances gemctr only after successful puts.
+        # Source: legacy/KYRANIM.C:429-449.
         room_id = self._room_picker(44, 168)
         room_objects = list(self._room_objects_getter(room_id))
+        gem_counter_before = state.gem_counter
+        state.gem_last_attempt_room_id = room_id
+        state.gem_last_attempt_object_count = len(room_objects)
 
         if len(room_objects) >= 4:
-            return []
+            state.gem_last_attempt_status = "skipped_capacity"
+            return [
+                self._audit_event(
+                    room_id,
+                    {
+                        "status": "skipped_capacity",
+                        "room_object_count_before": len(room_objects),
+                        "room_object_count_after": len(room_objects),
+                        "gem_counter_before": gem_counter_before,
+                        "gem_counter_after": state.gem_counter,
+                    },
+                )
+            ]
 
         if state.gem_counter == 10:
             gem_id = self._gem_picker(0, 12)
@@ -483,25 +519,57 @@ class GemSpawnRoutine:
         else:
             state.gem_counter += 1
             gem_id = 2
+        gem_name = self._gem_name_lookup(gem_id)
 
         updated_objects = [*room_objects, gem_id]
         self._room_objects_setter(room_id, updated_objects)
+        state.gem_last_attempt_status = "spawned"
+        state.gem_last_spawn_room_id = room_id
+        state.gem_last_spawn_object_id = gem_id
+        state.gem_last_spawn_object_name = gem_name
 
         return [
             AnimationTickEvent(
                 flag="gemakr",
                 room_id=room_id,
                 message_id="GEMAPP",
-                message_text=self._message_formatter(self._gem_name_lookup(gem_id)),
+                message_text=self._message_formatter(gem_name),
                 payload={
                     "type": "room_objects",
                     "location": room_id,
                     "objects": [{"id": object_id} for object_id in updated_objects],
                     "spawned_object_id": gem_id,
+                    "spawned_object_name": gem_name,
                     "spawn_source": "gemakr",
                 },
-            )
+            ),
+            self._audit_event(
+                room_id,
+                {
+                    "status": "spawned",
+                    "room_object_count_before": len(room_objects),
+                    "room_object_count_after": len(updated_objects),
+                    "gem_counter_before": gem_counter_before,
+                    "gem_counter_after": state.gem_counter,
+                    "spawned_object_id": gem_id,
+                    "spawned_object_name": gem_name,
+                },
+            ),
         ]
+
+    def _audit_event(self, room_id: int, payload: Mapping[str, object]) -> AnimationTickEvent:
+        return AnimationTickEvent(
+            flag="gemakr",
+            room_id=room_id,
+            payload={
+                "audit_only": True,
+                "audit": {
+                    "event_type": "animation.gem_attempt",
+                    "room_id": room_id,
+                    **dict(payload),
+                },
+            },
+        )
 
 
 class DryadWanderRoutine:
@@ -926,6 +994,12 @@ class AnimationTickSystem:
                 "zar_attack_index": self.state.zar_attack_index,
                 "timed_flags": dict(self.state.timed_flags),
                 "gem_counter": self.state.gem_counter,
+                "gem_last_attempt_room_id": self.state.gem_last_attempt_room_id,
+                "gem_last_attempt_status": self.state.gem_last_attempt_status,
+                "gem_last_attempt_object_count": self.state.gem_last_attempt_object_count,
+                "gem_last_spawn_room_id": self.state.gem_last_spawn_room_id,
+                "gem_last_spawn_object_id": self.state.gem_last_spawn_object_id,
+                "gem_last_spawn_object_name": self.state.gem_last_spawn_object_name,
                 "dryad_location": self.state.dryad_location,
                 "brownie_location": self.state.brownie_location,
                 "brownie_path_index": self.state.brownie_path_index,
@@ -955,6 +1029,14 @@ class AnimationTickSystem:
             zar_attack_index=int(payload.get("zar_attack_index", 0)),
             timed_flags=normalized_flags,
             gem_counter=int(payload.get("gem_counter", 0)),
+            gem_last_attempt_room_id=_optional_int(payload.get("gem_last_attempt_room_id")),
+            gem_last_attempt_status=_optional_str(payload.get("gem_last_attempt_status")),
+            gem_last_attempt_object_count=_optional_int(
+                payload.get("gem_last_attempt_object_count")
+            ),
+            gem_last_spawn_room_id=_optional_int(payload.get("gem_last_spawn_room_id")),
+            gem_last_spawn_object_id=_optional_int(payload.get("gem_last_spawn_object_id")),
+            gem_last_spawn_object_name=_optional_str(payload.get("gem_last_spawn_object_name")),
             dryad_location=int(payload.get("dryad_location", 0)),
             brownie_location=int(payload.get("brownie_location", 0)),
             brownie_path_index=int(payload.get("brownie_path_index", 0)),
@@ -1074,10 +1156,13 @@ class AnimationTickRuntimeBridge:
         )
         dispatch_status = "failure" if dispatch_failures else "success"
         for audit_event in audit_events:
+            event_type = str(
+                audit_event.pop("event_type", None) or "animation.brownie_step"
+            )
             audit_event.setdefault("trigger_source", trigger_source)
             audit_event["dispatch_status"] = dispatch_status
             audit_event["dispatch_failure_count"] = len(dispatch_failures)
-            await self._record_audit("animation.brownie_step", audit_event)
+            await self._record_audit(event_type, audit_event)
 
         if raised is not None:
             raise raised
