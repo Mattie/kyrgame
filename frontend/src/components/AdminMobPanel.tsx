@@ -15,11 +15,13 @@ const formatSeconds = (seconds?: number | null) => {
 }
 
 const formatRoom = (mob: AdminMobRecord) => {
-  if (mob.room_id === undefined || mob.room_id === null) return 'No current room'
-  const brief = mob.room?.brief
   if (mob.id === 'gem_spawner') {
+    if (mob.room_id === undefined || mob.room_id === null) return 'No successful spawn yet'
+    const brief = mob.room?.brief
     return brief ? `Last spawn room ${mob.room_id}: ${brief}` : `Last spawn room ${mob.room_id}`
   }
+  if (mob.room_id === undefined || mob.room_id === null) return 'No current room'
+  const brief = mob.room?.brief
   return brief ? `Room ${mob.room_id}: ${brief}` : `Room ${mob.room_id}`
 }
 
