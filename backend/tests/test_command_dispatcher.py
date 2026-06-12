@@ -75,6 +75,33 @@ async def test_unknown_command_uses_legacy_kyra_fallback_and_room_mumbling(base_
 
 
 @pytest.mark.parametrize(
+    ("command_text", "expected_message_id"),
+    [
+        ("imagine", "KYRA2"),
+        ("because dragons", "KYRA3"),
+    ],
+)
+@pytest.mark.anyio
+async def test_unknown_command_preserves_legacy_kyra_special_replies(
+    base_state, command_text, expected_message_id
+):
+    vocabulary = commands.CommandVocabulary(
+        fixtures.load_commands(), fixtures.load_messages()
+    )
+    registry = commands.build_default_registry(vocabulary)
+    dispatcher = commands.CommandDispatcher(registry, clock=FakeClock())
+
+    parsed = vocabulary.parse_text(command_text)
+    result = await dispatcher.dispatch_parsed(parsed, base_state)
+
+    direct = next(event for event in result.events if event["scope"] == "player")
+    room = next(event for event in result.events if event["scope"] == "room")
+    assert direct["message_id"] == expected_message_id
+    assert "mumbling under" in room["text"]
+    assert room["exclude_player"] == base_state.player.plyrid
+
+
+@pytest.mark.parametrize(
     "verb,args,expected_location,expected_event_type",
     [
         ("move", {"direction": "north"}, 1, "player_moved"),

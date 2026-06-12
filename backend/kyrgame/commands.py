@@ -1209,10 +1209,19 @@ def _legacy_unknown_command_result(
     command_id = args.get("command_id")
     raw = str(args.get("fallback_raw") or args.get("raw") or "").strip()
     phrase = " ".join(part for part in (verb, raw) if part).strip()
-    argc = len(phrase.split())
-    # Legacy kyra() restores the command string, emits KYRA5-KYRA9 by argc, then
-    # broadcasts sndutl("mumbling under %s breath."). (legacy/KYRCMDS.C:1278-1303)
-    if argc == 1:
+    phrase_parts = phrase.split()
+    argc = len(phrase_parts)
+    first_word = phrase_parts[0].lower() if phrase_parts else verb.lower()
+    # Legacy kyra() checks "i..." and "because" before the argc-based
+    # KYRA5-KYRA9 replies, then broadcasts sndutl("mumbling under %s breath.").
+    # Source: legacy/KYRCMDS.C:1259-1303.
+    if first_word.startswith("i"):
+        message_id = "KYRA2"
+        text = _format_message(state, message_id)
+    elif first_word == "because":
+        message_id = "KYRA3"
+        text = _format_message(state, message_id)
+    elif argc == 1:
         message_id = "KYRA5"
         text = _format_message(state, message_id, phrase)
     elif argc == 2:
