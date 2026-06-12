@@ -90,13 +90,40 @@ def test_spell_tick_resets_macros_regens_spts_and_decrements_charms():
         message_lookup=lambda key: key,
     )
 
-    system.tick()
+    result = system.tick()
 
     assert player.macros == 0
     assert player.spts == 6
     assert player.charms == [0, 0, 1, 0, 0, 0]
     assert messages.direct == [("hero", "BASMSG", "BASMSG")]
+    assert result.touched_players[0].player_id == "hero"
     assert session.commits == 1
+
+
+def test_spell_tick_does_not_touch_unchanged_player():
+    player = StubPlayer(
+        plyrid="hero",
+        altnam="Hero",
+        attnam="Hero",
+        level=4,
+        spts=8,
+        macros=0,
+        gamloc=12,
+        flags=0,
+        charms=[0, 0, 0, 0, 0, 0],
+    )
+
+    system = SpellTickSystem(
+        session_factory=lambda: _session_scope(StubSession()),
+        player_repository_factory=lambda db: StubPlayerRepository([player]),
+        messaging=StubMessaging(),
+        constants=SpellTickConstants(),
+        message_lookup=lambda key: key,
+    )
+
+    result = system.tick()
+
+    assert result.touched_players == []
 
 
 def test_spell_tick_persists_json_charm_timer_decrements():

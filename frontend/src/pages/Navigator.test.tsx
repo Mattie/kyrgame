@@ -75,6 +75,7 @@ const maybeActivePlayerRosterFetch = (input: RequestInfo | URL) => {
 }
 
 const rememberedSessionStorageKey = 'kyrgame.navigator.rememberedSession'
+const scrollbackStorageKey = 'kyrgame.navigator.scrollback.v1:game:hero'
 
 describe('Navigator flow', () => {
   const locations = [
@@ -213,6 +214,7 @@ describe('Navigator flow', () => {
     vi.restoreAllMocks()
     MockWebSocket.instances.length = 0
     localStorage.clear()
+    sessionStorage.clear()
     window.history.replaceState(null, '', '/admin?modem=off')
   })
 
@@ -1406,6 +1408,11 @@ describe('Navigator flow', () => {
     expect(screen.getByText(/Invalid session token/i)).toBeInTheDocument()
 
     await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+    expect(MockWebSocket.instances).toHaveLength(1)
+
+    await act(async () => {
       await user.click(
         screen.getByRole('button', { name: /reconnect session/i })
       )
@@ -1423,6 +1430,334 @@ describe('Navigator flow', () => {
     expect(
       await screen.findByText(/token expires in 24h 30m/i)
     ).toBeInTheDocument()
+  })
+
+  it('automatically reconnects transient websocket drops with the same token and room', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+    fetchMock.mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const firstSocket = await waitFor(() => MockWebSocket.instances[0])
+    expect(firstSocket.url).toBe('ws://ws.local/rooms/7?token=abc123')
+
+    act(() => {
+      firstSocket.close(1006, 'Network dropped')
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2))
+    const secondSocket = MockWebSocket.instances[1]
+    expect(secondSocket.url).toBe('ws://ws.local/rooms/7?token=abc123')
+  })
+
+  it('restores same-tab scrollback for the same player after provider remount', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'fresh456', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+    fetchMock.mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    const view = render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const firstSocket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      firstSocket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          text: 'Remembered scrollback line.',
+        },
+      })
+    })
+    await waitFor(() =>
+      expect(getConsoleLines('Remembered scrollback line.').length).toBeGreaterThan(0)
+    )
+
+    view.unmount()
+    render(<App />)
+
+    await act(async () => {
+      await user.clear(screen.getByLabelText(/^player id$/i))
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    await waitFor(() =>
+      expect(getConsoleLines('Remembered scrollback line.').length).toBeGreaterThan(0)
+    )
+  })
+
+  it('does not restore another player scrollback when switching players', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'merlin456', player_id: 'merlin', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+    fetchMock.mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    const view = render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const firstSocket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      firstSocket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          text: 'Private scrollback line.',
+        },
+      })
+    })
+    await waitFor(() =>
+      expect(sessionStorage.getItem(scrollbackStorageKey)).toContain(
+        'Private scrollback line.'
+      )
+    )
+
+    view.unmount()
+    render(<App />)
+
+    await act(async () => {
+      await user.clear(screen.getByLabelText(/^player id$/i))
+      await user.type(screen.getByLabelText(/^player id$/i), 'merlin')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(2))
+    expect(screen.queryByText('Private scrollback line.')).toBeNull()
+  })
+
+  it('clears same-tab scrollback when the active player logs out', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+    fetchMock.mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.endsWith('/auth/logout')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'logged_out' }),
+        } as unknown as Response)
+      }
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          text: 'Logout-cleared scrollback line.',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(getConsoleLines('Logout-cleared scrollback line.').length).toBeGreaterThan(0)
+    )
+    expect(sessionStorage.getItem(scrollbackStorageKey)).toContain(
+      'Logout-cleared scrollback line.'
+    )
+
+    const activePlayersButton = await screen.findByRole('button', { name: /active players: 0/i })
+    act(() => {
+      fireEvent.click(activePlayersButton)
+    })
+    const logoutButton = await screen.findByRole('button', { name: /log out hero/i })
+    await act(async () => {
+      fireEvent.click(logoutButton)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(sessionStorage.getItem(scrollbackStorageKey)).toBeNull())
+  })
+
+  it('updates the current player visual from direct command_response player flags', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: {
+            token: 'abc123',
+            player_id: 'hero',
+            room_id: 7,
+            player_flags: 0,
+          },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+    const user = userEvent.setup()
+
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+    act(() => {
+      socket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          text: 'hero returns to ordinary form.',
+          player: 'hero',
+          player_flags: 2,
+        },
+      })
+    })
+
+    await waitFor(() => {
+      const heroVisuals = screen.getAllByText((_, element) =>
+        Boolean(
+          element?.classList.contains('player-wizard') &&
+            element.textContent?.includes('hero')
+        )
+      )
+      expect(heroVisuals.some((element) => element.textContent?.includes('♀'))).toBe(true)
+    })
   })
 
   it('renders command_response room_message text for look-style replies', async () => {

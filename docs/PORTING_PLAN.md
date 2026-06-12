@@ -65,6 +65,7 @@
 - [x] Aligned animation scheduler startup with `KYRANIM.C` first-delay parity (`rtkick(30)` then recurring `rtkick(15)`), persisted animation globals in DB-backed `runtime_state`, and added system telemetry audit events for animation ticks, brownie steps, and admin animation triggers.
 - [x] Ported `splrtk` into a stateless `SpellTickSystem` with scheduler registration, macro reset, +2 spell-point regen cap, and ALTNAM expiry/reversion side effects (`backend/kyrgame/spells/tick_system.py`).
 - [x] Persisted JSON-backed charm timer decrements from `SpellTickSystem` so ALTNAM transformations such as `weewillo` expire across database-backed ticks.
+- [x] Routed live spell-tick expiry fan-out through WebSockets and synced ticked active sessions so transformation timers cannot leave stale `altnam`/`attnam` state in MudConsole clients.
 
 - [x] Documented runtime tick-scheduler usage (`KYRGAME_TICK_SECONDS`, registration helpers, shutdown cleanup) in backend architecture/development docs for future timer ports.
 

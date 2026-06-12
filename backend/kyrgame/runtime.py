@@ -47,8 +47,10 @@ async def _publish_runtime_scry_output(app: FastAPI, player_id: str | None, mess
 
 
 async def _publish_runtime_scry_for_recipients(
-    app: FastAPI, recipients: list, message: dict
+    app: FastAPI, recipients: list | None, message: dict
 ) -> None:
+    if not recipients:
+        return
     socket_players = getattr(app.state, "game_socket_players", {})
     for recipient in recipients:
         await _publish_runtime_scry_output(app, socket_players.get(recipient), message)
@@ -434,6 +436,50 @@ async def bootstrap_app(app: FastAPI):
             return
         app.state.room_scripts.yaml_engine.get_room_state(room_id)[key] = value
 
+    def _runtime_active_player_flags() -> dict[str, int]:
+        flags: dict[str, int] = {}
+        for player in getattr(app.state, "active_players", {}).values():
+            flags[player.plyrid] = int(player.flags)
+        for player in getattr(app.state, "active_player_sessions", {}).values():
+            flags[player.plyrid] = int(player.flags)
+        return flags
+
+    async def _room_occupants_refresh_payload(
+        player_id: str,
+        room_id: int,
+        *,
+        occupants: list[str] | None = None,
+        player_flags_by_id: dict[str, int] | None = None,
+    ) -> dict | None:
+        if occupants is None:
+            occupants = await app.state.presence.players_in_room(room_id)
+        player_key = player_id.strip().casefold()
+        others = commands._dedupe_room_occupants(
+            sorted(
+                occupant
+                for occupant in occupants
+                if str(occupant or "").strip().casefold() != player_key
+            )
+        )
+        text, message_id = commands._format_room_occupants(others, default_messages)
+        if not text:
+            return None
+        if player_flags_by_id is None:
+            player_flags_by_id = _runtime_active_player_flags()
+        return {
+            "scope": "player",
+            "event": "room_occupants",
+            "type": "room_occupants",
+            "location": room_id,
+            "occupants": others,
+            "occupant_details": [
+                {"player_id": occupant, "flags": int(player_flags_by_id.get(occupant, 0))}
+                for occupant in others
+            ],
+            "text": text,
+            "message_id": message_id,
+        }
+
     async def _target_room_refresh_payloads(player_id: str, room_id: int) -> list[dict]:
         location = app.state.location_index.get(room_id)
         player_state = app.state.active_players.get(player_id)
@@ -461,28 +507,110 @@ async def bootstrap_app(app: FastAPI):
             commands._room_objects_event(location, objects_by_id, None, description_id),
         ]
         occupants = await app.state.presence.players_in_room(room_id)
-        player_key = player_id.strip().casefold()
-        others = commands._dedupe_room_occupants(
-            sorted(
-                occupant
-                for occupant in occupants
-                if str(occupant or "").strip().casefold() != player_key
-            )
+        player_flags_by_id = _runtime_active_player_flags()
+        occupant_payload = await _room_occupants_refresh_payload(
+            player_id,
+            room_id,
+            occupants=occupants,
+            player_flags_by_id=player_flags_by_id,
         )
-        text, message_id = commands._format_room_occupants(others, default_messages)
-        if text:
-            payloads.append(
-                {
-                    "scope": "player",
-                    "event": "room_occupants",
-                    "type": "room_occupants",
-                    "location": room_id,
-                    "occupants": others,
-                    "text": text,
-                    "message_id": message_id,
-                }
-            )
+        if occupant_payload:
+            payloads.append(occupant_payload)
         return payloads
+
+    async def _send_runtime_player_payload(
+        player_id: str, room_id: int, payload: dict
+    ) -> None:
+        envelope = {"type": "command_response", "room": room_id, "payload": payload}
+        session_connections = getattr(app.state, "session_connections", {})
+        for token in await app.state.presence.sessions_for_player(player_id):
+            target_socket = session_connections.get(token)
+            if not target_socket:
+                continue
+            if target_socket.application_state != WebSocketState.CONNECTED:
+                continue
+            await target_socket.send_json(envelope)
+            await _publish_runtime_scry_output(app, player_id, envelope)
+
+    async def _send_room_occupant_refreshes(room_ids: set[int]) -> None:
+        for room_id in room_ids:
+            occupants = commands._dedupe_room_occupants(
+                sorted(await app.state.presence.players_in_room(room_id))
+            )
+            player_flags_by_id = _runtime_active_player_flags()
+            for player_id in occupants:
+                payload = await _room_occupants_refresh_payload(
+                    player_id,
+                    room_id,
+                    occupants=occupants,
+                    player_flags_by_id=player_flags_by_id,
+                )
+                if payload:
+                    await _send_runtime_player_payload(player_id, room_id, payload)
+
+    async def _spell_tick_callback():
+        result = app.state.spell_tick_system.tick()
+
+        for touched in result.touched_players:
+            sync_active_player_state_from_db(app, touched.player_id)
+
+        player_flags_by_id = _runtime_active_player_flags()
+        for direct_message in result.direct_messages:
+            player_flags = player_flags_by_id.get(direct_message.player_id)
+            payload = {
+                "scope": "player",
+                "event": "room_message",
+                "type": "room_message",
+                "message_id": direct_message.message_id,
+                "text": direct_message.text,
+                "player": direct_message.player_id,
+            }
+            if player_flags is not None:
+                payload["player_flags"] = int(player_flags)
+            await _send_runtime_player_payload(
+                direct_message.player_id,
+                direct_message.room_id,
+                payload,
+            )
+
+        session_connections = getattr(app.state, "session_connections", {})
+        affected_room_ids: set[int] = set()
+        for room_message in result.room_messages:
+            excluded_sockets = set()
+            for token in await app.state.presence.sessions_for_player(
+                room_message.exclude_player_id
+            ):
+                if await app.state.presence.room_for_session(token) != room_message.room_id:
+                    continue
+                target_socket = session_connections.get(token)
+                if not target_socket:
+                    continue
+                if target_socket.application_state != WebSocketState.CONNECTED:
+                    continue
+                excluded_sockets.add(target_socket)
+            if not excluded_sockets:
+                continue
+            payload = {
+                "scope": "room",
+                "event": "room_message",
+                "type": "room_message",
+                "message_id": room_message.message_id,
+                "text": room_message.text,
+                "exclude_player": room_message.exclude_player_id,
+            }
+            envelope = {"type": "room_broadcast", "room": room_message.room_id, "payload": payload}
+            recipients = await app.state.gateway.broadcast(
+                room_message.room_id,
+                envelope,
+                exclude=excluded_sockets or None,
+            )
+            await _publish_runtime_scry_for_recipients(app, recipients, envelope)
+            affected_room_ids.add(room_message.room_id)
+
+        if affected_room_ids:
+            await _send_room_occupant_refreshes(affected_room_ids)
+
+    app.state.spell_tick_callback = _spell_tick_callback
 
     async def _dispatch_animation_event(event):
         text = app.state.animation_tick_callback.resolve_event_text(event)
@@ -647,7 +775,7 @@ async def bootstrap_app(app: FastAPI):
     )
     app.state.tick_runtime = RuntimeTickCoordinator(
         tick_scheduler=app.state.tick_scheduler,
-        spell_tick=app.state.spell_tick_system,
+        spell_tick=app.state.spell_tick_callback,
         animation_tick=app.state.animation_tick_callback,
     )
     app.state.tick_runtime.start()

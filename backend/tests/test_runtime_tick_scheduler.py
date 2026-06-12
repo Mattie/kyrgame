@@ -4,7 +4,7 @@ import pytest
 from fastapi import FastAPI
 from starlette.websockets import WebSocketState
 
-from kyrgame import fixtures, models
+from kyrgame import commands, constants, fixtures, models
 from kyrgame.runtime import bootstrap_app, shutdown_app
 from kyrgame.telemetry import TelemetryEventSink
 from kyrgame.world.animation_tick_system import AnimationTickEvent
@@ -73,6 +73,330 @@ async def test_bootstrap_uses_default_tick_seconds_when_env_missing(monkeypatch)
     await bootstrap_app(app)
 
     assert app.state.tick_scheduler.tick_seconds == 1.0
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_spell_tick_callback_fans_out_altname_expiry_and_syncs_live_players(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    with app.state.session_factory() as session:
+        hero = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        hero.gamloc = 7
+        hero.pgploc = 7
+        hero.altnam = "Some willowisp"
+        hero.attnam = "willowisp"
+        hero.flags = int(
+            constants.PlayerFlag.LOADED
+            | constants.PlayerFlag.INVISF
+            | constants.PlayerFlag.PEGASU
+            | constants.PlayerFlag.WILLOW
+            | constants.PlayerFlag.PDRAGN
+        )
+        hero.charms = [0, 0, 0, 0, 0, 1]
+        witness = fixtures.build_player().model_copy(
+            update={
+                "uidnam": "witness-user",
+                "plyrid": "witness",
+                "altnam": "Witness",
+                "attnam": "Witness",
+                "gamloc": 7,
+                "pgploc": 7,
+                "modno": 2,
+            }
+        )
+        session.add(models.Player(**witness.model_dump()))
+        session.commit()
+
+    hero_socket = _FakeSocket()
+    shadow_socket = _FakeSocket()
+    witness_socket = _FakeSocket()
+    live_hero = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "hero",
+            "altnam": "Some willowisp",
+            "attnam": "willowisp",
+            "gamloc": 7,
+            "pgploc": 7,
+            "flags": int(
+                constants.PlayerFlag.LOADED
+                | constants.PlayerFlag.INVISF
+                | constants.PlayerFlag.PEGASU
+                | constants.PlayerFlag.WILLOW
+                | constants.PlayerFlag.PDRAGN
+            ),
+            "charms": [0, 0, 0, 0, 0, 1],
+        }
+    )
+    shadow_hero = models.PlayerModel(**live_hero.model_dump())
+    live_witness = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "witness",
+            "altnam": "Witness",
+            "attnam": "Witness",
+            "gamloc": 7,
+            "pgploc": 7,
+        }
+    )
+    app.state.session_connections = {
+        "hero-token": hero_socket,
+        "shadow-hero-token": shadow_socket,
+        "witness-token": witness_socket,
+    }
+    app.state.active_player_sessions = {
+        "hero-token": live_hero,
+        "shadow-hero-token": shadow_hero,
+        "witness-token": live_witness,
+    }
+    app.state.active_players = {"hero": live_hero, "witness": live_witness}
+    await app.state.presence.set_location("hero", 7, "hero-token")
+    await app.state.presence.set_location("hero", 7, "shadow-hero-token")
+    await app.state.presence.set_location("witness", 7, "witness-token")
+    await app.state.gateway.register(7, hero_socket, announce=False)
+    await app.state.gateway.register(7, shadow_socket, announce=False)
+    await app.state.gateway.register(7, witness_socket, announce=False)
+
+    await app.state.spell_tick_callback()
+
+    for socket in (hero_socket, shadow_socket):
+        direct_message = next(
+            message
+            for message in socket.sent
+            if message.get("type") == "command_response"
+            and message.get("payload", {}).get("message_id") == "BASMSG5"
+        )
+        assert direct_message["payload"]["player"] == "hero"
+        assert direct_message["payload"]["player_flags"] == int(constants.PlayerFlag.LOADED)
+        assert not any(
+            message.get("payload", {}).get("message_id") == "RET2NM"
+            for message in socket.sent
+        )
+
+    ret2nm = next(
+        message
+        for message in witness_socket.sent
+        if message.get("type") == "room_broadcast"
+        and message.get("payload", {}).get("message_id") == "RET2NM"
+    )
+    assert "Some willowisp" in ret2nm["payload"]["text"]
+    assert "hero" in ret2nm["payload"]["text"]
+
+    occupants_refresh = next(
+        message
+        for message in witness_socket.sent
+        if message.get("type") == "command_response"
+        and message.get("payload", {}).get("event") == "room_occupants"
+    )
+    hero_detail = next(
+        detail
+        for detail in occupants_refresh["payload"]["occupant_details"]
+        if detail["player_id"] == "hero"
+    )
+    assert hero_detail["flags"] == int(constants.PlayerFlag.LOADED)
+
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        assert refreshed.altnam == "hero"
+        assert refreshed.attnam == "hero"
+        assert refreshed.flags == int(constants.PlayerFlag.LOADED)
+        assert refreshed.charms[constants.ALTNAM] == 0
+
+    for player_state in (live_hero, shadow_hero, app.state.active_players["hero"]):
+        assert player_state.altnam == "hero"
+        assert player_state.attnam == "hero"
+        assert player_state.flags == int(constants.PlayerFlag.LOADED)
+        assert player_state.charms[constants.ALTNAM] == 0
+
+    vocabulary = commands.CommandVocabulary(
+        app.state.fixture_cache["commands"], app.state.fixture_cache["messages"]
+    )
+    state = commands.GameState(
+        player=live_hero,
+        locations=app.state.location_index,
+        objects={obj.id: obj for obj in app.state.fixture_cache["objects"]},
+        messages=app.state.fixture_cache["messages"],
+        content_mappings=app.state.fixture_cache["content_mappings"],
+        presence=app.state.presence,
+    )
+    parsed = vocabulary.parse_text("say hello")
+    result = await commands.CommandDispatcher(
+        commands.build_default_registry(vocabulary)
+    ).dispatch_parsed(parsed, state)
+    room_text = next(event["text"] for event in result.events if event.get("scope") == "room")
+    assert "hero" in room_text
+    assert "Some willowisp" not in room_text
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_spell_tick_callback_skips_room_broadcast_for_offline_altname_expiry(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    with app.state.session_factory() as session:
+        hero = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        hero.gamloc = 7
+        hero.pgploc = 7
+        hero.altnam = "Some willowisp"
+        hero.attnam = "willowisp"
+        hero.flags = int(constants.PlayerFlag.LOADED | constants.PlayerFlag.WILLOW)
+        hero.charms = [0, 0, 0, 0, 0, 1]
+        witness = fixtures.build_player().model_copy(
+            update={
+                "uidnam": "witness-user",
+                "plyrid": "witness",
+                "altnam": "Witness",
+                "attnam": "Witness",
+                "gamloc": 7,
+                "pgploc": 7,
+                "modno": 2,
+            }
+        )
+        session.add(models.Player(**witness.model_dump()))
+        session.commit()
+
+    witness_socket = _FakeSocket()
+    live_witness = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "witness",
+            "altnam": "Witness",
+            "attnam": "Witness",
+            "gamloc": 7,
+            "pgploc": 7,
+        }
+    )
+    app.state.session_connections = {"witness-token": witness_socket}
+    app.state.active_player_sessions = {"witness-token": live_witness}
+    app.state.active_players = {"witness": live_witness}
+    await app.state.presence.set_location("witness", 7, "witness-token")
+    await app.state.gateway.register(7, witness_socket, announce=False)
+
+    await app.state.spell_tick_callback()
+
+    assert not any(
+        message.get("payload", {}).get("message_id") == "RET2NM"
+        for message in witness_socket.sent
+    )
+    assert not any(
+        message.get("payload", {}).get("event") == "room_occupants"
+        for message in witness_socket.sent
+    )
+
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        assert refreshed.altnam == "hero"
+        assert refreshed.attnam == "hero"
+        assert refreshed.flags == int(constants.PlayerFlag.LOADED)
+        assert refreshed.charms[constants.ALTNAM] == 0
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_spell_tick_callback_syncs_nonexpired_timer_decrements_to_live_players(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    with app.state.session_factory() as session:
+        hero = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        hero.gamloc = 7
+        hero.pgploc = 7
+        hero.altnam = "Some willowisp"
+        hero.attnam = "willowisp"
+        hero.flags = int(constants.PlayerFlag.LOADED | constants.PlayerFlag.WILLOW)
+        hero.spts = 3
+        hero.level = 4
+        hero.charms = [0, 0, 0, 0, 0, 4]
+        session.commit()
+
+    live_hero = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "hero",
+            "altnam": "Some willowisp",
+            "attnam": "willowisp",
+            "gamloc": 7,
+            "pgploc": 7,
+            "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.WILLOW),
+            "spts": 3,
+            "level": 4,
+            "charms": [0, 0, 0, 0, 0, 4],
+        }
+    )
+    app.state.active_players = {"hero": live_hero}
+    app.state.active_player_sessions = {"hero-token": live_hero}
+
+    await app.state.spell_tick_callback()
+
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        assert refreshed.altnam == "Some willowisp"
+        assert refreshed.flags == int(constants.PlayerFlag.LOADED | constants.PlayerFlag.WILLOW)
+        assert refreshed.spts == 5
+        assert refreshed.charms[constants.ALTNAM] == 3
+
+    assert live_hero.altnam == "Some willowisp"
+    assert live_hero.flags == int(constants.PlayerFlag.LOADED | constants.PlayerFlag.WILLOW)
+    assert live_hero.spts == 5
+    assert live_hero.charms[constants.ALTNAM] == 3
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "flag",
+    [
+        constants.PlayerFlag.INVISF,
+        constants.PlayerFlag.PEGASU,
+        constants.PlayerFlag.WILLOW,
+        constants.PlayerFlag.PDRAGN,
+    ],
+)
+async def test_spell_tick_callback_clears_each_legacy_transformation_flag(monkeypatch, flag):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "999")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+
+    with app.state.session_factory() as session:
+        hero = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        hero.gamloc = 7
+        hero.pgploc = 7
+        hero.altnam = "Some transformed shape"
+        hero.attnam = "transformed shape"
+        hero.flags = int(constants.PlayerFlag.LOADED | flag)
+        hero.charms = [0, 0, 0, 0, 0, 1]
+        session.commit()
+
+    await app.state.spell_tick_callback()
+
+    with app.state.session_factory() as session:
+        refreshed = session.query(models.Player).filter(models.Player.plyrid == "hero").one()
+        assert refreshed.altnam == "hero"
+        assert refreshed.attnam == "hero"
+        assert refreshed.flags == int(constants.PlayerFlag.LOADED)
+        assert refreshed.charms[constants.ALTNAM] == 0
 
     await shutdown_app(app)
 

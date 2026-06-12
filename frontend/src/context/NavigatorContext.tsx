@@ -298,6 +298,139 @@ const createActivityId = (() => {
   }
 })()
 
+const SCROLLBACK_STORAGE_KEY_PREFIX = 'kyrgame.navigator.scrollback.v1'
+const SCROLLBACK_ACTIVITY_LIMIT = 500
+const TRANSIENT_RECONNECT_DELAYS_MS = [250, 500, 1000, 2000, 4000, 8000] as const
+
+type ReconnectTarget = {
+  token: string
+  roomId: number
+}
+
+type ConnectWebSocketOptions = {
+  reconnecting?: boolean
+}
+
+type ConnectWebSocketFn = (
+  token: string,
+  roomId: number,
+  options?: ConnectWebSocketOptions
+) => void
+
+const getSessionStorage = (): Storage | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
+}
+
+const createScrollbackStorageKey = (sessionKind: SessionKind, playerId: string): string =>
+  `${SCROLLBACK_STORAGE_KEY_PREFIX}:${sessionKind}:${playerId.trim().toLowerCase()}`
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value && typeof value === 'object' && !Array.isArray(value))
+
+const coerceStoredActivityEntry = (value: unknown): ActivityEntry | null => {
+  if (!isRecord(value)) return null
+  if (
+    typeof value.id !== 'string' ||
+    typeof value.type !== 'string' ||
+    typeof value.summary !== 'string'
+  ) {
+    return null
+  }
+
+  const entry: ActivityEntry = {
+    id: value.id,
+    type: value.type,
+    summary: value.summary,
+  }
+
+  if (typeof value.room === 'number' && Number.isFinite(value.room)) {
+    entry.room = value.room
+  }
+  if ('payload' in value) {
+    const payload = value.payload
+    if (
+      payload === null ||
+      typeof payload === 'string' ||
+      typeof payload === 'number' ||
+      typeof payload === 'boolean' ||
+      isRecord(payload)
+    ) {
+      entry.payload = payload as ActivityEntry['payload']
+    }
+  }
+  if (Array.isArray(value.extraLines)) {
+    entry.extraLines = value.extraLines.filter((line): line is string => typeof line === 'string')
+  }
+  if (value.hidden === true) {
+    entry.hidden = true
+  }
+  if (isRecord(value.meta)) {
+    const meta = { ...value.meta }
+    delete meta.hydratedScrollback
+    if (Object.keys(meta).length > 0) {
+      entry.meta = meta
+    }
+  }
+  return entry
+}
+
+const readStoredScrollback = (key: string): ActivityEntry[] => {
+  try {
+    const storage = getSessionStorage()
+    const raw = storage?.getItem(key)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map(coerceStoredActivityEntry)
+      .filter((entry): entry is ActivityEntry => Boolean(entry))
+      .slice(-SCROLLBACK_ACTIVITY_LIMIT)
+      .map((entry) => ({
+        ...entry,
+        meta: { ...(entry.meta ?? {}), hydratedScrollback: true },
+      }))
+  } catch {
+    return []
+  }
+}
+
+const writeStoredScrollback = (key: string, entries: ActivityEntry[]) => {
+  try {
+    const storage = getSessionStorage()
+    if (!storage) return
+    const visibleEntries = entries
+      .filter((entry) => !entry.hidden)
+      .map((entry) =>
+        coerceStoredActivityEntry({
+          ...entry,
+          meta: entry.meta ? { ...entry.meta, hydratedScrollback: undefined } : undefined,
+        })
+      )
+      .filter((entry): entry is ActivityEntry => Boolean(entry))
+      .slice(-SCROLLBACK_ACTIVITY_LIMIT)
+    storage.setItem(key, JSON.stringify(visibleEntries))
+  } catch {
+    // Same-tab scrollback is best-effort; live game state stays authoritative.
+  }
+}
+
+const removeStoredScrollback = (key: string | null) => {
+  if (!key) return
+  try {
+    getSessionStorage()?.removeItem(key)
+  } catch {
+    // Browser storage can be unavailable in private/restricted contexts.
+  }
+}
+
+const isAuthWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
+  event.code === 1008 || /invalid session token/i.test(event.reason ?? '')
+
 const readRememberedSessionRaw = (): string | null => {
   try {
     return localStorage.getItem(REMEMBERED_SESSION_STORAGE_KEY)
@@ -583,7 +716,13 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const sessionRef = useRef<SessionRecord | null>(null)
   const adminTokenRef = useRef<string | null>(null)
   const occupantsRef = useRef<string[]>([])
-  const suppressSocketCloseRef = useRef(false)
+  const suppressedSocketRef = useRef<WebSocket | null>(null)
+  const activityRef = useRef<ActivityEntry[]>([])
+  const scrollbackKeyRef = useRef<string | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectAttemptRef = useRef(0)
+  const reconnectTargetRef = useRef<ReconnectTarget | null>(null)
+  const connectWebSocketRef = useRef<ConnectWebSocketFn | null>(null)
 
   useEffect(() => {
     sessionRef.current = session
@@ -594,16 +733,88 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     setAdminTokenState(token)
   }, [])
 
-  const resetSocket = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.close()
-      socketRef.current = null
+  const persistActivity = useCallback((entries: ActivityEntry[]) => {
+    const key = scrollbackKeyRef.current
+    if (key) {
+      writeStoredScrollback(key, entries)
     }
   }, [])
 
-  const appendActivity = useCallback((entry: Omit<ActivityEntry, 'id'>) => {
-    setActivity((prev) => [...prev, { ...entry, id: createActivityId() }])
+  const replaceActivity = useCallback(
+    (entries: ActivityEntry[]) => {
+      activityRef.current = entries
+      setActivity(entries)
+      persistActivity(entries)
+    },
+    [persistActivity]
+  )
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current === null) return
+    clearTimeout(reconnectTimerRef.current)
+    reconnectTimerRef.current = null
   }, [])
+
+  const closeGameSocket = useCallback((reason: string) => {
+    const socket = socketRef.current
+    socketRef.current = null
+    if (socket && socket.readyState !== WebSocket.CLOSED) {
+      suppressedSocketRef.current = socket
+      socket.close(1000, reason)
+    } else {
+      suppressedSocketRef.current = null
+    }
+  }, [])
+
+  const resetSocket = useCallback(
+    (reason = 'Reset game socket') => {
+      clearReconnectTimer()
+      reconnectAttemptRef.current = 0
+      reconnectTargetRef.current = null
+      closeGameSocket(reason)
+    },
+    [clearReconnectTimer, closeGameSocket]
+  )
+
+  useEffect(() => {
+    return () => {
+      resetSocket('Navigator provider unmounted')
+    }
+  }, [resetSocket])
+
+  const appendActivity = useCallback((entry: Omit<ActivityEntry, 'id'>) => {
+    setActivity((prev) => {
+      const next = [...prev, { ...entry, id: createActivityId() }]
+      activityRef.current = next
+      persistActivity(next)
+      return next
+    })
+  }, [persistActivity])
+
+  const activateScrollback = useCallback(
+    (sessionKind: SessionKind, playerId: string) => {
+      const nextKey = createScrollbackStorageKey(sessionKind, playerId)
+      const previousKey = scrollbackKeyRef.current
+      if (previousKey && previousKey !== nextKey) {
+        removeStoredScrollback(previousKey)
+      }
+      scrollbackKeyRef.current = nextKey
+
+      if (previousKey !== nextKey || activityRef.current.length === 0) {
+        replaceActivity(readStoredScrollback(nextKey))
+        return
+      }
+
+      persistActivity(activityRef.current)
+    },
+    [persistActivity, replaceActivity]
+  )
+
+  const clearCurrentScrollback = useCallback(() => {
+    removeStoredScrollback(scrollbackKeyRef.current)
+    scrollbackKeyRef.current = null
+    replaceActivity([])
+  }, [replaceActivity])
 
   const updateOccupants = useCallback((players: string[]) => {
     const unique = Array.from(new Set(players))
@@ -816,6 +1027,21 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           let payload = message.payload
           let extraLines: string[] | undefined
 
+          const directPlayer =
+            message.payload?.player ?? message.payload?.player_id ?? message.payload?.playerId
+          if (
+            !readOnlyPerspective &&
+            typeof directPlayer === 'string' &&
+            typeof message.payload?.player_flags === 'number'
+          ) {
+            mergePlayerVisuals([
+              {
+                player: directPlayer,
+                flags: message.payload.player_flags,
+              },
+            ])
+          }
+
           // Skip command acknowledgments that have no event - they're just metadata
           if (!message.payload?.event && message.payload?.verb) {
             break
@@ -997,27 +1223,58 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     ]
   )
 
-  const connectWebSocket = useCallback(
-    (token: string, roomId: number) => {
-      resetSocket()
+  const scheduleTransientReconnect = useCallback((target: ReconnectTarget) => {
+    clearReconnectTimer()
+    const attemptIndex = Math.min(
+      reconnectAttemptRef.current,
+      TRANSIENT_RECONNECT_DELAYS_MS.length - 1
+    )
+    const delayMs = TRANSIENT_RECONNECT_DELAYS_MS[attemptIndex]
+    reconnectAttemptRef.current = Math.min(
+      reconnectAttemptRef.current + 1,
+      TRANSIENT_RECONNECT_DELAYS_MS.length - 1
+    )
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null
+      connectWebSocketRef.current?.(target.token, target.roomId, { reconnecting: true })
+    }, delayMs)
+  }, [clearReconnectTimer])
+
+  const connectWebSocket = useCallback<ConnectWebSocketFn>(
+    (token, roomId, options) => {
+      clearReconnectTimer()
+      if (!options?.reconnecting) {
+        reconnectAttemptRef.current = 0
+      }
+      closeGameSocket('Replacing game socket')
+      reconnectTargetRef.current = { token, roomId }
       setConnectionStatus('connecting')
       const socket = new WebSocket(`${wsBaseUrl}/rooms/${roomId}?token=${token}`)
       socketRef.current = socket
 
       socket.onopen = () => {
+        reconnectAttemptRef.current = 0
         setConnectionStatus('connected')
+        setError(null)
       }
 
       socket.onclose = (event) => {
-        if (suppressSocketCloseRef.current) {
-          suppressSocketCloseRef.current = false
-          setConnectionStatus('idle')
+        if (socketRef.current === socket) {
+          socketRef.current = null
+        }
+        if (suppressedSocketRef.current === socket) {
+          suppressedSocketRef.current = null
           return
         }
         setConnectionStatus('disconnected')
         if (event.code !== 1000) {
           setError(event.reason || `WebSocket closed with code ${event.code}`)
         }
+        if (event.code === 1000 || isAuthWebSocketClose(event)) {
+          return
+        }
+        const reconnectTarget = reconnectTargetRef.current ?? { token, roomId }
+        scheduleTransientReconnect(reconnectTarget)
       }
 
       socket.onerror = () => {
@@ -1036,8 +1293,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
       }
     },
-    [appendActivity, handleIncoming, resetSocket, wsBaseUrl]
+    [
+      appendActivity,
+      clearReconnectTimer,
+      closeGameSocket,
+      handleIncoming,
+      scheduleTransientReconnect,
+      wsBaseUrl,
+    ]
   )
+
+  useEffect(() => {
+    connectWebSocketRef.current = connectWebSocket
+  }, [connectWebSocket])
 
   const closeScrySocket = useCallback((reason: string) => {
     const socket = scrySocketRef.current
@@ -1363,9 +1631,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     ) => {
       setConnectionStatus('connecting')
       setError(null)
-      setActivity([])
       setPlayerVisuals({})
-      resetSocket()
+      resetSocket('Starting session')
       setAdminToken(null)
       let elevatedAdminToken: string | null = null
       try {
@@ -1479,6 +1746,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         })
         setCurrentRoom(record.roomId)
         updateOccupants([])
+        activateScrollback(record.sessionKind, record.playerId)
         // Load world data first and wait for it to complete before connecting WebSocket
         // worldRef.current is set immediately by loadWorldData, so messages will be available
         await loadWorldData()
@@ -1521,6 +1789,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     },
     [
       apiBaseUrl,
+      activateScrollback,
       appendActivity,
       connectWebSocket,
       loadWorldData,
@@ -1570,25 +1839,25 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     } finally {
       closeScrySocket('Logout')
       setScrySession(null)
-      const socket = socketRef.current
-      socketRef.current = null
-      if (socket && socket.readyState !== WebSocket.CLOSED) {
-        suppressSocketCloseRef.current = true
-        socket.close(1000, 'Logout')
-      } else {
-        suppressSocketCloseRef.current = false
-      }
+      resetSocket('Logout')
       setSession(null)
       sessionRef.current = null
       setAdminToken(null)
       setCurrentRoom(null)
       updateOccupants([])
       setPlayerVisuals({})
-      setActivity([])
+      clearCurrentScrollback()
       setError(null)
       setConnectionStatus('idle')
     }
-  }, [closeScrySocket, logoutToken, setAdminToken, updateOccupants])
+  }, [
+    clearCurrentScrollback,
+    closeScrySocket,
+    logoutToken,
+    resetSocket,
+    setAdminToken,
+    updateOccupants,
+  ])
 
   const advanceLifecycle = useCallback(
     async (input: string) => {
