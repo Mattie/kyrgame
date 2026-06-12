@@ -2,7 +2,7 @@
 id: 264
 name: philos
 spoiler_summary: "Philosopher's retreat where wondering or considering tests readiness for level 23."
-spoiler_interaction: "Wonder or consider to attempt the level 23 ascension if you hold the golden key."
+spoiler_interaction: "Wonder or consider to attempt the level 23 ascension."
 legacy_ref: "legacy/KYRROUS.C:1374-1384"
 triggers:
   - verbs: [wonder, consider]
@@ -10,13 +10,7 @@ triggers:
       - type: level_gate
         target_level: 23
         level_up: true
-        requires_item: key
-        # Legacy chklvl() enforces golden key + correct level gates before msgutl2/glvutl. (legacy/KYRROUS.C:1377-1380)
-        on_missing_item:
-          - type: message
-            message_id: NPAY00
-            broadcast_message_id: NPAY01
-            broadcast_format: [player_altnam]
+        # Legacy chklvl() enforces the module KYRKEY + correct level gates before msgutl2/glvutl. (legacy/KYRROUS.C:1377-1380)
         on_success:
           # Level-up success path: msgutl2(LEVL23, LVL9M1) then glvutl(). (legacy/KYRROUS.C:1377-1380)
           - type: message

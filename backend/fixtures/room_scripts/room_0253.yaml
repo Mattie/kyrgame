@@ -2,20 +2,17 @@
 id: 253
 name: forgtr
 spoiler_summary: "Hall of Forgetfulness where forgetting tests readiness for level 20."
-spoiler_interaction: "Say 'forget' to attempt the level 20 ascension if you hold the golden key."
+spoiler_interaction: "Say 'forget' to attempt the level 20 ascension."
 legacy_ref: "legacy/KYRROUS.C:1334-1344"
 triggers:
   - verbs: [forget]
     actions:
+      # Legacy forgtr() calls chklvl(20), which checks KYRKEY/NORMAL module
+      # entitlement and the requested target level before msgutl2()+glvutl().
+      # Source: legacy/KYRROUS.C:1334-1339, 1436-1456.
       - type: level_gate
         target_level: 20
         level_up: true
-        requires_item: key
-        on_missing_item:
-          - type: message
-            message_id: NPAY00
-            broadcast_message_id: NPAY01
-            broadcast_format: [player_altnam]
         on_success:
           - type: message
             message_id: LEVL20

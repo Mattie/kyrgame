@@ -1,12 +1,14 @@
 # Legacy: legacy/KYRLOCS.C:348-353 (heartm); legacy/KYRROUS.C:1213-1232 (heartm)
 id: 288
 name: heartm
+allow_normalized_retry: false
 spoiler_summary: "Heart mastery altar that honors devotion to your spouse for the level 15 trial."
 spoiler_interaction: "Offer your heart to your spouse to attempt the level 15 ascension."
 legacy_ref: "legacy/KYRROUS.C:1213-1232"
 triggers:
   - verbs: [offer]
-    arg_strip: [to]
+    arg_filters: [bagprep]
+    arg_count: 2
     arg_matches:
       - index: 0
         value: heart
@@ -16,7 +18,8 @@ triggers:
       - type: level_gate
         target_level: 15
         level_up: false
-        # Legacy chklvl gate before reward. (legacy/KYRROUS.C:1218-1226)
+        # Legacy chklvl(15) checks KYRKEY/NORMAL module entitlement before reward.
+        # Source: legacy/KYRROUS.C:1218-1226, 1436-1456.
         on_success:
           # msgutl2(HEAR01, HEAR02) before locket reward + level-up. (legacy/KYRROUS.C:1219-1226)
           - type: message
@@ -30,6 +33,7 @@ triggers:
               # Legacy tgmpobj(0) drops oldest item when pack is full. (legacy/KYRROUS.C:1220-1223)
               - type: remove_inventory_index
                 index: 0
+                strategy: legacy_takpobj
               - type: message
                 message_id: HEAR03
           # Grant locket (gmobjs[15]) and then glvutl(). (legacy/KYRROUS.C:1225-1226)

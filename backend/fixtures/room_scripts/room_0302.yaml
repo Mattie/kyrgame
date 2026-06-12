@@ -1,6 +1,7 @@
 # Legacy: legacy/KYRLOCS.C:360-364 (wingam); legacy/KYRROUS.C:1406-1421 (wingam)
 id: 302
 name: wingam
+allow_normalized_retry: false
 spoiler_summary: "Wing animation chamber where answering the riddle completes the level 25 trial."
 spoiler_interaction: "Answer the riddle phrase to attempt the level 25 ascension."
 legacy_ref: "legacy/KYRROUS.C:1406-1421"
@@ -11,12 +12,15 @@ triggers:
   - verbs: [answer]
     # Legacy compares the answer phrase (RIDDLE) to the full response after "answer". (legacy/KYRROUS.C:1410-1416)
     arg_phrase_key: RIDDLE
+    phrase_match: sameas
     room_state_equals:
       zar_location: 302
     actions:
       - type: level_gate
         target_level: 25
         level_up: true
+        # Legacy chklvl(25) checks KYRKEY/NORMAL module entitlement before glvutl().
+        # Source: legacy/KYRROUS.C:1413-1416, 1436-1456.
         on_success:
           # Legacy shocst() announces externally, then msgutl2(YOUWIN, SHEWON). (legacy/KYRROUS.C:1414-1416)
           - type: message

@@ -1029,6 +1029,240 @@ async def test_websocket_room_command_handles_unknown_verbs():
 
 
 @pytest.mark.anyio
+async def test_body_chamber_jump_commands_match_legacy_fallback_and_leveling(
+    monkeypatch,
+):
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "10")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 282}
+            )
+            token = session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert hero is not None
+            hero.flags |= int(constants.PlayerFlag.LOADED)
+            hero.level = 12
+            hero.nmpdes = constants.level_to_nmpdes(12)
+            hero.hitpts = 48
+            hero.spts = 50
+            hero.gamloc = 282
+            hero.pgploc = 282
+            hero.gpobjs = []
+            hero.obvals = []
+            hero.npobjs = 0
+            hero.charms = [0 for _ in range(constants.NCHARM)]
+            hero.spells = [40]
+            hero.nspells = 1
+            db.commit()
+
+        uri = f"ws://{host}:{port}/ws/rooms/282?token={token}"
+        async with websockets.connect(uri) as ws:
+            await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+
+            await ws.send(json.dumps({"type": "command", "command": "cast makemyd"}))
+            await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "S41M00",
+            )
+
+            await ws.send(json.dumps({"type": "command", "command": "jump"}))
+            bare_jump = await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "KYRA5",
+            )
+            assert bare_jump["payload"]["text"] == "...jump what?"
+
+            await ws.send(json.dumps({"type": "command", "command": "jump into chasm"}))
+            into_chasm = await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "KYRA7",
+            )
+            assert into_chasm["payload"]["text"] == (
+                "...How do you plan to jump into chasm?"
+            )
+
+            await ws.send(json.dumps({"type": "command", "command": "jump over chasm"}))
+            over_chasm = await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "KYRA7",
+            )
+            assert over_chasm["payload"]["text"] == (
+                "...How do you plan to jump over chasm?"
+            )
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+                assert hero is not None
+                assert hero.level == 12
+                assert 14 not in hero.gpobjs
+
+            await ws.send(
+                json.dumps({"type": "command", "command": "jump across the chasm"})
+            )
+            await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "BODM01",
+            )
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert hero is not None
+            assert hero.level == 13
+            assert 23 in hero.gpobjs
+            assert 14 not in hero.gpobjs
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_body_chamber_unprotected_jump_uses_hitoth_reset_and_persists(
+    monkeypatch,
+):
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "10")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        seed_returning_players(app, ("zthero", "ztseer"))
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "zthero", "room_id": 282}
+            )
+            observer_session = await client.post(
+                "/auth/session", json={"player_id": "ztseer", "room_id": 282}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            observer_token = observer_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+            observer = db.scalar(
+                select(models.Player).where(models.Player.plyrid == "ztseer")
+            )
+            assert hero is not None
+            assert observer is not None
+            for record in (hero, observer):
+                record.flags |= int(constants.PlayerFlag.LOADED)
+                record.gamloc = 282
+                record.pgploc = 282
+            hero.level = 12
+            hero.nmpdes = constants.level_to_nmpdes(12)
+            hero.hitpts = 48
+            hero.charms = [0 for _ in range(constants.NCHARM)]
+            hero.gpobjs = []
+            hero.obvals = []
+            hero.npobjs = 0
+            db.commit()
+
+        hero_uri = f"ws://{host}:{port}/ws/rooms/282?token={hero_token}"
+        observer_uri = f"ws://{host}:{port}/ws/rooms/282?token={observer_token}"
+        async with (
+            websockets.connect(hero_uri) as hero_ws,
+            websockets.connect(observer_uri) as observer_ws,
+        ):
+            for ws in (hero_ws, observer_ws):
+                await _recv_matching(
+                    ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                        == "location_update",
+                )
+
+            shadow_hero = models.PlayerModel(
+                **app.state.active_player_sessions[hero_token].model_dump()
+            )
+            shadow_hero.gamloc = 282
+            shadow_hero.pgploc = 282
+            shadow_hero.level = 12
+            app.state.active_player_sessions["shadow-zthero-token"] = shadow_hero
+            await app.state.presence.set_location(
+                "zthero", 282, "shadow-zthero-token"
+            )
+
+            await hero_ws.send(json.dumps({"type": "command", "command": "jump chasm"}))
+
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "BODM04",
+            )
+            await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "DIEMSG",
+            )
+            reset_location = await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update"
+                and msg.get("payload", {}).get("location") == 0,
+            )
+            assert reset_location["payload"].get("death_reset") is True
+            reset_description = await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event")
+                == "location_description"
+                and msg.get("payload", {}).get("location") == 0,
+            )
+            assert reset_description["payload"].get("death_reset") is True
+            reset_objects = await _recv_matching(
+                hero_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "room_objects"
+                and msg.get("payload", {}).get("location") == 0,
+            )
+            assert reset_objects["payload"].get("death_reset") is True
+            assert shadow_hero.level == 1
+            assert shadow_hero.gamloc == 0
+            assert shadow_hero.hitpts == 4
+
+            await _recv_matching(
+                observer_ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "BODM05",
+            )
+            await _recv_matching(
+                observer_ws,
+                lambda msg: msg.get("payload", {}).get("message_id") == "KILLED",
+            )
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+            session_record = db.scalar(
+                select(models.PlayerSession).where(
+                    models.PlayerSession.session_token == hero_token
+                )
+            )
+            assert hero is not None
+            assert session_record is not None
+            assert hero.level == 1
+            assert hero.hitpts == 4
+            assert hero.gamloc == 0
+            assert session_record.room_id == 0
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_room_script_self_target_event_reaches_active_player_session():
     app = create_app()
     host = "127.0.0.1"

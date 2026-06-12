@@ -1,8 +1,9 @@
 # Legacy: legacy/KYRROUS.C:1193-1210 (mindma)
 id: 285
 name: mindma
+allow_normalized_retry: false
 spoiler_summary: "Mind mastery riddle where answering \"time\" tests readiness for level 14."
-spoiler_interaction: "Answer time to attempt the level 14 ascension if you hold the golden key."
+spoiler_interaction: "Answer time to attempt the level 14 ascension."
 legacy_ref: "legacy/KYRROUS.C:1193-1210"
 triggers:
   - verbs: [answer]
@@ -13,13 +14,7 @@ triggers:
       - type: level_gate
         target_level: 14
         level_up: false
-        requires_item: key
-        # Legacy chklvl gate (key + level 13) before reward. (legacy/KYRROUS.C:1196-1205)
-        on_missing_item:
-          - type: message
-            message_id: NPAY00
-            broadcast_message_id: NPAY01
-            broadcast_format: [player_altnam]
+        # Legacy chklvl gate (KYRKEY module entitlement + level 13) before reward. (legacy/KYRROUS.C:1196-1205)
         on_success:
           # msgutl2(MINM01, MINM02) before pendant reward + level-up. (legacy/KYRROUS.C:1198-1205)
           - type: message
@@ -33,6 +28,7 @@ triggers:
               # Legacy tgmpobj(0) drops oldest item when pack is full. (legacy/KYRROUS.C:1199-1202)
               - type: remove_inventory_index
                 index: 0
+                strategy: legacy_takpobj
               - type: message
                 message_id: MINM03
           # Grant pendant (gmobjs[17]) and then glvutl(). (legacy/KYRROUS.C:1203-1205)
