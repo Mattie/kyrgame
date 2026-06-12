@@ -1151,15 +1151,15 @@ def _handle_drop(state: GameState, args: dict) -> CommandResult:
             _message_event(
                 "room",
                 "DROPIT3",
-                # DROPIT3's catalog text consumes altnam, object name, and
-                # room landing; legacy prfmsg receives hisher too and ignores it.
+                # Legacy passes altnam, hisher, object name, and objlds; DROPIT3
+                # consumes the first three placeholders.
                 # Source: legacy/KYRCMDS.C:875-877; legacy/Dist/ELWKYRM.MSG:4684.
                 _format_message(
                     state,
                     "DROPIT3",
                     state.player.altnam,
+                    _hisher(state.player),
                     obj.name if obj else target,
-                    location.objlds,
                 ),
                 command_id,
                 exclude_player=state.player.plyrid,

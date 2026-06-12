@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 from collections import Counter, defaultdict, deque
@@ -13,10 +14,10 @@ from pathlib import Path
 from typing import Any, Iterable, TextIO
 
 
-DEFAULT_COMPOSE_PROJECT = "kyrgame-local"
-DEFAULT_COMPOSE_SERVICE = "backend"
+DEFAULT_DOCKER_CONTAINER = "kyrgame-local-backend-1"
 DEFAULT_TELEMETRY_DIR = Path("/data/telemetry")
 DEFAULT_CONTAINER_TELEMETRY_DIR = "/data/telemetry"
+DEFAULT_DOCKER_RECENT_SCAN_LINES = 5000
 
 Record = dict[str, Any]
 
@@ -25,6 +26,13 @@ def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed < 1:
         raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
     return parsed
 
 
@@ -77,18 +85,22 @@ def _matches_where(record: Record, expression: str) -> bool:
 def _source_lines(args: argparse.Namespace) -> Iterable[str]:
     if args.docker:
         container_file = args.container_file or f"{DEFAULT_CONTAINER_TELEMETRY_DIR}/{args.log}.jsonl"
+        log_reader = _docker_log_reader(args)
         command = [
             "docker",
-            "compose",
-            "-p",
-            args.compose_project,
             "exec",
-            "-T",
-            args.compose_service,
-            "cat",
+            args.container_name,
+            *log_reader,
             container_file,
         ]
-        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+        try:
+            completed = _run_docker_command(command, args.docker_timeout)
+        except subprocess.TimeoutExpired as exc:
+            raise SystemExit(
+                f"Docker telemetry read timed out after {args.docker_timeout:.1f}s. "
+                "Docker CLI may be unresponsive; retry with fewer --scan-lines, "
+                "read a copied log with --file, or restart Docker Desktop."
+            ) from exc
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip()
             raise SystemExit(f"Unable to read Docker telemetry log: {detail}")
@@ -98,6 +110,49 @@ def _source_lines(args: argparse.Namespace) -> Iterable[str]:
     log_file = _resolve_log_file(args)
     with log_file.open("r", encoding="utf-8") as handle:
         yield from handle
+
+
+def _run_docker_command(command: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=os.name != "nt",
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _terminate_process_tree(process)
+        try:
+            process.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    else:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+
+
+def _docker_log_reader(args: argparse.Namespace) -> list[str]:
+    if args.full_scan:
+        return ["cat"]
+    if args.scan_lines is not None:
+        return ["tail", "-n", str(args.scan_lines)]
+    if args.command in {"gems", "latest"}:
+        return ["tail", "-n", str(DEFAULT_DOCKER_RECENT_SCAN_LINES)]
+    return ["cat"]
+
 
 def _resolve_log_file(args: argparse.Namespace) -> Path:
     if args.file is not None:
@@ -345,12 +400,34 @@ def _build_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--docker",
         action="store_true",
-        help="Read from the running Docker Compose backend with cat",
+        help="Read from the running local backend container",
     )
     parser.add_argument("--log", default="system", help="Log basename when using --dir/env/default")
-    parser.add_argument("--compose-project", default=DEFAULT_COMPOSE_PROJECT)
-    parser.add_argument("--compose-service", default=DEFAULT_COMPOSE_SERVICE)
+    parser.add_argument(
+        "--container-name",
+        default=DEFAULT_DOCKER_CONTAINER,
+        help="Container name used by --docker reads.",
+    )
     parser.add_argument("--container-file", help="Container path when using --docker")
+    parser.add_argument(
+        "--scan-lines",
+        type=_positive_int,
+        help=(
+            "When using --docker, read only the last N lines with tail. "
+            f"Recent commands default to {DEFAULT_DOCKER_RECENT_SCAN_LINES} lines."
+        ),
+    )
+    parser.add_argument(
+        "--full-scan",
+        action="store_true",
+        help="When using --docker, read the full log with cat instead of tail.",
+    )
+    parser.add_argument(
+        "--docker-timeout",
+        type=_positive_float,
+        default=10.0,
+        help="Seconds to wait for Docker log reads before failing fast.",
+    )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 

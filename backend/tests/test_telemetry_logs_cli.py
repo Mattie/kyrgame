@@ -173,10 +173,10 @@ def test_types_can_emit_jsonl_for_piping(tmp_path, capsys):
     }
 
 
-def test_docker_source_uses_container_posix_path(monkeypatch, capsys):
+def test_docker_recent_commands_tail_container_log_by_default(monkeypatch, capsys):
     calls = []
 
-    def fake_run(command, capture_output, text, check):  # noqa: ARG001
+    def fake_run(command, timeout):  # noqa: ARG001
         calls.append(command)
         return SimpleNamespace(
             returncode=0,
@@ -197,10 +197,159 @@ def test_docker_source_uses_container_posix_path(monkeypatch, capsys):
             stderr="",
         )
 
-    monkeypatch.setattr(telemetry_logs.subprocess, "run", fake_run)
+    monkeypatch.setattr(telemetry_logs, "_run_docker_command", fake_run)
 
     exit_code = telemetry_logs.main(["--docker", "gems", "--limit", "1"])
 
     assert exit_code == 0
+    assert calls[0][:3] == ["docker", "exec", "kyrgame-local-backend-1"]
+    assert calls[0][-4:-1] == ["tail", "-n", "5000"]
     assert calls[0][-1] == "/data/telemetry/system.jsonl"
     assert "emerald" in capsys.readouterr().out
+
+
+def test_docker_full_scan_uses_cat_for_recent_commands(monkeypatch, capsys):
+    calls = []
+
+    def fake_run(command, timeout):  # noqa: ARG001
+        calls.append(command)
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "timestamp": "2026-06-12T20:09:19+00:00",
+                    "userid": "__system__",
+                    "event_type": "animation.gem_attempt",
+                    "payload": {
+                        "status": "spawned",
+                        "room_id": 166,
+                        "spawned_object_name": "emerald",
+                    },
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(telemetry_logs, "_run_docker_command", fake_run)
+
+    exit_code = telemetry_logs.main(["--docker", "--full-scan", "gems", "--limit", "1"])
+
+    assert exit_code == 0
+    assert calls[0][:3] == ["docker", "exec", "kyrgame-local-backend-1"]
+    assert calls[0][-2:] == ["cat", "/data/telemetry/system.jsonl"]
+    assert "emerald" in capsys.readouterr().out
+
+
+def test_docker_scan_lines_overrides_default_tail(monkeypatch, capsys):
+    calls = []
+
+    def fake_run(command, timeout):  # noqa: ARG001
+        calls.append(command)
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "timestamp": "2026-06-12T20:09:19+00:00",
+                    "userid": "__system__",
+                    "event_type": "animation.gem_attempt",
+                    "payload": {
+                        "status": "spawned",
+                        "room_id": 166,
+                        "spawned_object_name": "emerald",
+                    },
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(telemetry_logs, "_run_docker_command", fake_run)
+
+    exit_code = telemetry_logs.main(["--docker", "--scan-lines", "20000", "gems", "--limit", "1"])
+
+    assert exit_code == 0
+    assert calls[0][-4:-1] == ["tail", "-n", "20000"]
+    assert "emerald" in capsys.readouterr().out
+
+
+def test_docker_source_times_out_with_clear_message(monkeypatch):
+    def fake_run(command, timeout):  # noqa: ARG001
+        raise telemetry_logs.subprocess.TimeoutExpired(command, timeout)
+
+    monkeypatch.setattr(telemetry_logs, "_run_docker_command", fake_run)
+
+    try:
+        telemetry_logs.main(["--docker", "--docker-timeout", "3", "gems", "--limit", "1"])
+    except SystemExit as exc:
+        assert "Docker telemetry read timed out after 3.0s" in str(exc)
+    else:
+        raise AssertionError("expected SystemExit")
+
+
+def test_docker_timeout_must_be_positive(capsys):
+    try:
+        telemetry_logs.main(["--docker", "--docker-timeout", "0", "gems", "--limit", "1"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected SystemExit")
+
+    assert "must be greater than 0" in capsys.readouterr().err
+
+
+def test_run_docker_command_terminates_process_tree_on_timeout(monkeypatch):
+    calls = []
+
+    class FakeProcess:
+        pid = 1234
+        returncode = None
+        stdout = None
+        stderr = None
+
+        def communicate(self, timeout):
+            calls.append(("communicate", timeout))
+            raise telemetry_logs.subprocess.TimeoutExpired(["docker"], timeout)
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(telemetry_logs.subprocess, "Popen", lambda *args, **kwargs: fake_process)
+    monkeypatch.setattr(
+        telemetry_logs,
+        "_terminate_process_tree",
+        lambda process: calls.append(("terminate", process.pid)),
+    )
+
+    try:
+        telemetry_logs._run_docker_command(["docker", "exec", "container", "tail"], 3)
+    except telemetry_logs.subprocess.TimeoutExpired:
+        pass
+    else:
+        raise AssertionError("expected TimeoutExpired")
+
+    assert ("terminate", 1234) in calls
+
+
+def test_posix_timeout_termination_kills_process_group(monkeypatch):
+    calls = []
+
+    class FakeProcess:
+        pid = 4321
+
+        def kill(self):
+            calls.append(("kill", self.pid))
+
+    monkeypatch.setattr(telemetry_logs.os, "name", "posix")
+    monkeypatch.setattr(
+        telemetry_logs.os,
+        "killpg",
+        lambda pid, signal_number: calls.append(("killpg", pid, signal_number)),
+        raising=False,
+    )
+    monkeypatch.setattr(telemetry_logs.os, "getpgid", lambda pid: pid + 10, raising=False)
+    monkeypatch.setattr(telemetry_logs.signal, "SIGKILL", 9, raising=False)
+
+    telemetry_logs._terminate_process_tree(FakeProcess())
+
+    assert calls == [("killpg", 4331, telemetry_logs.signal.SIGKILL)]

@@ -868,7 +868,13 @@ async def test_drop_places_object_in_room(base_state):
     base_state.locations[location.id] = location.model_copy(update={"objects": [], "nlobjs": 0})
     location = base_state.locations[location.id]
     base_state.player = base_state.player.model_copy(
-        update={"gpobjs": [target_id], "obvals": [0], "npobjs": 1}
+        update={
+            "altnam": "Alice",
+            "flags": int(base_state.player.flags | constants.PlayerFlag.FEMALE),
+            "gpobjs": [target_id],
+            "obvals": [0],
+            "npobjs": 1,
+        }
     )
 
     result = await dispatcher.dispatch("drop", {"target": target_name}, base_state)
@@ -887,7 +893,7 @@ async def test_drop_places_object_in_room(base_state):
     assert actor_event["text"] == "...Okay, done."
     room_event = next(evt for evt in result.events if evt.get("message_id") == "DROPIT3")
     assert room_event["scope"] == "room"
-    assert target_name in room_event["text"]
+    assert room_event["text"] == f"***\r\nAlice dropped her {target_name}!"
     assert room_event["exclude_player"] == base_state.player.plyrid
 
 

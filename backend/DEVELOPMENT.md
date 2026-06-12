@@ -95,10 +95,15 @@ Set `KYRGAME_TELEMETRY_DIR` during live parity sessions to capture system audit 
 Use the telemetry log helper when you need the newest system events without hand-reading JSONL:
 
 ```powershell
-# From the repo root, pull directly from the running local Compose backend.
+# From the repo root, pull directly from the running local backend container.
 python.exe tools\telemetry_logs.py --docker gems --limit 10
 python.exe tools\telemetry_logs.py --docker latest --event animation.gem_attempt --limit 5
 python.exe tools\telemetry_logs.py --docker types --limit 20
+
+# Recent-event commands read a bounded Docker tail by default; tune or bypass it when needed.
+python.exe tools\telemetry_logs.py --docker --scan-lines 20000 gems --limit 10
+python.exe tools\telemetry_logs.py --docker --full-scan gems --status skipped_capacity --limit 10
+python.exe tools\telemetry_logs.py --docker --docker-timeout 3 gems --limit 10
 
 # Read a copied or local file directly.
 python.exe tools\telemetry_logs.py --file .\system.jsonl gems --status spawned --limit 5
