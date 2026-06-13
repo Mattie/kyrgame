@@ -329,6 +329,177 @@ async def test_public_player_activity_groups_sessions_active_players_and_recent_
 
 
 @pytest.mark.anyio
+async def test_public_activity_and_leaderboard_hide_allowlisted_admin_accounts(
+    monkeypatch, tmp_path
+):
+    allowlist_path = tmp_path / "admin-allowlist.yaml"
+    allowlist_path.write_text(
+        """
+admins:
+  adminacct:
+    roles: [player_admin]
+  modacct:
+    roles: [content_admin]
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    monkeypatch.setenv("KYRGAME_ADMIN_ALLOWLIST_PATH", str(allowlist_path))
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        with app.state.session_factory() as db:
+            admin_record, admin_model = _add_player(
+                db, "adminplyr", level=25, spells=spells, owned=6
+            )
+            db.add(
+                models.Account(
+                    userid="AdminAcct",
+                    userid_norm="adminacct",
+                    password_hash="test-password-hash",
+                    player_id=admin_record.id,
+                )
+            )
+            _add_session(
+                db,
+                admin_record,
+                token="admin-token",
+                last_seen=now - timedelta(minutes=1),
+                active=True,
+            )
+            stale_admin_model = admin_model.model_copy(update={"plyrid": "oldadmin"})
+            app.state.active_player_sessions["admin-token"] = stale_admin_model
+            app.state.active_player_connected_at["admin-token"] = now - timedelta(seconds=10)
+
+            mod_record, _ = _add_player(db, "modplyr", level=25, spells=spells, owned=5)
+            db.add(
+                models.Account(
+                    userid="ModAcct",
+                    userid_norm="modacct",
+                    password_hash="test-password-hash",
+                    player_id=mod_record.id,
+                )
+            )
+            _add_session(
+                db,
+                mod_record,
+                token="mod-recent-session",
+                last_seen=now - timedelta(minutes=1, seconds=30),
+            )
+
+            hero_record, hero_model = _add_player(
+                db, "hero", level=24, spells=spells, owned=2
+            )
+            _add_session(
+                db,
+                hero_record,
+                token="hero-recent-session",
+                last_seen=now - timedelta(minutes=2),
+            )
+            app.state.active_player_sessions["hero-token"] = hero_model
+            app.state.active_player_connected_at["hero-token"] = now - timedelta(seconds=20)
+
+            recent_record, _ = _add_player(db, "recent", level=23, spells=spells, owned=1)
+            _add_session(
+                db,
+                recent_record,
+                token="recent-session",
+                last_seen=now - timedelta(minutes=3),
+            )
+            collision_record, _ = _add_player(
+                db, "oldadmin", level=22, spells=spells, owned=1
+            )
+            _add_session(
+                db,
+                collision_record,
+                token="collision-session",
+                last_seen=now - timedelta(minutes=4),
+            )
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            activity_response = await client.get("/public/player-activity")
+            leaderboard_response = await client.get("/public/leaderboard")
+
+        assert activity_response.status_code == 200
+        activity = activity_response.json()
+        assert [player["player_id"] for player in activity["active"]] == ["hero"]
+        recent_ids = [player["player_id"] for player in activity["recent"]]
+        assert "adminplyr" not in recent_ids
+        assert "modplyr" not in recent_ids
+        assert "oldadmin" in recent_ids
+        assert "recent" in recent_ids
+
+        assert leaderboard_response.status_code == 200
+        leaderboard_ids = [
+            player["player_id"] for player in leaderboard_response.json()["players"]
+        ]
+        assert "adminplyr" not in leaderboard_ids
+        assert "modplyr" not in leaderboard_ids
+        assert "hero" in leaderboard_ids
+        oldadmin_summary = next(
+            player
+            for player in leaderboard_response.json()["players"]
+            if player["player_id"] == "oldadmin"
+        )
+        assert oldadmin_summary["active"] is False
+
+
+@pytest.mark.anyio
+async def test_public_leaderboard_filters_admin_accounts_before_limit(
+    monkeypatch, tmp_path
+):
+    allowlist_path = tmp_path / "admin-allowlist.yaml"
+    allowlist_path.write_text(
+        "admins:\n"
+        + "\n".join(
+            f"  adm{index:02d}:\n    roles: [player_admin]"
+            for index in range(PUBLIC_LEADERBOARD_LIMIT + 2)
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    monkeypatch.setenv("KYRGAME_ADMIN_ALLOWLIST_PATH", str(allowlist_path))
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        spells = app.state.fixture_cache["spells"]
+        with app.state.session_factory() as db:
+            for index in range(PUBLIC_LEADERBOARD_LIMIT + 2):
+                player_id = f"a{index:02d}plyr"
+                admin_record, _ = _add_player(
+                    db, player_id, level=25, spells=spells, owned=6
+                )
+                db.add(
+                    models.Account(
+                        userid=f"Adm{index:02d}",
+                        userid_norm=f"adm{index:02d}",
+                        password_hash="test-password-hash",
+                        player_id=admin_record.id,
+                    )
+                )
+
+            _add_player(db, "visible", level=24, spells=spells, owned=1)
+            db.commit()
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/public/leaderboard")
+
+        assert response.status_code == 200
+        leaderboard_ids = [player["player_id"] for player in response.json()["players"]]
+        assert "visible" in leaderboard_ids
+        assert all(not player_id.startswith("a") for player_id in leaderboard_ids)
+
+
+@pytest.mark.anyio
 async def test_public_summaries_use_player_id_for_out_of_game_display_names(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")

@@ -368,6 +368,22 @@ describe('MudConsole', () => {
     expect(pill).toHaveClass('disconnected')
   })
 
+  it('labels the connection pill with the current room name and number', () => {
+    navigatorState.currentRoom = 7
+    navigatorState.world = {
+      locations: [{ id: 7, brfdes: 'The Crystal Hall' }],
+      objects: [],
+      commands: [],
+      messages: {},
+    }
+
+    const { container } = render(<MudConsole />)
+
+    const pill = container.querySelector('.connection-pill')
+    expect(pill).toHaveAttribute('title', 'connected - Room 7: The Crystal Hall')
+    expect(pill).toHaveAttribute('aria-label', 'connected - Room 7: The Crystal Hall')
+  })
+
   it('renders text instantly when modem stream is disabled', () => {
     window.history.replaceState(null, '', '/?modem=off')
     navigatorState.session = {

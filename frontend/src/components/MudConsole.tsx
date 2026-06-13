@@ -1224,6 +1224,10 @@ export const MudConsole = () => {
       : scrySession?.status === 'closed'
         ? 'disconnected'
         : scrySession?.status ?? connectionStatus
+  // TODO(debug): remove this room tooltip once connection/location diagnostics are no longer needed.
+  const connectionPillAltText = location
+    ? `${connectionDisplay} - Room ${location.id}: ${location.brfdes}`
+    : `${connectionDisplay} - Room unknown`
 
   useEffect(() => {
     if (!canFocusCommandInput) return
@@ -1365,7 +1369,11 @@ export const MudConsole = () => {
             <p className="muted mud-session-line">
               <AnsiText text={sessionLineText} playerVisuals={playerVisuals} />
             </p>
-            <div className={`connection-pill ${connectionClass}`}>
+            <div
+              className={`connection-pill ${connectionClass}`}
+              title={connectionPillAltText}
+              aria-label={connectionPillAltText}
+            >
               {connectionDisplay}
             </div>
           </header>
