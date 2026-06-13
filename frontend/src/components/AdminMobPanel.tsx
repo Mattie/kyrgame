@@ -15,9 +15,43 @@ const formatSeconds = (seconds?: number | null) => {
 }
 
 const formatRoom = (mob: AdminMobRecord) => {
+  if (mob.id === 'gem_spawner') {
+    if (mob.room_id === undefined || mob.room_id === null) return 'No successful spawn yet'
+    const brief = mob.room?.brief
+    return brief ? `Last spawn room ${mob.room_id}: ${brief}` : `Last spawn room ${mob.room_id}`
+  }
   if (mob.room_id === undefined || mob.room_id === null) return 'No current room'
   const brief = mob.room?.brief
   return brief ? `Room ${mob.room_id}: ${brief}` : `Room ${mob.room_id}`
+}
+
+const formatGemSpawnerDetail = (mob: AdminMobRecord) => {
+  const randomDetail = mob.next_successful_gem_is_random
+    ? 'next success random'
+    : `random in ${mob.successful_spawns_until_random_gem ?? '?'}`
+  const nextDetail = `next ${formatSeconds(mob.next_attempt_seconds)}`
+  const attemptRoom = mob.last_attempt_room_id ?? '?'
+  const attemptDetail =
+    mob.last_attempt_status === 'spawned'
+      ? `last attempt succeeded room ${attemptRoom}`
+      : mob.last_attempt_status === 'skipped_capacity'
+        ? `last attempt skipped capacity room ${attemptRoom}`
+        : mob.last_attempt_status
+          ? `last attempt ${mob.last_attempt_status.replace(/_/g, ' ')} room ${attemptRoom}`
+          : 'no attempt yet'
+  const lastSpawnDetail =
+    mob.last_spawn_room_id !== undefined && mob.last_spawn_room_id !== null
+      ? `last ${mob.last_spawn_object_name ?? 'gem'} room ${mob.last_spawn_room_id}`
+      : 'no successful spawn yet'
+
+  return `${nextDetail}; ${attemptDetail}; ${lastSpawnDetail}; ${randomDetail}`
+}
+
+const renderMobName = (mob: AdminMobRecord) => {
+  if (mob.id === 'gem_spawner') {
+    return <span className="gem-spawner-inline">💎 Gems</span>
+  }
+  return <GemstoneText text={mob.name} />
 }
 
 const formatMobDetail = (mob: AdminMobRecord) => {
@@ -33,6 +67,9 @@ const formatMobDetail = (mob: AdminMobRecord) => {
   }
   if (mob.id === 'dragon') {
     return `next ${mob.next_attack ?? 'attack'}; counter ${mob.counter ?? 0}`
+  }
+  if (mob.id === 'gem_spawner') {
+    return formatGemSpawnerDetail(mob)
   }
   return mob.status.replace(/_/g, ' ')
 }
@@ -145,7 +182,10 @@ export const AdminMobPanel = () => {
               <GemstoneText text="Brownie step " />
               {formatSeconds(snapshot.animation.brownie_routine_interval_seconds)}
             </span>
-            <span>Full path {formatSeconds(snapshot.animation.brownie_full_path_interval_seconds)}</span>
+            <span>
+              Full path {formatSeconds(snapshot.animation.brownie_full_path_interval_seconds)}
+            </span>
+            <span>Gem spawn {formatSeconds(snapshot.animation.gem_spawn_interval_seconds)}</span>
           </div>
         )}
         <div className="mob-list">
@@ -153,7 +193,7 @@ export const AdminMobPanel = () => {
             <article className="mob-row" key={mob.id}>
               <div>
                 <h3>
-                  <GemstoneText text={mob.name} />
+                  {renderMobName(mob)}
                 </h3>
                 <p>
                   <GemstoneText text={formatRoom(mob)} />

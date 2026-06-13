@@ -90,6 +90,33 @@ The animation helper intentionally has separate first-delay and recurring cadenc
 
 Set `KYRGAME_TELEMETRY_DIR` during live parity sessions to capture system audit logs. Animation callbacks write `animation.tick` entries to `system.jsonl`, and brownie passes add `animation.brownie_step` entries with room/path, branch, target, gold/inventory, message IDs, and dispatch status.
 
+### Inspecting telemetry JSONL logs
+
+Use the telemetry log helper when you need the newest system events without hand-reading JSONL:
+
+```powershell
+# From the repo root, pull directly from the running local backend container.
+python.exe tools\telemetry_logs.py --docker gems --limit 10
+python.exe tools\telemetry_logs.py --docker latest --event animation.gem_attempt --limit 5
+python.exe tools\telemetry_logs.py --docker types --limit 20
+
+# Recent-event commands read a bounded Docker tail by default; tune or bypass it when needed.
+python.exe tools\telemetry_logs.py --docker --scan-lines 20000 gems --limit 10
+python.exe tools\telemetry_logs.py --docker --full-scan gems --status skipped_capacity --limit 10
+python.exe tools\telemetry_logs.py --docker --docker-timeout 3 gems --limit 10
+
+# Read a copied or local file directly.
+python.exe tools\telemetry_logs.py --file .\system.jsonl gems --status spawned --limit 5
+python.exe tools\telemetry_logs.py --file .\system.jsonl latest --where payload.room_id=167
+python.exe tools\telemetry_logs.py --file .\system.jsonl latest --format jsonl --contains bloodstone
+```
+
+Inside the backend container, the same tool can run against the default telemetry directory:
+
+```bash
+python -m kyrgame.scripts.telemetry_logs gems --limit 10
+```
+
 Example pattern:
 
 ```python

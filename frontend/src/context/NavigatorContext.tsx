@@ -168,6 +168,14 @@ export type AdminMobRecord = {
   state_room_id?: number | null
   object_room_id?: number | null
   room?: AdminMobRoom | null
+  last_attempt_room_id?: number | null
+  last_attempt_room?: AdminMobRoom | null
+  last_attempt_status?: string | null
+  last_attempt_object_count?: number | null
+  last_spawn_room_id?: number | null
+  last_spawn_room?: AdminMobRoom | null
+  last_spawn_object_id?: number | null
+  last_spawn_object_name?: string | null
   next_room_id?: number | null
   next_room?: AdminMobRoom | null
   home_room_id?: number | null
@@ -176,6 +184,10 @@ export type AdminMobRecord = {
   next_attack?: string
   path_index?: number
   path_length?: number
+  gem_counter?: number
+  next_attempt_seconds?: number | null
+  successful_spawns_until_random_gem?: number
+  next_successful_gem_is_random?: boolean
   next_outcome?: string
   hint_index?: number
   routine_interval_seconds?: number
@@ -192,6 +204,17 @@ export type AdminMobSnapshot = {
     animation_tick_interval_seconds: number
     brownie_routine_interval_seconds?: number
     brownie_full_path_interval_seconds?: number
+    gem_spawn_interval_seconds?: number
+    next_gem_spawn_attempt_seconds?: number | null
+    gem_counter?: number
+    successful_spawns_until_random_gem?: number
+    next_successful_gem_is_random?: boolean
+    last_gem_attempt_room_id?: number | null
+    last_gem_attempt_status?: string | null
+    last_gem_attempt_object_count?: number | null
+    last_gem_spawn_room_id?: number | null
+    last_gem_spawn_object_id?: number | null
+    last_gem_spawn_object_name?: string | null
     legacy_source?: string
   }
   mobs: AdminMobRecord[]

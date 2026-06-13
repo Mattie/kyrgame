@@ -226,16 +226,18 @@ async def bootstrap_app(app: FastAPI):
     app.state.animation_rng = random.Random()
 
     def _animation_room_picker(low: int, high: int) -> int:
-        return app.state.animation_rng.randint(low, high)
+        # Legacy genrdn(low, high) excludes the upper bound.
+        # Source: legacy/KYRANIM.C:326-459.
+        return app.state.animation_rng.randrange(low, high)
 
     def _animation_chance_picker(low: int, high: int) -> int:
         return app.state.animation_rng.randrange(low, high)
 
     def _animation_pick_gem(low: int, high: int) -> int:
-        return app.state.animation_rng.randint(low, high)
+        return app.state.animation_rng.randrange(low, high)
 
     def _animation_pick_gold(low: int, high: int) -> int:
-        return app.state.animation_rng.randint(low, high)
+        return app.state.animation_rng.randrange(low, high)
 
     def _animation_get_room_objects(room_id: int) -> list[int]:
         location = app.state.location_index.get(room_id)

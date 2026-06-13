@@ -1343,6 +1343,11 @@ p {
   color: #f3c77a;
 }
 
+.gem-spawner-inline {
+  color: #22d3ee;
+  white-space: nowrap;
+}
+
 .mob-row p {
   margin-top: 0.15rem;
   color: #e9f3ff;

@@ -126,6 +126,12 @@ def test_animation_tick_state_persists_through_sqlalchemy_store(tmp_path):
     system.state.zar_attack_index = 3
     system.state.timed_flags["chantd"] = 1
     system.state.gem_counter = 9
+    system.state.gem_last_attempt_room_id = 167
+    system.state.gem_last_attempt_status = "spawned"
+    system.state.gem_last_attempt_object_count = 2
+    system.state.gem_last_spawn_room_id = 167
+    system.state.gem_last_spawn_object_id = 11
+    system.state.gem_last_spawn_object_name = "bloodstone"
     system.state.dryad_location = 18
     system.state.brownie_location = 0
     system.state.brownie_path_index = 19
@@ -144,6 +150,12 @@ def test_animation_tick_state_persists_through_sqlalchemy_store(tmp_path):
     assert reloaded.state.zar_attack_index == 3
     assert reloaded.state.timed_flags["chantd"] == 1
     assert reloaded.state.gem_counter == 9
+    assert reloaded.state.gem_last_attempt_room_id == 167
+    assert reloaded.state.gem_last_attempt_status == "spawned"
+    assert reloaded.state.gem_last_attempt_object_count == 2
+    assert reloaded.state.gem_last_spawn_room_id == 167
+    assert reloaded.state.gem_last_spawn_object_id == 11
+    assert reloaded.state.gem_last_spawn_object_name == "bloodstone"
     assert reloaded.state.dryad_location == 18
     assert reloaded.state.brownie_location == 0
     assert reloaded.state.brownie_path_index == 19
@@ -199,10 +211,18 @@ def test_gemakr_uses_legacy_cadence_capacity_and_random_gem_every_11th_spawn():
         room_objects[50] = []
         events.extend(routine(state))
 
-    assert [event.payload["spawned_object_id"] for event in events] == [2] * 10 + [9]
+    spawn_events = [event for event in events if not event.payload.get("audit_only")]
+    audit_events = [event for event in events if event.payload.get("audit_only")]
+    assert [event.payload["spawned_object_id"] for event in spawn_events] == [2] * 10 + [9]
+    assert [event.payload["audit"]["status"] for event in audit_events] == ["spawned"] * 11
     assert state.gem_counter == 0
-    assert events[0].payload["location"] == 50
-    assert events[0].payload["objects"] == [{"id": 2}]
+    assert state.gem_last_attempt_room_id == 50
+    assert state.gem_last_attempt_status == "spawned"
+    assert state.gem_last_spawn_room_id == 50
+    assert state.gem_last_spawn_object_id == 9
+    assert state.gem_last_spawn_object_name == "onyx"
+    assert spawn_events[0].payload["location"] == 50
+    assert spawn_events[0].payload["objects"] == [{"id": 2}]
 
     room_objects[51] = [0, 1, 2, 3]
     blocked_event = GemSpawnRoutine(
@@ -213,7 +233,13 @@ def test_gemakr_uses_legacy_cadence_capacity_and_random_gem_every_11th_spawn():
         gem_name_lookup=lambda gem_id: "ignored",
         message_formatter=lambda gem_name: gem_name,
     )(state)
-    assert blocked_event == []
+    assert len(blocked_event) == 1
+    assert blocked_event[0].payload["audit"]["status"] == "skipped_capacity"
+    assert state.gem_last_attempt_room_id == 51
+    assert state.gem_last_attempt_status == "skipped_capacity"
+    assert state.gem_last_spawn_room_id == 50
+    assert state.gem_last_spawn_object_id == 9
+    assert state.gem_last_spawn_object_name == "onyx"
     assert room_objects[51] == [0, 1, 2, 3]
 
 

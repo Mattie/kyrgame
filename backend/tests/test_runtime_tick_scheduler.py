@@ -17,6 +17,22 @@ class _FixedAnimationRng:
     def randint(self, low: int, high: int) -> int:  # noqa: ARG002
         return self._values.pop(0)
 
+    def randrange(self, low: int, high: int) -> int:  # noqa: ARG002
+        return self._values.pop(0)
+
+
+class _ExclusiveBoundsAnimationRng:
+    def __init__(self, *values: int) -> None:
+        self._values = list(values)
+        self.randrange_calls: list[tuple[int, int]] = []
+
+    def randrange(self, low: int, high: int) -> int:
+        self.randrange_calls.append((low, high))
+        return self._values.pop(0)
+
+    def randint(self, low: int, high: int) -> int:  # noqa: ARG002
+        raise AssertionError("legacy genrdn bounds must use exclusive randrange")
+
 
 class _FakeSocket:
     application_state = WebSocketState.CONNECTED
@@ -585,7 +601,7 @@ async def test_animation_npcs_find_session_scoped_active_players(monkeypatch):
     )
     app.state.active_players = {}
     app.state.active_player_sessions = {"hero-token": active_player}
-    app.state.animation_rng = _FixedAnimationRng(7, 4)
+    app.state.animation_rng = _ExclusiveBoundsAnimationRng(7, 4)
     app.state.animation_tick_system.state.routine_index = 1
     app.state.animation_tick_system.state.elf_reward_next = 1
     broadcasts: list[tuple[int, dict]] = []
@@ -602,6 +618,7 @@ async def test_animation_npcs_find_session_scoped_active_players(monkeypatch):
         for _, event in broadcasts
         if event.get("type") == "room_broadcast"
     ] == ["EMSG00", "EMSG02", "EMSG04"]
+    assert app.state.animation_rng.randrange_calls == [(12, 168), (2, 11)]
     assert active_player.gold == 9
 
     with app.state.session_factory() as session:
@@ -776,5 +793,125 @@ async def test_animation_tick_gemakr_updates_room_objects_and_broadcasts_spawn(m
         refreshed = session.query(models.Location).filter(models.Location.id == spawned_room).one()
         assert refreshed.objects[-1] == 2
         assert refreshed.nlobjs == len(refreshed.objects)
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_tick_gemakr_uses_exclusive_bounds_and_logs_attempt(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TELEMETRY_DIR", str(tmp_path / "telemetry"))
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+    app.state.animation_rng = _ExclusiveBoundsAnimationRng(167, 11)
+    app.state.animation_tick_system.state.routine_index = 2
+    app.state.animation_tick_system.state.gem_counter = 10
+
+    with app.state.session_factory() as session:
+        location = session.query(models.Location).filter(models.Location.id == 167).one()
+        location.objects = []
+        location.nlobjs = 0
+        session.commit()
+    app.state.location_index[167] = app.state.location_index[167].model_copy(
+        update={"objects": [], "nlobjs": 0}
+    )
+
+    broadcasts: list[tuple[int, dict]] = []
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):
+        broadcasts.append((room_id, message))
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.animation_tick_callback()
+
+    assert app.state.animation_rng.randrange_calls == [(44, 168), (0, 12)]
+    assert broadcasts[0][0] == 167
+    payload = broadcasts[0][1]["payload"]
+    assert payload["spawned_object_id"] == 11
+    assert payload["spawned_object_name"] == "bloodstone"
+    state = app.state.animation_tick_system.state
+    assert state.gem_last_attempt_room_id == 167
+    assert state.gem_last_attempt_status == "spawned"
+    assert state.gem_last_spawn_room_id == 167
+    assert state.gem_last_spawn_object_id == 11
+    assert state.gem_last_spawn_object_name == "bloodstone"
+
+    system_log = tmp_path / "telemetry" / "system.jsonl"
+    lines = [json.loads(line) for line in system_log.read_text(encoding="utf-8").splitlines()]
+    gem_events = [line for line in lines if line["event_type"] == "animation.gem_attempt"]
+    assert gem_events
+    expected_payload = {
+        "status": "spawned",
+        "room_id": 167,
+        "spawned_object_id": 11,
+        "spawned_object_name": "bloodstone",
+        "gem_counter_before": 10,
+        "gem_counter_after": 0,
+    }
+    for key, value in expected_payload.items():
+        assert gem_events[-1]["payload"][key] == value
+
+    await shutdown_app(app)
+
+
+@pytest.mark.anyio
+async def test_animation_tick_gemakr_logs_capacity_skips(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TELEMETRY_DIR", str(tmp_path / "telemetry"))
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+
+    app = FastAPI()
+    await bootstrap_app(app)
+    app.state.tick_runtime.stop()
+    app.state.animation_rng = _ExclusiveBoundsAnimationRng(44)
+    app.state.animation_tick_system.state.routine_index = 2
+    app.state.animation_tick_system.state.gem_counter = 4
+
+    with app.state.session_factory() as session:
+        location = session.query(models.Location).filter(models.Location.id == 44).one()
+        location.objects = [0, 1, 2, 3]
+        location.nlobjs = 4
+        session.commit()
+    app.state.location_index[44] = app.state.location_index[44].model_copy(
+        update={"objects": [0, 1, 2, 3], "nlobjs": 4}
+    )
+
+    broadcasts: list[tuple[int, dict]] = []
+
+    async def _capture(room_id: int, message: dict, sender=None, exclude=None):
+        broadcasts.append((room_id, message))
+
+    app.state.gateway.broadcast = _capture
+
+    await app.state.animation_tick_callback()
+
+    assert broadcasts == []
+    state = app.state.animation_tick_system.state
+    assert state.gem_counter == 4
+    assert state.gem_last_attempt_room_id == 44
+    assert state.gem_last_attempt_status == "skipped_capacity"
+    assert state.gem_last_spawn_room_id is None
+    assert state.gem_last_spawn_object_id is None
+    assert state.gem_last_spawn_object_name is None
+    system_log = tmp_path / "telemetry" / "system.jsonl"
+    lines = [json.loads(line) for line in system_log.read_text(encoding="utf-8").splitlines()]
+    gem_events = [line for line in lines if line["event_type"] == "animation.gem_attempt"]
+    expected_payload = {
+        "status": "skipped_capacity",
+        "room_id": 44,
+        "room_object_count_before": 4,
+        "gem_counter_before": 4,
+        "gem_counter_after": 4,
+    }
+    for key, value in expected_payload.items():
+        assert gem_events[-1]["payload"][key] == value
 
     await shutdown_app(app)

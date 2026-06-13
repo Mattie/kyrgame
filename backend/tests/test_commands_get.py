@@ -134,6 +134,69 @@ async def test_get_pickup_emits_room_broadcast_getloc7():
 
 
 @pytest.mark.anyio
+async def test_get_pickup_emits_its_yours_actor_line():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[],
+        obvals=[],
+        npobjs=0,
+    )
+    state = _build_state(player, [])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+    _place_object_in_room(state, 2)
+
+    result = await dispatcher.dispatch("get", {"target": "garnet"}, state)
+
+    actor_event = next(event for event in result.events if event.get("message_id") == "ITSYOURS")
+    assert actor_event["scope"] == "player"
+    assert actor_event["text"] == "...It's yours!"
+
+
+@pytest.mark.anyio
+async def test_get_full_inventory_uses_getloc6_and_sndutl_room_line():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[0, 1, 2, 3, 4, 5],
+        obvals=[0, 0, 0, 0, 0, 0],
+        npobjs=constants.MXPOBS,
+    )
+    state = _build_state(player, [])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+    _place_object_in_room(state, 6)
+
+    result = await dispatcher.dispatch("get", {"target": "sapphire"}, state)
+
+    assert result.events[0]["message_id"] == "GETLOC6"
+    assert "too full" in result.events[0]["text"]
+    room_event = next(event for event in result.events if event.get("scope") == "room")
+    assert room_event["message_id"] is None
+    assert room_event["text"] == f"*** {player.altnam} is looking very greedy."
+    assert room_event["exclude_player"] == player.plyrid
+    assert 6 in state.locations[player.gamloc].objects
+
+
+@pytest.mark.anyio
+async def test_get_missing_room_object_uses_getloc4_and_sndutl_room_line():
+    player = _build_player(flags=int(constants.PlayerFlag.LOADED))
+    state = _build_state(player, [])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+    location = state.locations[player.gamloc]
+    state.locations[player.gamloc] = location.model_copy(update={"objects": [], "nlobjs": 0})
+
+    result = await dispatcher.dispatch("get", {"target": "garnet"}, state)
+
+    assert result.events[0]["message_id"] == "GETLOC4"
+    assert "no garnet" in result.events[0]["text"]
+    room_event = next(event for event in result.events if event.get("scope") == "room")
+    assert room_event["message_id"] is None
+    assert room_event["text"] == f"*** {player.altnam} is beyond all hope."
+    assert room_event["exclude_player"] == player.plyrid
+
+
+@pytest.mark.anyio
 async def test_get_resolves_room_object_by_legacy_prefix_match():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED),
@@ -235,10 +298,10 @@ async def test_get_true_id_does_not_bypass_legacy_attnam_matching():
     registry = commands.build_default_registry()
     dispatcher = commands.CommandDispatcher(registry)
 
-    with pytest.raises(commands.CommandError) as exc_info:
-        await dispatcher.dispatch("grab", {"target": "truth", "verb": "grab"}, state)
+    result = await dispatcher.dispatch("grab", {"target": "truth", "verb": "grab"}, state)
 
-    assert str(exc_info.value) == "No truth here"
+    assert result.events[0]["message_id"] == "GETLOC4"
+    assert "no truth" in result.events[0]["text"]
 
 
 @pytest.mark.anyio

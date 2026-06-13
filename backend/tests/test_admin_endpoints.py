@@ -560,6 +560,13 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         state.elf_last_room = 52
         state.elf_reward_next = 1
         state.elf_hint_index = 4
+        state.gem_counter = 7
+        state.gem_last_attempt_room_id = 167
+        state.gem_last_attempt_status = "spawned"
+        state.gem_last_attempt_object_count = 2
+        state.gem_last_spawn_room_id = 167
+        state.gem_last_spawn_object_id = 11
+        state.gem_last_spawn_object_name = "bloodstone"
         state.zar_location = 250
         state.zar_counter = 8
         state.zar_attack_index = 2
@@ -592,6 +599,17 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         assert payload["animation"]["animation_tick_interval_seconds"] == 15.0
         assert payload["animation"]["brownie_routine_interval_seconds"] == 90.0
         assert payload["animation"]["brownie_full_path_interval_seconds"] == 3600.0
+        assert payload["animation"]["gem_spawn_interval_seconds"] == 90.0
+        assert payload["animation"]["next_gem_spawn_attempt_seconds"] == 60.0
+        assert payload["animation"]["gem_counter"] == 7
+        assert payload["animation"]["successful_spawns_until_random_gem"] == 4
+        assert payload["animation"]["next_successful_gem_is_random"] is False
+        assert payload["animation"]["last_gem_attempt_room_id"] == 167
+        assert payload["animation"]["last_gem_attempt_status"] == "spawned"
+        assert payload["animation"]["last_gem_attempt_object_count"] == 2
+        assert payload["animation"]["last_gem_spawn_room_id"] == 167
+        assert payload["animation"]["last_gem_spawn_object_id"] == 11
+        assert payload["animation"]["last_gem_spawn_object_name"] == "bloodstone"
 
         mobs = {mob["id"]: mob for mob in payload["mobs"]}
         assert mobs["dryad"]["room_id"] == 18
@@ -609,6 +627,66 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         assert mobs["dragon"]["attack_index"] == 2
         assert mobs["dragon"]["next_attack"] == "claw"
         assert mobs["dragon"]["home_room_id"] == 302
+        assert mobs["gem_spawner"]["status"] == "waiting"
+        assert mobs["gem_spawner"]["room_id"] == 167
+        assert mobs["gem_spawner"]["room"]["brief"] == app.state.location_index[167].brfdes
+        assert mobs["gem_spawner"]["gem_counter"] == 7
+        assert mobs["gem_spawner"]["next_attempt_seconds"] == 60.0
+        assert mobs["gem_spawner"]["successful_spawns_until_random_gem"] == 4
+        assert mobs["gem_spawner"]["last_attempt_room_id"] == 167
+        assert mobs["gem_spawner"]["last_attempt_status"] == "spawned"
+        assert mobs["gem_spawner"]["last_attempt_object_count"] == 2
+        assert mobs["gem_spawner"]["last_spawn_room_id"] == 167
+        assert mobs["gem_spawner"]["last_spawn_object_id"] == 11
+        assert mobs["gem_spawner"]["last_spawn_object_name"] == "bloodstone"
+
+
+@pytest.mark.anyio
+async def test_admin_mob_tracker_keeps_last_gem_spawn_after_capacity_skip(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.gem_counter = 7
+        state.gem_last_attempt_room_id = 51
+        state.gem_last_attempt_status = "skipped_capacity"
+        state.gem_last_attempt_object_count = 4
+        state.gem_last_spawn_room_id = 167
+        state.gem_last_spawn_object_id = 11
+        state.gem_last_spawn_object_name = "bloodstone"
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/admin/mobs", headers=_auth("content-token"))
+
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["animation"]["last_gem_attempt_status"] == "skipped_capacity"
+        assert payload["animation"]["last_gem_attempt_room_id"] == 51
+        assert payload["animation"]["last_gem_attempt_object_count"] == 4
+        assert payload["animation"]["last_gem_spawn_room_id"] == 167
+        assert payload["animation"]["last_gem_spawn_object_name"] == "bloodstone"
+
+        gem_spawner = {mob["id"]: mob for mob in payload["mobs"]}["gem_spawner"]
+        assert gem_spawner["room_id"] == 167
+        assert gem_spawner["room"]["brief"] == app.state.location_index[167].brfdes
+        assert gem_spawner["last_attempt_status"] == "skipped_capacity"
+        assert gem_spawner["last_attempt_room_id"] == 51
+        assert gem_spawner["last_attempt_object_count"] == 4
+        assert gem_spawner["last_spawn_room_id"] == 167
+        assert gem_spawner["last_spawn_object_name"] == "bloodstone"
 
 
 @pytest.mark.anyio
