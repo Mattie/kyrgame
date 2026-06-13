@@ -17,6 +17,33 @@ const mockAdvanceLifecycle = vi.fn()
 const highlightedGroundObjectNames = ['scroll', 'elixir', 'codex', 'pinecone'] as const
 const completedStreamKeysStorageKey = 'kyrgame.mudConsole.completedStreamKeys'
 
+const hashStringForTest = (value: string): string => {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0
+  }
+  return Math.abs(hash).toString(36)
+}
+
+const createStreamKeyForTest = (
+  id: string,
+  text: string,
+  payloadText = '',
+  promptSymbol = false
+) =>
+  `${id}:${hashStringForTest(
+    [text, payloadText, promptSymbol ? 'prompt' : 'line'].join('\u001f')
+  )}`
+
+// Mirrors persisted stream keys so this test can simulate a completed scrollback restore.
+const createCompletedStreamKeysForEntries = (entries: ActivityEntry[]) =>
+  entries.flatMap((entry) => [
+    createStreamKeyForTest(entry.id, entry.summary),
+    ...(entry.extraLines ?? []).map((line, index) =>
+      createStreamKeyForTest(`${entry.id}-extra-${index}`, line)
+    ),
+  ])
+
 type MockNavigatorState = {
   apiBaseUrl: string
   session: SessionRecord | null
@@ -912,7 +939,7 @@ describe('MudConsole', () => {
   })
 
   it('limits completed stream keys restored from sessionStorage', () => {
-    const storedKeys = Array.from({ length: 1105 }, (_, index) => `stored-key-${index}`)
+    const storedKeys = Array.from({ length: 3105 }, (_, index) => `stored-key-${index}`)
     sessionStorage.setItem(completedStreamKeysStorageKey, JSON.stringify(storedKeys))
     navigatorState.session = null
     navigatorState.world = null
@@ -924,7 +951,7 @@ describe('MudConsole', () => {
     const restoredKeys = JSON.parse(
       sessionStorage.getItem(completedStreamKeysStorageKey) ?? '[]'
     )
-    expect(restoredKeys).toHaveLength(1000)
+    expect(restoredKeys).toHaveLength(3000)
     expect(restoredKeys[0]).toBe('stored-key-105')
   })
 
@@ -975,6 +1002,52 @@ describe('MudConsole', () => {
     })
     advanceModemTicks(4)
     expect(screen.getAllByText('Background line.')).toHaveLength(1)
+    vi.useRealTimers()
+  })
+
+  it('does not replay completed retained scrollback when many entries have extra lines', () => {
+    vi.useFakeTimers()
+    window.history.replaceState(
+      null,
+      '',
+      '/?modem=on&modemBaud=100000&modemCharsPerTick=1000'
+    )
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      lifecycle: { state: 'first_login_intro', step: 3 },
+    }
+    navigatorState.world = null
+    navigatorState.currentRoom = null
+    navigatorState.activity = Array.from({ length: 500 }, (_, index) => ({
+      id: `long-history-${index}`,
+      type: 'command_response',
+      summary: `History ${index}`,
+      payload: null,
+      extraLines: [
+        `History ${index} extra A`,
+        `History ${index} extra B`,
+        `History ${index} extra C`,
+      ],
+    }))
+    sessionStorage.setItem(
+      completedStreamKeysStorageKey,
+      JSON.stringify(createCompletedStreamKeysForEntries(navigatorState.activity))
+    )
+
+    render(<MudConsole />)
+    advanceModemTicks(4)
+
+    const streamAnnouncements = screen.getByTestId('console-stream-announcements')
+    const announcedLines = Array.from(streamAnnouncements.querySelectorAll('p')).map(
+      (line) => line.textContent
+    )
+    expect(announcedLines).toEqual([])
+    expect(screen.getByText('History 0')).toBeInTheDocument()
+    expect(screen.getByText('History 0 extra A')).toBeInTheDocument()
+    expect(screen.getByText('History 499 extra C')).toBeInTheDocument()
+
     vi.useRealTimers()
   })
 

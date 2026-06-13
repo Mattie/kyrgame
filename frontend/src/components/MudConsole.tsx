@@ -76,7 +76,10 @@ const TERMINAL_PAGER_PROMPT = '(N)onstop, (Q)uit, or (C)ontinue?'
 const COMMAND_HISTORY_LIMIT = 200
 const CARDINAL_DIRECTIONS = ['north', 'east', 'west', 'south'] as const
 const COMPLETED_STREAM_KEYS_STORAGE_KEY = 'kyrgame.mudConsole.completedStreamKeys'
-const COMPLETED_STREAM_KEYS_LIMIT = 1000
+// Retained activity keeps 500 visible entries, and room output can fan out
+// into multiple console lines per entry. Keep completed stream keys above
+// that rendered-line budget so old retained lines cannot replay.
+const COMPLETED_STREAM_KEYS_LIMIT = 3000
 
 type ConsoleLine = {
   id: string
@@ -816,7 +819,6 @@ export const MudConsole = () => {
     bannerLines,
     currentRoom,
     lifecycleIntroActive,
-    session?.playerId,
     terminalPagerPageRows,
     terminalPagerLineStates,
     visibleEntries,
