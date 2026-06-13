@@ -5,6 +5,10 @@ import {
   getGroundObjectVisual,
   groundObjectVisualAliases,
 } from '../data/groundObjectVisuals'
+import {
+  getTransformationVisual,
+  transformationVisualAliases,
+} from '../data/transformationVisuals'
 
 export type PlayerVisual = {
   emoji: string
@@ -39,6 +43,7 @@ export const GemstoneText = ({
   const gemstoneNames = Object.keys(gemstonePalette)
   const creatureNames = Object.keys(creaturePalette)
   const groundObjectNames = groundObjectVisualAliases
+  const transformationNames = transformationVisualAliases
   const playerEntries = Object.entries(playerVisuals)
   const playerVisualsByName = Object.fromEntries(
     playerEntries.map(([name, visual]) => [name.toLowerCase(), visual])
@@ -46,7 +51,13 @@ export const GemstoneText = ({
   const playerNames = playerEntries.map(([name]) => name)
   // Live Player-IDs are matched first; the backend reserves creature names
   // so "dragon" and "dryad" remain unambiguous in console text.
-  const inlineNames = [...playerNames, ...groundObjectNames, ...gemstoneNames, ...creatureNames]
+  const inlineNames = [
+    ...playerNames,
+    ...transformationNames,
+    ...groundObjectNames,
+    ...gemstoneNames,
+    ...creatureNames,
+  ]
     .map(escapeRegex)
     .sort((left, right) => right.length - left.length)
 
@@ -54,7 +65,10 @@ export const GemstoneText = ({
     return <>{text}</>
   }
 
-  const pattern = new RegExp(`\\b(${inlineNames.join('|')})\\b`, 'gi')
+  const pattern = new RegExp(
+    `(^|[^A-Za-z0-9_])(${inlineNames.join('|')})(?=$|[^A-Za-z0-9_])`,
+    'gi'
+  )
 
   const parts: ReactNode[] = []
   let lastIndex = 0
@@ -62,11 +76,13 @@ export const GemstoneText = ({
   const matches = text.matchAll(pattern)
 
   for (const match of matches) {
-    const matchedText = match[0]
+    const leadingText = match[1] ?? ''
+    const matchedText = match[2]
     const matchIndex = match.index!
+    const matchedTextIndex = matchIndex + leadingText.length
 
-    if (matchIndex > lastIndex) {
-      parts.push(text.slice(lastIndex, matchIndex))
+    if (matchedTextIndex > lastIndex) {
+      parts.push(text.slice(lastIndex, matchedTextIndex))
     }
 
     const playerVisual = playerVisualsByName[matchedText.toLowerCase()]
@@ -82,15 +98,18 @@ export const GemstoneText = ({
         </span>
       )
     } else {
-      const visual = getGemstoneVisual(matchedText)
-      if (visual) {
+      const transformationVisual = getTransformationVisual(matchedText)
+      if (transformationVisual) {
         parts.push(
           <span
-            key={`gem-${matchIndex}`}
-            style={{ color: visual.lightColor }}
-            className="gemstone-inline"
+            key={`transformation-${matchedTextIndex}`}
+            className={`transformation-inline ${transformationVisual.className}`}
+            style={{
+              color: transformationVisual.color,
+              textShadow: transformationVisual.textShadow,
+            }}
           >
-            {visual.emoji} {matchedText}
+            {transformationVisual.emoji} {matchedText}
           </span>
         )
       } else {
@@ -106,25 +125,38 @@ export const GemstoneText = ({
             </span>
           )
         } else {
-          const creatureVisual = creaturePalette[matchedText.toLowerCase()]
-          if (creatureVisual) {
+          const visual = getGemstoneVisual(matchedText)
+          if (visual) {
             parts.push(
               <span
-                key={`creature-${matchIndex}`}
-                className={`creature-inline ${creatureVisual.className}`}
-                style={{ color: creatureVisual.color }}
+                key={`gem-${matchedTextIndex}`}
+                style={{ color: visual.lightColor }}
+                className="gemstone-inline"
               >
-                {creatureVisual.emoji} {matchedText}
+                {visual.emoji} {matchedText}
               </span>
             )
           } else {
-            parts.push(matchedText)
+            const creatureVisual = creaturePalette[matchedText.toLowerCase()]
+            if (creatureVisual) {
+              parts.push(
+                <span
+                  key={`creature-${matchedTextIndex}`}
+                  className={`creature-inline ${creatureVisual.className}`}
+                  style={{ color: creatureVisual.color }}
+                >
+                  {creatureVisual.emoji} {matchedText}
+                </span>
+              )
+            } else {
+              parts.push(matchedText)
+            }
           }
         }
       }
     }
 
-    lastIndex = matchIndex + matchedText.length
+    lastIndex = matchedTextIndex + matchedText.length
   }
 
   if (lastIndex < text.length) {

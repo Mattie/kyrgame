@@ -1451,7 +1451,8 @@ p {
 }
 
 .gemstone-inline,
-.ground-object-inline {
+.ground-object-inline,
+.transformation-inline {
   white-space: nowrap;
 }
 
@@ -1469,6 +1470,10 @@ p {
   font-weight: 700;
 }
 
+.transformation-inline {
+  font-weight: 700;
+}
+
 .player-wizard {
   color: #a78bfa;
 }
@@ -1483,6 +1488,14 @@ p {
 
 .object-codex {
   color: #c084fc;
+}
+
+.object-tome {
+  color: #c084fc;
+}
+
+.object-parchment {
+  color: #f6c96d;
 }
 
 .object-pinecone {
@@ -1503,6 +1516,23 @@ p {
 
 .creature-brownie {
   color: #b07a4f;
+}
+
+.form-unseen-force {
+  color: #ffe4f1;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.57), 0 0 14px rgba(255, 228, 241, 0.45);
+}
+
+.form-pegasus {
+  color: #ffffff;
+}
+
+.form-pseudo-dragon {
+  color: #b6402b;
+}
+
+.form-willowisp {
+  color: #facc15;
 }
 
 .sr-only {
