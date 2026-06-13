@@ -5058,7 +5058,7 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
         _message_event("room", None, room_text, command_id, exclude_player=state.player.plyrid),
     ]
 
-    spell_roll = state.rng.randint(0, 111)
+    spell_roll = state.rng.randrange(0, 111)
     if spell_roll < 67:
         spell = fixtures.load_spells()[spell_roll]
         events.append(
@@ -5071,7 +5071,7 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
         )
         add_spell_to_book(state.player, spell)
     else:
-        failure = state.rng.randint(0, 8)
+        failure = state.rng.randrange(0, 8)
         if failure == 0:
             forget_all_memorized(state.player)
             events.append(_message_event("player", "SCRLM0", _format_message(state, "SCRLM0", read_item), command_id))
@@ -5087,7 +5087,7 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
             state.player.spts = 0
             events.append(_message_event("player", "SCRLM3", _format_message(state, "SCRLM3", read_item), command_id))
         elif failure == 4:
-            target_room = state.rng.randint(0, 169)
+            target_room = state.rng.randrange(0, 169)
             state.player.pgploc = state.player.gamloc
             state.player.gamloc = target_room
             events.append(_message_event("player", "SCRLM4", _format_message(state, "SCRLM4", read_item), command_id))
@@ -5099,7 +5099,7 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
                 state.player.npobjs = len(state.player.gpobjs)
             events.append(_message_event("player", "SCRLM5", _format_message(state, "SCRLM5", read_item), command_id))
         elif failure == 6:
-            surprise_item = state.rng.randint(36, 38)
+            surprise_item = state.rng.randrange(36, 38)
             label = "codex" if surprise_item == 36 else "tome"
             if len(state.player.gpobjs) < constants.MXPOBS:
                 state.player.gpobjs.append(surprise_item)
@@ -5107,9 +5107,12 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
                 state.player.npobjs = len(state.player.gpobjs)
             events.append(_message_event("player", "SCRLM6", _format_message(state, "SCRLM6", read_item, label), command_id))
         else:
-            damage = state.rng.randint(2, 11)
+            damage = state.rng.randrange(2, 11)
             state.player.hitpts = max(0, state.player.hitpts - damage)
             events.append(_message_event("player", "SCRLM7", _format_message(state, "SCRLM7", read_item, damage), command_id))
+            if state.player.hitpts <= 0:
+                _append_hitoth_death_events(state, state.player, command_id, events)
+                return CommandResult(state=state, events=events)
 
     _persist_player_state(state, state.player)
     return CommandResult(state=state, events=events)

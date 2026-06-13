@@ -20,6 +20,29 @@ class StubRandom:
         return self.values.pop(0)
 
 
+def _walk_action_types(value):
+    if isinstance(value, dict):
+        action_type = value.get("type")
+        if action_type is not None:
+            yield action_type
+        for nested in value.values():
+            yield from _walk_action_types(nested)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_action_types(item)
+
+
+def _walk_actions(value):
+    if isinstance(value, dict):
+        if "type" in value:
+            yield value
+        for nested in value.values():
+            yield from _walk_actions(nested)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk_actions(item)
+
+
 @pytest.fixture
 def room_engine():
     messages = fixtures.load_messages()
@@ -62,6 +85,187 @@ def test_room_scripts_fixture_is_split_into_files():
     assert {8, 9, 10, 12, 14, 16}.issubset(
         {int(path.stem.split("_")[-1]) for path in room_files}
     )
+
+
+def test_room_script_actions_use_readable_known_types():
+    definitions = fixtures.load_room_scripts()
+    action_types = set(_walk_action_types(definitions))
+
+    assert "hitoth" not in action_types
+    assert "damage" in action_types
+    assert action_types <= {
+        "add_gold",
+        "add_room_object",
+        "branch_by_item",
+        "conditional",
+        "damage",
+        "grant_object",
+        "grant_spell",
+        "heal",
+        "increment_room_state",
+        "level_gate",
+        "level_up",
+        "message",
+        "nonlethal_damage",
+        "purchase_spell",
+        "random_chance",
+        "random_choice",
+        "random_range",
+        "remove_inventory_index",
+        "remove_item",
+        "set_player_flag",
+        "transfer_player",
+    }
+
+
+def test_yaml_room_engine_rejects_unknown_action_types():
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions={
+            "rooms": [
+                {
+                    "id": 999,
+                    "triggers": [
+                        {
+                            "verbs": ["touch"],
+                            "actions": [{"type": "typo_damage", "amount": 1}],
+                        }
+                    ],
+                }
+            ]
+        },
+        messages=fixtures.load_messages(),
+        objects=fixtures.load_objects(),
+        spells=fixtures.load_spells(),
+        locations=fixtures.load_locations(),
+    )
+
+    with pytest.raises(ValueError, match="Unknown YAML room action type"):
+        engine.handle(
+            player=fixtures.build_player(),
+            room_id=999,
+            command="touch",
+            args=[],
+        )
+
+
+def test_damage_action_resets_only_when_damage_kills():
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = fixtures.load_locations()
+    definitions = {
+        "rooms": [
+            {
+                "id": 998,
+                "triggers": [
+                    {
+                        "verbs": ["sting"],
+                        "actions": [{"type": "damage", "amount": 8}],
+                    }
+                ],
+            }
+        ]
+    }
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations,
+        rng=StubRandom([0, 1, 2, 3]),
+    )
+
+    survivor = fixtures.build_player().model_copy(
+        update={"hitpts": 9, "gamloc": 998, "pgploc": 998}
+    )
+    survived = engine.handle(survivor, 998, "sting", [])
+
+    assert survived.handled is True
+    assert survivor.hitpts == 1
+    assert survivor.gamloc == 998
+    assert not any(evt.get("death_reset") for evt in survived.events)
+
+    killed = fixtures.build_player().model_copy(
+        update={"hitpts": 8, "gamloc": 998, "pgploc": 998}
+    )
+    died = engine.handle(killed, 998, "sting", [])
+
+    assert died.handled is True
+    assert killed.level == 1
+    assert killed.hitpts == 4
+    assert killed.gamloc == 0
+    assert killed.pgploc == 0
+    assert messages.messages["DIEMSG"] in [
+        evt["text"] for evt in died.events if evt["scope"] == "direct"
+    ]
+    assert any(
+        evt.get("event") == "room_transfer" and evt.get("death_reset") is True
+        for evt in died.events
+    )
+
+
+def test_nonlethal_damage_action_clamps_without_death_reset():
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions={
+            "rooms": [
+                {
+                    "id": 997,
+                    "triggers": [
+                        {
+                            "verbs": ["scrape"],
+                            "actions": [{"type": "nonlethal_damage", "amount": 8}],
+                        }
+                    ],
+                }
+            ]
+        },
+        messages=fixtures.load_messages(),
+        objects=fixtures.load_objects(),
+        spells=fixtures.load_spells(),
+        locations=fixtures.load_locations(),
+        rng=StubRandom([0, 1, 2, 3]),
+    )
+
+    player = fixtures.build_player().model_copy(
+        update={"hitpts": 3, "gamloc": 997, "pgploc": 997}
+    )
+    result = engine.handle(player, 997, "scrape", [])
+
+    assert result.handled is True
+    assert player.hitpts == 0
+    assert player.gamloc == 997
+    assert player.pgploc == 997
+    assert not any(evt.get("death_reset") for evt in result.events)
+
+
+def test_truthy_random_chance_names_reward_as_success_and_damage_as_failure():
+    definitions = fixtures.load_room_scripts()
+    truthy = next(room for room in definitions["rooms"] if room["id"] == 280)
+
+    chance_actions = [
+        action for action in _walk_actions(truthy) if action.get("type") == "random_chance"
+    ]
+    choices = [
+        action for action in _walk_actions(truthy) if action.get("type") == "random_choice"
+    ]
+
+    assert choices == []
+    assert len(chance_actions) == 1
+    chance = chance_actions[0]
+    assert chance["probability"] == 0.5
+    assert chance["on_success"] == [
+        {
+            "type": "message",
+            "message_id": "TRUM02",
+            "broadcast_message_id": "TRUM03",
+            "broadcast_format": ["player_altnam"],
+        },
+        {"type": "level_up"},
+    ]
+    assert chance["on_failure"] == [
+        {"type": "message", "message_id": "TRUM01"},
+        {"type": "damage", "amount": 100},
+    ]
 
 
 def test_yaml_room_engine_inferrs_message_scope_from_ids():
@@ -328,7 +532,7 @@ def test_truthy_seeking_truth_can_hurt_or_level():
         objects=objects,
         spells=spells,
         locations=locations,
-        rng=StubRandom([0.25, 0, 1, 2, 3]),
+        rng=StubRandom([0.75, 0, 1, 2, 3]),
     )
     level_engine = yaml_rooms.YamlRoomEngine(
         definitions=fixtures.load_room_scripts(),
@@ -336,7 +540,7 @@ def test_truthy_seeking_truth_can_hurt_or_level():
         objects=objects,
         spells=spells,
         locations=locations,
-        rng=StubRandom([0.75]),
+        rng=StubRandom([0.25]),
     )
 
     base = fixtures.build_player()
@@ -406,7 +610,7 @@ def test_truthy_seeking_truth_can_hurt_or_level():
 )
 def test_truthy_uses_gi_bagthe_article_filter(room_engine, base_player, args):
     player = base_player.model_copy(update={"level": 17, "hitpts": 40})
-    room_engine.rng = StubRandom([0.75])
+    room_engine.rng = StubRandom([0.25])
 
     result = room_engine.handle(
         player=player,
@@ -549,7 +753,7 @@ def test_bodyma_rejects_non_legacy_filtered_forms(room_engine, args):
     assert player.level == 12
 
 
-def test_bodyma_unprotected_jump_uses_hitoth_death_reset(room_engine):
+def test_bodyma_unprotected_jump_uses_damage_death_reset(room_engine):
     player = fixtures.build_player().model_copy(
         update={
             "level": 12,

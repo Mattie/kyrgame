@@ -20,18 +20,18 @@ triggers:
           - type: random_chance
             probability: 0.5
             on_success:
-              # 50% damage branch: TRUM01 + hitoth(100). (legacy/KYRROUS.C:1277-1281)
-              - type: message
-                message_id: TRUM01
-              - type: hitoth
-                amount: 100
-            on_failure:
               # 50% reward branch: msgutl2(TRUM02, TRUM03) + glvutl(). (legacy/KYRROUS.C:1282-1285)
               - type: message
                 message_id: TRUM02
                 broadcast_message_id: TRUM03
                 broadcast_format: [player_altnam]
               - type: level_up
+            on_failure:
+              # 50% damage branch: TRUM01 + hitoth(100). (legacy/KYRROUS.C:1277-1281)
+              - type: message
+                message_id: TRUM01
+              - type: damage
+                amount: 100
         on_too_high:
           # Over-leveled: msgutl2(LVLM00, LVLM01). (legacy/KYRROUS.C:1436-1452)
           - type: message

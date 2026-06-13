@@ -1,7 +1,7 @@
 id: 19
 name: thicket
 spoiler_summary: "Flaming thicket that scorches anyone foolish enough to walk inside."
-spoiler_interaction: "Walk thicket to take immediate fire damage and broadcast your burning misstep."
+spoiler_interaction: "Walk thicket to take immediate fire damage that can reset you on death, while broadcasting your burning misstep."
 legacy_ref: "legacy/KYRROUS.C:645-659"
 triggers:
   - verbs: [walk]
@@ -15,5 +15,6 @@ triggers:
         scope: broadcast_others
         text: "*** %s is burning in the flaming thicket!"
         format: [player_id]
+      # Legacy fthick() applies hitoth(10) after SAYOUCH/sndutl. (legacy/KYRROUS.C:651-655)
       - type: damage
         amount: 10

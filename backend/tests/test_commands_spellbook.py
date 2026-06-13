@@ -20,6 +20,26 @@ class FixedRng:
         assert low <= value <= high
         return value
 
+    def randrange(self, low, high):
+        value = self._values.pop(0)
+        assert low <= value < high
+        return value
+
+
+class RecordingRandrange:
+    def __init__(self, values):
+        self._values = list(values)
+        self.calls: list[tuple[int, int]] = []
+
+    def randrange(self, low, high):
+        self.calls.append((low, high))
+        value = self._values.pop(0)
+        assert low <= value < high
+        return value
+
+    def randint(self, low, high):  # pragma: no cover - catches legacy-bound regressions
+        raise AssertionError(f"Expected randrange({low}, {high}), not randint")
+
 
 def _build_state(player):
     locations = {location.id: location for location in fixtures.load_locations()}
@@ -207,6 +227,95 @@ async def test_read_scroll_failure_teleports_and_persists_player_state():
     assert record is not None
     assert record.gamloc == 99
     assert record.pgploc == 4
+
+
+@pytest.mark.anyio
+async def test_read_scroll_damage_failure_uses_death_reset_and_persists():
+    engine = get_engine("sqlite+pysqlite:///:memory:")
+    init_db_schema(engine)
+    session = create_session(engine)
+
+    base_player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gamloc=4,
+        pgploc=4,
+        hitpts=10,
+        gpobjs=[35],
+        obvals=[0],
+        npobjs=1,
+    )
+    session.add(models.Player(**base_player.model_dump()))
+    session.commit()
+
+    state = _build_state(base_player)
+    state.db_session = session
+    state.rng = FixedRng([67, 7, 10, 0, 1, 2, 3])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("read", {"raw": "scroll"}, state)
+
+    assert state.player.level == 1
+    assert state.player.hitpts == 4
+    assert state.player.gamloc == 0
+    assert state.player.pgploc == 0
+    assert state.player.gpobjs == []
+    assert state.player.npobjs == 0
+
+    events = result.events
+    message_ids = [event.get("message_id") for event in events]
+    assert message_ids[:2] == [None, "SCRLM7"]
+    assert "DIEMSG" in message_ids
+    assert "KILLED" in message_ids
+    assert events[0]["scope"] == "nearby_room"
+    assert events[0]["room_id"] == 4
+    assert events[0]["exclude_player"] == state.player.plyrid
+    assert any(
+        event.get("event") == "location_update"
+        and event.get("location") == 0
+        and event.get("death_reset") is True
+        for event in events
+    )
+
+    record = session.scalar(
+        select(models.Player).where(models.Player.plyrid == base_player.plyrid)
+    )
+    assert record is not None
+    assert record.level == 1
+    assert record.hitpts == 4
+    assert record.gamloc == 0
+    assert record.gpobjs == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("values", "expected_calls", "raw"),
+    [
+        ([66], [(0, 111)], "scroll"),
+        ([67, 7, 10], [(0, 111), (0, 8), (2, 11)], "scroll"),
+        ([67, 4, 168], [(0, 111), (0, 8), (0, 169)], "codex"),
+        ([67, 6, 37], [(0, 111), (0, 8), (36, 38)], "tome"),
+    ],
+)
+async def test_read_scroll_uses_legacy_exclusive_random_bounds(
+    values, expected_calls, raw
+):
+    object_id = {"scroll": 35, "codex": 36, "tome": 37}[raw]
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gpobjs=[object_id],
+        obvals=[0],
+        npobjs=1,
+        hitpts=40,
+    )
+    state = _build_state(player)
+    state.rng = RecordingRandrange(values)
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    await dispatcher.dispatch("read", {"raw": raw}, state)
+
+    assert state.rng.calls == expected_calls
 
 
 @pytest.mark.anyio

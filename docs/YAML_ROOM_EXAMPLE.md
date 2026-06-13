@@ -37,11 +37,11 @@ After reviewing the room behavior research in `ROOM_BEHAVIOR_SUMMARY.md` and exa
 2. **Conditional Logic** (e.g., wall event requiring chant before key works):
    - **Solution**: Use `preconditions` that check room flags or player flags. The chant sets a flag; the key action checks for that flag.
 
-3. **Random Player Selection** (e.g., ruby cache damages random other player):
-   - **Solution**: Add special action types like `damage_random_player` that the engine handles with its player list.
+3. **Death-Checked Damage** (e.g., ruby cache snake bite can reset the actor):
+   - **Solution**: Use `damage` for legacy damage that should run the death reset when hit points reach zero; use `nonlethal_damage` only for explicit clamp-only damage.
 
 4. **Teleportation** (multiple rooms teleport players):
-   - **Solution**: Add `teleport` action with target room ID and optional broadcast messages.
+   - **Solution**: Use `transfer_player` with target room ID and optional leave/arrival broadcast messages.
 
 5. **Spell/Flag Manipulation** (many rooms grant spell bits or set flags):
    - **Solution**: Support `grant_spell`, `set_flag`, `clear_flag` actions that directly modify player state.
@@ -268,10 +268,10 @@ rooms:
             msg_ids: [WALM00]
             text: "The key vanishes in a golden flash of light!"
           
-          - type: teleport
+          - type: transfer_player
             target_room: 186
-            entry_broadcast: "appeared in a golden flash of light"
-            exit_broadcast: "vanished in a golden flash of light"
+            leave_text: "vanished in a golden flash of light"
+            arrive_text: "appeared in a golden flash of light"
           
           # Reset room state for next player
           - type: set_room_flag
@@ -336,10 +336,8 @@ rooms:
                       You leap toward the chasm...
                       You fall! Sharp rocks tear at you as you plummet!
                   
-                  - type: damage_self
+                  - type: damage
                     amount: 100
-                    damage_type: falling
-                    broadcast_to_room: true
 ```
 
 ## Engine Implementation Sketch
@@ -367,7 +365,7 @@ class Precondition(BaseModel):
 
 class Action(BaseModel):
     """Actions to execute when trigger fires"""
-    type: str  # consume_item, grant_item, message, teleport, etc.
+    type: str  # remove_item, grant_object, message, transfer_player, etc.
     # ... additional fields vary by type
 
 class Trigger(BaseModel):
@@ -495,8 +493,8 @@ class YAMLRoomEngine:
             elif action.type == 'message':
                 await self._send_message(player, action.msg_ids, action.text)
             
-            elif action.type == 'teleport':
-                await self._teleport_player(player, room_id, action.target_room, action)
+            elif action.type == 'transfer_player':
+                await self._transfer_player(player, room_id, action.target_room, action)
             
             elif action.type == 'set_room_flag':
                 room_state = self._get_room_state(room_id)

@@ -77,6 +77,10 @@ def _broadcast_texts(engine: RoomScriptEngine) -> list[str]:
     ]
 
 
+def _system_events(engine: RoomScriptEngine) -> list[dict]:
+    return [event for event in engine.pending_events if event.get("scope") == "system"]
+
+
 @pytest.mark.anyio
 async def test_get_ruby_rewards_player_on_success(engine, player):
     engine.yaml_engine.rng = random.Random(1)
@@ -120,6 +124,43 @@ async def test_get_ruby_backfires_on_failed_roll(engine, player):
 
 
 @pytest.mark.anyio
+async def test_get_ruby_failure_uses_legacy_death_reset(engine, player):
+    engine.yaml_engine.rng = FixedRandom(0.9)
+    player = player.model_copy(
+        update={"hitpts": 8, "gamloc": 20, "pgploc": 20}, deep=True
+    )
+    engine.players[player.plyrid] = player
+
+    handled = await engine.handle_command(
+        player.plyrid, 20, command="get", args=["ruby"], player=player
+    )
+
+    assert handled is True
+    assert player.level == 1
+    assert player.hitpts == 4
+    assert player.gamloc == 0
+    assert player.pgploc == 0
+    assert player.gpobjs == []
+    assert player.npobjs == 0
+
+    messages = fixtures.load_messages().messages
+    direct_texts = _direct_texts(engine, player.plyrid)
+    broadcast_texts = _broadcast_texts(engine)
+    system_events = _system_events(engine)
+
+    assert messages["RUBY02"] in direct_texts
+    assert messages["DIEMSG"] in direct_texts
+    assert messages["RUBY03"] % player.plyrid in broadcast_texts
+    assert messages["KILLED"] % "Hero Alt" in broadcast_texts
+    assert any(
+        event.get("event") == "room_transfer"
+        and event.get("target_room") == 0
+        and event.get("death_reset") is True
+        for event in system_events
+    )
+
+
+@pytest.mark.anyio
 async def test_get_ruby_requires_inventory_space(engine, player):
     engine.yaml_engine.rng = FixedRandom(0.0)
     player = player.model_copy(
@@ -146,6 +187,45 @@ async def test_get_ruby_requires_inventory_space(engine, player):
 
     assert messages["RUBY02"] in direct_texts
     assert messages["RUBY03"] % player.plyrid in broadcast_texts
+
+
+@pytest.mark.anyio
+async def test_get_ruby_full_inventory_success_roll_uses_legacy_death_reset(
+    engine, player
+):
+    engine.yaml_engine.rng = FixedRandom(0.0)
+    player = player.model_copy(
+        update={
+            "hitpts": 8,
+            "gamloc": 20,
+            "pgploc": 20,
+            "gpobjs": list(range(constants.MXPOBS)),
+            "obvals": [0 for _ in range(constants.MXPOBS)],
+            "npobjs": constants.MXPOBS,
+        },
+        deep=True,
+    )
+    engine.players[player.plyrid] = player
+
+    handled = await engine.handle_command(
+        player.plyrid, 20, command="get", args=["ruby"], player=player
+    )
+
+    assert handled is True
+    assert player.level == 1
+    assert player.hitpts == 4
+    assert player.gamloc == 0
+    assert player.gpobjs == []
+    assert player.npobjs == 0
+
+    messages = fixtures.load_messages().messages
+    direct_texts = _direct_texts(engine, player.plyrid)
+    broadcast_texts = _broadcast_texts(engine)
+
+    assert messages["RUBY02"] in direct_texts
+    assert messages["DIEMSG"] in direct_texts
+    assert messages["RUBY03"] % player.plyrid in broadcast_texts
+    assert messages["KILLED"] % "Hero Alt" in broadcast_texts
 
 
 @pytest.mark.anyio

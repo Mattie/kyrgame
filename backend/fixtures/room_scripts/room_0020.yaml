@@ -1,7 +1,7 @@
 id: 20
 name: ruby cache
 spoiler_summary: "Ruby cache watched by hidden vipers and wary magic."
-spoiler_interaction: "Get/grab/pick/take ruby for a 20% success chance; failure triggers a snake strike that deals damage."
+spoiler_interaction: "Get/grab/pick/take ruby for a 20% success chance; failure or a full pack triggers a snake strike that can reset you on death."
 legacy_ref: "legacy/KYRROUS.C:599-618"
 triggers:
   - verbs: [get, grab, pick, take]
@@ -31,6 +31,7 @@ triggers:
                 scope: broadcast_others
                 message_id: RUBY03
                 format: [player_id]
+              # Legacy rubies() applies hitoth(8) to the actor after failure text. (legacy/KYRROUS.C:609-612)
               - type: damage
                 amount: 8
         on_failure:
@@ -41,5 +42,6 @@ triggers:
             scope: broadcast_others
             message_id: RUBY03
             format: [player_id]
+          # Legacy rubies() applies hitoth(8) to the actor after failure text. (legacy/KYRROUS.C:609-612)
           - type: damage
             amount: 8

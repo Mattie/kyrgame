@@ -58,5 +58,5 @@ triggers:
             message_id: BODM04
             broadcast_message_id: BODM05
             broadcast_format: [player_altnam]
-          - type: hitoth
+          - type: damage
             amount: 100

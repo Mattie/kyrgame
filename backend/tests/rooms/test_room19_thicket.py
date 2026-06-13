@@ -79,6 +79,56 @@ async def test_walk_thicket_surfaces_pain_even_without_inventory(engine, player,
 
 
 @pytest.mark.anyio
+async def test_walk_thicket_uses_legacy_death_reset(engine, player, scheduler):
+    player = player.model_copy(update={"hitpts": 10, "gamloc": 19, "pgploc": 19})
+    engine.players[player.plyrid] = player
+
+    handled = await engine.handle_command(
+        player.plyrid, 19, command="walk", args=["thicket"], player=player
+    )
+    await asyncio.sleep(0.01)
+
+    assert handled is True
+    assert player.level == 1
+    assert player.hitpts == 4
+    assert player.gamloc == 0
+    assert player.pgploc == 0
+
+    target_texts = [
+        event.get("text")
+        for event in engine.pending_events
+        if event.get("scope") == "target"
+    ]
+    room_events = [
+        event for event in engine.pending_events if event.get("scope") == "room"
+    ]
+    system_events = [
+        event for event in engine.pending_events if event.get("scope") == "system"
+    ]
+    messages = fixtures.load_messages().messages
+
+    assert "...Ouch!" in target_texts
+    assert messages["DIEMSG"] in target_texts
+    assert any(
+        "burning in the flaming thicket" in event.get("text", "")
+        for event in room_events
+    )
+    assert any(event.get("message_id") == "KILLED" for event in room_events)
+    assert all(
+        event.get("exclude_player") == player.plyrid
+        for event in room_events
+        if event.get("message_id") != "KILLED"
+        or event.get("text") == messages["KILLED"] % "Hero Alt"
+    )
+    assert any(
+        event.get("event") == "room_transfer"
+        and event.get("target_room") == 0
+        and event.get("death_reset") is True
+        for event in system_events
+    )
+
+
+@pytest.mark.anyio
 async def test_unrelated_commands_pass_through(engine, player, scheduler):
     handled = await engine.handle_command(player.plyrid, 19, command="look", args=["around"])
     await asyncio.sleep(0.01)

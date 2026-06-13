@@ -272,7 +272,7 @@ async def test_solo_level_journey_reaches_level_25_with_in_game_commands(monkeyp
     try:
         async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
             await client.post("/auth/session", json={"player_id": player_id, "room_id": 0})
-            app.state.room_scripts.yaml_engine.rng = _FixedRoomRng([0.75])
+            app.state.room_scripts.yaml_engine.rng = _FixedRoomRng([0.25])
 
             for step in LEVEL_STEPS:
                 with app.state.session_factory() as db:
