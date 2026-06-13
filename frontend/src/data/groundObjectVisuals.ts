@@ -20,6 +20,20 @@ export const groundObjectVisuals = {
     darkColor: '#581c87',
     className: 'object-codex',
   },
+  tome: {
+    name: 'tome',
+    emoji: '📖',
+    color: '#c084fc',
+    darkColor: '#581c87',
+    className: 'object-tome',
+  },
+  parchment: {
+    name: 'parchment',
+    emoji: '📜',
+    color: '#f6c96d',
+    darkColor: '#72450f',
+    className: 'object-parchment',
+  },
   pinecone: {
     name: 'pinecone',
     emoji: '🌰',

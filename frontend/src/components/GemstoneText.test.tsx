@@ -1,9 +1,15 @@
 import { render, screen } from '@testing-library/react'
 
 import { getGemstoneVisual } from '../data/gemstonePalette'
+import { getGroundObjectVisual } from '../data/groundObjectVisuals'
 import { GemstoneText } from './GemstoneText'
 
 describe('GemstoneText', () => {
+  const ghostEmoji = '\u{1F47B}'
+  const wingEmoji = '\u{1FABD}'
+  const dragonEmoji = '\u{1F409}'
+  const sparklesEmoji = '\u{2728}'
+
   it('renders creature names with emoji and themed colors', () => {
     render(
       <GemstoneText text="Zar and the dragon menace the dryad, elf, and brownie." />
@@ -26,6 +32,75 @@ describe('GemstoneText', () => {
     expect(container.querySelectorAll('.creature-dragon')).toHaveLength(1)
     expect(screen.getByText("🐲 dragon")).toBeInTheDocument()
     expect(container).toHaveTextContent("dragonstaff")
+  })
+
+  it('renders legacy transformation aliases with dedicated form visuals', () => {
+    render(
+      <GemstoneText text="Some Unseen Force, Some pegasus, Some psuedo dragon, and Some willowisp arrive." />
+    )
+
+    const unseen = screen.getByText(`${ghostEmoji} Some Unseen Force`)
+    const pegasus = screen.getByText(`${wingEmoji} Some pegasus`)
+    const pseudoDragon = screen.getByText(`${dragonEmoji} Some psuedo dragon`)
+    const willowisp = screen.getByText(`${sparklesEmoji} Some willowisp`)
+
+    expect(unseen).toHaveClass('transformation-inline', 'form-unseen-force')
+    expect(pegasus).toHaveClass('transformation-inline', 'form-pegasus')
+    expect(pseudoDragon).toHaveClass('transformation-inline', 'form-pseudo-dragon')
+    expect(willowisp).toHaveClass('transformation-inline', 'form-willowisp')
+    expect(unseen).toHaveStyle({ color: '#ffe4f1' })
+    expect((unseen as HTMLElement).style.textShadow).toBe(
+      '0 0 6px rgba(255,255,255,0.57), 0 0 14px rgba(255,228,241,0.45)'
+    )
+    expect(pseudoDragon).toHaveStyle({ color: '#b6402b' })
+    expect(willowisp).toHaveStyle({ color: '#facc15' })
+    expect(pegasus).toHaveStyle({ color: '#ffffff' })
+  })
+
+  it('protects pseudo-dragon forms and midword dragon text from generic dragon styling', () => {
+    const { container } = render(
+      <GemstoneText text="Some pseudo dragon, psuedo dragon, puesdo dragon, pseudodragon, psuedodragon, dragonstaff, and dragon." />
+    )
+
+    expect(screen.getByText(`${dragonEmoji} Some pseudo dragon`)).toHaveClass(
+      'form-pseudo-dragon'
+    )
+    expect(screen.getByText(`${dragonEmoji} psuedo dragon`)).toHaveClass(
+      'form-pseudo-dragon'
+    )
+    expect(screen.getByText(`${dragonEmoji} puesdo dragon`)).toHaveClass(
+      'form-pseudo-dragon'
+    )
+    expect(screen.getByText('🐲 dragon')).toHaveClass('creature-dragon')
+    expect(container.querySelectorAll('.creature-dragon')).toHaveLength(1)
+    expect(container).toHaveTextContent('pseudodragon')
+    expect(container).toHaveTextContent('psuedodragon')
+    expect(container).toHaveTextContent('dragonstaff')
+  })
+
+  it('renders parchment like scrolls and tome like codexes', () => {
+    const scroll = getGroundObjectVisual('scroll')!
+    const codex = getGroundObjectVisual('codex')!
+    const parchment = getGroundObjectVisual('parchment')!
+    const tome = getGroundObjectVisual('tome')!
+
+    expect(parchment.emoji).toBe(scroll.emoji)
+    expect(parchment.color).toBe(scroll.color)
+    expect(parchment.darkColor).toBe(scroll.darkColor)
+    expect(tome.emoji).toBe(codex.emoji)
+    expect(tome.color).toBe(codex.color)
+    expect(tome.darkColor).toBe(codex.darkColor)
+
+    render(<GemstoneText text="A parchment and a tome are here." />)
+
+    expect(screen.getByText(`${parchment.emoji} parchment`)).toHaveClass(
+      'ground-object-inline',
+      'object-parchment'
+    )
+    expect(screen.getByText(`${tome.emoji} tome`)).toHaveClass(
+      'ground-object-inline',
+      'object-tome'
+    )
   })
 
   it('keeps gemstone styling intact', () => {

@@ -5,7 +5,14 @@ import { getGemstoneVisual } from '../data/gemstonePalette'
 import { getGroundObjectVisual } from '../data/groundObjectVisuals'
 import { RoomPanel } from './RoomPanel'
 
-const highlightedGroundObjectNames = ['scroll', 'elixir', 'codex', 'pinecone'] as const
+const highlightedGroundObjectNames = [
+  'scroll',
+  'elixir',
+  'codex',
+  'pinecone',
+  'tome',
+  'parchment',
+] as const
 
 vi.mock('../context/NavigatorContext', () => ({
   useNavigator: () => ({
@@ -15,7 +22,7 @@ vi.mock('../context/NavigatorContext', () => ({
           id: 1,
           brfdes: 'Cavern of jewels',
           objlds: 'on a velvet pillow',
-          objects: [0, 12, 32, 35, 36, 45],
+          objects: [0, 12, 32, 35, 36, 37, 38, 45],
         },
       ],
       objects: [
@@ -24,6 +31,8 @@ vi.mock('../context/NavigatorContext', () => ({
         { id: 32, name: 'pinecone' },
         { id: 35, name: 'scroll' },
         { id: 36, name: 'codex' },
+        { id: 37, name: 'tome' },
+        { id: 38, name: 'parchment' },
         { id: 45, name: 'dryad' },
       ],
       commands: [],
@@ -52,7 +61,7 @@ describe('RoomPanel', () => {
     expect(screen.getByText('🌱 dryad')).toHaveClass('creature-dryad')
   })
 
-  it('renders scroll, elixir, codex, and pinecone ground badges with unique emoji and colors', () => {
+  it('renders highlighted ground object badges with configured emoji and colors', () => {
     render(<RoomPanel />)
 
     highlightedGroundObjectNames.forEach((name) => {

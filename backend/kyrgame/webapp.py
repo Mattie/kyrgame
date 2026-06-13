@@ -917,22 +917,85 @@ def _spellbook_count_sql_expression(
     return sum(terms, literal(0))
 
 
+def _public_admin_account_player_ids(
+    db: OrmSession,
+    app: FastAPI,
+    candidate_player_ids: set[int] | None = None,
+) -> set[int]:
+    admin_userids = {
+        userid_norm
+        for userid_norm, grant in getattr(app.state, "account_admin_grants", {}).items()
+        if grant.roles or grant.flags
+    }
+    if not admin_userids:
+        return set()
+    if candidate_player_ids is not None and not candidate_player_ids:
+        return set()
+
+    conditions = [models.Account.userid_norm.in_(admin_userids)]
+    if candidate_player_ids is not None:
+        conditions.append(models.Account.player_id.in_(candidate_player_ids))
+
+    return {
+        int(player_id)
+        for player_id in db.scalars(select(models.Account.player_id).where(*conditions))
+        if player_id is not None
+    }
+
+
+def _session_player_ids_by_token(
+    db: OrmSession, session_tokens: set[str]
+) -> dict[str, int]:
+    if not session_tokens:
+        return {}
+    return {
+        session_token: int(player_id)
+        for session_token, player_id in db.execute(
+            select(models.PlayerSession.session_token, models.PlayerSession.player_id).where(
+                models.PlayerSession.session_token.in_(session_tokens),
+                models.PlayerSession.session_kind == SESSION_KIND_GAME,
+            )
+        )
+    }
+
+
+def _public_runtime_sessions(
+    db: OrmSession,
+    app: FastAPI,
+    hidden_admin_player_ids: set[int],
+) -> dict[str, models.PlayerModel]:
+    runtime_sessions = _active_player_sessions(app)
+    hidden_admin_session_tokens = {
+        session_token
+        for session_token, player_id in _session_player_ids_by_token(
+            db, set(runtime_sessions)
+        ).items()
+        if player_id in hidden_admin_player_ids
+    }
+    return {
+        session_token: player
+        for session_token, player in runtime_sessions.items()
+        if session_token not in hidden_admin_session_tokens
+    }
+
+
 def _public_leaderboard_player_statement(
     spells_catalog: list[models.SpellModel],
+    exclude_player_ids: set[int] | None = None,
 ):
     spellbook_count_expr = _spellbook_count_sql_expression(spells_catalog).label(
         "public_spellbook_count"
     )
-    return (
-        select(models.Player, spellbook_count_expr)
-        .order_by(
-            models.Player.level.desc(),
-            spellbook_count_expr.desc(),
-            func.lower(models.Player.plyrid).asc(),
-            models.Player.plyrid.asc(),
-        )
-        .limit(PUBLIC_LEADERBOARD_LIMIT)
-    )
+    statement = select(models.Player, spellbook_count_expr)
+    if exclude_player_ids:
+        statement = statement.where(~models.Player.id.in_(exclude_player_ids))
+
+    return statement.order_by(
+        models.Player.level.desc(),
+        spellbook_count_expr.desc(),
+        func.lower(models.Player.plyrid).asc(),
+        models.Player.plyrid.asc(),
+    ).limit(PUBLIC_LEADERBOARD_LIMIT)
 
 
 def _latest_session_seen_for_player_ids(
@@ -2510,7 +2573,10 @@ async def public_player_activity(
     now = datetime.now(timezone.utc)
     spells_catalog = provider.cache["spells"]
     runtime_connected_at = _active_player_connected_at(request.app)
-    runtime_sessions = _active_player_sessions(request.app)
+    hidden_admin_player_ids = _public_admin_account_player_ids(db, request.app)
+    runtime_sessions = _public_runtime_sessions(
+        db, request.app, hidden_admin_player_ids
+    )
     active_aliases = {player.plyrid for player in runtime_sessions.values()}
     active_records = (
         list(
@@ -2521,14 +2587,24 @@ async def public_player_activity(
         if active_aliases
         else []
     )
+    hidden_admin_aliases = {
+        record.plyrid
+        for record in active_records
+        if record.id is not None and int(record.id) in hidden_admin_player_ids
+    }
+    public_active_records = [
+        record
+        for record in active_records
+        if record.id is None or int(record.id) not in hidden_admin_player_ids
+    ]
     players_by_alias = {
         record.plyrid: _player_model_from_record(record)
-        for record in active_records
+        for record in public_active_records
         if record.id is not None
     }
     record_id_by_alias = {
         record.plyrid: int(record.id)
-        for record in active_records
+        for record in public_active_records
         if record.id is not None
     }
     active_record_ids = set(record_id_by_alias.values())
@@ -2536,6 +2612,8 @@ async def public_player_activity(
 
     active_summaries: list[dict] = []
     for session_token, active_player in runtime_sessions.items():
+        if active_player.plyrid in hidden_admin_aliases:
+            continue
         canonical_player = players_by_alias.get(active_player.plyrid, active_player)
         record_id = record_id_by_alias.get(canonical_player.plyrid)
         active_summaries.append(
@@ -2564,7 +2642,7 @@ async def public_player_activity(
         db,
         since=recent_cutoff,
         limit=PUBLIC_RECENT_PLAYER_SCAN_LIMIT,
-        exclude_player_ids=active_record_ids,
+        exclude_player_ids=active_record_ids | hidden_admin_player_ids,
     )
     recent_records = _player_records_by_id(db, {player_id for player_id, _ in recent_rows})
     recent_entries = []
@@ -2600,10 +2678,14 @@ async def public_leaderboard(
 ):
     now = datetime.now(timezone.utc)
     spells_catalog = provider.cache["spells"]
+    hidden_admin_player_ids = _public_admin_account_player_ids(db, request.app)
     player_records = [
         record
         for record, _spellbook_count in db.execute(
-            _public_leaderboard_player_statement(spells_catalog)
+            _public_leaderboard_player_statement(
+                spells_catalog,
+                exclude_player_ids=hidden_admin_player_ids,
+            )
         ).all()
     ]
     latest_seen = _latest_session_seen_for_player_ids(
@@ -2612,7 +2694,9 @@ async def public_leaderboard(
     runtime_connected_at = _active_player_connected_at(request.app)
     runtime_connected_by_alias = {
         player.plyrid: runtime_connected_at.get(session_token, now)
-        for session_token, player in _active_player_sessions(request.app).items()
+        for session_token, player in _public_runtime_sessions(
+            db, request.app, hidden_admin_player_ids
+        ).items()
     }
 
     entries = []

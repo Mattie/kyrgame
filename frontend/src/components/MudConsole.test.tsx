@@ -14,7 +14,14 @@ import { MudConsole } from './MudConsole'
 const mockSendCommand = vi.fn()
 const mockSendMove = vi.fn()
 const mockAdvanceLifecycle = vi.fn()
-const highlightedGroundObjectNames = ['scroll', 'elixir', 'codex', 'pinecone'] as const
+const highlightedGroundObjectNames = [
+  'scroll',
+  'elixir',
+  'codex',
+  'pinecone',
+  'tome',
+  'parchment',
+] as const
 const completedStreamKeysStorageKey = 'kyrgame.mudConsole.completedStreamKeys'
 
 const hashStringForTest = (value: string): string => {
@@ -359,6 +366,22 @@ describe('MudConsole', () => {
     pill = container.querySelector('.connection-pill')
     expect(pill).toHaveTextContent('closed')
     expect(pill).toHaveClass('disconnected')
+  })
+
+  it('labels the connection pill with the current room name and number', () => {
+    navigatorState.currentRoom = 7
+    navigatorState.world = {
+      locations: [{ id: 7, brfdes: 'The Crystal Hall' }],
+      objects: [],
+      commands: [],
+      messages: {},
+    }
+
+    const { container } = render(<MudConsole />)
+
+    const pill = container.querySelector('.connection-pill')
+    expect(pill).toHaveAttribute('title', 'connected - Room 7: The Crystal Hall')
+    expect(pill).toHaveAttribute('aria-label', 'connected - Room 7: The Crystal Hall')
   })
 
   it('renders text instantly when modem stream is disabled', () => {
@@ -1833,14 +1856,14 @@ describe('MudConsole', () => {
     })
   })
 
-  it('renders scroll, elixir, codex, and pinecone visuals in console ground object lines', () => {
+  it('renders highlighted ground object visuals in console ground object lines', () => {
     navigatorState.world = {
       locations: [
         {
           id: 0,
           brfdes: 'A dark forest surrounds you in all directions.',
           objlds: 'on the ground',
-          objects: [12, 32, 35, 36],
+          objects: [12, 32, 35, 36, 37, 38],
         },
       ],
       objects: [
@@ -1848,6 +1871,8 @@ describe('MudConsole', () => {
         { id: 32, name: 'pinecone', flags: ['VISIBL'] },
         { id: 35, name: 'scroll', flags: ['VISIBL'] },
         { id: 36, name: 'codex', flags: ['VISIBL'] },
+        { id: 37, name: 'tome', flags: ['VISIBL'] },
+        { id: 38, name: 'parchment', flags: ['VISIBL'] },
       ],
       commands: [],
       messages: {},
@@ -1857,7 +1882,7 @@ describe('MudConsole', () => {
     render(<MudConsole />)
 
     const line = getConsoleLine(
-      'There is an 🧪 elixir, a 🌰 pinecone, a 📜 scroll, and a 📖 codex lying on the ground.'
+      'There is an 🧪 elixir, a 🌰 pinecone, a 📜 scroll, a 📖 codex, a 📖 tome, and a 📜 parchment lying on the ground.'
     )
     highlightedGroundObjectNames.forEach((name) => {
       const visual = getGroundObjectVisual(name)!
@@ -1867,6 +1892,80 @@ describe('MudConsole', () => {
       expect(inlineObject).toHaveTextContent(`${visual.emoji} ${name}`)
       expect(inlineObject).toHaveStyle({ color: visual.color })
     })
+  })
+
+  it('renders transformation forms with dedicated styling in console text', () => {
+    navigatorState.activity = [
+      {
+        id: 'transform-entry',
+        type: 'room_broadcast',
+        summary:
+          '*** Some Unseen Force drifts past Some psuedo dragon while Some willowisp glows.',
+        payload: {
+          scope: 'room',
+          event: 'room_message',
+          type: 'room_message',
+          text: '*** Some Unseen Force drifts past Some psuedo dragon while Some willowisp glows.',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    const line = getConsoleLine(
+      '*** 👻 Some Unseen Force drifts past 🐉 Some psuedo dragon while ✨ Some willowisp glows.'
+    )
+    expect(line.querySelector('.form-unseen-force')).toHaveStyle({ color: '#ffe4f1' })
+    expect(line.querySelector('.form-pseudo-dragon')).toHaveStyle({ color: '#b6402b' })
+    expect(line.querySelector('.form-willowisp')).toHaveStyle({ color: '#facc15' })
+    expect(line.querySelectorAll('.creature-dragon')).toHaveLength(0)
+  })
+
+  it('renders pseudo dragon form spelling without generic dragon styling in console text', () => {
+    navigatorState.activity = [
+      {
+        id: 'pseudo-transform-entry',
+        type: 'room_broadcast',
+        summary: '*** Some pseudo dragon watches pseudodragon and dragonstaff.',
+        payload: {
+          scope: 'room',
+          event: 'room_message',
+          type: 'room_message',
+          text: '*** Some pseudo dragon watches pseudodragon and dragonstaff.',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    const line = getConsoleLineContaining('Some pseudo dragon', 'pseudodragon', 'dragonstaff')
+    expect(line.querySelector('.form-pseudo-dragon')).toHaveStyle({ color: '#b6402b' })
+    expect(line.querySelectorAll('.creature-dragon')).toHaveLength(0)
+  })
+
+  it('renders legacy puesdo dragon catalog spelling without generic dragon styling', () => {
+    navigatorState.activity = [
+      {
+        id: 'puesdo-transform-entry',
+        type: 'room_broadcast',
+        summary: '*** Some willowisp suddenly transforms into a ugly puesdo dragon!',
+        payload: {
+          scope: 'room',
+          event: 'room_message',
+          type: 'room_message',
+          text: '*** Some willowisp suddenly transforms into a ugly puesdo dragon!',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    const line = getConsoleLine(
+      '*** ✨ Some willowisp suddenly transforms into a ugly 🐉 puesdo dragon!'
+    )
+    expect(line.querySelector('.form-willowisp')).toHaveStyle({ color: '#facc15' })
+    expect(line.querySelector('.form-pseudo-dragon')).toHaveStyle({ color: '#b6402b' })
+    expect(line.querySelectorAll('.creature-dragon')).toHaveLength(0)
   })
 
   it('renders known player names with wizard styling in console text', () => {
