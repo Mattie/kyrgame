@@ -324,7 +324,9 @@ class YamlRoomEngine:
             elif action_type == "level_up":
                 self._action_level_up(player)
             else:
-                raise ValueError(f"Unknown YAML room action type: {action_type!r}")
+                raise ValueError(
+                    f"Unknown YAML room action type: {action_type!r} (room_id={room_id})"
+                )
 
     def _action_branch_by_item(
         self,
