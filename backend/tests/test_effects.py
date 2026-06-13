@@ -260,8 +260,8 @@ def test_mower_destroys_pickup_ground_items_only(sample_player):
     )
     sample_player.gamloc = 7
     location = engine.locations[7]
-    object.__setattr__(location, "objects", [0, 45])
-    object.__setattr__(location, "nlobjs", 2)
+    object.__setattr__(location, "objects", [0, 1, 45])
+    object.__setattr__(location, "nlobjs", 3)
 
     result = engine.cast_spell(
         player=sample_player,
@@ -273,7 +273,17 @@ def test_mower_destroys_pickup_ground_items_only(sample_player):
 
     assert result.message_id == "YOUCASTSPELL"
     assert messages.messages[result.message_id] == "...You cast the spell!"
-    assert result.context["destroyed_object_ids"] == [0]
+    assert result.context["destroyed_object_ids"] == [0, 1]
+    assert result.context["room_messages"] == [
+        {
+            "message_id": None,
+            "text": "***\rThe ruby at the village temple vanishes!\r",
+        },
+        {
+            "message_id": None,
+            "text": "***\rThe emerald at the village temple vanishes!\r",
+        },
+    ]
     assert result.context["room_objects_update"] == {"location": 7, "objects": [45]}
     assert engine.locations[7].objects == [45]
 

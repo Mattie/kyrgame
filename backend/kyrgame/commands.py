@@ -2545,6 +2545,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
     area_damage = context.pop("area_damage", None)
     hitoth_target = context.pop("hitoth_target", None)
     extra_events = context.pop("extra_events", [])
+    room_messages = context.pop("room_messages", [])
     global_broadcast_message_id = context.pop("global_broadcast_message_id", None)
     room_broadcast_message_id = context.pop("room_broadcast_message_id", None)
     room_broadcast_include_sender = bool(
@@ -2619,6 +2620,23 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
         )
         if room_broadcast_include_sender:
             room_event["include_sender"] = True
+        events.append(room_event)
+    for room_message in room_messages:
+        if not isinstance(room_message, dict):
+            continue
+        message_id = room_message.get("message_id")
+        text = room_message.get("text")
+        if not isinstance(text, str):
+            continue
+        # Legacy inline spell room text uses prf()+sndloc(), which includes the caster
+        # when they are still in the source room (legacy/KYRUTIL.C:184-193).
+        room_event = _message_event(
+            "room",
+            message_id if isinstance(message_id, str) else None,
+            text,
+            command_id,
+        )
+        room_event["include_sender"] = True
         events.append(room_event)
     if target_room_message_id and target_player:
         events.append(

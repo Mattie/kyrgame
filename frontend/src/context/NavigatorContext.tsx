@@ -1048,6 +1048,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             break // Don't display these events in the console
           }
 
+          if (
+            normalizedPayload.event === 'drop' &&
+            normalizedPayload.type === 'drop' &&
+            !normalizedPayload.text
+          ) {
+            break
+          }
+
           const summary =
             normalizedPayload.event === 'room_message' && normalizedPayload.text
               ? normalizedPayload.text

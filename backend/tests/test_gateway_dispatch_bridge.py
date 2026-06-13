@@ -2200,6 +2200,154 @@ async def test_websocket_tiltowait_global_and_room_messages_reach_visible_client
 
 
 @pytest.mark.anyio
+async def test_websocket_mower_vanish_messages_reach_room_occupants(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+    test_player_ids = ("ztmower", "ztwitness")
+    room_objects = [0, 1, 45]
+    vanish_texts = {
+        "***\rThe ruby at the village temple vanishes!\r",
+        "***\rThe emerald at the village temple vanishes!\r",
+    }
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        seed_returning_players(app, test_player_ids)
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            caster_session = await client.post(
+                "/auth/session", json={"player_id": "ztmower", "room_id": 7}
+            )
+            witness_session = await client.post(
+                "/auth/session", json={"player_id": "ztwitness", "room_id": 7}
+            )
+            caster_token = caster_session.json()["session"]["token"]
+            witness_token = witness_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            caster = db.scalar(select(models.Player).where(models.Player.plyrid == "ztmower"))
+            witness = db.scalar(
+                select(models.Player).where(models.Player.plyrid == "ztwitness")
+            )
+            location = db.get(models.Location, 7)
+            assert caster is not None
+            assert witness is not None
+            assert location is not None
+            caster.flags |= int(constants.PlayerFlag.LOADED)
+            caster.level = 25
+            caster.spts = 25
+            caster.gamloc = 7
+            caster.pgploc = 7
+            caster.spells = [41]
+            caster.nspells = 1
+            witness.flags |= int(constants.PlayerFlag.LOADED)
+            witness.gamloc = 7
+            witness.pgploc = 7
+            location.objects = list(room_objects)
+            location.nlobjs = len(room_objects)
+            db.commit()
+
+        app.state.location_index[7] = app.state.location_index[7].model_copy(
+            update={"objects": list(room_objects), "nlobjs": len(room_objects)}
+        )
+
+        caster_uri = f"ws://{host}:{port}/ws/rooms/7?token={caster_token}"
+        witness_uri = f"ws://{host}:{port}/ws/rooms/7?token={witness_token}"
+
+        async with (
+            websockets.connect(caster_uri) as caster_ws,
+            websockets.connect(witness_uri) as witness_ws,
+        ):
+            await _recv_matching(
+                caster_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            await _recv_matching(
+                witness_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+
+            await caster_ws.send(json.dumps({"type": "command", "command": "cast mower"}))
+
+            caster_cast = await _recv_matching(
+                caster_ws,
+                lambda msg: msg.get("type") == "command_response"
+                and msg.get("payload", {}).get("message_id") == "YOUCASTSPELL",
+                timeout=2.0,
+            )
+            witness_vanishes = []
+            while len(witness_vanishes) < len(vanish_texts):
+                witness_vanishes.append(
+                    await _recv_matching(
+                        witness_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("text") in vanish_texts,
+                        timeout=2.0,
+                    )
+                )
+            caster_vanishes = []
+            while len(caster_vanishes) < len(vanish_texts):
+                caster_vanishes.append(
+                    await _recv_matching(
+                        caster_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("text") in vanish_texts,
+                        timeout=2.0,
+                    )
+                )
+            caster_room_objects = await _recv_matching(
+                caster_ws,
+                lambda msg: msg.get("type") == "command_response"
+                and msg.get("payload", {}).get("event") == "room_objects"
+                and msg.get("payload", {}).get("location") == 7,
+                timeout=2.0,
+            )
+
+            assert caster_cast["payload"]["scope"] == "player"
+            assert {msg["payload"]["text"] for msg in witness_vanishes} == vanish_texts
+            assert {msg["payload"]["message_id"] for msg in witness_vanishes} == {None}
+            assert {msg["payload"]["scope"] for msg in witness_vanishes} == {"room"}
+            assert all("exclude_player" not in msg["payload"] for msg in witness_vanishes)
+            assert {msg["payload"]["include_sender"] for msg in witness_vanishes} == {True}
+            assert {msg["payload"]["text"] for msg in caster_vanishes} == vanish_texts
+            assert {msg["payload"]["message_id"] for msg in caster_vanishes} == {None}
+            assert {msg["payload"]["scope"] for msg in caster_vanishes} == {"room"}
+            assert all("exclude_player" not in msg["payload"] for msg in caster_vanishes)
+            assert {msg["payload"]["include_sender"] for msg in caster_vanishes} == {True}
+            assert [obj["id"] for obj in caster_room_objects["payload"]["objects"]] == [45]
+
+        with app.state.session_factory() as db:
+            location = db.get(models.Location, 7)
+            assert location is not None
+            assert location.objects == [45]
+    finally:
+        if hasattr(app.state, "session_factory"):
+            with app.state.session_factory() as db:
+                players = db.scalars(
+                    select(models.Player).where(models.Player.plyrid.in_(test_player_ids))
+                ).all()
+                player_db_ids = [player.id for player in players]
+                if player_db_ids:
+                    db.execute(
+                        delete(models.PlayerSession).where(
+                            models.PlayerSession.player_id.in_(player_db_ids)
+                        )
+                    )
+                    db.execute(delete(models.Player).where(models.Player.id.in_(player_db_ids)))
+                    db.commit()
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_macros_fatigue_blocks_command_until_spell_tick_reset(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")

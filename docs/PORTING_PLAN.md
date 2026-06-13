@@ -75,6 +75,7 @@
 - [x] Optimized public leaderboard ranking so the database applies the level/spellbook/player-id ordering before payload slicing, and kept out-of-game public display names on canonical Player-IDs during transformations.
 - [x] Ported `cast`/`chant` command handling to legacy `caster` gating (missing spell, memorized checks, level/spell-point gates, and spell-point consumption) with broadcast parity.
 - [x] Aligned targeted spell casting (bookworm/dumdum/howru/saywhat) with `chkstf` target resolution and `sndbt2`-style broadcasts.
+- [x] Restored `mower` spell sender-inclusive room-facing vanish broadcasts for each destroyed `PICKUP` ground object while preserving caster `YOUCASTSPELL` and room-object refresh parity with `spl042`.
 - [x] Added spellbook forgetting helpers plus effect-engine integration for `dumdum`/`saywhat` (IDs 12/50) to keep memorized spell loss centralized.
 - [x] Verified `saywhat` (spl051) OBJPRO/empty-spellbook failures and msgutl3-style broadcasts with targeted cast coverage in tests.
 - [x] Verified spell lookup boundaries: `cast`/`memorize` spell names remain exact-name paths (`splchk`/`fsbspl`), current-room spell targets use legacy `findgp` attention-name prefixes plus room/inventory object prefixes via `chkstf`, room 9 `buyspl` preserves its reversed `sameto(stocked_spell_name, input)` match boundary, and `peepint` is the legacy remote-room viewing path by exact global player id.

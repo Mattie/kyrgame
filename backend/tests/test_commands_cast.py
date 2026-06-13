@@ -923,7 +923,7 @@ async def test_cast_mower_persists_ground_cleanup_and_room_objects(tmp_path):
             nspells=1,
         )
         state = _build_state(player)
-        location = state.locations[7].model_copy(update={"objects": [0, 45], "nlobjs": 2})
+        location = state.locations[7].model_copy(update={"objects": [0, 1, 45], "nlobjs": 3})
         state.locations[7] = location
         state.db_session = session
         session.add(models.Player(**player.model_dump()))
@@ -936,12 +936,27 @@ async def test_cast_mower_persists_ground_cleanup_and_room_objects(tmp_path):
         result = await dispatcher.dispatch("cast", {"raw": "mower"}, state)
 
         location_record = session.scalar(select(models.Location).where(models.Location.id == 7))
+        vanish_texts = [
+            "***\rThe ruby at the village temple vanishes!\r",
+            "***\rThe emerald at the village temple vanishes!\r",
+        ]
+        vanish_events = [
+            event
+            for event in result.events
+            if event.get("scope") == "room" and event.get("text") in vanish_texts
+        ]
         room_events = [event for event in result.events if event.get("type") == "room_objects"]
 
         assert location_record is not None
         assert location_record.objects == [45]
+        assert result.events[0]["message_id"] == "YOUCASTSPELL"
+        assert [event["text"] for event in vanish_events] == vanish_texts
+        assert [event["message_id"] for event in vanish_events] == [None, None]
+        assert all("exclude_player" not in event for event in vanish_events)
+        assert all(event["include_sender"] is True for event in vanish_events)
         assert room_events
         assert [obj["id"] for obj in room_events[-1]["objects"]] == [45]
+        assert result.events.index(vanish_events[-1]) < result.events.index(room_events[-1])
 
 
 @pytest.mark.anyio

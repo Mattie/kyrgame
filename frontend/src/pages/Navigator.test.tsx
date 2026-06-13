@@ -1916,6 +1916,84 @@ describe('Navigator flow', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders drop room text without showing the structured drop metadata event', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'hero')
+      await user.type(screen.getByLabelText(/room id/i), '7')
+      await user.click(screen.getByRole('button', { name: /start session/i }))
+    })
+
+    const socket = await waitFor(() => MockWebSocket.instances[0])
+
+    act(() => {
+      socket.triggerMessage({ type: 'room_welcome', room: 7 })
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_message',
+          type: 'room_message',
+          text: '***\r\nSlayer dropped his pearl!',
+        },
+      })
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          scope: 'room',
+          event: 'drop',
+          type: 'drop',
+          player: 'slayer',
+          object_id: 3,
+          object_name: 'pearl',
+          location: 7,
+        },
+      })
+    })
+
+    expect(
+      await screen.findByText((_, element) =>
+        Boolean(
+          element?.classList.contains('summary') &&
+            element.textContent?.includes('Slayer dropped his pearl!')
+        )
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText((_, element) =>
+        Boolean(
+          element?.classList.contains('summary') && element.textContent?.trim() === 'drop'
+        )
+      )
+    ).toBeNull()
+    expect(queryConsoleLines('drop')).toHaveLength(0)
+  })
+
   it('updates world room objects when room_broadcast delivers room_objects event (gem spawn)', async () => {
     // Location 7 starts with object id=0 (ruby). After gem spawn broadcast it should have id=1 (emerald) too.
     const localLocations = [
@@ -2815,12 +2893,57 @@ describe('Navigator flow', () => {
           payload: { command: 'look' },
         },
       })
+      scrySocket?.triggerMessage({
+        type: 'scry_event',
+        player_id: 'Hero',
+        event: {
+          event_type: 'output',
+          payload: {
+            type: 'room_broadcast',
+            room: 7,
+            payload: {
+              event: 'room_message',
+              type: 'room_message',
+              text: '***\r\nSlayer dropped his pearl!',
+            },
+          },
+        },
+      })
+      scrySocket?.triggerMessage({
+        type: 'scry_event',
+        player_id: 'Hero',
+        event: {
+          event_type: 'output',
+          payload: {
+            type: 'room_broadcast',
+            room: 7,
+            payload: {
+              scope: 'room',
+              event: 'drop',
+              type: 'drop',
+              player: 'slayer',
+              object_id: 3,
+              object_name: 'pearl',
+              location: 7,
+            },
+          },
+        },
+      })
     })
 
     expect(
       (await screen.findAllByText('A long description of the temple.')).length
     ).toBeGreaterThan(0)
     expect(getConsoleLines('> look')).toHaveLength(1)
+    expect(
+      await screen.findByText((_, element) =>
+        Boolean(
+          element?.classList.contains('summary') &&
+            element.textContent?.includes('Slayer dropped his pearl!')
+        )
+      )
+    ).toBeInTheDocument()
+    expect(queryConsoleLines('drop')).toHaveLength(0)
 
     await act(async () => {
       await user.click(screen.getByRole('button', { name: /log out opal/i }))
