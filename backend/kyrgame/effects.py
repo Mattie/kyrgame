@@ -877,16 +877,26 @@ class SpellEffectEngine:
 
             kept: list[int] = []
             destroyed: list[int] = []
+            room_messages: list[dict[str, object]] = []
             for object_id in location.objects:
                 obj = self.objects.get(object_id)
                 if obj and "PICKUP" in obj.flags:
                     destroyed.append(object_id)
+                    room_messages.append(
+                        {
+                            "message_id": None,
+                            "text": f"***\rThe {obj.name} {location.brfdes} vanishes!\r",
+                        }
+                    )
                 else:
                     kept.append(object_id)
 
             self._set_location_objects(location, kept)
             context: dict[str, object] = {
                 "destroyed_object_ids": destroyed,
+                # Legacy spl042 prints an inline prf()+sndloc() line before
+                # each tgmlobj() removal (legacy/KYRSPEL.C:893-900).
+                "room_messages": room_messages,
                 "room_objects_update": {"location": location.id, "objects": kept},
             }
             if target:
