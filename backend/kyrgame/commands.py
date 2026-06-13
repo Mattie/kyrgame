@@ -5112,6 +5112,7 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
             events.append(_message_event("player", "SCRLM7", _format_message(state, "SCRLM7", read_item, damage), command_id))
             if state.player.hitpts <= 0:
                 _append_hitoth_death_events(state, state.player, command_id, events)
+                return CommandResult(state=state, events=events)
 
     _persist_player_state(state, state.player)
     return CommandResult(state=state, events=events)
