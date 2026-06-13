@@ -92,15 +92,15 @@ LEGACY_ROOM_SPOILERS: dict[int, dict[str, str]] = {
     },
     19: {
         "summary": "Flaming thicket that scorches the unwary.",
-        "interaction": "Walk the thicket to take immediate fire damage and broadcast the mishap.",
+        "interaction": "Walk the thicket to take immediate fire damage that can reset you on death and broadcast the mishap.",
         "legacy_ref": "legacy/KYRLOCS.C:79; legacy/KYRROUS.C:645-659",
         # Legacy: legacy/KYRLOCS.C:79; legacy/KYRROUS.C:645-659
     },
     20: {
         "summary": "Ruby cache guarded by a risky grab.",
         "interaction": (
-            "Get/grab/pick/take ruby for a 20% success chance; failure triggers a snake "
-            "strike that deals damage."
+            "Get/grab/pick/take ruby for a 20% success chance; failure or a full pack "
+            "triggers a snake strike that can reset you on death."
         ),
         "legacy_ref": "legacy/KYRLOCS.C:80; legacy/KYRROUS.C:599-618",
         # Legacy: legacy/KYRLOCS.C:80; legacy/KYRROUS.C:599-618

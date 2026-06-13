@@ -118,7 +118,7 @@
 
 ### Legacy Gameplay Support Gaps
 
-- [x] Shared `hitoth()` death handling for all spell/self/area damage paths, including reset, room fan-out, active-session relocation, and DB persistence.
+- [x] Shared `hitoth()` death handling for all spell/self/area damage paths, including reset, room fan-out, active-session relocation, and DB persistence. *(Extended coverage to the room-script `damage` action and readable scroll damage, including ruby cache, flaming thicket, and scroll RNG parity.)*
 - [x] Legacy `macros` fatigue gate from `kyrand()` case 7: increment per accepted command, emit `TIRED` on the 20th command before tick reset, with an allowlisted read-only UI refresh bypass for satellite status panels.
 - [x] First-login player-ID lifecycle parity: 3-9 letters, duplicate rejection, `Sysop` plus visible entity-name reservation (`Zar`, `dragon`, `dryad`, `elf`, `brownie`), `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, ENTER-gated `INTROA`/`INTROB`/`INTROC`/`INTROD` paging, delayed room entry, initgp-style player initialization, `APPEARFLASH` first-entry broadcast, and wizard player-name UI styling.
 - [x] Corrected first-login/death-reset birthstone generation to match legacy `genrdn(0,12)` exclusive-upper-bound semantics, preventing object 12 (`elixir`) from being assigned as a birthstone.
