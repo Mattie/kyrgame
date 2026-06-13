@@ -67,7 +67,7 @@ export const GemstoneText = ({
 
   const pattern = new RegExp(
     `(^|[^A-Za-z0-9_])(${inlineNames.join('|')})(?=$|[^A-Za-z0-9_])`,
-    'gi'
+    'giu'
   )
 
   const parts: ReactNode[] = []
