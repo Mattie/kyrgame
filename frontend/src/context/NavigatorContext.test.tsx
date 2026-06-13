@@ -57,6 +57,31 @@ const TestHarness = () => {
       <output data-testid="activity">
         {navigator.activity.map((entry) => entry.summary).join('\n')}
       </output>
+      <output data-testid="activity-count">{navigator.activity.length}</output>
+      <output data-testid="visible-activity-count">
+        {navigator.activity.filter((entry) => !entry.hidden).length}
+      </output>
+      <output data-testid="hidden-activity-count">
+        {navigator.activity.filter((entry) => entry.hidden).length}
+      </output>
+      <output data-testid="hydrated-activity-count">
+        {
+          navigator.activity.filter((entry) => entry.meta?.hydratedScrollback === true)
+            .length
+        }
+      </output>
+      <output data-testid="first-activity">
+        {navigator.activity[0]?.summary ?? 'none'}
+      </output>
+      <output data-testid="last-activity">
+        {navigator.activity[navigator.activity.length - 1]?.summary ?? 'none'}
+      </output>
+      <output data-testid="first-visible-activity">
+        {navigator.activity.find((entry) => !entry.hidden)?.summary ?? 'none'}
+      </output>
+      <output data-testid="first-hidden-activity">
+        {navigator.activity.find((entry) => entry.hidden)?.summary ?? 'none'}
+      </output>
       <button
         type="button"
         onClick={() => void navigator.startSession('Opal', 7)}
@@ -85,6 +110,8 @@ const TestHarness = () => {
 describe('NavigatorContext SCRY state handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    localStorage.clear()
+    sessionStorage.clear()
     MockWebSocket.instances.length = 0
     vi.spyOn(global, 'fetch').mockImplementation(
       (input: RequestInfo | URL, init?: RequestInit) => {
@@ -239,5 +266,100 @@ describe('NavigatorContext SCRY state handling', () => {
 
     await screen.findByText('7')
     expect(screen.getByTestId('admin-token')).toHaveTextContent('none')
+  })
+
+  it('retains newest visible activity without hidden status entries consuming the budget', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+
+    const gameSocket = await waitFor(() => {
+      const socket = MockWebSocket.instances.find(
+        (entry) => entry.url === 'ws://ws.local/rooms/7?token=game-token'
+      )
+      expect(socket).toBeTruthy()
+      return socket as MockWebSocket
+    })
+
+    act(() => {
+      for (let index = 0; index < 520; index += 1) {
+        gameSocket.triggerMessage({
+          type: 'command_response',
+          room: 7,
+          payload: {
+            event: 'room_message',
+            text: `Visible ${index}`,
+          },
+        })
+      }
+      for (let index = 0; index < 60; index += 1) {
+        gameSocket.triggerMessage({
+          type: 'command_response',
+          room: 7,
+          payload: {
+            event: 'room_message',
+            text: `Hidden ${index}`,
+          },
+          meta: { silent: true },
+        })
+      }
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('visible-activity-count')).toHaveTextContent('500')
+    )
+    expect(screen.getByTestId('hidden-activity-count')).toHaveTextContent('50')
+    expect(screen.getByTestId('activity-count')).toHaveTextContent('550')
+    expect(screen.getByTestId('first-visible-activity')).toHaveTextContent('Visible 20')
+    expect(screen.getByTestId('first-hidden-activity')).toHaveTextContent('Hidden 10')
+    expect(screen.getByTestId('last-activity')).toHaveTextContent('Hidden 59')
+  })
+
+  it('restores capped hydrated scrollback for a remembered session', async () => {
+    // Stored hidden entries are defensive read-path coverage; normal writes persist visible scrollback.
+    const storedEntries = [
+      ...Array.from({ length: 520 }, (_, index) => ({
+        id: `stored-${index}`,
+        type: 'command_response',
+        summary: `Stored ${index}`,
+        payload: null,
+      })),
+      ...Array.from({ length: 60 }, (_, index) => ({
+        id: `stored-hidden-${index}`,
+        type: 'command_response',
+        summary: `Stored hidden ${index}`,
+        payload: null,
+        hidden: true,
+      })),
+    ]
+    sessionStorage.setItem(
+      'kyrgame.navigator.scrollback.v1:game:opal',
+      JSON.stringify(storedEntries)
+    )
+
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('visible-activity-count')).toHaveTextContent('500')
+    )
+    expect(screen.getByTestId('hidden-activity-count')).toHaveTextContent('50')
+    expect(screen.getByTestId('hydrated-activity-count')).toHaveTextContent('550')
+    expect(screen.getByTestId('first-activity')).toHaveTextContent('Stored 20')
+    expect(screen.getByTestId('first-hidden-activity')).toHaveTextContent('Stored hidden 10')
+    expect(screen.getByTestId('last-activity')).toHaveTextContent('Stored hidden 59')
   })
 })

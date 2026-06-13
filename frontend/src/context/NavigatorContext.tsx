@@ -352,6 +352,21 @@ const getSessionStorage = (): Storage | null => {
 const createScrollbackStorageKey = (sessionKind: SessionKind, playerId: string): string =>
   `${SCROLLBACK_STORAGE_KEY_PREFIX}:${sessionKind}:${playerId.trim().toLowerCase()}`
 
+const HIDDEN_ACTIVITY_LIMIT = 50
+
+const limitRetainedActivity = (entries: ActivityEntry[]): ActivityEntry[] => {
+  const retainedVisible = new Set(
+    entries.filter((entry) => !entry.hidden).slice(-SCROLLBACK_ACTIVITY_LIMIT)
+  )
+  const retainedHidden = new Set(
+    entries.filter((entry) => entry.hidden).slice(-HIDDEN_ACTIVITY_LIMIT)
+  )
+
+  return entries.filter((entry) =>
+    entry.hidden ? retainedHidden.has(entry) : retainedVisible.has(entry)
+  )
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value))
 
@@ -409,14 +424,14 @@ const readStoredScrollback = (key: string): ActivityEntry[] => {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed
-      .map(coerceStoredActivityEntry)
-      .filter((entry): entry is ActivityEntry => Boolean(entry))
-      .slice(-SCROLLBACK_ACTIVITY_LIMIT)
-      .map((entry) => ({
-        ...entry,
-        meta: { ...(entry.meta ?? {}), hydratedScrollback: true },
-      }))
+    return limitRetainedActivity(
+      parsed
+        .map(coerceStoredActivityEntry)
+        .filter((entry): entry is ActivityEntry => Boolean(entry))
+    ).map((entry) => ({
+      ...entry,
+      meta: { ...(entry.meta ?? {}), hydratedScrollback: true },
+    }))
   } catch {
     return []
   }
@@ -426,7 +441,7 @@ const writeStoredScrollback = (key: string, entries: ActivityEntry[]) => {
   try {
     const storage = getSessionStorage()
     if (!storage) return
-    const visibleEntries = entries
+    const visibleEntries = limitRetainedActivity(entries)
       .filter((entry) => !entry.hidden)
       .map((entry) =>
         coerceStoredActivityEntry({
@@ -765,9 +780,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
   const replaceActivity = useCallback(
     (entries: ActivityEntry[]) => {
-      activityRef.current = entries
-      setActivity(entries)
-      persistActivity(entries)
+      const retainedEntries = limitRetainedActivity(entries)
+      activityRef.current = retainedEntries
+      setActivity(retainedEntries)
+      persistActivity(retainedEntries)
     },
     [persistActivity]
   )
@@ -807,7 +823,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
   const appendActivity = useCallback((entry: Omit<ActivityEntry, 'id'>) => {
     setActivity((prev) => {
-      const next = [...prev, { ...entry, id: createActivityId() }]
+      const next = limitRetainedActivity([...prev, { ...entry, id: createActivityId() }])
       activityRef.current = next
       persistActivity(next)
       return next
@@ -882,8 +898,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
   const handleIncoming = useCallback(
     // WebSocket payloads are legacy-shaped event envelopes; narrow individual fields as used.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       message: any,
       perspective?: { playerId?: string | null; roomId?: number | null; readOnly?: boolean }
     ) => {
@@ -1769,7 +1785,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         })
         setCurrentRoom(record.roomId)
         updateOccupants([])
-        activateScrollback(record.sessionKind, record.playerId)
+        activateScrollback(sessionKind, record.playerId)
         // Load world data first and wait for it to complete before connecting WebSocket
         // worldRef.current is set immediately by loadWorldData, so messages will be available
         await loadWorldData()
