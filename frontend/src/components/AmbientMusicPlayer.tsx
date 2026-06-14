@@ -138,11 +138,12 @@ export const AmbientMusicPlayer = () => {
       if (completed) return
       completed = true
       cleanup()
-      if (levelUpSfxRef.current === sfxAudio) {
+      const isCurrentSfx = levelUpSfxRef.current === sfxAudio
+      if (isCurrentSfx) {
         levelUpSfxCleanupRef.current = null
         levelUpSfxRef.current = null
+        onComplete?.()
       }
-      onComplete?.()
     }
     const clearSfxRef = () => {
       complete()

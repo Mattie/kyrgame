@@ -40,6 +40,7 @@ class MockAudio {
   static rejectNextPlay = false
   static deferNextPlay = false
   static resolveDeferredPlay: (() => void) | null = null
+  static rejectDeferredPlay: (() => void) | null = null
   src = ''
   preload = ''
   currentTime = 0
@@ -53,11 +54,17 @@ class MockAudio {
     }
     if (MockAudio.deferNextPlay) {
       MockAudio.deferNextPlay = false
-      return new Promise<void>((resolve) => {
+      return new Promise<void>((resolve, reject) => {
         MockAudio.resolveDeferredPlay = () => {
           this.paused = false
           MockAudio.resolveDeferredPlay = null
+          MockAudio.rejectDeferredPlay = null
           resolve()
+        }
+        MockAudio.rejectDeferredPlay = () => {
+          MockAudio.resolveDeferredPlay = null
+          MockAudio.rejectDeferredPlay = null
+          reject(new Error('play rejected'))
         }
       })
     }
@@ -100,6 +107,7 @@ describe('AmbientMusicPlayer', () => {
     MockAudio.rejectNextPlay = false
     MockAudio.deferNextPlay = false
     MockAudio.resolveDeferredPlay = null
+    MockAudio.rejectDeferredPlay = null
     vi.stubGlobal('Audio', MockAudio)
   })
 
@@ -482,6 +490,56 @@ describe('AmbientMusicPlayer', () => {
     })
 
     expect(levelUpAudio?.paused || levelUpAudio?.volume === 0).toBe(true)
+  })
+
+  it('ignores stopped level-up SFX play rejections after logout', async () => {
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    MockAudio.deferNextPlay = true
+    navigatorState.value = {
+      ...navigatorState.value,
+      latestLevelUpCue: {
+        sequence: 1,
+        player: 'hero',
+        previousLevel: 4,
+        level: 5,
+        location: 189,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const sfxAudio = MockAudio.instances.find((audio) => audio.src.includes('SFX_LevelUp.mp3'))
+    expect(sfxAudio?.play).toHaveBeenCalled()
+    expect(sfxAudio?.paused).toBe(true)
+
+    navigatorState.value = { ...navigatorState.value, currentRoom: null, session: null }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      MockAudio.rejectDeferredPlay?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const staleLevelUpAudio = MockAudio.instances.find((audio) =>
+      audio.src.includes('GoldenForay_LevelUp.mp3')
+    )
+    expect(staleLevelUpAudio).toBeUndefined()
   })
 
   it('plays the dark-forest level-up cue once before returning to the room track', async () => {
