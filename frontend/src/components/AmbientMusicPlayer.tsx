@@ -61,11 +61,14 @@ export const AmbientMusicPlayer = () => {
   const collapseTimerRef = useRef<number | null>(null)
   const scheduleCollapseRef = useRef<(() => void) | null>(null)
   const targetVolumeRef = useRef(muted ? 0 : volume)
+  const currentRoomRef = useRef(currentRoom)
   const seenLevelUpCueRef = useRef<number | null>(null)
   const repeatArmedRef = useRef(false)
   const startTransitionRef = useRef<
     ((track: AmbientTrack | null, durationMs: number, repeat?: boolean) => void) | null
   >(null)
+
+  currentRoomRef.current = currentRoom
 
   const desiredTrack = useMemo(() => {
     const levelUpTrack = resolveLevelUpTrack(activeLevelUpCue)
@@ -408,13 +411,15 @@ export const AmbientMusicPlayer = () => {
     seenLevelUpCueRef.current = latestLevelUpCue.sequence
     const levelUpTrack = resolveLevelUpTrack(latestLevelUpCue)
     const resumeAmbientAfterSfx = () => {
-      if (levelUpTrack) {
+      const roomAtCompletion = currentRoomRef.current
+      if (levelUpTrack && areRoomsInSameAmbientArea(latestLevelUpCue.location, roomAtCompletion)) {
         setActiveLevelUpCue(latestLevelUpCue)
         startTransitionRef.current?.(levelUpTrack, LEVEL_UP_AMBIENT_FADE_MS, true)
         return
       }
 
-      startTransitionRef.current?.(resolveAmbientTrack(currentRoom), CROSSFADE_MS, true)
+      setActiveLevelUpCue(null)
+      startTransitionRef.current?.(resolveAmbientTrack(roomAtCompletion), CROSSFADE_MS, true)
     }
 
     if (playLevelUpSfx(resumeAmbientAfterSfx)) {

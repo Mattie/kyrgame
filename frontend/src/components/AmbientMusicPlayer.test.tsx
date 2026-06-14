@@ -799,6 +799,109 @@ describe('AmbientMusicPlayer', () => {
     expect(levelUpAudio?.volume).toBeCloseTo(0.3, 2)
   })
 
+  it('skips a delayed level-up cue after moving to another ambient area', async () => {
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    navigatorState.value = {
+      ...navigatorState.value,
+      latestLevelUpCue: {
+        sequence: 1,
+        player: 'hero',
+        previousLevel: 4,
+        level: 5,
+        location: 189,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const sfxAudio = MockAudio.instances.find((audio) => audio.src.includes('SFX_LevelUp.mp3'))
+    expect(sfxAudio?.play).toHaveBeenCalled()
+    expect(
+      MockAudio.instances.some((audio) => audio.src.includes('GoldenForay_LevelUp.mp3'))
+    ).toBe(false)
+
+    navigatorState.value = { ...navigatorState.value, currentRoom: 219 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    expect(MockAudio.instances.some((audio) => audio.src.includes('ThroughTheGate.mp3'))).toBe(
+      true
+    )
+
+    await act(async () => {
+      sfxAudio?.dispatch('ended')
+      await Promise.resolve()
+    })
+
+    expect(
+      MockAudio.instances.some((audio) => audio.src.includes('GoldenForay_LevelUp.mp3'))
+    ).toBe(false)
+  })
+
+  it('resumes the current mapped room after an unmapped level-up cue completes', async () => {
+    navigatorState.value = { ...navigatorState.value, currentRoom: 172 }
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    navigatorState.value = {
+      ...navigatorState.value,
+      latestLevelUpCue: {
+        sequence: 1,
+        player: 'hero',
+        previousLevel: 4,
+        level: 5,
+        location: 172,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const sfxAudio = MockAudio.instances.find((audio) => audio.src.includes('SFX_LevelUp.mp3'))
+    expect(sfxAudio?.play).toHaveBeenCalled()
+
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const goldenAudio = MockAudio.instances.find((audio) => audio.src.includes('GoldenForay.mp3'))
+    expect(goldenAudio?.play).toHaveBeenCalled()
+
+    await act(async () => {
+      sfxAudio?.dispatch('ended')
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    const playingGoldenAudio = MockAudio.instances.find(
+      (audio) => audio.src.includes('GoldenForay.mp3') && !audio.paused
+    )
+    expect(playingGoldenAudio?.volume).toBeCloseTo(0.3, 2)
+  })
+
   it('invalidates pending room transitions before ducking level-up audio', async () => {
     const { rerender } = render(<AmbientMusicPlayer />)
     await act(async () => {
