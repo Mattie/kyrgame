@@ -153,6 +153,7 @@ export class AmbientAudioRuntime {
     const resumeAfterSfx = () => {
       if (this.levelUpOperationId !== levelUpOperation || !this.sessionActive) return
       this.ambientSuspendedForSfx = false
+      this.cancelDuckFade()
       const roomAtCompletion = this.currentRoom
       if (levelUpTrack && areRoomsInSameAmbientArea(cue.location, roomAtCompletion)) {
         this.activeLevelUpCue = cue
@@ -165,12 +166,13 @@ export class AmbientAudioRuntime {
       this.requestAmbientTrack(resolveAmbientTrack(roomAtCompletion), CROSSFADE_MS)
     }
 
-    const sfxStarted = this.playSfx(resumeAfterSfx)
-    this.duckAmbientForLevelUp()
-    this.ambientSuspendedForSfx = sfxStarted
-    if (!sfxStarted) {
-      resumeAfterSfx()
+    if (this.playSfx(resumeAfterSfx)) {
+      this.ambientSuspendedForSfx = true
+      this.duckAmbientForLevelUp()
+      return
     }
+    this.ambientSuspendedForSfx = false
+    resumeAfterSfx()
   }
 
   dispose() {
@@ -338,6 +340,11 @@ export class AmbientAudioRuntime {
         }
         this.pendingAmbient = null
         this.resetDeck(nextDeck)
+        if (isLevelUpAmbientTrack(track)) {
+          this.activeLevelUpCue = null
+          this.requestAmbientTrack(resolveAmbientTrack(this.currentRoom), CROSSFADE_MS)
+          return
+        }
         this.setStatus('waiting')
       })
   }
@@ -582,6 +589,11 @@ export class AmbientAudioRuntime {
       window.clearInterval(this.duckFadeTimer)
       this.duckFadeTimer = null
     }
+  }
+
+  private cancelDuckFade() {
+    this.duckOperationId += 1
+    this.clearDuckFade()
   }
 
   private stepsFor(durationMs: number) {

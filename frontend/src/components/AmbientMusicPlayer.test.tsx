@@ -114,6 +114,7 @@ describe('AmbientMusicPlayer', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('starts after user interaction at the default 30% volume', async () => {
@@ -159,6 +160,24 @@ describe('AmbientMusicPlayer', () => {
 
   it('falls back to default volume for invalid persisted settings', async () => {
     localStorage.setItem('kyrgame.ambient.volume', 'loud')
+
+    render(<AmbientMusicPlayer />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('30')
+  })
+
+  it('falls back when browser storage is unavailable', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage blocked')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage blocked')
+    })
 
     render(<AmbientMusicPlayer />)
 

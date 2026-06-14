@@ -211,6 +211,44 @@ describe('AmbientAudioRuntime', () => {
     expect(goldenAudio?.volume).toBeCloseTo(0, 2)
   })
 
+  it('resumes the room loop when ambient level-up playback fails', async () => {
+    const runtime = await startRuntimeInRoom(189)
+
+    runtime.handleLevelUpCue({ sequence: 1, location: 189 })
+    const sfxAudio = playableAudios('SFX_LevelUp.mp3')[0]
+    MockAudio.rejectNextPlay = true
+    sfxAudio.dispatch('ended')
+    await flushPromises()
+
+    const rejectedLevelUp = playableAudios('GoldenForay_LevelUp.mp3')[0]
+    expect(rejectedLevelUp?.paused).toBe(true)
+
+    vi.advanceTimersByTime(2000)
+
+    const roomLoop = playableAudios('GoldenForay.mp3')[0]
+    expect(roomLoop?.paused).toBe(false)
+    expect(roomLoop?.volume).toBeCloseTo(0.3, 2)
+  })
+
+  it('does not duck ambient when muted audio skips level-up SFX', async () => {
+    const runtime = await startRuntimeInRoom(189)
+
+    runtime.setMasterMuted(true)
+    MockAudio.deferNextPlay = true
+    runtime.handleLevelUpCue({ sequence: 1, location: 189 })
+    expect(playableAudios('SFX_LevelUp.mp3')).toHaveLength(0)
+
+    vi.advanceTimersByTime(350)
+    MockAudio.resolveDeferredPlay?.()
+    await flushPromises()
+    runtime.setMasterMuted(false)
+    vi.advanceTimersByTime(1350)
+
+    const levelUpAudio = playableAudios('GoldenForay_LevelUp.mp3')[0]
+    expect(levelUpAudio?.paused).toBe(false)
+    expect(levelUpAudio?.volume).toBeCloseTo(0.3, 2)
+  })
+
   it('ignores stale level-up SFX completion after logout', async () => {
     const runtime = await startRuntimeInRoom(189)
 

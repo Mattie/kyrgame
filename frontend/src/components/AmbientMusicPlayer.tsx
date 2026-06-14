@@ -13,14 +13,30 @@ const MUTED_STORAGE_KEY = 'kyrgame.ambient.muted'
 
 const clampVolume = (value: number) => Math.min(1, Math.max(0, value))
 
+const safeReadStorage = (key: string) => {
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+const safeWriteStorage = (key: string, value: string) => {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // Browsers can block storage in privacy modes; audio still works with in-memory state.
+  }
+}
+
 const readStoredVolume = () => {
-  const raw = window.localStorage.getItem(VOLUME_STORAGE_KEY)
+  const raw = safeReadStorage(VOLUME_STORAGE_KEY)
   if (raw === null) return DEFAULT_VOLUME
   const parsed = Number.parseFloat(raw)
   return Number.isFinite(parsed) ? clampVolume(parsed) : DEFAULT_VOLUME
 }
 
-const readStoredMuted = () => window.localStorage.getItem(MUTED_STORAGE_KEY) === 'true'
+const readStoredMuted = () => safeReadStorage(MUTED_STORAGE_KEY) === 'true'
 
 export const AmbientMusicPlayer = () => {
   const { currentRoom, latestLevelUpCue, session } = useNavigator()
@@ -77,8 +93,8 @@ export const AmbientMusicPlayer = () => {
   }, [runtime])
 
   useEffect(() => {
-    window.localStorage.setItem(VOLUME_STORAGE_KEY, String(volume))
-    window.localStorage.setItem(MUTED_STORAGE_KEY, muted ? 'true' : 'false')
+    safeWriteStorage(VOLUME_STORAGE_KEY, String(volume))
+    safeWriteStorage(MUTED_STORAGE_KEY, muted ? 'true' : 'false')
     runtime.setMasterVolume(volume)
     runtime.setMasterMuted(muted)
   }, [muted, runtime, volume])
