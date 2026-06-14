@@ -680,12 +680,74 @@
   max-width: none;
 }
 
-.active-player-indicator {
+.navigator-top-controls {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 7;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.active-player-indicator {
+  position: relative;
   font-family: 'DM Mono', 'Segoe UI', sans-serif;
+}
+
+.ambient-music-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-height: 2.35rem;
+  border-radius: 8px;
+  padding: 0.32rem 0.48rem;
+  background: rgba(7, 16, 25, 0.92);
+  font-family: 'DM Mono', 'Segoe UI', sans-serif;
+}
+
+.ambient-music-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 1.58rem;
+  height: 1.58rem;
+  border: 1px solid rgba(141, 225, 198, 0.34);
+  border-radius: 8px;
+  padding: 0;
+  background: rgba(141, 225, 198, 0.1);
+  color: #f3c77a;
+  cursor: pointer;
+  font-family: 'Segoe UI Emoji', 'Segoe UI Symbol', 'Segoe UI', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ambient-music-toggle span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  transform: translateY(-0.01em);
+}
+
+.ambient-music-toggle[aria-pressed='true'] {
+  color: #b7c8d9;
+  border-color: rgba(183, 200, 217, 0.28);
+}
+
+.ambient-volume-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.ambient-volume-control input {
+  width: 4.9rem;
+  accent-color: #8de1c6;
+  cursor: pointer;
 }
 
 .active-player-trigger {
@@ -2228,7 +2290,26 @@ p {
 
   .play-logo-link {
     width: min(50vw, 13rem);
-    max-width: calc(100% - 6.2rem);
+    max-width: calc(100% - 10.5rem);
+  }
+
+  .navigator-top-controls {
+    gap: 0.35rem;
+  }
+
+  .ambient-music-player {
+    min-height: 2.1rem;
+    padding: 0.26rem 0.38rem;
+  }
+
+  .ambient-music-toggle {
+    width: 1.42rem;
+    height: 1.42rem;
+    font-size: 0.82rem;
+  }
+
+  .ambient-volume-control input {
+    width: 3.5rem;
   }
 
   .masthead {

@@ -99,6 +99,14 @@ export type ScrySession = {
   roomId?: number | null
 }
 
+export type PlayerLevelUpCue = {
+  sequence: number
+  player: string
+  previousLevel: number
+  level: number
+  location: number | null
+}
+
 export type AdminUpdatePayload = {
   altnam?: string
   attnam?: string
@@ -278,6 +286,7 @@ type NavigatorContextValue = {
   connectionStatus: ConnectionStatus
   error: string | null
   scrySession: ScrySession | null
+  latestLevelUpCue: PlayerLevelUpCue | null
   startSession: (
     playerId: string,
     roomId?: number | null,
@@ -468,6 +477,9 @@ const removeStoredScrollback = (key: string | null) => {
 
 const isAuthWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
   event.code === 1008 || /invalid session token/i.test(event.reason ?? '')
+
+const isReplacedWebSocketClose = (event: Pick<CloseEvent, 'code'>): boolean =>
+  event.code === 1013
 
 const readRememberedSessionRaw = (): string | null => {
   try {
@@ -748,10 +760,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [playerVisuals, setPlayerVisuals] = useState<Record<string, PlayerVisual>>({})
   const [adminToken, setAdminTokenState] = useState<string | null>(null)
   const [scrySession, setScrySession] = useState<ScrySession | null>(null)
+  const [latestLevelUpCue, setLatestLevelUpCue] = useState<PlayerLevelUpCue | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const scrySocketRef = useRef<WebSocket | null>(null)
   const worldRef = useRef<WorldData | null>(null)
   const sessionRef = useRef<SessionRecord | null>(null)
+  const currentRoomRef = useRef<number | null>(null)
   const adminTokenRef = useRef<string | null>(null)
   const occupantsRef = useRef<string[]>([])
   const suppressedSocketRef = useRef<WebSocket | null>(null)
@@ -761,10 +775,15 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const reconnectAttemptRef = useRef(0)
   const reconnectTargetRef = useRef<ReconnectTarget | null>(null)
   const connectWebSocketRef = useRef<ConnectWebSocketFn | null>(null)
+  const levelUpCueSequenceRef = useRef(0)
 
   useEffect(() => {
     sessionRef.current = session
   }, [session])
+
+  useEffect(() => {
+    currentRoomRef.current = currentRoom
+  }, [currentRoom])
 
   const setAdminToken = useCallback((token: string | null) => {
     adminTokenRef.current = token
@@ -908,9 +927,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       const hidden = Boolean(meta?.silent)
       const readOnlyPerspective = Boolean(perspective?.readOnly)
       const perspectivePlayerId =
-        perspective?.playerId ?? sessionRef.current?.playerId ?? session?.playerId ?? null
+        perspective?.playerId ?? sessionRef.current?.playerId ?? null
       const perspectiveRoomId =
-        perspective?.roomId ?? currentRoom ?? sessionRef.current?.roomId ?? session?.roomId ?? null
+        perspective?.roomId ?? currentRoomRef.current ?? sessionRef.current?.roomId ?? null
       switch (message.type) {
         case 'room_welcome':
         case 'room_change': {
@@ -1137,6 +1156,30 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
             break
           }
 
+          if (payloadEvent === 'player_level_up') {
+            if (!readOnlyPerspective) {
+              const nextLevel = Number(message.payload?.level)
+              const previousLevel = Number(message.payload?.previous_level)
+              const location =
+                typeof message.payload?.location === 'number'
+                  ? message.payload.location
+                  : typeof message.room === 'number'
+                    ? message.room
+                    : null
+              if (Number.isFinite(nextLevel) && Number.isFinite(previousLevel)) {
+                levelUpCueSequenceRef.current += 1
+                setLatestLevelUpCue({
+                  sequence: levelUpCueSequenceRef.current,
+                  player: String(message.payload?.player ?? perspectivePlayerId ?? ''),
+                  previousLevel,
+                  level: nextLevel,
+                  location,
+                })
+              }
+            }
+            break
+          }
+
           if (message.payload?.event === 'location_description') {
             // Look up the full description from world.messages using message_id, just like RoomPanel does
             let text = message.payload?.text ?? message.payload?.description
@@ -1261,11 +1304,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     },
     [
       appendActivity,
-      currentRoom,
       handleRoomChange,
       mergePlayerVisuals,
-      session?.playerId,
-      session?.roomId,
       updateOccupants,
     ]
   )
@@ -1314,6 +1354,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           return
         }
         setConnectionStatus('disconnected')
+        if (isReplacedWebSocketClose(event)) {
+          setError('This game session is open in another tab or window.')
+          return
+        }
         if (event.code !== 1000) {
           setError(event.reason || `WebSocket closed with code ${event.code}`)
         }
@@ -2095,6 +2139,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       connectionStatus,
       error,
       scrySession,
+      latestLevelUpCue,
       startSession,
       adminToken,
       setAdminToken,
@@ -2121,6 +2166,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       error,
       fetchAdminMobs,
       fetchAdminPlayer,
+      latestLevelUpCue,
       logoutSession,
       occupants,
       playerVisuals,

@@ -975,6 +975,124 @@ async def test_websocket_bridge_echoes_silent_metadata_on_responses():
 
 
 @pytest.mark.anyio
+async def test_websocket_python_room_level_up_emits_direct_audio_cue(monkeypatch):
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "10")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        seed_returning_players(app, ("zthero",))
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            session = await client.post(
+                "/auth/session", json={"player_id": "zthero", "room_id": 0}
+            )
+            token = session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+            assert hero is not None
+            hero.level = 1
+            hero.nmpdes = constants.level_to_nmpdes(1)
+            hero.gamloc = 0
+            hero.pgploc = 0
+            db.commit()
+
+        uri = f"ws://{host}:{port}/ws/rooms/0?token={token}"
+        async with websockets.connect(uri) as ws:
+            await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+
+            await ws.send(json.dumps({"type": "command", "command": "kneel"}))
+
+            cue = await _recv_matching(
+                ws,
+                lambda msg: msg.get("type") == "command_response"
+                and msg.get("payload", {}).get("event") == "player_level_up",
+                timeout=2.0,
+            )
+            assert cue["payload"] == {
+                "scope": "player",
+                "event": "player_level_up",
+                "type": "player_level_up",
+                "player": "zthero",
+                "previous_level": 1,
+                "level": 2,
+                "location": 0,
+            }
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_yaml_room_level_up_emits_direct_audio_cue(monkeypatch):
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "10")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        seed_returning_players(app, ("ztfear",))
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            session = await client.post(
+                "/auth/session", json={"player_id": "ztfear", "room_id": 16}
+            )
+            token = session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "ztfear"))
+            assert hero is not None
+            hero.level = 4
+            hero.nmpdes = constants.level_to_nmpdes(4)
+            hero.gamloc = 16
+            hero.pgploc = 16
+            db.commit()
+
+        uri = f"ws://{host}:{port}/ws/rooms/16?token={token}"
+        async with websockets.connect(uri) as ws:
+            await _recv_matching(
+                ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+
+            await ws.send(json.dumps({"type": "command", "command": "fear no evil"}))
+
+            cue = await _recv_matching(
+                ws,
+                lambda msg: msg.get("type") == "command_response"
+                and msg.get("payload", {}).get("event") == "player_level_up",
+                timeout=2.0,
+            )
+            assert cue["payload"] == {
+                "scope": "player",
+                "event": "player_level_up",
+                "type": "player_level_up",
+                "player": "ztfear",
+                "previous_level": 4,
+                "level": 5,
+                "location": 16,
+            }
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_room_command_handles_unknown_verbs():
     app = create_app()
     host = "127.0.0.1"

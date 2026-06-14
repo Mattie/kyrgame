@@ -3551,6 +3551,25 @@ def create_app() -> FastAPI:
             if websocket.application_state == WebSocketState.CONNECTED:
                 await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
 
+        async def _send_level_up_cue(previous_level: int, location: int) -> None:
+            if state.player.level <= previous_level:
+                return
+            await send_player_json(
+                {
+                    "type": "command_response",
+                    "room": location,
+                    "payload": {
+                        "scope": "player",
+                        "event": "player_level_up",
+                        "type": "player_level_up",
+                        "player": player_id,
+                        "previous_level": previous_level,
+                        "level": state.player.level,
+                        "location": location,
+                    },
+                }
+            )
+
         try:
             while True:
                 payload = await websocket.receive_json()
@@ -3568,6 +3587,8 @@ def create_app() -> FastAPI:
                 await _sync_current_room_from_state()
                 command_text = payload.get("command", "")
                 await record_player_input(str(command_text))
+                command_room = current_room
+                previous_level = state.player.level
                 args = payload.get("args", {}) or {}
                 raw_tokens = command_text.strip().split()
                 raw_verb = raw_tokens[0].lower() if raw_tokens else ""
@@ -3702,6 +3723,7 @@ def create_app() -> FastAPI:
                         if meta:
                             ack_payload["meta"] = meta
                         await send_player_json(ack_payload)
+                        await _send_level_up_cue(previous_level, command_room)
                         
                         # Process pending events from room script engine
                         pending_events = provider.room_scripts.get_and_clear_pending_events()
@@ -4032,6 +4054,7 @@ def create_app() -> FastAPI:
                 if meta:
                     ack_payload["meta"] = meta
                 await send_player_json(ack_payload)
+                await _send_level_up_cue(previous_level, command_room)
 
                 for event in result.events:
                     scope = event.get("scope", "player")
