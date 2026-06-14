@@ -290,7 +290,7 @@ describe('NavigatorContext SCRY state handling', () => {
     })
 
     await act(async () => {
-      gameSocket.close(1013)
+      gameSocket.close(1013, 'Game session replaced by another connection')
       await new Promise((resolve) => window.setTimeout(resolve, 320))
     })
 
@@ -303,6 +303,38 @@ describe('NavigatorContext SCRY state handling', () => {
         (socket) => socket.url === 'ws://ws.local/rooms/7?token=game-token'
       )
     ).toHaveLength(1)
+  })
+
+  it('auto-reconnects when a 1013 game socket close is transient', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+
+    const gameSocket = await waitFor(() => {
+      const socket = MockWebSocket.instances.find(
+        (entry) => entry.url === 'ws://ws.local/rooms/7?token=game-token'
+      )
+      expect(socket).toBeTruthy()
+      return socket as MockWebSocket
+    })
+
+    await act(async () => {
+      gameSocket.close(1013, 'Server overloaded')
+      await new Promise((resolve) => window.setTimeout(resolve, 320))
+    })
+
+    expect(
+      MockWebSocket.instances.filter(
+        (socket) => socket.url === 'ws://ws.local/rooms/7?token=game-token'
+      )
+    ).toHaveLength(2)
+    expect(screen.getByTestId('connection-status')).toHaveTextContent('connected')
   })
 
   it('retains newest visible activity without hidden status entries consuming the budget', async () => {

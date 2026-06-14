@@ -241,6 +241,14 @@ describe('AmbientMusicPlayer', () => {
       await Promise.resolve()
     })
 
+    navigatorState.value = { ...navigatorState.value, currentRoom: 169 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    expect(MockAudio.instances.some((audio) => audio.src.includes('Spelunking.mp3'))).toBe(true)
+
     navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
     await act(async () => {
       rerender(<AmbientMusicPlayer />)
@@ -590,6 +598,55 @@ describe('AmbientMusicPlayer', () => {
     expect(MockAudio.instances.some((audio) => audio.src.includes('WillowDrift1.mp3'))).toBe(true)
   })
 
+  it('plays the spelunking level-up cue once before returning to the room track', async () => {
+    navigatorState.value = { ...navigatorState.value, currentRoom: 169 }
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    navigatorState.value = {
+      ...navigatorState.value,
+      latestLevelUpCue: {
+        sequence: 1,
+        player: 'hero',
+        previousLevel: 2,
+        level: 3,
+        location: 169,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const spelunkingBeforeSfxEnds = MockAudio.instances.find((audio) =>
+      audio.src.includes('Spelunking_LevelUp.mp3')
+    )
+    expect(spelunkingBeforeSfxEnds).toBeUndefined()
+
+    const levelUpSfx = MockAudio.instances.find((audio) => audio.src.includes('SFX_LevelUp.mp3'))
+    expect(levelUpSfx?.play).toHaveBeenCalled()
+
+    await act(async () => {
+      levelUpSfx?.dispatch('ended')
+      await Promise.resolve()
+    })
+
+    const levelUpAudio = MockAudio.instances.find((audio) =>
+      audio.src.includes('Spelunking_LevelUp.mp3')
+    )
+    expect(levelUpAudio?.play).toHaveBeenCalled()
+
+    await act(async () => {
+      levelUpAudio?.dispatch('ended')
+      await Promise.resolve()
+    })
+
+    expect(MockAudio.instances.some((audio) => audio.src.includes('Spelunking.mp3'))).toBe(true)
+  })
+
   it('plays mapped area level-up cues once before returning to the room track', async () => {
     navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
     const { rerender } = render(<AmbientMusicPlayer />)
@@ -839,5 +896,68 @@ describe('AmbientMusicPlayer', () => {
         audio.src.includes('SFX_LevelUp.mp3') && audio.play.mock.calls.length > 0 && audio.volume > 0
     )
     expect(audibleSfx).toBe(false)
+  })
+
+  it('stops a current level-up SFX before muted cue fallback', async () => {
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    navigatorState.value = {
+      ...navigatorState.value,
+      latestLevelUpCue: {
+        sequence: 1,
+        player: 'hero',
+        previousLevel: 4,
+        level: 5,
+        location: 189,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const firstSfx = MockAudio.instances.find((audio) => audio.src.includes('SFX_LevelUp.mp3'))
+    expect(firstSfx?.play).toHaveBeenCalled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /mute ambient music/i }))
+      await Promise.resolve()
+    })
+
+    navigatorState.value = {
+      ...navigatorState.value,
+      currentRoom: 219,
+      latestLevelUpCue: {
+        sequence: 2,
+        player: 'hero',
+        previousLevel: 5,
+        level: 6,
+        location: 219,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    expect(firstSfx?.pause).toHaveBeenCalled()
+    expect(firstSfx?.currentTime).toBe(0)
+
+    await act(async () => {
+      firstSfx?.dispatch('ended')
+      await Promise.resolve()
+    })
+
+    expect(
+      MockAudio.instances.some((audio) => audio.src.includes('GoldenForay_LevelUp.mp3'))
+    ).toBe(false)
+    expect(
+      MockAudio.instances.some((audio) => audio.src.includes('ThroughTheGate_LevelUp.mp3'))
+    ).toBe(true)
   })
 })

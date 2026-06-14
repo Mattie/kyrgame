@@ -3324,7 +3324,10 @@ def create_app() -> FastAPI:
         if existing_socket is not None and existing_socket.application_state == WebSocketState.CONNECTED:
             await gateway.unregister(current_room, existing_socket)
             getattr(provider.scope.app.state, "game_socket_players", {}).pop(existing_socket, None)
-            await existing_socket.close(code=status.WS_1013_TRY_AGAIN_LATER)
+            await existing_socket.close(
+                code=status.WS_1013_TRY_AGAIN_LATER,
+                reason="Game session replaced by another connection",
+            )
         session_connections[session_token] = websocket
         provider.scope.app.state.game_socket_players[websocket] = player_id
 

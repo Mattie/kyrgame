@@ -127,9 +127,8 @@ export const AmbientMusicPlayer = () => {
 
   const playLevelUpSfx = useCallback((onComplete?: () => void) => {
     const targetVolume = targetVolumeRef.current
-    if (!unlocked || targetVolume <= 0) return false
-
     stopLevelUpSfx()
+    if (!unlocked || targetVolume <= 0) return false
 
     const sfxAudio = new Audio()
     let completed = false

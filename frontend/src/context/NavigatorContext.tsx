@@ -478,8 +478,10 @@ const removeStoredScrollback = (key: string | null) => {
 const isAuthWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
   event.code === 1008 || /invalid session token/i.test(event.reason ?? '')
 
-const isReplacedWebSocketClose = (event: Pick<CloseEvent, 'code'>): boolean =>
-  event.code === 1013
+const REPLACED_GAME_SOCKET_REASON = 'Game session replaced by another connection'
+
+const isReplacedWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
+  event.code === 1013 && event.reason === REPLACED_GAME_SOCKET_REASON
 
 const readRememberedSessionRaw = (): string | null => {
   try {
