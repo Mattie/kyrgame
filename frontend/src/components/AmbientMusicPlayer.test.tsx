@@ -188,6 +188,24 @@ describe('AmbientMusicPlayer', () => {
     )
   })
 
+  it('keeps the volume slider expanded while keyboard focus remains inside it', async () => {
+    render(<AmbientMusicPlayer />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    const volumeInput = screen.getByLabelText(/ambient volume/i)
+    act(() => {
+      volumeInput.focus()
+      fireEvent.focus(volumeInput)
+      vi.advanceTimersByTime(3000)
+    })
+
+    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('30')
+  })
+
   it('crossfades to mapped area tracks and silence for unmapped rooms', async () => {
     const { rerender } = render(<AmbientMusicPlayer />)
     await act(async () => {
@@ -224,6 +242,37 @@ describe('AmbientMusicPlayer', () => {
     })
 
     expect(MockAudio.instances.every((audio) => audio.paused || audio.volume === 0)).toBe(true)
+  })
+
+  it('uses the current volume setting while a room crossfade is active', async () => {
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/ambient volume/i), { target: { value: '0' } })
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    const goldenAudio = MockAudio.instances.find((audio) => audio.src.includes('GoldenForay.mp3'))
+    expect(goldenAudio?.volume).toBe(0)
+    expect(MockAudio.instances.every((audio) => audio.volume === 0)).toBe(true)
   })
 
   it('self-crossfades at repeat boundaries', async () => {

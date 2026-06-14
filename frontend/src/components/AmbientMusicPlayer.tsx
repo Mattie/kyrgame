@@ -109,7 +109,7 @@ export const AmbientMusicPlayer = () => {
       step += 1
       const progress = Math.min(1, step / steps)
       audioElements.forEach((audio, index) => {
-        audio.volume = startVolumes[index] * (1 - progress)
+        audio.volume = Math.min(startVolumes[index] * (1 - progress), targetVolumeRef.current)
       })
       if (progress >= 1) {
         clearFadeTimer()
@@ -159,7 +159,10 @@ export const AmbientMusicPlayer = () => {
 
   const shouldKeepExpanded = useCallback(() => {
     const root = rootRef.current
-    return Boolean(root && root.matches(':hover'))
+    const activeElement = document.activeElement
+    return Boolean(
+      root && (root.matches(':hover') || (activeElement && root.contains(activeElement)))
+    )
   }, [])
 
   const scheduleCollapse = useCallback(() => {
@@ -181,6 +184,12 @@ export const AmbientMusicPlayer = () => {
     const activeAudio = audioRefs.current[activeIndexRef.current]
     if (fadeTimerRef.current === null && activeAudio) {
       activeAudio.volume = targetVolumeRef.current
+    } else {
+      audioRefs.current.forEach((audio) => {
+        if (audio && audio.volume > targetVolumeRef.current) {
+          audio.volume = targetVolumeRef.current
+        }
+      })
     }
     if (levelUpSfxRef.current) {
       levelUpSfxRef.current.volume = targetVolumeRef.current
@@ -205,7 +214,7 @@ export const AmbientMusicPlayer = () => {
         fadeTimerRef.current = window.setInterval(() => {
           step += 1
           const progress = Math.min(1, step / steps)
-          activeAudio.volume = startVolume * (1 - progress)
+          activeAudio.volume = Math.min(startVolume * (1 - progress), targetVolumeRef.current)
           if (progress >= 1) {
             clearFadeTimer()
             activeAudio.pause()
@@ -240,7 +249,6 @@ export const AmbientMusicPlayer = () => {
 
       const previousAudio = activeAudio
       const previousStartVolume = previousAudio.volume
-      const targetVolume = targetVolumeRef.current
       const steps = Math.max(1, Math.ceil(durationMs / FADE_STEP_MS))
       let step = 0
       activeIndexRef.current = nextIndex
@@ -249,8 +257,9 @@ export const AmbientMusicPlayer = () => {
       fadeTimerRef.current = window.setInterval(() => {
         step += 1
         const progress = Math.min(1, step / steps)
+        const targetVolume = targetVolumeRef.current
         nextAudio.volume = targetVolume * progress
-        previousAudio.volume = previousStartVolume * (1 - progress)
+        previousAudio.volume = Math.min(previousStartVolume * (1 - progress), targetVolume)
         if (progress >= 1) {
           clearFadeTimer()
           previousAudio.pause()
