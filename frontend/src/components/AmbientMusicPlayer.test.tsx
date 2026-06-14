@@ -38,6 +38,8 @@ vi.mock('../context/NavigatorContext', () => ({
 class MockAudio {
   static instances: MockAudio[] = []
   static rejectNextPlay = false
+  static deferNextPlay = false
+  static resolveDeferredPlay: (() => void) | null = null
   src = ''
   preload = ''
   currentTime = 0
@@ -48,6 +50,16 @@ class MockAudio {
     if (MockAudio.rejectNextPlay) {
       MockAudio.rejectNextPlay = false
       throw new Error('play rejected')
+    }
+    if (MockAudio.deferNextPlay) {
+      MockAudio.deferNextPlay = false
+      return new Promise<void>((resolve) => {
+        MockAudio.resolveDeferredPlay = () => {
+          this.paused = false
+          MockAudio.resolveDeferredPlay = null
+          resolve()
+        }
+      })
     }
     this.paused = false
   })
@@ -86,6 +98,8 @@ describe('AmbientMusicPlayer', () => {
     }
     MockAudio.instances = []
     MockAudio.rejectNextPlay = false
+    MockAudio.deferNextPlay = false
+    MockAudio.resolveDeferredPlay = null
     vi.stubGlobal('Audio', MockAudio)
   })
 
@@ -667,6 +681,74 @@ describe('AmbientMusicPlayer', () => {
     act(() => {
       vi.advanceTimersByTime(1350)
     })
+    expect(levelUpAudio?.volume).toBeCloseTo(0.3, 2)
+  })
+
+  it('invalidates pending room transitions before ducking level-up audio', async () => {
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    MockAudio.deferNextPlay = true
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const pendingGolden = MockAudio.instances.find((audio) =>
+      audio.src.includes('GoldenForay.mp3')
+    )
+    expect(pendingGolden?.play).toHaveBeenCalled()
+    expect(pendingGolden?.paused).toBe(true)
+
+    navigatorState.value = {
+      ...navigatorState.value,
+      latestLevelUpCue: {
+        sequence: 1,
+        player: 'hero',
+        previousLevel: 4,
+        level: 5,
+        location: 189,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const sfxAudio = MockAudio.instances.find((audio) => audio.src.includes('SFX_LevelUp.mp3'))
+    expect(sfxAudio?.play).toHaveBeenCalled()
+
+    await act(async () => {
+      MockAudio.resolveDeferredPlay?.()
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(350)
+    })
+
+    await act(async () => {
+      sfxAudio?.dispatch('ended')
+      await Promise.resolve()
+    })
+
+    const levelUpAudio = MockAudio.instances.find((audio) =>
+      audio.src.includes('GoldenForay_LevelUp.mp3')
+    )
+    expect(levelUpAudio?.play).toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(1350)
+    })
+
     expect(levelUpAudio?.volume).toBeCloseTo(0.3, 2)
   })
 

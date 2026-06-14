@@ -104,6 +104,10 @@ export const AmbientMusicPlayer = () => {
     )
     if (audioElements.length === 0) return
 
+    transitionAttemptRef.current += 1
+    pendingTrackIdRef.current = null
+    silenceFadeTrackIdRef.current = null
+    repeatArmedRef.current = false
     clearFadeTimer()
 
     const startVolumes = audioElements.map((audio) => audio.volume)
