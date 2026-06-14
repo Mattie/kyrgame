@@ -53,6 +53,9 @@ export const AmbientMusicPlayer = () => {
   const levelUpSfxCleanupRef = useRef<(() => void) | null>(null)
   const activeIndexRef = useRef(0)
   const activeTrackRef = useRef<AmbientTrack | null>(null)
+  const pendingTrackIdRef = useRef<string | null>(null)
+  const transitionAttemptRef = useRef(0)
+  const pendingAudioAttemptRef = useRef(new WeakMap<HTMLAudioElement, number>())
   const fadeTimerRef = useRef<number | null>(null)
   const collapseTimerRef = useRef<number | null>(null)
   const scheduleCollapseRef = useRef<(() => void) | null>(null)
@@ -201,13 +204,19 @@ export const AmbientMusicPlayer = () => {
       const activeAudio = audioRefs.current[activeIndexRef.current]
       if (!unlocked || !activeAudio) return
 
-      if (!repeat && activeTrackRef.current?.id === track?.id) {
+      if (
+        !repeat &&
+        (activeTrackRef.current?.id === track?.id || pendingTrackIdRef.current === track?.id)
+      ) {
         return
       }
 
       clearFadeTimer()
+      transitionAttemptRef.current += 1
+      const transitionAttempt = transitionAttemptRef.current
 
       if (!track) {
+        pendingTrackIdRef.current = null
         const startVolume = activeAudio.volume
         const steps = Math.max(1, Math.ceil(durationMs / FADE_STEP_MS))
         let step = 0
@@ -237,36 +246,61 @@ export const AmbientMusicPlayer = () => {
       nextAudio.currentTime = 0
       nextAudio.volume = 0
       repeatArmedRef.current = false
-
-      void nextAudio
-        .play()
-        .then(() => {
-          setStatus('playing')
-        })
-        .catch(() => {
-          setStatus('waiting')
-        })
+      pendingTrackIdRef.current = track.id
+      pendingAudioAttemptRef.current.set(nextAudio, transitionAttempt)
 
       const previousAudio = activeAudio
       const previousStartVolume = previousAudio.volume
       const steps = Math.max(1, Math.ceil(durationMs / FADE_STEP_MS))
       let step = 0
-      activeIndexRef.current = nextIndex
-      activeTrackRef.current = track
+      const resetNextAudio = () => {
+        nextAudio.pause()
+        nextAudio.currentTime = 0
+        nextAudio.volume = 0
+        pendingAudioAttemptRef.current.delete(nextAudio)
+      }
 
-      fadeTimerRef.current = window.setInterval(() => {
-        step += 1
-        const progress = Math.min(1, step / steps)
-        const targetVolume = targetVolumeRef.current
-        nextAudio.volume = targetVolume * progress
-        previousAudio.volume = Math.min(previousStartVolume * (1 - progress), targetVolume)
-        if (progress >= 1) {
-          clearFadeTimer()
-          previousAudio.pause()
-          previousAudio.currentTime = 0
-          previousAudio.volume = 0
-        }
-      }, FADE_STEP_MS)
+      void nextAudio
+        .play()
+        .then(() => {
+          if (transitionAttemptRef.current !== transitionAttempt) {
+            if (pendingAudioAttemptRef.current.get(nextAudio) === transitionAttempt) {
+              resetNextAudio()
+            }
+            return
+          }
+          setStatus('playing')
+          pendingTrackIdRef.current = null
+          pendingAudioAttemptRef.current.delete(nextAudio)
+          activeIndexRef.current = nextIndex
+          activeTrackRef.current = track
+
+          fadeTimerRef.current = window.setInterval(() => {
+            step += 1
+            const progress = Math.min(1, step / steps)
+            const targetVolume = targetVolumeRef.current
+            nextAudio.volume = targetVolume * progress
+            previousAudio.volume = Math.min(previousStartVolume * (1 - progress), targetVolume)
+            if (progress >= 1) {
+              clearFadeTimer()
+              previousAudio.pause()
+              previousAudio.currentTime = 0
+              previousAudio.volume = 0
+            }
+          }, FADE_STEP_MS)
+        })
+        .catch(() => {
+          if (transitionAttemptRef.current !== transitionAttempt) {
+            if (pendingAudioAttemptRef.current.get(nextAudio) === transitionAttempt) {
+              resetNextAudio()
+            }
+            return
+          }
+          resetNextAudio()
+          repeatArmedRef.current = false
+          pendingTrackIdRef.current = null
+          setStatus('waiting')
+        })
     },
     [clearFadeTimer, unlocked]
   )
@@ -397,11 +431,19 @@ export const AmbientMusicPlayer = () => {
     startTransition(desiredTrack, initial ? FADE_IN_MS : CROSSFADE_MS)
   }, [desiredTrack, startTransition, unlocked])
 
+  const retryWaitingPlayback = () => {
+    if (status !== 'waiting') return
+    const initial = activeTrackRef.current === null
+    startTransitionRef.current?.(desiredTrack, initial ? FADE_IN_MS : CROSSFADE_MS)
+  }
+
   const handleToggle = () => {
     if (!expanded) {
       setExpanded(true)
       if (!unlocked) {
         setUnlocked(true)
+      } else {
+        retryWaitingPlayback()
       }
       return
     }
@@ -415,11 +457,19 @@ export const AmbientMusicPlayer = () => {
       }
       return
     }
+    if (status === 'waiting') {
+      retryWaitingPlayback()
+      return
+    }
     if (effectiveMuted) {
       if (volume === 0) {
+        targetVolumeRef.current = DEFAULT_VOLUME
         setVolume(DEFAULT_VOLUME)
+      } else {
+        targetVolumeRef.current = volume
       }
       setMuted(false)
+      retryWaitingPlayback()
       return
     }
     setMuted((current) => !current)
@@ -427,10 +477,12 @@ export const AmbientMusicPlayer = () => {
 
   const handleVolumeChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextVolume = clampVolume(Number(event.target.value) / 100)
+    targetVolumeRef.current = nextVolume
     setVolume(nextVolume)
     if (nextVolume > 0) {
       setMuted(false)
     }
+    retryWaitingPlayback()
   }
 
   const handleControlBlur = (event: FocusEvent<HTMLDivElement>) => {

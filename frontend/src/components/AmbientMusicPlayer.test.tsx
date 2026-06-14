@@ -37,6 +37,7 @@ vi.mock('../context/NavigatorContext', () => ({
 
 class MockAudio {
   static instances: MockAudio[] = []
+  static rejectNextPlay = false
   src = ''
   preload = ''
   currentTime = 0
@@ -44,6 +45,10 @@ class MockAudio {
   volume = 1
   paused = true
   play = vi.fn(async () => {
+    if (MockAudio.rejectNextPlay) {
+      MockAudio.rejectNextPlay = false
+      throw new Error('play rejected')
+    }
     this.paused = false
   })
   pause = vi.fn(() => {
@@ -80,6 +85,7 @@ describe('AmbientMusicPlayer', () => {
       session: { token: 'token', playerId: 'hero', roomId: 0, sessionKind: 'game' },
     }
     MockAudio.instances = []
+    MockAudio.rejectNextPlay = false
     vi.stubGlobal('Audio', MockAudio)
   })
 
@@ -273,6 +279,51 @@ describe('AmbientMusicPlayer', () => {
     const goldenAudio = MockAudio.instances.find((audio) => audio.src.includes('GoldenForay.mp3'))
     expect(goldenAudio?.volume).toBe(0)
     expect(MockAudio.instances.every((audio) => audio.volume === 0)).toBe(true)
+  })
+
+  it('retries the same room track after a rejected playback attempt', async () => {
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    MockAudio.rejectNextPlay = true
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const goldenAudio = MockAudio.instances.find((audio) => audio.src.includes('GoldenForay.mp3'))
+    expect(goldenAudio?.play).toHaveBeenCalledTimes(1)
+    expect(goldenAudio?.paused).toBe(true)
+
+    MockAudio.rejectNextPlay = true
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /mute ambient music/i }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(goldenAudio?.play).toHaveBeenCalledTimes(2)
+    expect(goldenAudio?.paused).toBe(true)
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/ambient volume/i), { target: { value: '40' } })
+      await Promise.resolve()
+    })
+
+    expect(goldenAudio?.play).toHaveBeenCalledTimes(3)
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(goldenAudio?.volume).toBeCloseTo(0.4, 2)
   })
 
   it('self-crossfades at repeat boundaries', async () => {
