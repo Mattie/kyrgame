@@ -119,13 +119,13 @@ describe('AmbientMusicPlayer', () => {
   it('starts after user interaction at the default 30% volume', async () => {
     render(<AmbientMusicPlayer />)
 
-    expect(screen.queryByLabelText(/ambient volume/i)).toBeNull()
+    expect(screen.queryByLabelText(/audio volume/i)).toBeNull()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
       await Promise.resolve()
     })
 
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('30')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('30')
 
     act(() => {
       vi.advanceTimersByTime(1000)
@@ -141,13 +141,13 @@ describe('AmbientMusicPlayer', () => {
 
     render(<AmbientMusicPlayer />)
 
-    expect(screen.queryByLabelText(/ambient volume/i)).toBeNull()
+    expect(screen.queryByLabelText(/audio volume/i)).toBeNull()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
       await Promise.resolve()
     })
 
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('70')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('70')
     expect(screen.getByRole('button', { name: /unmute ambient music/i })).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -167,7 +167,7 @@ describe('AmbientMusicPlayer', () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('30')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('30')
   })
 
   it('restores default volume when unmuting from zero volume', async () => {
@@ -179,14 +179,14 @@ describe('AmbientMusicPlayer', () => {
       fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
       await Promise.resolve()
     })
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('0')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('0')
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /unmute ambient music/i }))
       await Promise.resolve()
     })
 
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('30')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('30')
     expect(screen.getByRole('button', { name: /mute ambient music/i })).toHaveTextContent(
       '\u{1F50A}'
     )
@@ -199,18 +199,18 @@ describe('AmbientMusicPlayer', () => {
       fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
       await Promise.resolve()
     })
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('30')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('30')
 
     fireEvent.pointerLeave(screen.getByTestId('ambient-music-player'))
     act(() => {
       vi.advanceTimersByTime(2999)
     })
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('30')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('30')
 
     act(() => {
       vi.advanceTimersByTime(1)
     })
-    expect(screen.queryByLabelText(/ambient volume/i)).toBeNull()
+    expect(screen.queryByLabelText(/audio volume/i)).toBeNull()
     expect(screen.getByRole('button', { name: /open ambient music controls/i })).toHaveTextContent(
       '\u{1F50A}'
     )
@@ -224,14 +224,14 @@ describe('AmbientMusicPlayer', () => {
       await Promise.resolve()
     })
 
-    const volumeInput = screen.getByLabelText(/ambient volume/i)
+    const volumeInput = screen.getByLabelText(/audio volume/i)
     act(() => {
       volumeInput.focus()
       fireEvent.focus(volumeInput)
       vi.advanceTimersByTime(3000)
     })
 
-    expect(screen.getByLabelText(/ambient volume/i)).toHaveValue('30')
+    expect(screen.getByLabelText(/audio volume/i)).toHaveValue('30')
   })
 
   it('crossfades to mapped area tracks and silence for unmapped rooms', async () => {
@@ -337,7 +337,7 @@ describe('AmbientMusicPlayer', () => {
     })
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/ambient volume/i), { target: { value: '0' } })
+      fireEvent.change(screen.getByLabelText(/audio volume/i), { target: { value: '0' } })
       await Promise.resolve()
     })
 
@@ -384,7 +384,7 @@ describe('AmbientMusicPlayer', () => {
     expect(goldenAudio?.paused).toBe(true)
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/ambient volume/i), { target: { value: '40' } })
+      fireEvent.change(screen.getByLabelText(/audio volume/i), { target: { value: '40' } })
       await Promise.resolve()
     })
 
@@ -839,21 +839,27 @@ describe('AmbientMusicPlayer', () => {
     })
 
     expect(MockAudio.instances.some((audio) => audio.src.includes('ThroughTheGate.mp3'))).toBe(
-      true
+      false
     )
 
     await act(async () => {
       sfxAudio?.dispatch('ended')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
       await Promise.resolve()
     })
 
     expect(
       MockAudio.instances.some((audio) => audio.src.includes('GoldenForay_LevelUp.mp3'))
     ).toBe(false)
+    expect(MockAudio.instances.some((audio) => audio.src.includes('ThroughTheGate.mp3'))).toBe(
+      true
+    )
   })
 
   it('resumes the current mapped room after an unmapped level-up cue completes', async () => {
-    navigatorState.value = { ...navigatorState.value, currentRoom: 172 }
+    navigatorState.value = { ...navigatorState.value, currentRoom: 303 }
     const { rerender } = render(<AmbientMusicPlayer />)
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
@@ -867,7 +873,7 @@ describe('AmbientMusicPlayer', () => {
         player: 'hero',
         previousLevel: 4,
         level: 5,
-        location: 172,
+        location: 303,
       },
     }
     await act(async () => {
@@ -884,13 +890,15 @@ describe('AmbientMusicPlayer', () => {
       await Promise.resolve()
     })
 
-    const goldenAudio = MockAudio.instances.find((audio) => audio.src.includes('GoldenForay.mp3'))
-    expect(goldenAudio?.play).toHaveBeenCalled()
+    expect(MockAudio.instances.some((audio) => audio.src.includes('GoldenForay.mp3'))).toBe(false)
 
     await act(async () => {
       sfxAudio?.dispatch('ended')
       await Promise.resolve()
     })
+
+    const goldenAudio = MockAudio.instances.find((audio) => audio.src.includes('GoldenForay.mp3'))
+    expect(goldenAudio?.play).toHaveBeenCalled()
 
     act(() => {
       vi.advanceTimersByTime(2000)
