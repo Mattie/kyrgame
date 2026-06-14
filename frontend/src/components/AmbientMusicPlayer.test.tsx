@@ -250,6 +250,45 @@ describe('AmbientMusicPlayer', () => {
     expect(MockAudio.instances.every((audio) => audio.paused || audio.volume === 0)).toBe(true)
   })
 
+  it('cancels a pending silence fade when returning to the same ambient track', async () => {
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    const willowAudio = MockAudio.instances.find((audio) => audio.src.includes('WillowDrift1.mp3'))
+    expect(willowAudio?.volume).toBeCloseTo(0.3, 2)
+
+    navigatorState.value = { ...navigatorState.value, currentRoom: 172 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(willowAudio?.volume).toBeLessThan(0.3)
+
+    navigatorState.value = { ...navigatorState.value, currentRoom: 0 }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(willowAudio?.paused).toBe(false)
+    expect(willowAudio?.volume).toBeCloseTo(0.3, 2)
+  })
+
   it('uses the current volume setting while a room crossfade is active', async () => {
     const { rerender } = render(<AmbientMusicPlayer />)
     await act(async () => {
@@ -373,6 +412,62 @@ describe('AmbientMusicPlayer', () => {
     })
 
     expect(MockAudio.instances.every((audio) => audio.paused || audio.volume === 0)).toBe(true)
+  })
+
+  it('clears active level-up ambient music when the active session logs out', async () => {
+    navigatorState.value = { ...navigatorState.value, currentRoom: 189 }
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    navigatorState.value = {
+      ...navigatorState.value,
+      latestLevelUpCue: {
+        sequence: 1,
+        player: 'hero',
+        previousLevel: 4,
+        level: 5,
+        location: 189,
+      },
+    }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    const sfxAudio = MockAudio.instances.find((audio) => audio.src.includes('SFX_LevelUp.mp3'))
+    await act(async () => {
+      sfxAudio?.dispatch('ended')
+      await Promise.resolve()
+    })
+
+    const levelUpAudio = MockAudio.instances.find((audio) =>
+      audio.src.includes('GoldenForay_LevelUp.mp3')
+    )
+    expect(levelUpAudio?.play).toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(1350)
+    })
+    expect(levelUpAudio?.volume).toBeCloseTo(0.3, 2)
+
+    navigatorState.value = { ...navigatorState.value, currentRoom: null, session: null }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(levelUpAudio?.paused || levelUpAudio?.volume === 0).toBe(true)
   })
 
   it('plays the dark-forest level-up cue once before returning to the room track', async () => {

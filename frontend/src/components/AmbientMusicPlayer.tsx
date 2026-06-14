@@ -56,6 +56,7 @@ export const AmbientMusicPlayer = () => {
   const pendingTrackIdRef = useRef<string | null>(null)
   const transitionAttemptRef = useRef(0)
   const pendingAudioAttemptRef = useRef(new WeakMap<HTMLAudioElement, number>())
+  const silenceFadeTrackIdRef = useRef<string | null>(null)
   const fadeTimerRef = useRef<number | null>(null)
   const collapseTimerRef = useRef<number | null>(null)
   const scheduleCollapseRef = useRef<(() => void) | null>(null)
@@ -204,10 +205,18 @@ export const AmbientMusicPlayer = () => {
       const activeAudio = audioRefs.current[activeIndexRef.current]
       if (!unlocked || !activeAudio) return
 
-      if (
-        !repeat &&
-        (activeTrackRef.current?.id === track?.id || pendingTrackIdRef.current === track?.id)
-      ) {
+      if (!repeat && track && activeTrackRef.current?.id === track.id) {
+        if (silenceFadeTrackIdRef.current === track.id) {
+          clearFadeTimer()
+          silenceFadeTrackIdRef.current = null
+          repeatArmedRef.current = false
+          activeAudio.volume = targetVolumeRef.current
+          setStatus('playing')
+        }
+        return
+      }
+
+      if (!repeat && pendingTrackIdRef.current === track?.id) {
         return
       }
 
@@ -217,6 +226,7 @@ export const AmbientMusicPlayer = () => {
 
       if (!track) {
         pendingTrackIdRef.current = null
+        silenceFadeTrackIdRef.current = activeTrackRef.current?.id ?? null
         const startVolume = activeAudio.volume
         const steps = Math.max(1, Math.ceil(durationMs / FADE_STEP_MS))
         let step = 0
@@ -229,6 +239,7 @@ export const AmbientMusicPlayer = () => {
             activeAudio.pause()
             activeAudio.currentTime = 0
             activeTrackRef.current = null
+            silenceFadeTrackIdRef.current = null
             repeatArmedRef.current = false
             setStatus('silent')
           }
@@ -247,6 +258,7 @@ export const AmbientMusicPlayer = () => {
       nextAudio.volume = 0
       repeatArmedRef.current = false
       pendingTrackIdRef.current = track.id
+      silenceFadeTrackIdRef.current = null
       pendingAudioAttemptRef.current.set(nextAudio, transitionAttempt)
 
       const previousAudio = activeAudio
@@ -422,6 +434,8 @@ export const AmbientMusicPlayer = () => {
   useEffect(() => {
     if (!session) {
       stopLevelUpSfx()
+      setActiveLevelUpCue(null)
+      startTransitionRef.current?.(null, CROSSFADE_MS, true)
     }
   }, [session, stopLevelUpSfx])
 
