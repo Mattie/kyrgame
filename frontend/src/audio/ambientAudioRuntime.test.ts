@@ -13,6 +13,7 @@ class MockAudio {
   preload = ''
   currentTime = 0
   duration = 120
+  ended = false
   volume = 1
   paused = true
   play = vi.fn(() => {
@@ -25,6 +26,7 @@ class MockAudio {
       return new Promise<void>((resolve, reject) => {
         MockAudio.resolveDeferredPlay = () => {
           this.paused = false
+          this.ended = false
           MockAudio.resolveDeferredPlay = null
           MockAudio.rejectDeferredPlay = null
           resolve()
@@ -37,6 +39,7 @@ class MockAudio {
       })
     }
     this.paused = false
+    this.ended = false
     return Promise.resolve()
   })
   pause = vi.fn(() => {
@@ -59,6 +62,10 @@ class MockAudio {
   }
 
   dispatch(type: string) {
+    if (type === 'ended') {
+      this.paused = true
+      this.ended = true
+    }
     this.listeners.get(type)?.forEach((listener) => listener())
   }
 }
@@ -190,6 +197,54 @@ describe('AmbientAudioRuntime', () => {
 
     expect(firstSpelunking.paused).toBe(true)
     expect(nextSpelunking?.volume).toBeCloseTo(0.3, 2)
+  })
+
+  it('retries same-track ambient playback after a failed repeat', async () => {
+    const runtime = await startRuntimeInRoom(0)
+
+    const firstWillow = playableAudios('WillowDrift1.mp3')[0]
+    firstWillow.currentTime = 119
+    MockAudio.rejectNextPlay = true
+    firstWillow.dispatch('timeupdate')
+    firstWillow.dispatch('ended')
+    await flushPromises()
+
+    expect(firstWillow.ended).toBe(true)
+    expect(playableAudios('WillowDrift1.mp3')).toHaveLength(2)
+
+    runtime.retry()
+    await flushPromises()
+    vi.advanceTimersByTime(2000)
+
+    const willowAttempts = playableAudios('WillowDrift1.mp3')
+    expect(willowAttempts.reduce((count, audio) => count + audio.play.mock.calls.length, 0)).toBe(3)
+    expect(willowAttempts.some((audio) => !audio.paused && audio.volume > 0)).toBe(true)
+  })
+
+  it('retries same-track ambient playback when the stopped deck has partial gain', async () => {
+    const runtime = createRuntime()
+    runtime.setSessionActive(true)
+    runtime.setRoom(0)
+    runtime.unlock()
+    await flushPromises()
+    vi.advanceTimersByTime(500)
+
+    const firstWillow = playableAudios('WillowDrift1.mp3')[0]
+    expect(firstWillow.volume).toBeGreaterThan(0)
+    expect(firstWillow.volume).toBeLessThan(0.3)
+
+    MockAudio.rejectNextPlay = true
+    firstWillow.dispatch('ended')
+    await flushPromises()
+
+    runtime.retry()
+    await flushPromises()
+    vi.advanceTimersByTime(2000)
+
+    const willowAttempts = playableAudios('WillowDrift1.mp3')
+    expect(willowAttempts.reduce((count, audio) => count + audio.play.mock.calls.length, 0)).toBe(3)
+    expect(willowAttempts.some((audio) => !audio.paused && audio.volume > 0)).toBe(true)
+    expect(runtime.getSnapshot().status).toBe('playing')
   })
 
   it('ignores ended events while a different track is pending', async () => {

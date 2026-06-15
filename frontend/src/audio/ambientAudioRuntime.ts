@@ -265,7 +265,9 @@ export class AmbientAudioRuntime {
 
     const activeDeck = this.activeDeck()
     if (!options.repeat && !options.forceRestart && this.activeTrack?.id === track.id) {
-      if (activeDeck.gain < 1) {
+      if (this.isDeckPlaybackStopped(activeDeck)) {
+        this.startCrossfade(track, durationMs, false)
+      } else if (activeDeck.gain < 1) {
         this.startDeckGainFade(activeDeck, durationMs, 1)
       } else {
         this.setStatus('playing')
@@ -557,6 +559,10 @@ export class AmbientAudioRuntime {
     deck.audio.volume = 0
     deck.gain = 0
     deck.track = null
+  }
+
+  private isDeckPlaybackStopped(deck: AmbientDeck) {
+    return deck.audio.paused || deck.audio.ended
   }
 
   private applyVolumes() {
