@@ -6,6 +6,12 @@ import { AmbientMusicPlayer } from './AmbientMusicPlayer'
 
 const navigatorState = vi.hoisted(() => ({
   value: {
+    connectionStatus: 'connected' as
+      | 'idle'
+      | 'connecting'
+      | 'connected'
+      | 'disconnected'
+      | 'error',
     currentRoom: 0 as number | null,
     gameSessionReplaced: false,
     latestLevelUpCue: null as
@@ -101,6 +107,7 @@ describe('AmbientMusicPlayer', () => {
     vi.useFakeTimers()
     localStorage.clear()
     navigatorState.value = {
+      connectionStatus: 'connected',
       currentRoom: 0,
       gameSessionReplaced: false,
       latestLevelUpCue: null,
@@ -527,6 +534,33 @@ describe('AmbientMusicPlayer', () => {
     expect(activeAudio?.volume).toBeCloseTo(0.3, 2)
 
     navigatorState.value = { ...navigatorState.value, gameSessionReplaced: true }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(activeAudio?.volume).toBe(0)
+  })
+
+  it('fades to silence when the game socket disconnects after an exit', async () => {
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    const activeAudio = MockAudio.instances.find((audio) => audio.src.includes('WillowDrift1.mp3'))
+    expect(activeAudio?.volume).toBeCloseTo(0.3, 2)
+
+    navigatorState.value = { ...navigatorState.value, connectionStatus: 'disconnected' }
     await act(async () => {
       rerender(<AmbientMusicPlayer />)
       await Promise.resolve()
