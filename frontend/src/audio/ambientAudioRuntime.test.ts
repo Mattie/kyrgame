@@ -173,6 +173,27 @@ describe('AmbientAudioRuntime', () => {
     expect(willowPlayers.reduce((count, audio) => count + audio.play.mock.calls.length, 0)).toBe(2)
   })
 
+  it('ignores ended events while a different track is pending', async () => {
+    const runtime = await startRuntimeInRoom(0)
+
+    const willowAudio = playableAudios('WillowDrift1.mp3')[0]
+    MockAudio.deferNextPlay = true
+    runtime.setRoom(169)
+
+    const pendingSpelunking = playableAudios('Spelunking.mp3')[0]
+    expect(pendingSpelunking?.paused).toBe(true)
+
+    willowAudio.dispatch('ended')
+    expect(playableAudios('WillowDrift1.mp3')).toHaveLength(1)
+
+    MockAudio.resolveDeferredPlay?.()
+    await flushPromises()
+    vi.advanceTimersByTime(2000)
+
+    expect(pendingSpelunking?.paused).toBe(false)
+    expect(pendingSpelunking?.volume).toBeCloseTo(0.3, 2)
+  })
+
   it('revalidates the current room before starting delayed level-up music', async () => {
     const runtime = await startRuntimeInRoom(189)
 

@@ -514,7 +514,7 @@ export class AmbientAudioRuntime {
 
   private handleDeckEnded(deck: AmbientDeck) {
     if (deck !== this.activeDeck() || !this.activeTrack) return
-    if (this.pendingAmbient?.repeat) return
+    if (this.pendingAmbient) return
     if (isLevelUpAmbientTrack(this.activeTrack)) {
       this.activeLevelUpCue = null
       this.requestDesiredAmbient(CROSSFADE_MS)
@@ -528,7 +528,7 @@ export class AmbientAudioRuntime {
       deck !== this.activeDeck() ||
       !this.activeTrack ||
       isLevelUpAmbientTrack(this.activeTrack) ||
-      this.pendingAmbient?.repeat
+      this.pendingAmbient
     ) {
       return
     }
