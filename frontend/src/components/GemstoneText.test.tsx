@@ -9,6 +9,8 @@ describe('GemstoneText', () => {
   const wingEmoji = '\u{1FABD}'
   const dragonEmoji = '\u{1F409}'
   const sparklesEmoji = '\u{2728}'
+  const tearEmoji = '\u{1F4A7}'
+  const amuletEmoji = '\u{1F9FF}'
 
   it('renders creature names with emoji and themed colors', () => {
     render(
@@ -101,6 +103,30 @@ describe('GemstoneText', () => {
       'ground-object-inline',
       'object-tome'
     )
+  })
+
+  it('renders shard and amulet as dedicated ground object visuals', () => {
+    const shard = getGroundObjectVisual('shard')!
+    const amulet = getGroundObjectVisual('amulet')!
+
+    expect(shard.emoji).toBe(tearEmoji)
+    expect(shard.color).toBe('#7498db')
+    expect(shard.darkColor).toBe('#7498db')
+    expect(shard.className).toBe('object-shard')
+    expect(amulet.emoji).toBe(amuletEmoji)
+    expect(amulet.color).toBe('#8ecae6')
+    expect(amulet.darkColor).toBe('#1d4ed8')
+    expect(amulet.className).toBe('object-amulet')
+
+    render(<GemstoneText text="A shard rests near an amulet." />)
+
+    const shardInline = screen.getByText(`${tearEmoji} shard`)
+    const amuletInline = screen.getByText(`${amuletEmoji} amulet`)
+
+    expect(shardInline).toHaveClass('ground-object-inline', 'object-shard')
+    expect(shardInline).toHaveStyle({ color: '#7498db' })
+    expect((shardInline as HTMLElement).style.textShadow).toBe('')
+    expect(amuletInline).toHaveClass('ground-object-inline', 'object-amulet')
   })
 
   it('keeps gemstone styling intact', () => {

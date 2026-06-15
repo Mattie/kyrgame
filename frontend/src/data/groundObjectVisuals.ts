@@ -1,3 +1,11 @@
+type GroundObjectVisualDefinition = {
+  name: string
+  emoji: string
+  color: string
+  darkColor: string
+  className: string
+}
+
 export const groundObjectVisuals = {
   scroll: {
     name: 'scroll',
@@ -41,13 +49,26 @@ export const groundObjectVisuals = {
     darkColor: '#5f3217',
     className: 'object-pinecone',
   },
-} as const
+  shard: {
+    name: 'shard',
+    emoji: '💧',
+    color: '#7498db',
+    darkColor: '#7498db',
+    className: 'object-shard',
+  },
+  amulet: {
+    name: 'amulet',
+    emoji: '🧿',
+    color: '#8ecae6',
+    darkColor: '#1d4ed8',
+    className: 'object-amulet',
+  },
+} as const satisfies Record<string, GroundObjectVisualDefinition>
 
 export type GroundObjectVisualName = keyof typeof groundObjectVisuals
-export type GroundObjectVisual =
-  (typeof groundObjectVisuals)[GroundObjectVisualName] & {
-    displayName: string
-  }
+export type GroundObjectVisual = GroundObjectVisualDefinition & {
+  displayName: string
+}
 
 const isGroundObjectVisualName = (value: string): value is GroundObjectVisualName =>
   Object.prototype.hasOwnProperty.call(groundObjectVisuals, value)

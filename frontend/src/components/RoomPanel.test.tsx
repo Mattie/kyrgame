@@ -12,6 +12,8 @@ const highlightedGroundObjectNames = [
   'pinecone',
   'tome',
   'parchment',
+  'amulet',
+  'shard',
 ] as const
 
 vi.mock('../context/NavigatorContext', () => ({
@@ -22,17 +24,19 @@ vi.mock('../context/NavigatorContext', () => ({
           id: 1,
           brfdes: 'Cavern of jewels',
           objlds: 'on a velvet pillow',
-          objects: [0, 12, 32, 35, 36, 37, 38, 45],
+          objects: [0, 12, 16, 32, 35, 36, 37, 38, 43, 45],
         },
       ],
       objects: [
         { id: 0, name: 'ruby' },
         { id: 12, name: 'elixir' },
+        { id: 16, name: 'amulet' },
         { id: 32, name: 'pinecone' },
         { id: 35, name: 'scroll' },
         { id: 36, name: 'codex' },
         { id: 37, name: 'tome' },
         { id: 38, name: 'parchment' },
+        { id: 43, name: 'shard' },
         { id: 45, name: 'dryad' },
       ],
       commands: [],
