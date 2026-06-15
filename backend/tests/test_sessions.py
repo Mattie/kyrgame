@@ -989,6 +989,41 @@ async def test_duplicate_player_login_replaces_active_websocket_session():
 
 
 @pytest.mark.anyio
+async def test_same_session_websocket_replacement_uses_specific_close_reason():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            session = await client.post(
+                "/auth/session",
+                json={"player_id": "hero", "room_id": 7},
+            )
+            token = session.json()["session"]["token"]
+            uri = f"ws://{host}:{port}/ws/rooms/7?token={token}"
+
+            async with websockets.connect(uri) as first_ws:
+                await _receive_initial_room_payloads(first_ws)
+
+                async with websockets.connect(uri) as second_ws:
+                    await _receive_initial_room_payloads(second_ws)
+                    await _wait_until(lambda: first_ws.closed)
+
+                    assert first_ws.close_code == 1013
+                    assert first_ws.close_reason == "Game session replaced by another connection"
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_session_token_expiration():
     """Test that expired tokens are rejected"""
     from datetime import datetime, timedelta, timezone

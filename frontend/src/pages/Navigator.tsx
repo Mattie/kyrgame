@@ -4,6 +4,7 @@ import { ActivityLog } from '../components/ActivityLog'
 import { AdminControls } from '../components/AdminControls'
 import { AdminMobPanel } from '../components/AdminMobPanel'
 import { ActivePlayerIndicator } from '../components/ActivePlayerIndicator'
+import { AmbientMusicPlayer } from '../components/AmbientMusicPlayer'
 import { MudConsole } from '../components/MudConsole'
 // import { RoomPanel } from '../components/RoomPanel' // Deprecated - not needed anymore
 import { SessionForm } from '../components/SessionForm'
@@ -39,7 +40,10 @@ const NavigatorContent = ({ mode = 'admin' }: NavigatorProps) => {
           <img src={kyrandiaLogo} alt="" />
         </a>
       )}
-      <ActivePlayerIndicator />
+      <div className="navigator-top-controls">
+        {!isAdmin && <AmbientMusicPlayer />}
+        <ActivePlayerIndicator />
+      </div>
       {isAdmin && (
         <header className="masthead">
           <p className="eyebrow">Operator console</p>
