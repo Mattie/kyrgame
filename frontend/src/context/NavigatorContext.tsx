@@ -236,6 +236,52 @@ export type AdminElfTriggerResponse = {
   snapshot: AdminMobSnapshot
 }
 
+export type AdminRoomObjectEntry = {
+  id: number
+  name?: string
+}
+
+export type AdminRoomObjectsResponse = {
+  room_id: number
+  room: {
+    id: number
+    name?: string | null
+    object_landing?: string | null
+  }
+  room_objects: AdminRoomObjectEntry[]
+}
+
+export type AdminDropItemResponse = {
+  status: 'dropped'
+  room_id: number
+  object: {
+    id: number
+    name: string
+  }
+  room_objects: Array<number | AdminRoomObjectEntry>
+  announcement: {
+    message_id?: string | null
+    modeled_after_message_id?: string | null
+    text: string
+  }
+}
+
+export type AdminDeleteRoomObjectResponse = {
+  status: 'deleted'
+  room_id: number
+  slot_index: number
+  object: {
+    id: number
+    name: string
+  }
+  room_objects: AdminRoomObjectEntry[]
+  announcement: {
+    message_id?: string | null
+    modeled_after_spell?: string | null
+    text: string
+  }
+}
+
 type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'error'
 type SessionKind = 'game' | 'admin'
 type AccountAuthMode = 'legacy' | 'login' | 'register'
@@ -298,6 +344,13 @@ type NavigatorContextValue = {
   fetchAdminPlayer: (playerId: string) => Promise<AdminPlayerRecord>
   fetchAdminMobs: () => Promise<AdminMobSnapshot>
   triggerElf: (playerId: string, roomId: number) => Promise<AdminElfTriggerResponse>
+  dropAdminItem: (roomId: number, objectRef: number | string) => Promise<AdminDropItemResponse>
+  fetchAdminRoomObjects: (roomId: number) => Promise<AdminRoomObjectsResponse>
+  deleteAdminRoomObject: (
+    roomId: number,
+    slotIndex: number,
+    expectedObjectId: number
+  ) => Promise<AdminDeleteRoomObjectResponse>
   applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
   startScry: (player: ActivePlayerSummary) => void
   stopScry: () => void
@@ -1641,6 +1694,22 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     return worldData
   }, [apiBaseUrl, fetchJson])
 
+  const updateWorldRoomObjects = useCallback(
+    (roomId: number, roomObjects: Array<number | AdminRoomObjectEntry>) => {
+      const newObjects = extractObjectIds(roomObjects)
+
+      if (worldRef.current) {
+        const updatedLocations = worldRef.current.locations.map((location) =>
+          location.id === roomId ? { ...location, objects: newObjects } : location
+        )
+        const updatedWorld = { ...worldRef.current, locations: updatedLocations }
+        worldRef.current = updatedWorld
+        setWorld(updatedWorld)
+      }
+    },
+    []
+  )
+
   const applyAdminUpdate = useCallback(
     async (playerId: string, payload: AdminUpdatePayload) => {
       if (!adminToken) {
@@ -1735,6 +1804,97 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       return (await response.json()) as AdminElfTriggerResponse
     },
     [adminToken, apiBaseUrl]
+  )
+
+  const dropAdminItem = useCallback(
+    async (roomId: number, objectRef: number | string) => {
+      if (!adminToken) {
+        throw new Error('Admin token required to drop items')
+      }
+
+      const response = await fetch(
+        `${apiBaseUrl}/admin/rooms/${encodeURIComponent(String(roomId))}/objects/drop`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ object_ref: objectRef }),
+        }
+      )
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin item drop failed')
+      }
+
+      const data = (await response.json()) as AdminDropItemResponse
+      const targetRoomId = typeof data.room_id === 'number' ? data.room_id : roomId
+      updateWorldRoomObjects(targetRoomId, data.room_objects)
+
+      return data
+    },
+    [adminToken, apiBaseUrl, updateWorldRoomObjects]
+  )
+
+  const fetchAdminRoomObjects = useCallback(
+    async (roomId: number) => {
+      if (!adminToken) {
+        throw new Error('Admin token required to fetch room objects')
+      }
+
+      const response = await fetch(
+        `${apiBaseUrl}/admin/rooms/${encodeURIComponent(String(roomId))}/objects`,
+        {
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin room object fetch failed')
+      }
+
+      const data = (await response.json()) as AdminRoomObjectsResponse
+      const targetRoomId = typeof data.room_id === 'number' ? data.room_id : roomId
+      updateWorldRoomObjects(targetRoomId, data.room_objects)
+      return data
+    },
+    [adminToken, apiBaseUrl, updateWorldRoomObjects]
+  )
+
+  const deleteAdminRoomObject = useCallback(
+    async (roomId: number, slotIndex: number, expectedObjectId: number) => {
+      if (!adminToken) {
+        throw new Error('Admin token required to delete room objects')
+      }
+
+      const response = await fetch(
+        `${apiBaseUrl}/admin/rooms/${encodeURIComponent(String(roomId))}/objects/${encodeURIComponent(
+          String(slotIndex)
+        )}?expected_object_id=${encodeURIComponent(String(expectedObjectId))}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(detail || 'Admin room object delete failed')
+      }
+
+      const data = (await response.json()) as AdminDeleteRoomObjectResponse
+      const targetRoomId = typeof data.room_id === 'number' ? data.room_id : roomId
+      updateWorldRoomObjects(targetRoomId, data.room_objects)
+      return data
+    },
+    [adminToken, apiBaseUrl, updateWorldRoomObjects]
   )
 
   const startSession = useCallback(
@@ -2170,6 +2330,9 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       fetchAdminPlayer,
       fetchAdminMobs,
       triggerElf,
+      dropAdminItem,
+      fetchAdminRoomObjects,
+      deleteAdminRoomObject,
       applyAdminUpdate,
       startScry,
       stopScry,
@@ -2187,7 +2350,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       advanceLifecycle,
       connectionStatus,
       currentRoom,
+      deleteAdminRoomObject,
+      dropAdminItem,
       error,
+      fetchAdminRoomObjects,
       gameSessionReplaced,
       fetchAdminMobs,
       fetchAdminPlayer,

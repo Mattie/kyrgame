@@ -48,6 +48,7 @@
 - [x] Implement authentication/session lifecycle matching `kyloin`/`kyrand` semantics (login, reconnection, concurrent session handling) with tests.
 - [x] Build admin/editing endpoints that port `KYRSYSP.C` behaviors (player editor, content maintenance) with authorization. *(Admin panel now includes a grant-all-spells admin toggle that also sets max level and max spell points for spell-testing workflows.)*
 - [x] Repaired read-only admin SCRY monitoring with account-admin authorization, case-insensitive active target lookup, initial room snapshots, main-console rendering, observed input lines, and playable admin console sessions that use separate admin and game tokens.
+- [x] Added an admin-only item drop tool that places catalog objects into live room state, persists the room object list, and broadcasts an ASHM01-modeled appearance line plus `room_objects` refresh so connected players see the item without reconnecting. The panel now also reads live room object slots, shows hidden/mob objects for admin inspection, and can remove a selected slot with mower-modeled vanish messaging from `legacy/KYRSPEL.C`.
 - [x] Preserve non-editable player flags when applying admin editor updates to mirror `KYRSYSP.C` flag handling.
 - [x] Ensure LOOKER4 room broadcasts exclude the target player, mirroring legacy `sndbt2` behavior.
 - [x] Updated msgutl2 room scripts (rooms 34/35/36/182) to broadcast to other occupants only, matching legacy exclusion behavior.

@@ -690,6 +690,329 @@ async def test_admin_mob_tracker_keeps_last_gem_spawn_after_capacity_skip(monkey
 
 
 @pytest.mark.anyio
+async def test_admin_drop_item_requires_admin_and_validates_room_capacity(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                },
+                "player-token": {
+                    "roles": ["player_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        full_room_objects = [0, 2, 3, 4, 5, 6]
+        with app.state.session_factory() as db:
+            location = db.get(models.Location, 7)
+            assert location is not None
+            location.objects = list(full_room_objects)
+            location.nlobjs = len(full_room_objects)
+            db.commit()
+
+        app.state.location_index[7] = app.state.location_index[7].model_copy(
+            update={"objects": list(full_room_objects), "nlobjs": len(full_room_objects)}
+        )
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_auth = await client.post(
+                "/admin/rooms/7/objects/drop",
+                json={"object_ref": "emerald"},
+            )
+            missing_room = await client.post(
+                "/admin/rooms/9999/objects/drop",
+                headers=_auth("content-token"),
+                json={"object_ref": "emerald"},
+            )
+            full_room = await client.post(
+                "/admin/rooms/7/objects/drop",
+                headers=_auth("content-token"),
+                json={"object_ref": "emerald"},
+            )
+
+        assert missing_auth.status_code == 401
+        assert missing_room.status_code == 404
+        assert full_room.status_code == 409
+        assert "room is full" in full_room.text.lower()
+
+        with app.state.session_factory() as db:
+            refreshed = db.get(models.Location, 7)
+            assert refreshed is not None
+            assert refreshed.objects == full_room_objects
+            assert refreshed.nlobjs == len(full_room_objects)
+        assert app.state.location_index[7].objects == full_room_objects
+
+
+@pytest.mark.anyio
+async def test_admin_drop_item_resolves_object_id_and_rejects_missing_object(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        with app.state.session_factory() as db:
+            location = db.get(models.Location, 7)
+            assert location is not None
+            location.objects = []
+            location.nlobjs = 0
+            db.commit()
+
+        app.state.location_index[7] = app.state.location_index[7].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            from_id = await client.post(
+                "/admin/rooms/7/objects/drop",
+                headers=_auth("content-token"),
+                json={"object_ref": 1},
+            )
+            missing_object = await client.post(
+                "/admin/rooms/7/objects/drop",
+                headers=_auth("content-token"),
+                json={"object_ref": "missing catalog item"},
+            )
+
+        assert from_id.status_code == 200
+        assert from_id.json()["object"] == {"id": 1, "name": "emerald"}
+        assert missing_object.status_code == 422
+        assert "catalog object" in missing_object.text
+
+        with app.state.session_factory() as db:
+            refreshed = db.get(models.Location, 7)
+            assert refreshed is not None
+            assert refreshed.objects == [1]
+            assert refreshed.nlobjs == 1
+        assert app.state.location_index[7].objects == [1]
+
+
+@pytest.mark.anyio
+async def test_admin_room_objects_lists_hidden_mobs_and_deletes_one_slot(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                },
+                "player-token": {
+                    "roles": ["player_admin"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        room_objects = [51, 52, 1]
+        with app.state.session_factory() as db:
+            location = db.get(models.Location, 7)
+            assert location is not None
+            location.objects = list(room_objects)
+            location.nlobjs = len(room_objects)
+            db.commit()
+
+        app.state.location_index[7] = app.state.location_index[7].model_copy(
+            update={"objects": list(room_objects), "nlobjs": len(room_objects)}
+        )
+        broadcasts: list[tuple[int, dict, set | None]] = []
+
+        async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+            broadcasts.append((room_id, message, exclude))
+            return []
+
+        app.state.gateway.broadcast = _capture
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            missing_auth = await client.get("/admin/rooms/7/objects")
+            listed = await client.get(
+                "/admin/rooms/7/objects",
+                headers=_auth("content-token"),
+            )
+            missing_expected_object = await client.delete(
+                "/admin/rooms/7/objects/1",
+                headers=_auth("content-token"),
+            )
+            stale_delete = await client.delete(
+                "/admin/rooms/7/objects/1?expected_object_id=51",
+                headers=_auth("content-token"),
+            )
+            deleted = await client.delete(
+                "/admin/rooms/7/objects/1?expected_object_id=52",
+                headers=_auth("player-token"),
+            )
+            missing_slot = await client.delete(
+                "/admin/rooms/7/objects/9?expected_object_id=51",
+                headers=_auth("content-token"),
+            )
+
+        assert missing_auth.status_code == 401
+        assert listed.status_code == 200
+        assert listed.json()["room_objects"] == [
+            {"id": 51, "name": "machine"},
+            {"id": 52, "name": "dragon"},
+            {"id": 1, "name": "emerald"},
+        ]
+        assert missing_expected_object.status_code == 422
+
+        assert deleted.status_code == 200
+        delete_payload = deleted.json()
+        assert delete_payload["status"] == "deleted"
+        assert delete_payload["slot_index"] == 1
+        assert delete_payload["object"] == {"id": 52, "name": "dragon"}
+        assert delete_payload["room_objects"] == [
+            {"id": 51, "name": "machine"},
+            {"id": 1, "name": "emerald"},
+        ]
+        assert delete_payload["announcement"] == {
+            "message_id": None,
+            "modeled_after_spell": "mower",
+            "text": "***\rThe dragon at the village temple vanishes!\r",
+        }
+        assert stale_delete.status_code == 409
+        assert "room object slot changed" in stale_delete.text.lower()
+
+        assert missing_slot.status_code == 404
+        with app.state.session_factory() as db:
+            refreshed = db.get(models.Location, 7)
+            assert refreshed is not None
+            assert refreshed.objects == [51, 1]
+            assert refreshed.nlobjs == 2
+        assert app.state.location_index[7].objects == [51, 1]
+
+        assert [room_id for room_id, _, _ in broadcasts] == [7, 7]
+        assert broadcasts[0][1]["payload"] == {
+            "scope": "room",
+            "event": "room_message",
+            "type": "room_message",
+            "message_id": None,
+            "text": "***\rThe dragon at the village temple vanishes!\r",
+            "source": "admin_delete_item",
+            "modeled_after_spell": "mower",
+            "object_id": 52,
+            "object_name": "dragon",
+            "location": 7,
+        }
+        assert broadcasts[1][1]["payload"]["event"] == "room_objects"
+        assert broadcasts[1][1]["payload"]["include_sender"] is True
+        assert broadcasts[1][1]["payload"]["objects"] == [
+            {"id": 51, "name": "machine"},
+            {"id": 1, "name": "emerald"},
+        ]
+
+
+@pytest.mark.anyio
+async def test_admin_drop_item_persists_and_broadcasts_live_room_objects(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "content-token": {
+                    "roles": ["content_admin"],
+                }
+            }
+        ),
+    )
+
+    class _FailingTelemetrySink:
+        async def record_system(self, *, event_type, payload):  # noqa: ARG002
+            raise OSError("telemetry path unavailable")
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        with app.state.session_factory() as db:
+            location = db.get(models.Location, 7)
+            assert location is not None
+            location.objects = []
+            location.nlobjs = 0
+            db.commit()
+
+        app.state.location_index[7] = app.state.location_index[7].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+        app.state.telemetry_sink = _FailingTelemetrySink()
+        broadcasts: list[tuple[int, dict, set | None]] = []
+
+        async def _capture(room_id: int, message: dict, sender=None, exclude=None):  # noqa: ARG001
+            broadcasts.append((room_id, message, exclude))
+            return []
+
+        app.state.gateway.broadcast = _capture
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/admin/rooms/7/objects/drop",
+                headers=_auth("content-token"),
+                json={"object_ref": "emerald"},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "dropped"
+        assert payload["room_id"] == 7
+        assert payload["object"] == {"id": 1, "name": "emerald"}
+        assert payload["room_objects"] == [{"id": 1, "name": "emerald"}]
+        assert payload["announcement"] == {
+            "message_id": None,
+            "modeled_after_message_id": "ASHM01",
+            "text": "***\r\nAn emerald suddenly appears near the altar!",
+        }
+
+        with app.state.session_factory() as db:
+            refreshed = db.get(models.Location, 7)
+            assert refreshed is not None
+            assert refreshed.objects == [1]
+            assert refreshed.nlobjs == 1
+        assert app.state.location_index[7].objects == [1]
+        cached_location = next(
+            location for location in app.state.fixture_cache["locations"] if location.id == 7
+        )
+        assert cached_location.objects == [1]
+
+        assert [room_id for room_id, _, _ in broadcasts] == [7, 7]
+        assert broadcasts[0][1]["payload"] == {
+            "scope": "room",
+            "event": "room_message",
+            "type": "room_message",
+            "message_id": None,
+            "text": "***\r\nAn emerald suddenly appears near the altar!",
+            "source": "admin_drop_item",
+            "modeled_after_message_id": "ASHM01",
+            "object_id": 1,
+            "object_name": "emerald",
+            "location": 7,
+        }
+        assert broadcasts[1][1]["payload"]["event"] == "room_objects"
+        assert broadcasts[1][1]["payload"]["include_sender"] is True
+        assert broadcasts[1][1]["payload"]["objects"] == [{"id": 1, "name": "emerald"}]
+
+
+@pytest.mark.anyio
 async def test_admin_elf_trigger_requires_admin_and_active_player(monkeypatch):
     monkeypatch.setenv(
         ADMIN_MAP_ENV,
