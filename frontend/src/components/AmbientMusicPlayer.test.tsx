@@ -6,6 +6,7 @@ import { AmbientMusicPlayer } from './AmbientMusicPlayer'
 const navigatorState = vi.hoisted(() => ({
   value: {
     currentRoom: 0 as number | null,
+    gameSessionReplaced: false,
     latestLevelUpCue: null as
       | {
           sequence: number
@@ -100,6 +101,7 @@ describe('AmbientMusicPlayer', () => {
     localStorage.clear()
     navigatorState.value = {
       currentRoom: 0,
+      gameSessionReplaced: false,
       latestLevelUpCue: null,
       session: { token: 'token', playerId: 'hero', roomId: 0, sessionKind: 'game' },
     }
@@ -461,6 +463,33 @@ describe('AmbientMusicPlayer', () => {
     })
 
     expect(MockAudio.instances.every((audio) => audio.paused || audio.volume === 0)).toBe(true)
+  })
+
+  it('fades to silence when the game session is replaced in another tab', async () => {
+    const { rerender } = render(<AmbientMusicPlayer />)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    const activeAudio = MockAudio.instances.find((audio) => audio.src.includes('WillowDrift1.mp3'))
+    expect(activeAudio?.volume).toBeCloseTo(0.3, 2)
+
+    navigatorState.value = { ...navigatorState.value, gameSessionReplaced: true }
+    await act(async () => {
+      rerender(<AmbientMusicPlayer />)
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(activeAudio?.volume).toBe(0)
   })
 
   it('clears active level-up ambient music when the active session logs out', async () => {

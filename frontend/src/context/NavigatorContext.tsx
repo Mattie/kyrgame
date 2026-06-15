@@ -284,6 +284,7 @@ type NavigatorContextValue = {
   playerVisuals: Record<string, PlayerVisual>
   activity: ActivityEntry[]
   connectionStatus: ConnectionStatus
+  gameSessionReplaced: boolean
   error: string | null
   scrySession: ScrySession | null
   latestLevelUpCue: PlayerLevelUpCue | null
@@ -757,6 +758,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const [activity, setActivity] = useState<ActivityEntry[]>([])
   const [currentRoom, setCurrentRoom] = useState<number | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle')
+  const [gameSessionReplaced, setGameSessionReplaced] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [occupants, setOccupants] = useState<string[]>([])
   const [playerVisuals, setPlayerVisuals] = useState<Record<string, PlayerVisual>>({})
@@ -778,6 +780,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const reconnectTargetRef = useRef<ReconnectTarget | null>(null)
   const connectWebSocketRef = useRef<ConnectWebSocketFn | null>(null)
   const levelUpCueSequenceRef = useRef(0)
+  const levelUpCueClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     sessionRef.current = session
@@ -815,6 +818,12 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     reconnectTimerRef.current = null
   }, [])
 
+  const clearLevelUpCueTimer = useCallback(() => {
+    if (levelUpCueClearTimerRef.current === null) return
+    clearTimeout(levelUpCueClearTimerRef.current)
+    levelUpCueClearTimerRef.current = null
+  }, [])
+
   const closeGameSocket = useCallback((reason: string) => {
     const socket = socketRef.current
     socketRef.current = null
@@ -838,9 +847,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
   useEffect(() => {
     return () => {
+      clearLevelUpCueTimer()
       resetSocket('Navigator provider unmounted')
     }
-  }, [resetSocket])
+  }, [clearLevelUpCueTimer, resetSocket])
 
   const appendActivity = useCallback((entry: Omit<ActivityEntry, 'id'>) => {
     setActivity((prev) => {
@@ -1170,13 +1180,21 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
                     : null
               if (Number.isFinite(nextLevel) && Number.isFinite(previousLevel)) {
                 levelUpCueSequenceRef.current += 1
-                setLatestLevelUpCue({
+                const cue = {
                   sequence: levelUpCueSequenceRef.current,
                   player: String(message.payload?.player ?? perspectivePlayerId ?? ''),
                   previousLevel,
                   level: nextLevel,
                   location,
-                })
+                }
+                setLatestLevelUpCue(cue)
+                clearLevelUpCueTimer()
+                levelUpCueClearTimerRef.current = setTimeout(() => {
+                  levelUpCueClearTimerRef.current = null
+                  setLatestLevelUpCue((current) =>
+                    current?.sequence === cue.sequence ? null : current
+                  )
+                }, 0)
               }
             }
             break
@@ -1306,6 +1324,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     },
     [
       appendActivity,
+      clearLevelUpCueTimer,
       handleRoomChange,
       mergePlayerVisuals,
       updateOccupants,
@@ -1337,6 +1356,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       }
       closeGameSocket('Replacing game socket')
       reconnectTargetRef.current = { token, roomId }
+      setGameSessionReplaced(false)
       setConnectionStatus('connecting')
       const socket = new WebSocket(`${wsBaseUrl}/rooms/${roomId}?token=${token}`)
       socketRef.current = socket
@@ -1357,6 +1377,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         }
         setConnectionStatus('disconnected')
         if (isReplacedWebSocketClose(event)) {
+          setGameSessionReplaced(true)
           setError('This game session is open in another tab or window.')
           return
         }
@@ -2139,6 +2160,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       playerVisuals,
       activity,
       connectionStatus,
+      gameSessionReplaced,
       error,
       scrySession,
       latestLevelUpCue,
@@ -2166,6 +2188,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       connectionStatus,
       currentRoom,
       error,
+      gameSessionReplaced,
       fetchAdminMobs,
       fetchAdminPlayer,
       latestLevelUpCue,

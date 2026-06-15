@@ -7,6 +7,7 @@ import {
   AMBIENT_TRACK_SPELUNKING_LEVEL_UP,
   AMBIENT_TRACK_THROUGH_GATE,
   AMBIENT_TRACK_THROUGH_GATE_LEVEL_UP,
+  AMBIENT_TRACK_VILLAGER,
   AMBIENT_TRACK_WILLOW_DRIFT,
   AMBIENT_TRACK_WILLOW_LEVEL_UP,
   resolveAmbientTrack,
@@ -19,14 +20,19 @@ describe('ambient music track selection', () => {
     expect(AMBIENT_TRACK_SPELUNKING).toBe('spelunking')
     expect(AMBIENT_TRACK_GOLDEN_FORAY).toBe('golden-foray')
     expect(AMBIENT_TRACK_THROUGH_GATE).toBe('through-the-gate')
+    expect(AMBIENT_TRACK_VILLAGER).toBe('villager')
     expect(AMBIENT_TRACK_WILLOW_LEVEL_UP).toBe('willow-drift-level-up')
     expect(AMBIENT_TRACK_SPELUNKING_LEVEL_UP).toBe('spelunking-level-up')
     expect(AMBIENT_TRACK_GOLDEN_LEVEL_UP).toBe('golden-foray-level-up')
     expect(AMBIENT_TRACK_THROUGH_GATE_LEVEL_UP).toBe('through-the-gate-level-up')
   })
 
-  it('maps dark forest, spelunking, golden forest, and castle rooms to their ambient tracks', () => {
+  it('maps village, dark forest, spelunking, golden forest, and castle rooms to their ambient tracks', () => {
     expect(resolveAmbientTrack(0)?.id).toBe(AMBIENT_TRACK_WILLOW_DRIFT)
+    expect(resolveAmbientTrack(4)?.id).toBe(AMBIENT_TRACK_WILLOW_DRIFT)
+    expect(resolveAmbientTrack(5)?.id).toBe(AMBIENT_TRACK_VILLAGER)
+    expect(resolveAmbientTrack(11)?.id).toBe(AMBIENT_TRACK_VILLAGER)
+    expect(resolveAmbientTrack(12)?.id).toBe(AMBIENT_TRACK_WILLOW_DRIFT)
     expect(resolveAmbientTrack(168)?.id).toBe(AMBIENT_TRACK_WILLOW_DRIFT)
     expect(resolveAmbientTrack(169)?.id).toBe(AMBIENT_TRACK_SPELUNKING)
     expect(resolveAmbientTrack(188)?.id).toBe(AMBIENT_TRACK_SPELUNKING)
@@ -44,6 +50,10 @@ describe('ambient music track selection', () => {
 
   it('uses the level-up track for mapped area level-up cues', () => {
     expect(resolveLevelUpTrack({ location: 0 })?.id).toBe(AMBIENT_TRACK_WILLOW_LEVEL_UP)
+    expect(resolveLevelUpTrack({ location: 4 })?.id).toBe(AMBIENT_TRACK_WILLOW_LEVEL_UP)
+    expect(resolveLevelUpTrack({ location: 5 })).toBeNull()
+    expect(resolveLevelUpTrack({ location: 11 })).toBeNull()
+    expect(resolveLevelUpTrack({ location: 12 })?.id).toBe(AMBIENT_TRACK_WILLOW_LEVEL_UP)
     expect(resolveLevelUpTrack({ location: 168 })?.id).toBe(AMBIENT_TRACK_WILLOW_LEVEL_UP)
     expect(resolveLevelUpTrack({ location: 169 })?.id).toBe(AMBIENT_TRACK_SPELUNKING_LEVEL_UP)
     expect(resolveLevelUpTrack({ location: 188 })?.id).toBe(AMBIENT_TRACK_SPELUNKING_LEVEL_UP)

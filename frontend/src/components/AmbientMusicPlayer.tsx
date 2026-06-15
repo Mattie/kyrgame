@@ -39,7 +39,7 @@ const readStoredVolume = () => {
 const readStoredMuted = () => safeReadStorage(MUTED_STORAGE_KEY) === 'true'
 
 export const AmbientMusicPlayer = () => {
-  const { currentRoom, latestLevelUpCue, session } = useNavigator()
+  const { currentRoom, gameSessionReplaced, latestLevelUpCue, session } = useNavigator()
   const runtimeRef = useRef<AmbientAudioRuntime | null>(null)
   if (!runtimeRef.current) {
     runtimeRef.current = new AmbientAudioRuntime()
@@ -125,8 +125,8 @@ export const AmbientMusicPlayer = () => {
   }, [currentRoom, runtime])
 
   useEffect(() => {
-    runtime.setSessionActive(session?.sessionKind === 'game')
-  }, [runtime, session?.sessionKind])
+    runtime.setSessionActive(session?.sessionKind === 'game' && !gameSessionReplaced)
+  }, [gameSessionReplaced, runtime, session?.sessionKind])
 
   useEffect(() => {
     runtime.handleLevelUpCue(latestLevelUpCue)

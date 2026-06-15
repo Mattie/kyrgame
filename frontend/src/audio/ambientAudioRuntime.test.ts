@@ -230,6 +230,21 @@ describe('AmbientAudioRuntime', () => {
     expect(roomLoop?.volume).toBeCloseTo(0.3, 2)
   })
 
+  it('keeps village level-up cues on the normal village loop', async () => {
+    const runtime = await startRuntimeInRoom(5)
+
+    runtime.handleLevelUpCue({ sequence: 1, location: 5 })
+    const sfxAudio = playableAudios('SFX_LevelUp.mp3')[0]
+    expect(sfxAudio?.play).toHaveBeenCalled()
+
+    sfxAudio.dispatch('ended')
+    await flushPromises()
+    vi.advanceTimersByTime(2000)
+
+    expect(playableAudios('WillowDrift_LevelUp.mp3')).toHaveLength(0)
+    expect(playableAudios('Villager.mp3').some((audio) => !audio.paused)).toBe(true)
+  })
+
   it('does not duck ambient when muted audio skips level-up SFX', async () => {
     const runtime = await startRuntimeInRoom(189)
 

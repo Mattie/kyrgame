@@ -55,6 +55,14 @@ const TestHarness = () => {
       <output data-testid="room">{navigator.currentRoom ?? 'none'}</output>
       <output data-testid="admin-token">{navigator.adminToken ?? 'none'}</output>
       <output data-testid="connection-status">{navigator.connectionStatus}</output>
+      <output data-testid="game-session-replaced">
+        {navigator.gameSessionReplaced ? 'true' : 'false'}
+      </output>
+      <output data-testid="latest-level-up-cue">
+        {navigator.latestLevelUpCue
+          ? `${navigator.latestLevelUpCue.sequence}:${navigator.latestLevelUpCue.level}`
+          : 'none'}
+      </output>
       <output data-testid="error">{navigator.error ?? 'none'}</output>
       <output data-testid="activity">
         {navigator.activity.map((entry) => entry.summary).join('\n')}
@@ -295,6 +303,7 @@ describe('NavigatorContext SCRY state handling', () => {
     })
 
     expect(screen.getByTestId('connection-status')).toHaveTextContent('disconnected')
+    expect(screen.getByTestId('game-session-replaced')).toHaveTextContent('true')
     expect(screen.getByTestId('error')).toHaveTextContent(
       'This game session is open in another tab or window.'
     )
@@ -335,6 +344,49 @@ describe('NavigatorContext SCRY state handling', () => {
       )
     ).toHaveLength(2)
     expect(screen.getByTestId('connection-status')).toHaveTextContent('connected')
+    expect(screen.getByTestId('game-session-replaced')).toHaveTextContent('false')
+  })
+
+  it('clears level-up cues after the next tick', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+
+    const gameSocket = await waitFor(() => {
+      const socket = MockWebSocket.instances.find(
+        (entry) => entry.url === 'ws://ws.local/rooms/7?token=game-token'
+      )
+      expect(socket).toBeTruthy()
+      return socket as MockWebSocket
+    })
+
+    act(() => {
+      gameSocket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          event: 'player_level_up',
+          player: 'Opal',
+          previous_level: 1,
+          level: 2,
+          location: 7,
+        },
+      })
+    })
+
+    expect(screen.getByTestId('latest-level-up-cue')).toHaveTextContent('1:2')
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(screen.getByTestId('latest-level-up-cue')).toHaveTextContent('none')
   })
 
   it('retains newest visible activity without hidden status entries consuming the budget', async () => {
