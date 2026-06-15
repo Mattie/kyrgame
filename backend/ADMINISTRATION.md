@@ -76,6 +76,9 @@ Keep `KYRGAME_RESET_ON_BOOT=0` for public demo/prod deployments so restarts are 
 | `GET /admin/fixtures` | player_admin or content_admin | Returns current cache counts. |
 | `GET /admin/mobs` | player_admin or content_admin | Returns the admin-only animation/mob tracker snapshot, including dryad room, brownie path state, elf last sighting, and Zar object presence. |
 | `POST /admin/mobs/elf/trigger` | player_admin or content_admin | Forces the legacy Elf encounter in the requesting admin session room for parity testing; uses the same hint/gold alternation as the scheduled animation tick. |
+| `GET /admin/rooms/{id}/objects` | player_admin or content_admin | Returns the live persisted room object slots, including hidden/non-player-visible objects and mob objects. |
+| `POST /admin/rooms/{id}/objects/drop` | player_admin or content_admin | Places a catalog object by id or exact name into the live room object list, persists it, and broadcasts the legacy-modeled appearance line plus a `room_objects` refresh to connected players. |
+| `DELETE /admin/rooms/{id}/objects/{slot}?expected_object_id={object_id}` | player_admin or content_admin | Removes one live room object slot when it still contains the expected object id, persists it, and broadcasts a mower-modeled vanish line plus a `room_objects` refresh to connected players. Returns `409` when the slot changed before deletion. |
 | `POST /admin/reload-scripts` | content_admin | Hot-reloads room scripts. |
 | `GET /admin/players` | player_admin | Lists cached player models. |
 | `GET /admin/players/{alias}` | player_admin | Fetches a single player by canonical player id or original login alias. |

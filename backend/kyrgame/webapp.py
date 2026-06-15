@@ -155,6 +155,12 @@ class AdminElfTriggerRequest(BaseModel):
     room_id: int
 
 
+class AdminDropItemRequest(BaseModel):
+    object_ref: int | str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class AdminRole(str, Enum):
     PLAYER = "player_admin"
     CONTENT = "content_admin"
@@ -1153,6 +1159,68 @@ def _admin_room_summary(provider: FixtureProvider, room_id: int | None):
         "id": location.id,
         "brief": location.brfdes,
         "object_landing": location.objlds,
+    }
+
+
+def _admin_object_article(obj: models.GameObjectModel) -> str:
+    article = "An" if "NEEDAN" in obj.flags or obj.name[:1].lower() in "aeiou" else "A"
+    return f"{article} {obj.name}"
+
+
+def _admin_drop_announcement(
+    location: models.LocationModel, obj: models.GameObjectModel
+) -> dict[str, object]:
+    # Modeled after ashtre() spawning a shard with ASHM01 before pgmlobj().
+    # Source: legacy/KYRROUS.C:707-727; message catalog ASHM01.
+    return {
+        "scope": "room",
+        "event": "room_message",
+        "type": "room_message",
+        "message_id": None,
+        "text": f"***\r\n{_admin_object_article(obj)} suddenly appears {location.objlds}!",
+        "source": "admin_drop_item",
+        "modeled_after_message_id": "ASHM01",
+        "object_id": obj.id,
+        "object_name": obj.name,
+        "location": location.id,
+    }
+
+
+def _admin_room_objects_payload(
+    location: models.LocationModel,
+    objects_by_id: dict[int, models.GameObjectModel],
+) -> dict[str, object]:
+    return {
+        "room_id": location.id,
+        "room": {
+            "id": location.id,
+            "name": location.brfdes,
+            "object_landing": location.objlds,
+        },
+        "room_objects": commands.room_object_entries(location, objects_by_id),
+    }
+
+
+def _admin_delete_announcement(
+    location: models.LocationModel,
+    object_id: int,
+    objects_by_id: dict[int, models.GameObjectModel],
+) -> dict[str, object]:
+    obj = objects_by_id.get(object_id)
+    object_name = obj.name if obj else f"object {object_id}"
+    # Modeled after spl042 mower removing ground objects with inline prf()+sndloc().
+    # Source: legacy/KYRSPEL.C:889-904.
+    return {
+        "scope": "room",
+        "event": "room_message",
+        "type": "room_message",
+        "message_id": None,
+        "text": f"***\rThe {object_name} {location.brfdes} vanishes!\r",
+        "source": "admin_delete_item",
+        "modeled_after_spell": "mower",
+        "object_id": object_id,
+        "object_name": object_name,
+        "location": location.id,
     }
 
 
@@ -2281,6 +2349,206 @@ async def admin_trigger_elf(
         "player_id": payload.player_id,
         "outcome": outcome,
         "snapshot": _admin_mob_snapshot(provider),
+    }
+
+
+@admin_router.post("/rooms/{room_id}/objects/drop")
+async def admin_drop_item_in_room(
+    room_id: int,
+    payload: AdminDropItemRequest,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+):
+    location = provider.location_index.get(room_id)
+    record = db.get(models.Location, room_id)
+    if location is None or record is None:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    objects_by_id, objects_by_name = _object_catalog_indexes(provider.cache["objects"])
+    object_id = _resolve_object_reference(
+        payload.object_ref,
+        objects_by_id,
+        objects_by_name,
+        field_name="object_ref",
+    )
+    obj = objects_by_id[object_id]
+
+    room_objects = list(record.objects)
+    if len(room_objects) >= constants.MXLOBS:
+        raise HTTPException(status_code=409, detail="Room is full")
+
+    updated_objects = [*room_objects, object_id]
+    location_repo = repositories.LocationRepository(db)
+    location_repo.update_objects(room_id, updated_objects)
+    db.commit()
+
+    updated_location = location.model_copy(
+        update={"objects": updated_objects, "nlobjs": len(updated_objects)}
+    )
+    provider.scope.app.state.location_index[room_id] = updated_location
+    _replace_cached_model(provider.cache["locations"], updated_location)
+
+    announcement = _admin_drop_announcement(updated_location, obj)
+    room_objects_event = commands._room_objects_event(
+        updated_location,
+        objects_by_id,
+        None,
+        None,
+        scope="room",
+        include_sender=True,
+    )
+
+    await _broadcast_game_json(
+        provider.scope.app,
+        provider.gateway,
+        room_id,
+        {
+            "type": "room_broadcast",
+            "room": room_id,
+            "payload": announcement,
+        },
+    )
+    await _broadcast_game_json(
+        provider.scope.app,
+        provider.gateway,
+        room_id,
+        {
+            "type": "room_broadcast",
+            "room": room_id,
+            "payload": room_objects_event,
+        },
+    )
+
+    telemetry_sink = getattr(provider.scope.app.state, "telemetry_sink", None)
+    if telemetry_sink is not None:
+        try:
+            await telemetry_sink.record_system(
+                event_type="admin.drop_item",
+                payload={
+                    "room_id": room_id,
+                    "object_id": object_id,
+                    "object_name": obj.name,
+                    "status": "dropped",
+                },
+            )
+        except Exception:
+            pass
+
+    return {
+        "status": "dropped",
+        "room_id": room_id,
+        "object": {"id": obj.id, "name": obj.name},
+        "room_objects": commands.room_object_entries(updated_location, objects_by_id),
+        "announcement": {
+            "message_id": None,
+            "modeled_after_message_id": "ASHM01",
+            "text": announcement["text"],
+        },
+    }
+
+
+@admin_router.get("/rooms/{room_id}/objects")
+async def admin_get_room_objects(
+    room_id: int,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+):
+    location = provider.location_index.get(room_id)
+    record = db.get(models.Location, room_id)
+    if location is None or record is None:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    objects_by_id, _objects_by_name = _object_catalog_indexes(provider.cache["objects"])
+    room_objects = list(record.objects)
+    live_location = location.model_copy(
+        update={"objects": room_objects, "nlobjs": len(room_objects)}
+    )
+    return _admin_room_objects_payload(live_location, objects_by_id)
+
+
+@admin_router.delete("/rooms/{room_id}/objects/{slot_index}")
+async def admin_delete_room_object(
+    room_id: int,
+    slot_index: int,
+    provider: Annotated[FixtureProvider, Depends(get_request_provider)],
+    db: Annotated[OrmSession, Depends(get_db_session)],
+    admin: Annotated[AdminGrant, Depends(require_player_or_content_admin)],
+    expected_object_id: int,
+):
+    location = provider.location_index.get(room_id)
+    record = db.get(models.Location, room_id)
+    if location is None or record is None:
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    room_objects = list(record.objects)
+    if slot_index < 0 or slot_index >= len(room_objects):
+        raise HTTPException(status_code=404, detail="Room object slot not found")
+
+    object_id = room_objects[slot_index]
+    if object_id != expected_object_id:
+        raise HTTPException(status_code=409, detail="Room object slot changed")
+
+    updated_objects = [
+        *room_objects[:slot_index],
+        *room_objects[slot_index + 1 :],
+    ]
+    location_repo = repositories.LocationRepository(db)
+    location_repo.update_objects(room_id, updated_objects)
+    db.commit()
+
+    updated_location = location.model_copy(
+        update={"objects": updated_objects, "nlobjs": len(updated_objects)}
+    )
+    provider.scope.app.state.location_index[room_id] = updated_location
+    _replace_cached_model(provider.cache["locations"], updated_location)
+
+    objects_by_id, _objects_by_name = _object_catalog_indexes(provider.cache["objects"])
+    announcement = _admin_delete_announcement(updated_location, object_id, objects_by_id)
+    room_objects_event = commands._room_objects_event(
+        updated_location,
+        objects_by_id,
+        None,
+        None,
+        scope="room",
+        include_sender=True,
+    )
+
+    await _broadcast_game_json(
+        provider.scope.app,
+        provider.gateway,
+        room_id,
+        {
+            "type": "room_broadcast",
+            "room": room_id,
+            "payload": announcement,
+        },
+    )
+    await _broadcast_game_json(
+        provider.scope.app,
+        provider.gateway,
+        room_id,
+        {
+            "type": "room_broadcast",
+            "room": room_id,
+            "payload": room_objects_event,
+        },
+    )
+
+    obj = objects_by_id.get(object_id)
+    object_name = obj.name if obj else f"object {object_id}"
+    return {
+        "status": "deleted",
+        "room_id": room_id,
+        "slot_index": slot_index,
+        "object": {"id": object_id, "name": object_name},
+        "room_objects": commands.room_object_entries(updated_location, objects_by_id),
+        "announcement": {
+            "message_id": None,
+            "modeled_after_spell": "mower",
+            "text": announcement["text"],
+        },
     }
 
 

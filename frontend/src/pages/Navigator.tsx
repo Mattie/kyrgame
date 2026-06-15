@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { ActivityLog } from '../components/ActivityLog'
 import { AdminControls } from '../components/AdminControls'
+import { AdminDropItemPanel } from '../components/AdminDropItemPanel'
 import { AdminMobPanel } from '../components/AdminMobPanel'
 import { ActivePlayerIndicator } from '../components/ActivePlayerIndicator'
 import { AmbientMusicPlayer } from '../components/AmbientMusicPlayer'
@@ -86,6 +87,7 @@ const NavigatorContent = ({ mode = 'admin' }: NavigatorProps) => {
           >
             <SessionForm />
             <AdminMobPanel />
+            <AdminDropItemPanel />
             <AdminControls />
             {/* <RoomPanel /> */}
             <ActivityLog />

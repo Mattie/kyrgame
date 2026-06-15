@@ -53,6 +53,13 @@ const TestHarness = () => {
   return (
     <div>
       <output data-testid="room">{navigator.currentRoom ?? 'none'}</output>
+      <output data-testid="room-seven-objects">
+        {(() => {
+          const objects = navigator.world?.locations.find((location) => location.id === 7)?.objects
+          if (!objects) return 'none'
+          return objects.length > 0 ? objects.join(',') : 'empty'
+        })()}
+      </output>
       <output data-testid="admin-token">{navigator.adminToken ?? 'none'}</output>
       <output data-testid="connection-status">{navigator.connectionStatus}</output>
       <output data-testid="game-session-replaced">
@@ -100,6 +107,24 @@ const TestHarness = () => {
       </button>
       <button type="button" onClick={() => navigator.setAdminToken('admin-token')}>
         Set admin
+      </button>
+      <button
+        type="button"
+        onClick={() => void navigator.dropAdminItem(7, 'emerald')}
+      >
+        Drop emerald
+      </button>
+      <button
+        type="button"
+        onClick={() => void navigator.fetchAdminRoomObjects(7)}
+      >
+        Fetch room objects
+      </button>
+      <button
+        type="button"
+        onClick={() => void navigator.deleteAdminRoomObject(7, 0, 51)}
+      >
+        Delete room object
       </button>
       <button
         type="button"
@@ -153,10 +178,69 @@ describe('NavigatorContext SCRY state handling', () => {
             ],
           } as unknown as Response)
         }
-        if (url.endsWith('/objects')) {
+        if (url === 'http://api.local/objects') {
           return Promise.resolve({
             ok: true,
-            json: async () => [],
+            json: async () => [{ id: 1, name: 'emerald' }],
+          } as unknown as Response)
+        }
+        if (url.endsWith('/admin/rooms/7/objects/drop')) {
+          expect(init?.method).toBe('POST')
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer admin-token',
+            'Content-Type': 'application/json',
+          })
+          expect(JSON.parse(String(init?.body))).toEqual({ object_ref: 'emerald' })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'dropped',
+              room_id: 7,
+              object: { id: 1, name: 'emerald' },
+              room_objects: [{ id: 1, name: 'emerald' }],
+              announcement: {
+                message_id: null,
+                modeled_after_message_id: 'ASHM01',
+                text: '***\r\nAn emerald suddenly appears near the altar!',
+              },
+            }),
+          } as unknown as Response)
+        }
+        if (url.endsWith('/admin/rooms/7/objects')) {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer admin-token',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              room_id: 7,
+              room: { id: 7, name: 'Temple threshold' },
+              room_objects: [
+                { id: 51, name: 'machine' },
+                { id: 52, name: 'dragon' },
+              ],
+            }),
+          } as unknown as Response)
+        }
+        if (url.endsWith('/admin/rooms/7/objects/0?expected_object_id=51')) {
+          expect(init?.method).toBe('DELETE')
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer admin-token',
+          })
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              status: 'deleted',
+              room_id: 7,
+              slot_index: 0,
+              object: { id: 51, name: 'machine' },
+              room_objects: [{ id: 52, name: 'dragon' }],
+              announcement: {
+                message_id: null,
+                modeled_after_spell: 'mower',
+                text: '***\rThe machine at the village temple vanishes!\r',
+              },
+            }),
           } as unknown as Response)
         }
         if (url.endsWith('/commands')) {
@@ -276,6 +360,67 @@ describe('NavigatorContext SCRY state handling', () => {
 
     await screen.findByText('7')
     expect(screen.getByTestId('admin-token')).toHaveTextContent('none')
+  })
+
+  it('drops an admin item and updates live world room objects from the response', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+    await screen.findByText('7')
+    expect(screen.getByTestId('room-seven-objects')).toHaveTextContent('empty')
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /set admin/i }))
+    })
+    await screen.findByText('admin-token')
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /drop emerald/i }))
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('room-seven-objects')).toHaveTextContent('1')
+    )
+  })
+
+  it('fetches and deletes admin room objects with auth and updates world room objects', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+    await screen.findByText('7')
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /set admin/i }))
+    })
+    await screen.findByText('admin-token')
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /fetch room objects/i }))
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('room-seven-objects')).toHaveTextContent('51,52')
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /delete room object/i }))
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('room-seven-objects')).toHaveTextContent('52')
+    )
   })
 
   it('does not auto-reconnect when another tab replaces the game socket', async () => {

@@ -652,6 +652,106 @@ async def test_websocket_give_overflow_broadcasts_room_objects_to_all_clients():
 
 
 @pytest.mark.anyio
+async def test_admin_drop_item_broadcasts_live_room_objects_to_connected_player(monkeypatch):
+    monkeypatch.setenv(
+        "KYRGAME_ADMIN_TOKENS",
+        json.dumps({"admin-token": {"roles": ["content_admin"]}}),
+    )
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        with app.state.session_factory() as db:
+            location = db.get(models.Location, 7)
+            assert location is not None
+            location.objects = []
+            location.nlobjs = 0
+            db.commit()
+        app.state.location_index[7] = app.state.location_index[7].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 7}
+            )
+            assert hero_session.status_code == 201
+            token = hero_session.json()["session"]["token"]
+            hero_uri = f"ws://{host}:{port}/ws/rooms/7?token={token}"
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                initial_objects = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_objects",
+                )
+                assert initial_objects["payload"]["objects"] == []
+
+                response = await client.post(
+                    "/admin/rooms/7/objects/drop",
+                    headers={"Authorization": "Bearer admin-token"},
+                    json={"object_ref": "emerald"},
+                )
+                assert response.status_code == 200
+
+                announcement = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("source") == "admin_drop_item",
+                )
+                room_objects = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("event") == "room_objects",
+                )
+
+                assert announcement["payload"]["text"] == (
+                    "***\r\nAn emerald suddenly appears near the altar!"
+                )
+                assert announcement["payload"]["modeled_after_message_id"] == "ASHM01"
+                assert room_objects["payload"]["location"] == 7
+                assert room_objects["payload"]["objects"] == [{"id": 1, "name": "emerald"}]
+
+                delete_response = await client.delete(
+                    "/admin/rooms/7/objects/0?expected_object_id=1",
+                    headers={"Authorization": "Bearer admin-token"},
+                )
+                assert delete_response.status_code == 200
+
+                vanish = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("source") == "admin_delete_item",
+                )
+                emptied_objects = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("event") == "room_objects"
+                    and msg.get("payload", {}).get("objects") == [],
+                )
+
+                assert vanish["payload"]["text"] == (
+                    "***\rThe emerald at the village temple vanishes!\r"
+                )
+                assert vanish["payload"]["modeled_after_spell"] == "mower"
+                assert emptied_objects["payload"]["location"] == 7
+                assert emptied_objects["payload"]["include_sender"] is True
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_fountain_pinecones_persist_scroll_spawn_and_refresh_target_room(
     monkeypatch,
 ):
