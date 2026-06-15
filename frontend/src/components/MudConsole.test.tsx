@@ -21,6 +21,8 @@ const highlightedGroundObjectNames = [
   'pinecone',
   'tome',
   'parchment',
+  'amulet',
+  'shard',
 ] as const
 const completedStreamKeysStorageKey = 'kyrgame.mudConsole.completedStreamKeys'
 
@@ -1863,16 +1865,18 @@ describe('MudConsole', () => {
           id: 0,
           brfdes: 'A dark forest surrounds you in all directions.',
           objlds: 'on the ground',
-          objects: [12, 32, 35, 36, 37, 38],
+          objects: [12, 16, 32, 35, 36, 37, 38, 43],
         },
       ],
       objects: [
         { id: 12, name: 'elixir', flags: ['VISIBL', 'NEEDAN'] },
+        { id: 16, name: 'amulet', flags: ['VISIBL', 'PICKUP', 'NEEDAN'] },
         { id: 32, name: 'pinecone', flags: ['VISIBL'] },
         { id: 35, name: 'scroll', flags: ['VISIBL'] },
         { id: 36, name: 'codex', flags: ['VISIBL'] },
         { id: 37, name: 'tome', flags: ['VISIBL'] },
         { id: 38, name: 'parchment', flags: ['VISIBL'] },
+        { id: 43, name: 'shard', flags: ['VISIBL', 'PICKUP'] },
       ],
       commands: [],
       messages: {},
@@ -1882,7 +1886,7 @@ describe('MudConsole', () => {
     render(<MudConsole />)
 
     const line = getConsoleLine(
-      'There is an 🧪 elixir, a 🌰 pinecone, a 📜 scroll, a 📖 codex, a 📖 tome, and a 📜 parchment lying on the ground.'
+      'There is an 🧪 elixir, an 🧿 amulet, a 🌰 pinecone, a 📜 scroll, a 📖 codex, a 📖 tome, a 📜 parchment, and a 💧 shard lying on the ground.'
     )
     highlightedGroundObjectNames.forEach((name) => {
       const visual = getGroundObjectVisual(name)!
