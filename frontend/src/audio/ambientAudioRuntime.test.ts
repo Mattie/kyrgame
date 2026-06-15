@@ -173,6 +173,25 @@ describe('AmbientAudioRuntime', () => {
     expect(willowPlayers.reduce((count, audio) => count + audio.play.mock.calls.length, 0)).toBe(2)
   })
 
+  it('keeps ordinary area music looping through repeat crossfades', async () => {
+    await startRuntimeInRoom(169)
+
+    const firstSpelunking = playableAudios('Spelunking.mp3')[0]
+    firstSpelunking.currentTime = 119
+    firstSpelunking.dispatch('timeupdate')
+    await flushPromises()
+
+    const spelunkingPlayers = playableAudios('Spelunking.mp3')
+    expect(spelunkingPlayers).toHaveLength(2)
+    const nextSpelunking = spelunkingPlayers.find((audio) => audio !== firstSpelunking)
+    expect(nextSpelunking?.paused).toBe(false)
+
+    vi.advanceTimersByTime(2000)
+
+    expect(firstSpelunking.paused).toBe(true)
+    expect(nextSpelunking?.volume).toBeCloseTo(0.3, 2)
+  })
+
   it('ignores ended events while a different track is pending', async () => {
     const runtime = await startRuntimeInRoom(0)
 

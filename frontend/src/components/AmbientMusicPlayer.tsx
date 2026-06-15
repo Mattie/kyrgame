@@ -41,6 +41,7 @@ const readStoredMuted = () => safeReadStorage(MUTED_STORAGE_KEY) === 'true'
 export const AmbientMusicPlayer = () => {
   const { currentRoom, gameSessionReplaced, latestLevelUpCue, session } = useNavigator()
   const runtimeRef = useRef<AmbientAudioRuntime | null>(null)
+  const disposeTimerRef = useRef<number | null>(null)
   if (!runtimeRef.current) {
     runtimeRef.current = new AmbientAudioRuntime()
   }
@@ -85,10 +86,23 @@ export const AmbientMusicPlayer = () => {
   scheduleCollapseRef.current = scheduleCollapse
 
   useEffect(() => {
+    if (disposeTimerRef.current !== null) {
+      window.clearTimeout(disposeTimerRef.current)
+      disposeTimerRef.current = null
+    }
     const unsubscribe = runtime.subscribe(setRuntimeSnapshot)
     return () => {
       unsubscribe()
-      runtime.dispose()
+      if (disposeTimerRef.current !== null) {
+        window.clearTimeout(disposeTimerRef.current)
+      }
+      disposeTimerRef.current = window.setTimeout(() => {
+        disposeTimerRef.current = null
+        runtime.dispose()
+        if (runtimeRef.current === runtime) {
+          runtimeRef.current = null
+        }
+      }, 0)
     }
   }, [runtime])
 

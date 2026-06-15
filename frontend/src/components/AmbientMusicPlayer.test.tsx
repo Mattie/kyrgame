@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AmbientMusicPlayer } from './AmbientMusicPlayer'
@@ -299,6 +300,52 @@ describe('AmbientMusicPlayer', () => {
     })
 
     expect(MockAudio.instances.every((audio) => audio.paused || audio.volume === 0)).toBe(true)
+  })
+
+  it('keeps area music repeat listeners after StrictMode mount replay', async () => {
+    navigatorState.value = { ...navigatorState.value, currentRoom: 169 }
+
+    render(
+      <StrictMode>
+        <AmbientMusicPlayer />
+      </StrictMode>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /open ambient music controls/i }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    const firstSpelunking = MockAudio.instances.find(
+      (audio) => audio.src.includes('Spelunking.mp3') && audio.play.mock.calls.length > 0
+    )
+    expect(firstSpelunking?.volume).toBeCloseTo(0.3, 2)
+
+    await act(async () => {
+      firstSpelunking!.currentTime = 119
+      firstSpelunking!.dispatch('timeupdate')
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const spelunkingPlayers = MockAudio.instances.filter((audio) =>
+      audio.src.includes('Spelunking.mp3')
+    )
+    expect(spelunkingPlayers).toHaveLength(2)
+
+    const nextSpelunking = spelunkingPlayers.find((audio) => audio !== firstSpelunking)
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(firstSpelunking?.paused).toBe(true)
+    expect(nextSpelunking?.paused).toBe(false)
+    expect(nextSpelunking?.volume).toBeCloseTo(0.3, 2)
   })
 
   it('cancels a pending silence fade when returning to the same ambient track', async () => {
