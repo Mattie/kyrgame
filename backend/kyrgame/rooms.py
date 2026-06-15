@@ -286,6 +286,10 @@ class RoomScriptEngine:
             player_obj = player or self.players.get(player_id)
             if player_obj:
                 self.players[player_id] = player_obj
+                # YAML room-object mutations, such as room 26 ashtre pgmlobj,
+                # start from the live gmlptr object slots. Source: legacy/KYRROUS.C:715-721.
+                before_objects = self.get_room_objects(room_id)
+                self.yaml_engine.set_room_objects(room_id, before_objects)
                 result = self.yaml_engine.handle(
                     player=player_obj,
                     room_id=room_id,
@@ -305,6 +309,15 @@ class RoomScriptEngine:
                         event = {**event, "scope": "room"}
                     self.pending_events.append(event)
                 if result.handled:
+                    after_objects = self.yaml_engine.get_room_objects(room_id)
+                    if after_objects != before_objects:
+                        self.set_room_objects(room_id, after_objects)
+                        self.pending_events.append(
+                            {
+                                **self.room_objects_payload(room_id, scope="room"),
+                                "include_sender": True,
+                            }
+                        )
                     return True
         
         # Fall back to Python routines

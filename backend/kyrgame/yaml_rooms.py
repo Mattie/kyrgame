@@ -1027,6 +1027,9 @@ class YamlRoomEngine:
     def get_room_objects(self, room_id: int) -> list[int]:
         return self._get_room_objects(room_id)
 
+    def set_room_objects(self, room_id: int, object_ids: list[int]) -> None:
+        self.room_objects[room_id] = list(object_ids)
+
 
 def load_yaml_room_definitions(path) -> dict:
     """Load YAML room configuration from disk."""
