@@ -549,8 +549,9 @@ def _temple_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             )
             return True
 
-        # Legacy: PUT object handling for level-up donations
-        if verb == "put" and args:
+        # Legacy: putwrds object handling for level-up donations.
+        # Source: legacy/KYRROUS.C:103-106 and legacy/KYRROUS.C:295-314.
+        if verb in {"lay", "place", "put"} and args:
             obj_arg = args[0].lower()
             # Legacy temple only accepts an offering when chantd is exactly 5.
             # Source: legacy/KYRROUS.C:295-314.

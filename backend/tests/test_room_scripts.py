@@ -518,6 +518,62 @@ async def test_temple_five_chants_then_charm_levels_eligible_player():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("command", ["lay", "place"])
+async def test_temple_putwrds_aliases_level_tiara_offering(command):
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"level": 9, "gpobjs": [21], "obvals": [0], "npobjs": 1}, deep=True
+    )
+    engine.get_room_state(7).flags["chantd"] = 5
+
+    handled = await engine.handle_command(
+        "hero", 7, command=command, args=["tiara", "altar"], player=player
+    )
+
+    assert handled is True
+    assert player.level == 10
+    assert 21 not in player.gpobjs
+    assert any(
+        msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("message_id") == "LV10M0"
+        for msg in gateway.messages
+    )
+
+
+@pytest.mark.anyio
+async def test_temple_drop_remains_outside_putwrds_offering_aliases():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=fixtures.load_locations(),
+        messages=messages,
+    )
+    player = fixtures.build_player().model_copy(
+        update={"level": 9, "gpobjs": [21], "obvals": [0], "npobjs": 1}, deep=True
+    )
+    engine.get_room_state(7).flags["chantd"] = 5
+
+    handled = await engine.handle_command(
+        "hero", 7, command="drop", args=["tiara", "altar"], player=player
+    )
+
+    assert handled is False
+    assert player.level == 9
+    assert 21 in player.gpobjs
+
+
+@pytest.mark.anyio
 async def test_temple_six_chants_rejects_until_reset_allows_fresh_five_chants():
     scheduler = SchedulerService()
     gateway = FakeGateway()

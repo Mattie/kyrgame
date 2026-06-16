@@ -56,7 +56,6 @@
 - [x] Centralized direct-and-others room messaging in `kyrgame.messaging` and applied it to Python + YAML room handlers so actor-excluding broadcasts stay consistent.
 - [x] Preserved `msgutl2`-style actor-visible room-script effects across all active WebSocket sessions for the player, covering multi-session fan-out for self-target YAML events while honoring silent command metadata.
 - [x] Persist YAML room script player mutations (levels, flags, inventory, gold, location) to the database for session continuity.
-- [x] Synced YAML room-object mutations back into the live room-object store with sender-inclusive refresh events, covering room 26 shard spawning and live setter persistence.
 - [x] Persist ordinary movement and room object pickup/drop player mutations so fresh sessions restore location and inventory outside special room/script paths.
 - [x] Captured spell bitflags from `legacy/KYRSPLS.H` in `backend/kyrgame/constants.py` for reuse in room routines.
 - [x] Centralized spellbook ownership/memorization invariants in `backend/kyrgame/spellbook.py` and routed room-script spell grants/purchases through the shared service (ownership bits in `offspls/defspls/othspls`, memorized IDs in `spells`).
@@ -110,6 +109,7 @@
 - [x] Cataloged spell/object routines and drafted an effect engine design for parity tracking (`docs/spell_object_effect_engine_design.md`).
 - [x] Surface session expiration metadata in `/auth/session` responses (repository already tracks `expires_at`); add contract tests and client handling. *(Response contract now includes `expires_at`/`expires_in_seconds`, `backend/tests/test_api_contract_gaps.py` covers create/validate/resume, and the navigator displays expiry plus a fresh-token reconnect action.)* [Tracker: `docs/legacy_command_porting.md`]
 - [x] Attached live room-object snapshots to `location_description` payloads and rendered console object lines from that snapshot, preventing stale item text after pickups, drops, reconnects, and room entry refreshes.
+- [x] Synced YAML room-object mutations back into the live room-object store with sender-inclusive refresh events, covering room 26 shard spawning and live setter persistence.
 - [x] Added 30-day player remember-me sessions for account login/register, direct `/play` token resume, remembered-token cleanup on rejection, and a player logout action in the active-player popover.
 
 ### Complete Playable Game Parity (Completed Gameplay Lane)
@@ -127,6 +127,7 @@
 - [x] Legacy `macros` fatigue gate from `kyrand()` case 7: increment per accepted command, emit `TIRED` on the 20th command before tick reset, with an allowlisted read-only UI refresh bypass for satellite status panels.
 - [x] First-login player-ID lifecycle parity: 3-9 letters, duplicate rejection, `Sysop` plus visible entity-name reservation (`Zar`, `dragon`, `dryad`, `elf`, `brownie`), `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, ENTER-gated `INTROA`/`INTROB`/`INTROC`/`INTROD` paging, delayed room entry, initgp-style player initialization, `APPEARFLASH` first-entry broadcast, and wizard player-name UI styling.
 - [x] Corrected first-login/death-reset birthstone generation to match legacy `genrdn(0,12)` exclusive-upper-bound semantics, preventing object 12 (`elixir`) from being assigned as a birthstone.
+- [x] Corrected additional room-routine parity gaps in the village temple, slot machine, and demon gate: room 7 now honors legacy `putwrds` (`lay`/`place`/`put`) for tiara/charm offerings, room 186 uses `genrdn(1,11)`/`genrdn(0,12)` odds and gem-only prizes, and room 218 emits legacy `remvgp`/`entrgp` player-name fan-out on both sides of the transfer.
 - [x] Preserved silver altar birthstone and brown-gem stump progress on wrong or premature offerings while still consuming valid offered inventory objects, matching `silver()`/`stumpr()` reset boundaries in `legacy/KYRROUS.C`.
 - [x] Preserved the original `INTROD` version and designed/programmed-by credit block while appending the modernized porting credit block for first-login intro paging.
 - [x] Frontend first-login intro rendering through the existing console/session UI, including blank ENTER advancement, typed-input consumption during intro, WASD command gating, and room description suppression until lifecycle completion.

@@ -906,6 +906,7 @@ class YamlRoomEngine:
                 "target_room": int(target_room),
                 "leave_text": _format_text(leave_text, leave_format),
                 "arrive_text": _format_text(arrive_text, arrive_format),
+                "legacy_transfer_format": bool(action.get("legacy_transfer_format")),
             }
         )
 

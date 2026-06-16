@@ -4090,6 +4090,20 @@ def create_app() -> FastAPI:
                             target_room = int(transfer_event.get("target_room", current_room))
                             leave_text = transfer_event.get("leave_text")
                             arrive_text = transfer_event.get("arrive_text")
+                            legacy_transfer_format = bool(
+                                transfer_event.get("legacy_transfer_format")
+                            )
+                            if legacy_transfer_format:
+                                # Legacy remvgp()/entrgp() wrap room-facing movement text.
+                                # Source: legacy/KYRUTIL.C:225-257.
+                                if leave_text:
+                                    leave_text = (
+                                        f"*** {state.player.altnam} has just {leave_text}!"
+                                    )
+                                if arrive_text:
+                                    arrive_text = (
+                                        f"*** {state.player.altnam} has just {arrive_text}!"
+                                    )
                             death_reset = bool(transfer_event.get("death_reset"))
                             # YAML hitoth() death resets mirror initgp()+entrgp(), so
                             # every active session for the player must relocate and refresh.

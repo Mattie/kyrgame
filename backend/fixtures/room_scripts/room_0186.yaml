@@ -2,7 +2,7 @@
 id: 186
 name: slotma
 spoiler_summary: "Slot machine cavern that eats garnets for a small chance at prizes."
-spoiler_interaction: "Drop/insert/put/stick/thrust a garnet into the slot to gamble for a random gem or elixir."
+spoiler_interaction: "Drop/insert/put/stick/thrust a garnet into the slot to gamble for a random gem."
 legacy_ref: "legacy/KYRROUS.C:965-989"
 triggers:
   - verbs: [drop, insert, put, stick, thrust]
@@ -15,7 +15,7 @@ triggers:
       - type: remove_item
         item: garnet
       - type: random_chance
-        probability: 0.1818181818
+        probability: 0.2
         on_success:
           - type: message
             message_id: SLOT00
@@ -59,9 +59,6 @@ triggers:
               - actions:
                   - type: grant_object
                     object: bloodstone
-              - actions:
-                  - type: grant_object
-                    object: elixir
           - type: message
             scope: direct
             message_id: SLOT02
