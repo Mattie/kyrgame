@@ -845,6 +845,16 @@ def _build_caster(**updates):
     return player.model_copy(update=data)
 
 
+class _FeeluckBoundaryRng:
+    def randrange(self, low, high):
+        assert (low, high) == (0, 218)
+        return 217
+
+    def randint(self, low, high):
+        assert (low, high) == (0, 218)
+        return 218
+
+
 @pytest.mark.parametrize(
     ("spell_id", "expected_charms"),
     [
@@ -1130,6 +1140,35 @@ def test_world_mutation_spells_emit_room_object_updates_and_teleport_context():
     assert earthquake.context["global_broadcast_message_id"] == "S59M02"
     assert earthquake.context["room_broadcast_message_id"] == "S59M03"
     assert earthquake.context["room_broadcast_include_sender"] is True
+
+
+def test_feeluck_uses_legacy_exclusive_room_bound():
+    messages = fixtures.load_messages()
+    spells = fixtures.load_spells()
+    engine = SpellEffectEngine(
+        spells=spells,
+        messages=messages,
+        rng=_FeeluckBoundaryRng(),
+    )
+    player = _build_caster(gamloc=7, pgploc=7)
+
+    luck = engine.cast_spell(
+        player=player,
+        spell_id=13,
+        target=None,
+        target_player=None,
+        apply_cost=False,
+    )
+
+    assert luck.message_id == "S14M00"
+    assert luck.context["broadcast_message_id"] == "S14M01"
+    assert luck.context["move_from_room"] == 7
+    assert luck.context["move_to_room"] == 217
+    assert luck.context["move_to_room"] != 218
+    assert player.gamloc == 217
+    assert player.pgploc == 7
+    assert "blue light" in luck.context["departure_emote"]
+    assert "appeared in a blue" in luck.context["arrival_text"]
 
 
 def test_hocus_detect_scry_and_servant_spells_surface_legacy_payloads():

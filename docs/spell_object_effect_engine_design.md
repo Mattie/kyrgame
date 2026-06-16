@@ -39,7 +39,7 @@ This document catalogs the legacy spell/object routines in `legacy/KYRSPEL.C`, `
 | 10 | `clutzopho` | 3 | 5 SP | Targeted player via `chkstf`; fails if target `OBJPRO`, no items, or room full. | None | Forces target to drop all items onto room ground (up to `MXLOBS`). | KYRSPEL.C L148-L154, L564-L589 |
 | 11 | `cuseme` | 3 | 3 SP | Targeted player via `chkstf`. | None | Reveals target spell points. | KYRSPEL.C L149-L155, L593-L602 |
 | 12 | `dumdum` | 3 | 17 SP | Targeted player via `chkstf`; fails if target `OBJPRO` or no spells. | None | Clears target memorized spells (`nspells=0`). | KYRSPEL.C L150-L156, L606-L615 |
-| 13 | `feeluck` | 3 | 10 SP | Self-cast | None | Teleports to random location `0-218`. | KYRSPEL.C L151-L157, L620-L631 |
+| 13 | `feeluck` | 3 | 10 SP | Self-cast | None | Teleports to random location `0..217` via legacy `genrdn(0,218)` exclusive upper-bound semantics. | KYRSPEL.C L151-L157, L620-L631 |
 | 14 | `firstai` | 2 | 10 SP | Self-cast | None | Heal III: +25 HP, cap at `4*level`. | KYRSPEL.C L152-L158, L634-L640 |
 | 15 | `flyaway` | 3 | 10 SP | Self-cast | None | Transform to pegasus (`PEGASU` flag), duration `2` (`ALTNAM` charm +4). | KYRSPEL.C L153-L159, L644-L651 |
 | 16 | `fpandl` | 1 | 2 SP | Targeted player via `striker`. | None | Firebolt I: damage 4, `FIRPRO` blocks, mercy for targets `<=0`. | KYRSPEL.C L154-L160, L654-L657 |

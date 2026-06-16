@@ -134,6 +134,7 @@
 - [x] Frontend first-login intro rendering through the existing console/session UI, including blank ENTER advancement, typed-input consumption during intro, WASD command gating, and room description suppression until lifecycle completion.
 - [x] Simulated MajorBBS-style screen-length paging for long first-login lifecycle output with `C` continue, `N` nonstop, and `Q` quit controls.
 - [x] In-game `x` exit parity: emit `EXIKYR`, broadcast sparkling-light departure, deactivate session/presence, persist player state, and re-enter fresh sessions from `pgploc` when `gamloc` is negative.
+- [x] Corrected `feeluck` teleport destination bounds to legacy `genrdn(0,218)` exclusive upper semantics (`0..217`) while preserving blue-light `remvgp`/`entrgp` fan-out.
 - [x] Aligned village temple `chantd` with the hardcoded room state used by `temple()`, so animation ticks clear the exact offering window and altar glow text renders through `room_message` instead of the raw event label.
 - [ ] Frontend rendering for remaining exit lifecycle messages through the existing console/session UI.
 

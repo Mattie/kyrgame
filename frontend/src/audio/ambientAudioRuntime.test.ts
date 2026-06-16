@@ -199,6 +199,30 @@ describe('AmbientAudioRuntime', () => {
     expect(nextSpelunking?.volume).toBeCloseTo(0.3, 2)
   })
 
+  it('fades golden forest music to silence in rooms 217 and 218', async () => {
+    const runtime = await startRuntimeInRoom(189)
+
+    const goldenAudio = playableAudios('GoldenForay.mp3')[0]
+    expect(goldenAudio?.paused).toBe(false)
+
+    runtime.setRoom(217)
+    vi.advanceTimersByTime(2000)
+
+    expect(goldenAudio.paused).toBe(true)
+    expect(playableAudios('GoldenForay.mp3')).toHaveLength(1)
+
+    runtime.setRoom(189)
+    await flushPromises()
+    vi.advanceTimersByTime(2000)
+    const resumedGolden = playableAudios('GoldenForay.mp3').find((audio) => audio !== goldenAudio)
+    expect(resumedGolden?.paused).toBe(false)
+
+    runtime.setRoom(218)
+    vi.advanceTimersByTime(2000)
+
+    expect(resumedGolden?.paused).toBe(true)
+  })
+
   it('retries same-track ambient playback after a failed repeat', async () => {
     const runtime = await startRuntimeInRoom(0)
 

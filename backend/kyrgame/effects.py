@@ -964,7 +964,7 @@ class SpellEffectEngine:
             effect: SpellEffect,
         ) -> EffectResult:  # noqa: ARG001
             previous_room = player.gamloc
-            room_id = self.rng.randint(0, 218)
+            room_id = self.rng.randrange(0, 218)
             player.pgploc = previous_room
             player.gamloc = room_id
             return EffectResult(

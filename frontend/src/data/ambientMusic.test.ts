@@ -37,7 +37,7 @@ describe('ambient music track selection', () => {
     expect(resolveAmbientTrack(169)?.id).toBe(AMBIENT_TRACK_SPELUNKING)
     expect(resolveAmbientTrack(188)?.id).toBe(AMBIENT_TRACK_SPELUNKING)
     expect(resolveAmbientTrack(189)?.id).toBe(AMBIENT_TRACK_GOLDEN_FORAY)
-    expect(resolveAmbientTrack(218)?.id).toBe(AMBIENT_TRACK_GOLDEN_FORAY)
+    expect(resolveAmbientTrack(216)?.id).toBe(AMBIENT_TRACK_GOLDEN_FORAY)
     expect(resolveAmbientTrack(219)?.id).toBe(AMBIENT_TRACK_THROUGH_GATE)
     expect(resolveAmbientTrack(302)?.id).toBe(AMBIENT_TRACK_THROUGH_GATE)
   })
@@ -45,6 +45,8 @@ describe('ambient music track selection', () => {
   it('fades to silence for unmapped rooms', () => {
     expect(resolveAmbientTrack(null)).toBeNull()
     expect(resolveAmbientTrack(-1)).toBeNull()
+    expect(resolveAmbientTrack(217)).toBeNull()
+    expect(resolveAmbientTrack(218)).toBeNull()
     expect(resolveAmbientTrack(303)).toBeNull()
   })
 
@@ -58,7 +60,9 @@ describe('ambient music track selection', () => {
     expect(resolveLevelUpTrack({ location: 169 })?.id).toBe(AMBIENT_TRACK_SPELUNKING_LEVEL_UP)
     expect(resolveLevelUpTrack({ location: 188 })?.id).toBe(AMBIENT_TRACK_SPELUNKING_LEVEL_UP)
     expect(resolveLevelUpTrack({ location: 189 })?.id).toBe(AMBIENT_TRACK_GOLDEN_LEVEL_UP)
-    expect(resolveLevelUpTrack({ location: 218 })?.id).toBe(AMBIENT_TRACK_GOLDEN_LEVEL_UP)
+    expect(resolveLevelUpTrack({ location: 216 })?.id).toBe(AMBIENT_TRACK_GOLDEN_LEVEL_UP)
+    expect(resolveLevelUpTrack({ location: 217 })).toBeNull()
+    expect(resolveLevelUpTrack({ location: 218 })).toBeNull()
     expect(resolveLevelUpTrack({ location: 219 })?.id).toBe(AMBIENT_TRACK_THROUGH_GATE_LEVEL_UP)
     expect(resolveLevelUpTrack({ location: 302 })?.id).toBe(AMBIENT_TRACK_THROUGH_GATE_LEVEL_UP)
     expect(resolveLevelUpTrack({ location: 303 })).toBeNull()
