@@ -21,3 +21,4 @@ triggers:
         target_room: 219
         leave_text: "vanished through the demon gate"
         arrive_text: "appeared in a column of blue flame"
+        legacy_transfer_format: true

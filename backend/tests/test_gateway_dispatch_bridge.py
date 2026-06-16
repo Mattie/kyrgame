@@ -317,6 +317,121 @@ async def test_websocket_clutzopho_drop_lines_reach_caster_and_bystanders():
 
 
 @pytest.mark.anyio
+async def test_websocket_demong_transfer_wraps_departure_and_arrival_with_player_name():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+    test_player_ids = ("zthero", "ztseer", "ztwatch")
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        seed_returning_players(app, test_player_ids)
+        with app.state.session_factory() as db:
+            soulstone = db.scalar(
+                select(models.GameObject).where(models.GameObject.name == "soulstone")
+            )
+            assert soulstone is not None
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+            seer = db.scalar(select(models.Player).where(models.Player.plyrid == "ztseer"))
+            watcher = db.scalar(select(models.Player).where(models.Player.plyrid == "ztwatch"))
+            assert hero is not None
+            assert seer is not None
+            assert watcher is not None
+            hero.flags |= int(constants.PlayerFlag.LOADED)
+            hero.gamloc = 218
+            hero.pgploc = 218
+            hero.altnam = "Hero Alt"
+            hero.attnam = "Hero Alt"
+            hero.gpobjs = [soulstone.id]
+            hero.obvals = [0]
+            hero.npobjs = 1
+            seer.flags |= int(constants.PlayerFlag.LOADED)
+            seer.gamloc = 218
+            seer.pgploc = 218
+            watcher.flags |= int(constants.PlayerFlag.LOADED)
+            watcher.gamloc = 219
+            watcher.pgploc = 219
+            db.commit()
+
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "zthero", "room_id": 218}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            seer_session = await client.post(
+                "/auth/session", json={"player_id": "ztseer", "room_id": 218}
+            )
+            seer_token = seer_session.json()["session"]["token"]
+            watcher_session = await client.post(
+                "/auth/session", json={"player_id": "ztwatch", "room_id": 219}
+            )
+            watcher_token = watcher_session.json()["session"]["token"]
+
+        hero_uri = f"ws://{host}:{port}/ws/rooms/218?token={hero_token}"
+        seer_uri = f"ws://{host}:{port}/ws/rooms/218?token={seer_token}"
+        watcher_uri = f"ws://{host}:{port}/ws/rooms/219?token={watcher_token}"
+        async with (
+            websockets.connect(hero_uri) as hero_ws,
+            websockets.connect(seer_uri) as seer_ws,
+            websockets.connect(watcher_uri) as watcher_ws,
+        ):
+            for ws in (hero_ws, seer_ws, watcher_ws):
+                await _recv_matching(
+                    ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                    == "location_update",
+                )
+
+            await hero_ws.send(
+                json.dumps({"type": "command", "command": "put soulstone niche"})
+            )
+
+            hero_messages = []
+            saw_soukey = False
+            saw_location_update = False
+            while not saw_location_update:
+                message = json.loads(await asyncio.wait_for(hero_ws.recv(), timeout=1.0))
+                hero_messages.append(message)
+                payload = message.get("payload", {})
+                if payload.get("message_id") == "SOUKEY":
+                    saw_soukey = True
+                if (
+                    payload.get("event") == "location_update"
+                    and payload.get("location") == 219
+                ):
+                    saw_location_update = True
+            assert saw_soukey is True
+            departure = await _recv_matching(
+                seer_ws,
+                lambda msg: msg.get("type") == "room_broadcast"
+                and msg.get("payload", {}).get("text")
+                == "*** Hero Alt has just vanished through the demon gate!",
+            )
+            arrival = await _recv_matching(
+                watcher_ws,
+                lambda msg: msg.get("type") == "room_broadcast"
+                and msg.get("payload", {}).get("text")
+                == "*** Hero Alt has just appeared in a column of blue flame!",
+            )
+
+            assert departure["room"] == 218
+            assert arrival["room"] == 219
+            assert not any(
+                msg.get("type") == "room_broadcast"
+                and "through the demon gate" in msg.get("payload", {}).get("text", "")
+                for msg in hero_messages
+            )
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_temple_marry_uses_live_player_lookup_and_persists_spouse():
     app = create_app()
     host = "127.0.0.1"

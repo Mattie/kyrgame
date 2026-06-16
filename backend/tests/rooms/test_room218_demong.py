@@ -86,3 +86,4 @@ async def test_demong_place_soulstone_triggers_gate(engine, player):
     assert transfer_event["target_room"] == 219
     assert transfer_event["leave_text"] == "vanished through the demon gate"
     assert transfer_event["arrive_text"] == "appeared in a column of blue flame"
+    assert transfer_event["legacy_transfer_format"] is True

@@ -15,6 +15,7 @@ triggers:
         target_room: 34
         leave_text: "vanished in a bright blue flash"
         arrive_text: "appeared in a bright blue flash"
+        legacy_transfer_format: true
   - verbs: [think, concentrate, meditate]
     arg_matches:
       - index: 0

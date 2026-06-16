@@ -2,6 +2,7 @@ import asyncio
 import random
 
 import pytest
+import yaml
 
 from kyrgame import fixtures
 from kyrgame.rooms import RoomScriptEngine
@@ -24,6 +25,12 @@ def _pending_events(engine: RoomScriptEngine, scope: str | None = None) -> list[
 
 def _object_by_name(name: str):
     return next(obj for obj in fixtures.load_objects() if obj.name == name)
+
+
+def _slot_random_chance_action():
+    script_path = fixtures.FIXTURE_ROOT / "room_scripts" / "room_0186.yaml"
+    script = yaml.safe_load(script_path.read_text(encoding="utf-8"))
+    return script["triggers"][0]["actions"][1]
 
 
 @pytest.fixture
@@ -59,6 +66,33 @@ async def engine(player, scheduler):
     return engine
 
 
+def test_slotma_fixture_matches_legacy_gem_prize_bounds():
+    random_chance = _slot_random_chance_action()
+    choices = random_chance["on_success"][1]["choices"]
+    prize_names = [
+        choice["actions"][0]["object"]
+        for choice in choices
+        if choice["actions"][0]["type"] == "grant_object"
+    ]
+
+    assert random_chance["probability"] == 0.2
+    assert prize_names == [
+        "ruby",
+        "emerald",
+        "garnet",
+        "pearl",
+        "aquamarine",
+        "moonstone",
+        "sapphire",
+        "diamond",
+        "amethyst",
+        "onyx",
+        "opal",
+        "bloodstone",
+    ]
+    assert "elixir" not in prize_names
+
+
 @pytest.mark.anyio
 async def test_slotma_grants_random_item_on_win(engine, player):
     engine.yaml_engine.rng = random.Random(1)
@@ -72,8 +106,14 @@ async def test_slotma_grants_random_item_on_win(engine, player):
     assert _object_by_name("garnet").id not in player.gpobjs
     assert len(player.gpobjs) == 1
 
-    prize = _object_by_name("bloodstone")
-    assert prize.id in player.gpobjs
+    prize_names = {
+        choice["actions"][0]["object"]
+        for choice in _slot_random_chance_action()["on_success"][1]["choices"]
+    }
+    prize_by_id = {obj.id: obj for obj in fixtures.load_objects() if obj.name in prize_names}
+    prize = prize_by_id[player.gpobjs[0]]
+    assert prize.name in prize_names
+    assert prize.name != "elixir"
 
     messages = fixtures.load_messages().messages
     direct_ids = {

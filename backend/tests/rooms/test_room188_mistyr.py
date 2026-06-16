@@ -81,6 +81,7 @@ async def test_mistyr_touch_orb_transfers_player(engine, player):
     assert transfer_event["target_room"] == 34
     assert transfer_event["leave_text"] == "vanished in a bright blue flash"
     assert transfer_event["arrive_text"] == "appeared in a bright blue flash"
+    assert transfer_event["legacy_transfer_format"] is True
 
 
 @pytest.mark.anyio
