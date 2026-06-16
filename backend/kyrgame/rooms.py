@@ -948,7 +948,8 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             return True
 
         # Legacy stumpr consumes the offered inventory object before validating
-        # level or sequence, and only resets stumpi on final chklvl failure.
+        # level or sequence. Wrong level/sequence paths preserve stumpi; the
+        # old final missing-key reset branch is obsolete in the modern session model.
         # Source: legacy/KYRROUS.C:518-543.
         remove_inventory_item(player, offered)
 
@@ -976,18 +977,18 @@ def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
 
         player.stumpi = progress + 1
         if player.stumpi == len(gem_sequence):
-            if level == 5:
-                # Legacy stumpr rewards the final gem with chklvl(6)+glvutl (legacy/KYRROUS.C:534-537).
-                level_up_player(player)
-                _grant_off_spell(player, hotkiss)
-                await context.direct_and_others(
-                    player_id,
-                    "room_message",
-                    direct_text=messages.messages.get("BGEM00", ""),
-                    others_text=messages.messages.get("BGEM01", "") % display_name,
-                    direct_message_id="BGEM00",
-                    others_message_id="BGEM01",
-                )
+            # Modern active sessions always satisfy the legacy chklvl(6) KYRKEY gate.
+            # The reward path mirrors legacy/KYRROUS.C:524-528 and 1436-1444.
+            level_up_player(player)
+            _grant_off_spell(player, hotkiss)
+            await context.direct_and_others(
+                player_id,
+                "room_message",
+                direct_text=messages.messages.get("BGEM00", ""),
+                others_text=messages.messages.get("BGEM01", "") % display_name,
+                direct_message_id="BGEM00",
+                others_message_id="BGEM01",
+            )
             return True
 
         await context.direct_and_others(

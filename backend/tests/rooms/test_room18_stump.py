@@ -1,5 +1,6 @@
 import pytest
 
+from kyrgame import constants
 from kyrgame import fixtures
 from kyrgame.rooms import RoomScriptEngine
 from kyrgame.scheduler import SchedulerService
@@ -73,6 +74,7 @@ async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
     messages = fixtures.load_messages()
     player = _fresh_player()
     player.level = 5
+    player.flags = int(constants.PlayerFlag.LOADED)
 
     for obj_id in range(11):
         await engine.handle_command(
@@ -98,7 +100,7 @@ async def test_stump_sequence_awards_hotkiss(engine_and_gateway):
 
     assert player.stumpi == 12
     assert player.level == 6
-    assert player.offspls
+    assert player.offspls & constants.SBD032_FIREBOLT2 == constants.SBD032_FIREBOLT2
     assert player.spells == []
     assert player.nspells == 0
 
