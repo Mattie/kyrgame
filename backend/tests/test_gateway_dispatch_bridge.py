@@ -1609,7 +1609,7 @@ async def test_thicket_walk_uses_damage_reset_and_persists(monkeypatch):
         await asyncio.sleep(0.05)
 
     try:
-        seed_returning_players(app, ("zthero", "ztseer"))
+        seed_returning_players(app, ("zthero", "ztseer", "ztwatcher"))
         async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
             hero_session = await client.post(
                 "/auth/session", json={"player_id": "zthero", "room_id": 19}
@@ -1617,8 +1617,12 @@ async def test_thicket_walk_uses_damage_reset_and_persists(monkeypatch):
             observer_session = await client.post(
                 "/auth/session", json={"player_id": "ztseer", "room_id": 19}
             )
+            remote_session = await client.post(
+                "/auth/session", json={"player_id": "ztwatcher", "room_id": 12}
+            )
             hero_token = hero_session.json()["session"]["token"]
             observer_token = observer_session.json()["session"]["token"]
+            remote_token = remote_session.json()["session"]["token"]
 
         with app.state.session_factory() as db:
             hero = db.scalar(
@@ -1627,12 +1631,19 @@ async def test_thicket_walk_uses_damage_reset_and_persists(monkeypatch):
             observer = db.scalar(
                 select(models.Player).where(models.Player.plyrid == "ztseer")
             )
+            remote = db.scalar(
+                select(models.Player).where(models.Player.plyrid == "ztwatcher")
+            )
             assert hero is not None
             assert observer is not None
+            assert remote is not None
             for record in (hero, observer):
                 record.flags |= int(constants.PlayerFlag.LOADED)
                 record.gamloc = 19
                 record.pgploc = 19
+            remote.flags |= int(constants.PlayerFlag.LOADED)
+            remote.gamloc = 12
+            remote.pgploc = 12
             hero.hitpts = 10
             hero.level = 3
             hero.nmpdes = constants.level_to_nmpdes(3)
@@ -1640,11 +1651,13 @@ async def test_thicket_walk_uses_damage_reset_and_persists(monkeypatch):
 
         hero_uri = f"ws://{host}:{port}/ws/rooms/19?token={hero_token}"
         observer_uri = f"ws://{host}:{port}/ws/rooms/19?token={observer_token}"
+        remote_uri = f"ws://{host}:{port}/ws/rooms/12?token={remote_token}"
         async with (
             websockets.connect(hero_uri) as hero_ws,
             websockets.connect(observer_uri) as observer_ws,
+            websockets.connect(remote_uri) as remote_ws,
         ):
-            for ws in (hero_ws, observer_ws):
+            for ws in (hero_ws, observer_ws, remote_ws):
                 await _recv_matching(
                     ws,
                     lambda msg: msg.get("payload", {}).get("event")
@@ -1702,6 +1715,17 @@ async def test_thicket_walk_uses_damage_reset_and_persists(monkeypatch):
                 observer_ws,
                 lambda msg: msg.get("payload", {}).get("message_id") == "KILLED",
             )
+            await remote_ws.send(json.dumps({"type": "command", "command": "look"}))
+            while True:
+                remote_msg = json.loads(
+                    await asyncio.wait_for(remote_ws.recv(), timeout=1.0)
+                )
+                assert remote_msg.get("payload", {}).get("message_id") != "KILLED"
+                if (
+                    remote_msg.get("type") == "command_response"
+                    and remote_msg.get("payload", {}).get("verb") == "look"
+                ):
+                    break
 
             assert shadow_hero.level == 1
             assert shadow_hero.gamloc == 0
