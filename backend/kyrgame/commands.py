@@ -5057,6 +5057,7 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
     events = [
         _message_event("room", None, room_text, command_id, exclude_player=state.player.plyrid),
     ]
+    events[0]["room_id"] = state.player.gamloc
 
     spell_roll = state.rng.randrange(0, 111)
     if spell_roll < 67:
@@ -5088,9 +5089,31 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
             events.append(_message_event("player", "SCRLM3", _format_message(state, "SCRLM3", read_item), command_id))
         elif failure == 4:
             target_room = state.rng.randrange(0, 169)
-            state.player.pgploc = state.player.gamloc
-            state.player.gamloc = target_room
+            from_room = state.player.gamloc
             events.append(_message_event("player", "SCRLM4", _format_message(state, "SCRLM4", read_item), command_id))
+            events.append(
+                _room_departure_event(
+                    state,
+                    from_room=from_room,
+                    to_room=target_room,
+                    command_id=command_id,
+                    direction=None,
+                    departure_text="vanished with a look of surprise",
+                )
+            )
+            state.player.gamloc = target_room
+            state.player.pgploc = target_room
+            events.extend(
+                _build_room_transition_events(
+                    state,
+                    from_room=from_room,
+                    to_room=target_room,
+                    command_id=command_id,
+                    message_id=_command_message_id(command_id),
+                    direction=None,
+                    arrival_text=f"*** {state.player.altnam} has just appeared with a look of surprise!",
+                )
+            )
             events.append(_message_event("player", "SCRLM42", _format_message(state, "SCRLM42"), command_id))
         elif failure == 5:
             if len(state.player.gpobjs) < constants.MXPOBS:

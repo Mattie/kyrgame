@@ -220,13 +220,73 @@ async def test_read_scroll_failure_teleports_and_persists_player_state():
     result = await dispatcher.dispatch("read", {"raw": "codex"}, state)
 
     assert state.player.gamloc == 99
-    assert state.player.pgploc == 4
-    assert [event["message_id"] for event in result.events][-2:] == ["SCRLM4", "SCRLM42"]
+    assert state.player.pgploc == 99
+
+    events = result.events
+    assert events[0]["room_id"] == 4
+    assert events[1]["message_id"] == "SCRLM4"
+    departure = next(
+        event
+        for event in events
+        if event.get("event") == "room_message" and event.get("from") == 4
+    )
+    assert departure["room_id"] == 4
+    assert departure["exclude_player"] == state.player.plyrid
+    assert departure["text"] == "*** Hero Alt has just vanished with a look of surprise!"
+    assert any(
+        event.get("event") == "location_update" and event.get("location") == 99
+        for event in events
+    )
+    assert any(
+        event.get("event") == "location_description" and event.get("location") == 99
+        for event in events
+    )
+    assert any(
+        event.get("event") == "room_objects" and event.get("location") == 99
+        for event in events
+    )
+    arrival = next(
+        event
+        for event in events
+        if event.get("event") == "room_message"
+        and event.get("to") == 99
+        and "appeared with a look of surprise" in event.get("text", "")
+    )
+    assert arrival["text"] == "*** Hero Alt has just appeared with a look of surprise!"
+    assert events[-1]["message_id"] == "SCRLM42"
 
     record = session.scalar(select(models.Player).where(models.Player.plyrid == base_player.plyrid))
     assert record is not None
     assert record.gamloc == 99
-    assert record.pgploc == 4
+    assert record.pgploc == 99
+
+
+@pytest.mark.anyio
+async def test_read_scroll_vortex_allows_same_room_destination():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        gamloc=4,
+        pgploc=4,
+        gpobjs=[36],
+        obvals=[0],
+        npobjs=1,
+    )
+    state = _build_state(player)
+    state.rng = FixedRng([90, 4, 4])
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("read", {"raw": "codex"}, state)
+
+    assert state.player.gamloc == 4
+    assert state.player.pgploc == 4
+    texts = [
+        event.get("text", "")
+        for event in result.events
+        if event.get("event") == "room_message"
+    ]
+    assert "*** Hero Alt has just vanished with a look of surprise!" in texts
+    assert "*** Hero Alt has just appeared with a look of surprise!" in texts
 
 
 @pytest.mark.anyio
@@ -284,6 +344,7 @@ async def test_read_scroll_damage_failure_uses_death_reset_and_persists():
     assert record.level == 1
     assert record.hitpts == 4
     assert record.gamloc == 0
+    assert record.pgploc == 0
     assert record.gpobjs == []
 
 
