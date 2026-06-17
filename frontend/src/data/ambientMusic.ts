@@ -115,7 +115,7 @@ export const getAmbientArea = (roomId: number | null | undefined): AmbientArea |
   if (roomId >= 5 && roomId <= 11) return 'village'
   if (roomId >= 0 && roomId <= 168) return 'dark-forest'
   if (roomId >= 169 && roomId <= 188) return 'spelunking'
-  if (roomId >= 189 && roomId <= 218) return 'golden-forest'
+  if (roomId >= 189 && roomId <= 216) return 'golden-forest'
   if (roomId >= 219 && roomId <= 302) return 'castle'
   return null
 }

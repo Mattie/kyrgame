@@ -10,8 +10,19 @@ const appCss = readFileSync(path.join(process.cwd(), 'src', 'App.css'), 'utf8').
 
 const readRule = (selector: string) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = appCss.match(new RegExp(`${escaped}\\s*{([^}]*)}`))
+  const match = appCss.match(new RegExp(`(?:^|\\n)\\s*${escaped}\\s*{([^}]*)}`))
   return match?.[1] ?? ''
+}
+
+const primaryButtonGradient = 'linear-gradient(125deg, #d788da, #8de1c6)'
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const expectBackgroundDeclaration = (selector: string, background: string) => {
+  const rule = readRule(selector)
+  const escapedBackground = escapeRegExp(background)
+
+  expect(rule).toMatch(new RegExp(`(?:^|\\n)\\s*background:\\s*${escapedBackground};`))
 }
 
 describe('App CSS', () => {
@@ -27,6 +38,20 @@ describe('App CSS', () => {
     const rule = readRule('.mode-hint')
 
     expect(rule).toContain('font-size: 0.7rem;')
+  })
+
+  it('uses the shared purple-to-mint gradient on interactive gradient buttons', () => {
+    expectBackgroundDeclaration('.send-button', primaryButtonGradient)
+    expectBackgroundDeclaration('.session-form button', primaryButtonGradient)
+    expectBackgroundDeclaration('.admin-controls button', primaryButtonGradient)
+    expectBackgroundDeclaration('.compass', primaryButtonGradient)
+    expectBackgroundDeclaration('.compass.active', primaryButtonGradient)
+  })
+
+  it('keeps the compass text icon readable against the shared gradient', () => {
+    const rule = readRule('.compass')
+
+    expect(rule).toContain('color: #000;')
   })
 
   it('reserves a legacy terminal-sized text viewport in the MUD console', () => {
