@@ -436,6 +436,62 @@ async def test_admin_player_patch_syncs_active_player_honor_mode(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_admin_player_rename_syncs_active_player_aliases(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps(
+            {
+                "player-token": {
+                    "roles": ["player_admin"],
+                    "flags": ["allow_player_rename"],
+                }
+            }
+        ),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        active_player = fixtures.build_player().model_copy(
+            update={"plyrid": "hero", "gold": 12},
+            deep=True,
+        )
+        app.state.active_players["hero"] = active_player
+        app.state.active_player_sessions["token"] = active_player
+        app.state.room_scripts.players["hero"] = active_player
+        active_socket = _FakeSocket()
+        app.state.session_connections["token"] = active_socket
+        app.state.game_socket_players[active_socket] = "hero"
+        await app.state.presence.set_location("hero", active_player.gamloc, "token")
+
+        replacement = active_player.model_copy(
+            update={"plyrid": "herox", "gold": 77},
+            deep=True,
+        )
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            rename_resp = await client.put(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json=replacement.model_dump(),
+            )
+
+        assert rename_resp.status_code == 200
+        assert active_player.plyrid == "herox"
+        assert active_player.gold == 77
+        assert "hero" not in app.state.active_players
+        assert app.state.active_players["herox"] is active_player
+        assert app.state.active_player_sessions["token"] is active_player
+        assert app.state.game_socket_players[active_socket] == "herox"
+        assert "hero" not in app.state.room_scripts.players
+        assert app.state.room_scripts.players["herox"] is active_player
+        assert await app.state.presence.sessions_for_player("hero") == set()
+        assert await app.state.presence.sessions_for_player("herox") == {"token"}
+        assert await app.state.presence.players_in_room(active_player.gamloc) == {"herox"}
+
+
+@pytest.mark.anyio
 async def test_admin_staged_honor_mode_is_effectively_forced_by_runtime_flag(
     monkeypatch, tmp_path
 ):

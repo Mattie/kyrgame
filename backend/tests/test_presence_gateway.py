@@ -132,6 +132,20 @@ async def test_presence_service_tracks_membership_and_moves():
 
 
 @pytest.mark.anyio
+async def test_presence_service_relabels_session_in_same_room():
+    presence = PresenceService()
+
+    await presence.set_location("hero", 0, "token")
+    await presence.set_location("herox", 0, "token")
+
+    assert await presence.room_for_player("hero") is None
+    assert await presence.room_for_player("herox") == 0
+    assert await presence.sessions_for_player("hero") == set()
+    assert await presence.sessions_for_player("herox") == {"token"}
+    assert await presence.players_in_room(0) == {"herox"}
+
+
+@pytest.mark.anyio
 async def test_gateway_unregister_removes_socket_from_registered_room_when_caller_room_is_stale():
     gateway = RoomGateway()
     websocket = DummyWebSocket()
