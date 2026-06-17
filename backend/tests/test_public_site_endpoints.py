@@ -143,6 +143,29 @@ async def test_public_player_id_lookup_reports_existing_available_and_reserved(m
 
 
 @pytest.mark.anyio
+async def test_public_runtime_mode_reports_honor_mode_capabilities(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    monkeypatch.setenv("KYRGAME_FORCE_HONOR_MODE", "1")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/public/runtime-mode")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["force_honor_mode"] is True
+    assert payload["default_honor_mode"] is True
+    assert payload["selectable_honor_mode"] is False
+    assert {
+        feature["id"] for feature in payload["modern_features"]
+    } == {"fountain_immediate_sp_restore"}
+
+
+@pytest.mark.anyio
 async def test_public_player_id_lookup_reports_existing_account_binding(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
     monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")

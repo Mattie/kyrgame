@@ -47,6 +47,9 @@ Object.defineProperty(global, 'WebSocket', {
   value: MockWebSocket,
 })
 
+let authSessionBodies: Array<Record<string, unknown>> = []
+let runtimeModePayload: Record<string, unknown>
+
 const TestHarness = () => {
   const navigator = useNavigator()
 
@@ -61,6 +64,9 @@ const TestHarness = () => {
         })()}
       </output>
       <output data-testid="admin-token">{navigator.adminToken ?? 'none'}</output>
+      <output data-testid="runtime-mode-selectable">
+        {navigator.runtimeMode.selectableHonorMode ? 'true' : 'false'}
+      </output>
       <output data-testid="connection-status">{navigator.connectionStatus}</output>
       <output data-testid="game-session-replaced">
         {navigator.gameSessionReplaced ? 'true' : 'false'}
@@ -105,6 +111,17 @@ const TestHarness = () => {
       >
         Start game
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          void navigator.startSession('Opal', 7, {
+            createPlayer: true,
+            honorMode: false,
+          })
+        }
+      >
+        Start modern character
+      </button>
       <button type="button" onClick={() => navigator.setAdminToken('admin-token')}>
         Set admin
       </button>
@@ -148,11 +165,31 @@ describe('NavigatorContext SCRY state handling', () => {
     localStorage.clear()
     sessionStorage.clear()
     MockWebSocket.instances.length = 0
+    authSessionBodies = []
+    runtimeModePayload = {
+      force_honor_mode: false,
+      default_honor_mode: true,
+      selectable_honor_mode: true,
+      modern_features: [
+        {
+          id: 'fountain_immediate_sp_restore',
+          title: 'Fountain immediate spell-point restore',
+        },
+      ],
+    }
     vi.spyOn(global, 'fetch').mockImplementation(
       (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input)
+        if (url.endsWith('/public/runtime-mode')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => runtimeModePayload,
+          } as unknown as Response)
+        }
         if (url.endsWith('/auth/session')) {
-          expect(JSON.parse(String(init?.body))).toMatchObject({
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+          authSessionBodies.push(body)
+          expect(body).toMatchObject({
             player_id: 'Opal',
             room_id: 7,
           })
@@ -340,6 +377,62 @@ describe('NavigatorContext SCRY state handling', () => {
       expect(screen.getByTestId('activity')).toHaveTextContent('Scry room only.')
     )
     expect(screen.getByTestId('room')).toHaveTextContent('7')
+  })
+
+  it('loads runtime mode and sends an explicit non-honor character choice', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('runtime-mode-selectable')).toHaveTextContent('true')
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start modern character/i }))
+    })
+
+    await waitFor(() =>
+      expect(authSessionBodies).toContainEqual(
+        expect.objectContaining({
+          create_player: true,
+          honor_mode: false,
+        })
+      )
+    )
+  })
+
+  it('omits explicit honor choice when runtime mode is forced', async () => {
+    runtimeModePayload = {
+      force_honor_mode: true,
+      default_honor_mode: true,
+      selectable_honor_mode: false,
+      modern_features: [],
+    }
+
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('runtime-mode-selectable')).toHaveTextContent('false')
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start modern character/i }))
+    })
+
+    await waitFor(() => expect(authSessionBodies).toHaveLength(1))
+    expect(authSessionBodies[0]).toEqual(
+      expect.objectContaining({
+        create_player: true,
+      })
+    )
+    expect(authSessionBodies[0]).not.toHaveProperty('honor_mode')
   })
 
   it('clears a stale admin token when starting a new game session', async () => {

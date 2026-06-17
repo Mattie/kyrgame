@@ -1199,6 +1199,42 @@ p {
   color: #fff4e3;
 }
 
+.difficulty-choice .difficulty-note {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.45rem;
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0.08rem 0 0;
+  border: 1px solid rgba(141, 225, 198, 0.28);
+  border-radius: 8px;
+  padding: 0.7rem 0.78rem;
+  background: rgba(5, 10, 16, 0.58);
+  color: #d7e5f2;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: center;
+  text-transform: none;
+}
+
+.character-choice .difficulty-note span {
+  display: block;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  box-shadow: none;
+  text-transform: none;
+}
+
+.difficulty-note span:last-child {
+  color: #f1d3ad;
+}
+
 .coming-soon-note {
   margin-top: 1rem;
   color: #f1d3ad;

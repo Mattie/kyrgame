@@ -35,6 +35,7 @@ def player_model_from_record(record: models.Player) -> models.PlayerModel:
         macros=record.macros,
         stumpi=record.stumpi,
         spouse=record.spouse,
+        honor_mode=record.honor_mode,
     )
 
 

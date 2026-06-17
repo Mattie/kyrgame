@@ -67,11 +67,31 @@ const activePlayerRosterResponse = () =>
     json: async () => ({ active: [], recent: [] }),
   } as unknown as Response)
 
+const selectableRuntimeModePayload = () => ({
+  force_honor_mode: false,
+  default_honor_mode: true,
+  selectable_honor_mode: true,
+  modern_features: [
+    {
+      id: 'fountain_immediate_sp_restore',
+      title: 'Fountain immediate spell-point restore',
+    },
+  ],
+})
+
+let runtimeModePayload = selectableRuntimeModePayload()
+
+const runtimeModeResponse = () =>
+  Promise.resolve({
+    ok: true,
+    json: async () => runtimeModePayload,
+  } as unknown as Response)
+
 const maybeActivePlayerRosterFetch = (input: RequestInfo | URL) => {
   const url = String(input)
-  return url.endsWith('/public/player-activity')
-    ? activePlayerRosterResponse()
-    : null
+  if (url.endsWith('/public/runtime-mode')) return runtimeModeResponse()
+  if (url.endsWith('/public/player-activity')) return activePlayerRosterResponse()
+  return null
 }
 
 const rememberedSessionStorageKey = 'kyrgame.navigator.rememberedSession'
@@ -215,6 +235,7 @@ describe('Navigator flow', () => {
     MockWebSocket.instances.length = 0
     localStorage.clear()
     sessionStorage.clear()
+    runtimeModePayload = selectableRuntimeModePayload()
     window.history.replaceState(null, '', '/admin?modem=off')
   })
 
@@ -532,6 +553,7 @@ describe('Navigator flow', () => {
     expect(sessionRequest).toEqual({
       player_id: 'Merlin',
       create_player: true,
+      honor_mode: true,
     })
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(0))
     expect(
@@ -1163,6 +1185,7 @@ describe('Navigator flow', () => {
             password: 'new-secret',
             session_kind: 'game',
             background: 'lord',
+            honor_mode: false,
           })
           return Promise.resolve({
             ok: true,
@@ -1227,6 +1250,25 @@ describe('Navigator flow', () => {
     expect(
       screen.queryByText(/use the password for this player-id account/i)
     ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('group', { name: /^choose difficulty$/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /^⚠️ Challenging legacy style, faithful to the original game\. Dying loses all levels\.$/i
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Difficulty cannot be changed later\./i)
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByText(/^Modern mode$/i))
+    expect(
+      screen.getByText(
+        /^✨ Forgiving modern style with quality of life enhancements\. Dying loses a single level\.$/i
+      )
+    ).toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: /create character/i }))
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -1240,6 +1282,105 @@ describe('Navigator flow', () => {
       expect(document.body.textContent).toContain('Lyra')
     })
     expect(MockWebSocket.instances).toHaveLength(0)
+  })
+
+  it('hides player mode choice during forced honor-mode registration', async () => {
+    window.history.replaceState(null, '', '/play')
+    runtimeModePayload = {
+      force_honor_mode: true,
+      default_honor_mode: true,
+      selectable_honor_mode: false,
+      modern_features: [],
+    }
+    let registerRequest: Record<string, unknown> | null = null
+    vi.spyOn(global, 'fetch').mockImplementation((input, init) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/public/player-id/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            player_id: 'Lyra',
+            canonical_player_id: 'Lyra',
+            valid: true,
+            exists: false,
+            available: true,
+            reserved: false,
+            status: 'available',
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/auth/register')) {
+        registerRequest = JSON.parse(String(init?.body)) as Record<string, unknown>
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'created',
+            session: {
+              token: 'forced-honor-token',
+              player_id: 'Lyra',
+              account_userid: 'Lyra',
+              session_kind: 'game',
+              room_id: 0,
+              first_login: true,
+              lifecycle: { state: 'first_login_intro', step: 2 },
+              lifecycle_messages: [],
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => locations,
+        } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => objects,
+        } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => commands,
+        } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ messages }),
+        } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await user.type(screen.getByLabelText(/^player id$/i), 'Lyra')
+    await user.type(screen.getByLabelText(/^password$/i), 'new-secret')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /create character/i })
+      ).toBeEnabled()
+    )
+
+    expect(
+      screen.queryByRole('group', { name: /^choose difficulty$/i })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /create character/i }))
+
+    await waitFor(() => expect(registerRequest).not.toBeNull())
+    expect(registerRequest).toEqual({
+      userid: 'Lyra',
+      password: 'new-secret',
+      session_kind: 'game',
+      background: 'lord',
+    })
   })
 
   it('reports lifecycle advance failures without opening the room socket', async () => {
@@ -2752,6 +2893,9 @@ describe('Navigator flow', () => {
       .spyOn(global, 'fetch')
       .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input)
+        if (url.endsWith('/public/runtime-mode')) {
+          return runtimeModeResponse()
+        }
         if (url.endsWith('/public/player-activity')) {
           return Promise.resolve({
             ok: true,
@@ -2812,6 +2956,15 @@ describe('Navigator flow', () => {
         }
         if (url.endsWith('/locations')) {
           return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+        }
+        if (url.endsWith('/admin/rooms/7/objects')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              room_id: 7,
+              room_objects: [],
+            }),
+          } as unknown as Response)
         }
         if (url.endsWith('/objects')) {
           return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
@@ -3051,6 +3204,15 @@ describe('Navigator flow', () => {
           return Promise.resolve({
             ok: true,
             json: async () => ({ player: adminPlayer }),
+          } as unknown as Response)
+        }
+        if (url.endsWith('/admin/rooms/0/objects')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              room_id: 0,
+              room_objects: [],
+            }),
           } as unknown as Response)
         }
         if (url.includes('/locations')) {

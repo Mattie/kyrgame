@@ -15,6 +15,15 @@ def test_player_model_round_trip_serialization():
     assert restored.model_dump() == payload
 
 
+def test_player_model_defaults_to_honor_mode_for_legacy_fixture_payloads():
+    payload = _player_payload()
+    payload.pop("honor_mode", None)
+
+    restored = models.PlayerModel(**payload)
+
+    assert restored.honor_mode is True
+
+
 def test_player_model_requires_all_gmplyr_fields():
     payload = _player_payload()
     payload.pop("macros")

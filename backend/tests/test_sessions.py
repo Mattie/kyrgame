@@ -105,6 +105,8 @@ async def test_explicit_first_login_claim_returns_legacy_intro_messages_and_init
             assert created["room_id"] == 0
             assert created["first_login"] is True
             assert created["player_flags"] == int(constants.PlayerFlag.LOADED)
+            assert created["honor_mode"] is True
+            assert created["effective_honor_mode"] is True
             assert [
                 message["message_id"] for message in created["lifecycle_messages"]
             ] == ["GOODPD"]
@@ -130,8 +132,70 @@ async def test_explicit_first_login_claim_returns_legacy_intro_messages_and_init
             assert player.gpobjs == []
             assert player.spells == []
             assert player.flags == int(constants.PlayerFlag.LOADED)
+            assert player.honor_mode is True
         finally:
             db.close()
+
+
+@pytest.mark.anyio
+async def test_first_login_claim_can_opt_out_of_honor_mode():
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            create_resp = await client.post(
+                "/auth/session",
+                json={
+                    "player_id": "arcana",
+                    "create_player": True,
+                    "honor_mode": False,
+                },
+            )
+
+        assert create_resp.status_code == 201
+        created = create_resp.json()["session"]
+        assert created["honor_mode"] is False
+        assert created["effective_honor_mode"] is False
+
+        db = app.state.session_factory()
+        try:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "Arcana"))
+            assert player is not None
+            assert player.honor_mode is False
+        finally:
+            db.close()
+
+
+@pytest.mark.anyio
+async def test_force_honor_mode_ignores_first_login_opt_out(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{tmp_path/'force-honor.db'}")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    monkeypatch.setenv("KYRGAME_FORCE_HONOR_MODE", "1")
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            create_resp = await client.post(
+                "/auth/session",
+                json={
+                    "player_id": "valiant",
+                    "create_player": True,
+                    "honor_mode": False,
+                },
+            )
+
+        assert create_resp.status_code == 201
+        created = create_resp.json()["session"]
+        assert created["honor_mode"] is True
+        assert created["effective_honor_mode"] is True
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "Valiant"))
+            assert player is not None
+            assert player.honor_mode is True
 
 
 @pytest.mark.anyio

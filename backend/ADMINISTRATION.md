@@ -69,6 +69,16 @@ Use these environment variables to control startup fixture behavior:
 
 Keep `KYRGAME_RESET_ON_BOOT=0` for public demo/prod deployments so restarts are non-destructive. Use explicit seed scripts and migrations when you intentionally need controlled data changes.
 
+## Honor mode startup policy
+
+Players store an `honor_mode` flag. When it is `true`, gameplay uses legacy-only behavior. When it is `false`, explicitly registered modern features can apply. Admin player payloads include both `honor_mode` and `effective_honor_mode` so operators can see the stored preference and the current server policy outcome.
+
+- `KYRGAME_FORCE_HONOR_MODE` (default: `0`)
+  - `0`: new players can choose whether to store `honor_mode`; admins can edit the stored flag.
+  - `1`: all gameplay runs as effective honor mode. New-player creation stores `honor_mode=true`, public clients are expected to hide the chooser, and any stored non-honor values remain inactive until the flag is disabled.
+
+The public `GET /public/runtime-mode` endpoint reports the effective server policy plus the enumerated modern-feature registry documented in `docs/MODERN_FEATURES.md`.
+
 ## HTTP endpoints
 
 | Endpoint | Role | Notes |

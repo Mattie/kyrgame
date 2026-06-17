@@ -3389,6 +3389,7 @@ def _persist_player_state(state: GameState, player: models.PlayerModel):
     record.macros = player.macros
     record.stumpi = player.stumpi
     record.spouse = player.spouse
+    record.honor_mode = player.honor_mode
     state.db_session.commit()
 
 

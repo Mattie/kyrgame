@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Iterable
 
-from sqlalchemy import inspect
+from sqlalchemy import MetaData, Table, inspect
 from sqlalchemy.orm import Session
 
 from . import fixtures, models
@@ -31,9 +31,62 @@ def _persist_all(session: Session, entities: Iterable[object]):
     session.commit()
 
 
+def _player_fixture_payload(item: models.PlayerModel) -> dict:
+    return {
+        "uidnam": item.uidnam,
+        "plyrid": item.plyrid,
+        "altnam": item.altnam,
+        "attnam": item.attnam,
+        "gpobjs": item.gpobjs,
+        "nmpdes": item.nmpdes,
+        "modno": item.modno,
+        "level": item.level,
+        "gamloc": item.gamloc,
+        "pgploc": item.pgploc,
+        "flags": item.flags,
+        "gold": item.gold,
+        "npobjs": item.npobjs,
+        "obvals": item.obvals,
+        "nspells": item.nspells,
+        "spts": item.spts,
+        "hitpts": item.hitpts,
+        "offspls": item.offspls,
+        "defspls": item.defspls,
+        "othspls": item.othspls,
+        "charms": item.charms,
+        "spells": item.spells,
+        "gemidx": item.gemidx,
+        "stones": item.stones,
+        "macros": item.macros,
+        "stumpi": item.stumpi,
+        "spouse": item.spouse,
+        "honor_mode": item.honor_mode,
+    }
+
+
+def _persist_players(session: Session, players: list[models.PlayerModel], *, include_honor_mode: bool):
+    payloads = [_player_fixture_payload(item) for item in players]
+    if include_honor_mode:
+        _persist_all(session, [models.Player(**payload) for payload in payloads])
+        return
+
+    player_table = Table(models.Player.__tablename__, MetaData(), autoload_with=session.get_bind())
+    legacy_payloads = [
+        {key: value for key, value in payload.items() if key in player_table.c}
+        for payload in payloads
+    ]
+    session.execute(player_table.insert(), legacy_payloads)
+    session.commit()
+
+
 def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
     """Load all JSON/YAML fixtures into the provided database session."""
     _reset_tables(session)
+    player_columns = {
+        column["name"]
+        for column in inspect(session.get_bind()).get_columns(models.Player.__tablename__)
+    }
+    include_honor_mode = "honor_mode" in player_columns
 
     locations = fixtures.load_locations(fixture_root)
     objects = fixtures.load_objects(fixture_root)
@@ -108,38 +161,4 @@ def load_all_from_fixtures(session: Session, fixture_root: Path | None = None):
         [models.Message(id=key, text=value) for key, value in messages.messages.items()],
     )
 
-    _persist_all(
-        session,
-        [
-            models.Player(
-                uidnam=item.uidnam,
-                plyrid=item.plyrid,
-                altnam=item.altnam,
-                attnam=item.attnam,
-                gpobjs=item.gpobjs,
-                nmpdes=item.nmpdes,
-                modno=item.modno,
-                level=item.level,
-                gamloc=item.gamloc,
-                pgploc=item.pgploc,
-                flags=item.flags,
-                gold=item.gold,
-                npobjs=item.npobjs,
-                obvals=item.obvals,
-                nspells=item.nspells,
-                spts=item.spts,
-                hitpts=item.hitpts,
-                offspls=item.offspls,
-                defspls=item.defspls,
-                othspls=item.othspls,
-                charms=item.charms,
-                spells=item.spells,
-                gemidx=item.gemidx,
-                stones=item.stones,
-                macros=item.macros,
-                stumpi=item.stumpi,
-                spouse=item.spouse,
-            )
-            for item in players
-        ],
-    )
+    _persist_players(session, players, include_honor_mode=include_honor_mode)

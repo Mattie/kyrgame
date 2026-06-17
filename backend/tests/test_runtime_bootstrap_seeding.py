@@ -12,6 +12,23 @@ def test_runtime_config_parses_seed_boot_flags(monkeypatch):
 
     assert config.reset_on_boot is True
     assert config.seed_if_empty is False
+    assert config.force_honor_mode is False
+
+
+def test_runtime_config_parses_force_honor_mode(monkeypatch):
+    monkeypatch.setenv("KYRGAME_FORCE_HONOR_MODE", "1")
+
+    config = RuntimeConfig.from_env()
+
+    assert config.force_honor_mode is True
+
+
+def test_runtime_config_treats_blank_and_off_flags_as_false(monkeypatch):
+    monkeypatch.setenv("KYRGAME_FORCE_HONOR_MODE", "")
+    assert RuntimeConfig.from_env().force_honor_mode is False
+
+    monkeypatch.setenv("KYRGAME_FORCE_HONOR_MODE", "off")
+    assert RuntimeConfig.from_env().force_honor_mode is False
 
 
 def test_runtime_config_uses_safe_default_seed_boot_flags(monkeypatch):
@@ -22,6 +39,7 @@ def test_runtime_config_uses_safe_default_seed_boot_flags(monkeypatch):
 
     assert config.reset_on_boot is False
     assert config.seed_if_empty is True
+    assert config.force_honor_mode is False
 
 
 def test_database_has_locations_detects_empty_and_populated(tmp_path):

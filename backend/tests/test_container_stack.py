@@ -30,6 +30,7 @@ def test_compose_dev_stack_wires_backend_frontend_postgres_and_tunnel_profile():
     assert services["backend"]["environment"]["KYRGAME_TELEMETRY_DIR"] == "${KYRGAME_TELEMETRY_DIR:-/data/telemetry}"
     assert services["backend"]["environment"]["KYRGAME_DB_CONNECT_ATTEMPTS"] == "${KYRGAME_DB_CONNECT_ATTEMPTS:-30}"
     assert services["backend"]["environment"]["KYRGAME_DB_CONNECT_RETRY_SECONDS"] == "${KYRGAME_DB_CONNECT_RETRY_SECONDS:-1}"
+    assert services["backend"]["environment"]["KYRGAME_FORCE_HONOR_MODE"] == "${KYRGAME_FORCE_HONOR_MODE:-0}"
     assert "http://127.0.0.1:5173" in services["backend"]["environment"]["KYRGAME_CORS_ORIGINS"]
 
     assert services["frontend"]["image"].startswith("node:20")
@@ -97,6 +98,7 @@ def test_root_docker_env_example_includes_local_only_admin_and_tunnel_controls()
     assert "KYRGAME_TELEMETRY_DIR=/data/telemetry" in text
     assert "KYRGAME_DB_CONNECT_ATTEMPTS=30" in text
     assert "KYRGAME_DB_CONNECT_RETRY_SECONDS=1" in text
+    assert "KYRGAME_FORCE_HONOR_MODE=0" in text
     assert "KYRGAME_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173" in text
     assert "KYRGAME_ADMIN_TOKEN=\n" in text
     assert "dev-admin-token" not in text

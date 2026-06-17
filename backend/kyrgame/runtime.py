@@ -15,6 +15,7 @@ from starlette.websockets import WebSocketState
 from . import commands, constants, database, fixtures, loader, models, repositories, rooms
 from .env import load_env_file
 from .gateway import RoomGateway
+from .honor_mode import HonorModePolicy
 from .presence import PresenceService
 from .scheduler import SchedulerService
 from .session_state import sync_active_player_state_from_db
@@ -68,6 +69,7 @@ class RuntimeConfig:
     seed_if_empty: bool = True
     db_connect_attempts: int = 1
     db_connect_retry_seconds: float = 1.0
+    force_honor_mode: bool = False
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
@@ -92,6 +94,7 @@ class RuntimeConfig:
             seed_if_empty=_env_flag("KYRGAME_SEED_IF_EMPTY", default=True),
             db_connect_attempts=_env_int("KYRGAME_DB_CONNECT_ATTEMPTS", default=1),
             db_connect_retry_seconds=_env_float("KYRGAME_DB_CONNECT_RETRY_SECONDS", default=1.0),
+            force_honor_mode=_env_flag("KYRGAME_FORCE_HONOR_MODE", default=False),
         )
 
     def should_seed_database(self, session: Session) -> bool:
@@ -112,7 +115,12 @@ def _env_flag(name: str, *, default: bool) -> bool:
     value = os.getenv(name)
     if value is None:
         return default
-    return value.lower() not in {"0", "false", "no"}
+    normalized = value.strip().lower()
+    if normalized in {"0", "false", "no", "off", ""}:
+        return False
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    return True
 
 
 def _env_int(name: str, *, default: int) -> int:
@@ -161,6 +169,10 @@ async def bootstrap_app(app: FastAPI):
             loader.load_all_from_fixtures(session, fixture_root=seed_root)
 
     app.state.engine = engine
+    app.state.runtime_config = runtime_config
+    app.state.honor_mode_policy = HonorModePolicy(
+        force_honor_mode=runtime_config.force_honor_mode
+    )
     app.state.session_factory = session_factory
     app.state.gateway = RoomGateway()
     app.state.presence = PresenceService()
@@ -330,6 +342,7 @@ async def bootstrap_app(app: FastAPI):
             record.macros = player.macros
             record.stumpi = player.stumpi
             record.spouse = player.spouse
+            record.honor_mode = player.honor_mode
             db.commit()
 
     def _set_zar_location(room_id: int) -> None:
@@ -415,6 +428,7 @@ async def bootstrap_app(app: FastAPI):
         room_objects_getter=_animation_get_room_objects,
         room_objects_setter=_animation_set_room_objects,
         room_players_getter=_animation_players_getter,
+        honor_mode_policy=app.state.honor_mode_policy,
     )
     zar_routine.initialize(app.state.animation_tick_system.state)
     app.state.animation_tick_system.persist_state()

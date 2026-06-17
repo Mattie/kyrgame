@@ -2,9 +2,10 @@ import random
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Dict, Iterable, Optional
 
-from . import constants
+from . import constants, modern_features
 from . import fixtures
 from .gateway import RoomGateway
+from .honor_mode import HonorModePolicy
 from .scheduler import ScheduledHandle, SchedulerService
 from .models import (
     GameObjectModel,
@@ -123,6 +124,7 @@ class RoomScriptEngine:
         room_objects_getter: RoomObjectsGetter | None = None,
         room_objects_setter: RoomObjectsSetter | None = None,
         room_players_getter: RoomPlayersGetter | None = None,
+        honor_mode_policy: HonorModePolicy | None = None,
     ):
         self.gateway = gateway
         self.scheduler = scheduler
@@ -133,6 +135,7 @@ class RoomScriptEngine:
         self.room_objects_getter = room_objects_getter
         self.room_objects_setter = room_objects_setter
         self.room_players_getter = room_players_getter
+        self.honor_mode_policy = honor_mode_policy or HonorModePolicy()
         self.routines: Dict[int, RoomRoutine] = build_default_routines(messages)
         self.states: Dict[int, RoomState] = {}
         self.players: Dict[str, PlayerModel] = {
@@ -806,6 +809,32 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
             )
             return True
 
+        if _is_fountain_drink_command(verb, args) and player is not None:
+            # Modern feature gate: legacy magicf() has no immediate SP restore
+            # path for room 38 fountain water (legacy/KYRROUS.C:759-819).
+            restore_enabled = context.engine.honor_mode_policy.modern_feature_enabled(
+                player, modern_features.FOUNTAIN_IMMEDIATE_SP_RESTORE
+            )
+            max_spell_points = max(0, player.level * 2)
+            restore_amount = min(2, max(0, max_spell_points - player.spts))
+            if restore_enabled and restore_amount > 0:
+                player.spts += restore_amount
+                direct_text = (
+                    f"{messages.messages['DRINK0']} Your mind feels clearer."
+                )
+            else:
+                direct_text = messages.messages["DRINK0"]
+
+            await context.direct_and_others(
+                player_id,
+                "room_message",
+                direct_text=direct_text,
+                others_text=messages.messages["DRINK1"] % display_name,
+                direct_message_id="DRINK0",
+                others_message_id="DRINK1",
+            )
+            return True
+
         if verb not in {"drop", "throw", "toss"} or player is None:
             return False
 
@@ -904,6 +933,13 @@ def _fountain_on_command(messages: MessageBundleModel) -> RoomCommandCallback:
         return True
 
     return _handler
+
+
+def _is_fountain_drink_command(verb: str, args: list[str]) -> bool:
+    if verb not in {"drink", "swallow"}:
+        return False
+    normalized = [arg.lower() for arg in _strip_gi_bagthe_articles(args)]
+    return normalized in (["water"], ["fountain"], ["from", "fountain"])
 
 
 def _stump_on_command(messages: MessageBundleModel) -> RoomCommandCallback:

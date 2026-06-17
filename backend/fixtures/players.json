@@ -4,6 +4,7 @@
     "plyrid": "hero",
     "altnam": "Hero Alt",
     "attnam": "Hero Att",
+    "honor_mode": true,
     "gpobjs": [0, 1],
     "nmpdes": 1,
     "modno": 0,

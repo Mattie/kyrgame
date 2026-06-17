@@ -373,6 +373,103 @@ async def test_admin_player_patch_preserves_non_editable_flags(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_admin_player_patch_updates_stored_honor_mode(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps({"player-token": {"roles": ["player_admin"]}}),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            patch_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"honor_mode": False},
+            )
+            fetch_resp = await client.get("/admin/players/hero", headers=_auth("player-token"))
+
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["player"]["honor_mode"] is False
+        assert patch_resp.json()["player"]["effective_honor_mode"] is False
+        assert fetch_resp.json()["player"]["honor_mode"] is False
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            assert player.honor_mode is False
+
+
+@pytest.mark.anyio
+async def test_admin_player_patch_syncs_active_player_honor_mode(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps({"player-token": {"roles": ["player_admin"]}}),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        active_player = fixtures.build_player().model_copy(
+            update={"plyrid": "hero", "honor_mode": True},
+            deep=True,
+        )
+        app.state.active_players["hero"] = active_player
+        app.state.active_player_sessions["token"] = active_player
+        app.state.room_scripts.players["hero"] = active_player
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            patch_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"honor_mode": False},
+            )
+
+        assert patch_resp.status_code == 200
+        assert active_player.honor_mode is False
+        assert app.state.active_players["hero"] is active_player
+        assert app.state.room_scripts.players["hero"] is active_player
+        assert app.state.room_scripts.players["hero"].honor_mode is False
+
+
+@pytest.mark.anyio
+async def test_admin_staged_honor_mode_is_effectively_forced_by_runtime_flag(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps({"player-token": {"roles": ["player_admin"]}}),
+    )
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+pysqlite:///{tmp_path/'admin-force.db'}")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    monkeypatch.setenv("KYRGAME_FORCE_HONOR_MODE", "1")
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            patch_resp = await client.patch(
+                "/admin/players/hero",
+                headers=_auth("player-token"),
+                json={"honor_mode": False},
+            )
+
+        assert patch_resp.status_code == 200
+        assert patch_resp.json()["player"]["honor_mode"] is False
+        assert patch_resp.json()["player"]["effective_honor_mode"] is True
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert player is not None
+            assert player.honor_mode is False
+
+
+@pytest.mark.anyio
 async def test_admin_player_patch_inventory_and_gems(monkeypatch):
     monkeypatch.setenv(
         ADMIN_MAP_ENV,
