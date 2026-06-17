@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    true,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -102,6 +103,7 @@ class PlayerModel(BaseModel):
     macros: int
     stumpi: int
     spouse: str = Field(max_length=constants.ALSSIZ)
+    honor_mode: bool = True
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
@@ -290,6 +292,7 @@ class Player(Base):
     macros = Column(Integer, nullable=False)
     stumpi = Column(Integer, nullable=False)
     spouse = Column(String(constants.ALSSIZ), nullable=False)
+    honor_mode = Column(Boolean, nullable=False, default=True, server_default=true())
 
 
 class Command(Base):

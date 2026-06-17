@@ -54,6 +54,12 @@ Once running, the API will be available at:
 
 Public Player-ID and session creation throttles use the direct peer address by default. Set `KYRGAME_TRUST_PROXY_HEADERS=1` only when the API is behind a reverse proxy that overwrites or strips client-supplied `CF-Connecting-IP`, `X-Forwarded-For`, and `X-Real-IP` headers. `KYRGAME_HTTP_RATE_LIMIT_MAX_CLIENT_KEYS` caps each endpoint's in-memory limiter cache and defaults to `1024`.
 
+### Honor mode startup policy
+
+`KYRGAME_FORCE_HONOR_MODE=1` forces the whole runtime onto the legacy-only honor-mode path. In that mode, the public runtime-mode endpoint reports `selectable_honor_mode: false`, new-player creation stores `honor_mode: true`, and gameplay ignores stored non-honor values when deciding whether modern features are active.
+
+The modern-feature registry lives in `kyrgame.modern_features`, and the human-readable list lives in `docs/MODERN_FEATURES.md`.
+
 ### Verifying the Server is Running
 
 You can verify the backend is running by checking the health endpoints:
@@ -207,6 +213,8 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
         "resumed": false,
         "replaced_sessions": 0,
         "player_flags": 1,
+        "honor_mode": true,
+        "effective_honor_mode": true,
         "lifecycle": { "state": "first_login_intro", "step": 2 },
         "lifecycle_messages": [
           { "message_id": "GOODPD", "text": "..." }
@@ -271,6 +279,8 @@ curl -X POST http://localhost:8000/auth/session \
       "resumed": false,
       "replaced_sessions": 0,
       "player_flags": 1,
+      "honor_mode": true,
+      "effective_honor_mode": true,
       "lifecycle": null,
       "lifecycle_messages": []
     }

@@ -141,6 +141,7 @@ def test_player_and_content_column_lengths_match_existing_contracts(migrated_eng
     assert player_columns["altnam"]["type"].length == 30
     assert player_columns["attnam"]["type"].length == 30
     assert player_columns["spouse"]["type"].length == 14
+    assert player_columns["honor_mode"]["type"].python_type is bool
 
     session_columns = {
         column["name"]: column for column in inspector.get_columns("player_sessions")
@@ -181,7 +182,44 @@ def test_runtime_in_memory_migration_keeps_followup_session_lifecycle_columns():
         assert session_columns["hidden_from_activity"]["type"].python_type is bool
         assert runtime_columns["key"]["type"].length == 64
         assert "payload" in runtime_columns
-        assert version == "0004_runtime_state"
+        assert version == "0005_honor_mode"
+    finally:
+        engine.dispose()
+
+
+def test_honor_mode_migration_defaults_existing_players_to_true(
+    alembic_config, database_url
+):
+    command.upgrade(alembic_config, "0004_runtime_state")
+    engine = database.get_engine(database_url, connect_args={"check_same_thread": False})
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    insert into players (
+                        uidnam, plyrid, altnam, attnam, gpobjs, nmpdes, modno,
+                        level, gamloc, pgploc, flags, gold, npobjs, obvals,
+                        nspells, spts, hitpts, offspls, defspls, othspls,
+                        charms, spells, gemidx, stones, macros, stumpi, spouse
+                    ) values (
+                        'LegacyUser', 'legacy', 'Legacy', 'Legacy', '[]', 0, 0,
+                        1, 0, 0, 1, 0, 0, '[]',
+                        0, 2, 4, 0, 0, 0,
+                        '[0,0,0,0,0,0]', '[]', 0, '[0,1,2,3]', 0, 0, ''
+                    )
+                    """
+                )
+            )
+
+        command.upgrade(alembic_config, "head")
+
+        with engine.connect() as connection:
+            row = connection.execute(
+                text("select honor_mode from players where plyrid = 'legacy'")
+            ).mappings().one()
+
+        assert bool(row["honor_mode"]) is True
     finally:
         engine.dispose()
 

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { useNavigator } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
@@ -43,6 +43,10 @@ type PlayerIdLookup = {
 }
 
 const PLAYER_ID_LOOKUP_DEBOUNCE_MS = 250
+const honorDifficultyDescription =
+  '⚠️ Challenging legacy style, faithful to the original game. Dying loses all levels.'
+const modernDifficultyDescription =
+  '✨ Forgiving modern style with quality of life enhancements. Dying loses a single level.'
 
 const sanitizePlayerIdInput = (value: string) =>
   value.replace(/[^A-Za-z]/g, '').slice(0, 9)
@@ -64,6 +68,7 @@ export const SessionForm = ({
     session,
     currentRoom,
     resumeRememberedSession,
+    runtimeMode,
   } = useNavigator()
   const [playerId, setPlayerId] = useState('')
   const [roomId, setRoomId] = useState('')
@@ -73,6 +78,7 @@ export const SessionForm = ({
   const [claimNewPlayer, setClaimNewPlayer] = useState(false)
   const [characterBackground, setCharacterBackground] =
     useState<CharacterBackground>('lord')
+  const [honorMode, setHonorMode] = useState(true)
   const [playerIdLookup, setPlayerIdLookup] = useState<PlayerIdLookup | null>(
     null
   )
@@ -83,6 +89,7 @@ export const SessionForm = ({
   const [submitting, setSubmitting] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const autoResumeAttemptedRef = useRef(false)
+  const difficultyNoteId = useId()
   const isPlayerEntry = !showAdminFields
   const usesAccountAuth = isPlayerEntry || (showAdminFields && joinAsAdmin)
 
@@ -99,6 +106,9 @@ export const SessionForm = ({
   const effectiveClaimNewPlayer = isPlayerEntry
     ? isPlayerEntryAvailable || isPlayerEntryKnownUnowned
     : claimNewPlayer
+  const difficultyDescription = honorMode
+    ? honorDifficultyDescription
+    : modernDifficultyDescription
 
   useEffect(() => {
     const storedPlayerId = localStorage.getItem(storageKeys.playerId)
@@ -212,6 +222,12 @@ export const SessionForm = ({
     }
   }, [apiBaseUrl, effectiveClaimNewPlayer, isPlayerEntry])
 
+  useEffect(() => {
+    if (!runtimeMode.selectableHonorMode) {
+      setHonorMode(true)
+    }
+  }, [runtimeMode.selectableHonorMode])
+
   const persistPlayerId = (nextValue: string) => {
     if (nextValue.trim() === '') {
       localStorage.removeItem(storageKeys.playerId)
@@ -268,6 +284,10 @@ export const SessionForm = ({
             : 'legacy',
           sessionKind: showAdminFields && joinAsAdmin ? 'admin' : 'game',
           rememberMe: usesAccountAuth && isPlayerEntry ? rememberMe : false,
+          honorMode:
+            effectiveClaimNewPlayer && runtimeMode.selectableHonorMode
+              ? honorMode
+              : undefined,
         }
       )
       if (showAdminFields && !joinAsAdmin && trimmedStaticAdminToken !== '') {
@@ -485,7 +505,7 @@ export const SessionForm = ({
 
           {isPlayerEntry && isPlayerEntryAvailable && (
             <fieldset className="character-choice">
-              <legend>Choose your background</legend>
+              <legend>Choose Background</legend>
               <label>
                 <input
                   type="radio"
@@ -506,6 +526,39 @@ export const SessionForm = ({
                 />
                 <span>Lady</span>
               </label>
+            </fieldset>
+          )}
+
+          {effectiveClaimNewPlayer && runtimeMode.selectableHonorMode && (
+            <fieldset
+              className="character-choice difficulty-choice"
+              aria-describedby={difficultyNoteId}
+            >
+              <legend>Choose Difficulty</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="honor-mode"
+                  value="honor"
+                  checked={honorMode}
+                  onChange={() => setHonorMode(true)}
+                />
+                <span>Honor mode</span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="honor-mode"
+                  value="modern"
+                  checked={!honorMode}
+                  onChange={() => setHonorMode(false)}
+                />
+                <span>Modern mode</span>
+              </label>
+              <p className="difficulty-note" id={difficultyNoteId}>
+                <span aria-live="polite">{difficultyDescription}</span>
+                <span>Difficulty cannot be changed later.</span>
+              </p>
             </fieldset>
           )}
 

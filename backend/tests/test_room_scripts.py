@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from kyrgame import constants, fixtures
+from kyrgame.honor_mode import HonorModePolicy
 from kyrgame.rooms import RoomScriptEngine
 from kyrgame.scheduler import SchedulerService
 from kyrgame.webapp import create_app
@@ -833,6 +834,118 @@ async def test_fountain_routine_schedules_and_cleans_ambience():
     ]
     assert messages.messages["KRD038"] in room_message_texts
     assert not engine.get_room_state(38).timers
+
+
+def _fountain_drink_engine(
+    gateway: FakeGateway, messages, *, force_honor_mode: bool = False
+) -> RoomScriptEngine:
+    return RoomScriptEngine(
+        gateway=gateway,
+        scheduler=SchedulerService(),
+        locations=fixtures.load_locations(),
+        messages=messages,
+        objects=fixtures.load_objects(),
+        honor_mode_policy=HonorModePolicy(force_honor_mode=force_honor_mode),
+    )
+
+
+def _direct_texts(gateway: FakeGateway, player_id: str = "hero") -> list[str]:
+    return [
+        msg.get("payload", {}).get("text")
+        for msg in gateway.messages
+        if msg.get("payload", {}).get("scope") == "direct"
+        and msg.get("payload", {}).get("player") == player_id
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("command", "args"),
+    [
+        ("drink", ["water"]),
+        ("drink", ["fountain"]),
+        ("drink", ["from", "fountain"]),
+        ("swallow", ["water"]),
+        ("swallow", ["fountain"]),
+        ("swallow", ["from", "fountain"]),
+    ],
+)
+async def test_fountain_drink_restores_spell_points_for_non_honor_player(command, args):
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = _fountain_drink_engine(gateway, messages)
+    player = fixtures.build_player().model_copy(
+        update={"honor_mode": False, "level": 3, "spts": 2},
+        deep=True,
+    )
+
+    handled = await engine.handle_command(
+        "hero", 38, command=command, args=args, player=player
+    )
+
+    assert handled is True
+    assert player.spts == 4
+    assert (
+        "...The fresh water is very delicious and refreshing! Your mind feels clearer."
+        in _direct_texts(gateway)
+    )
+
+
+@pytest.mark.anyio
+async def test_fountain_drink_uses_default_water_message_when_no_spell_points_restore():
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = _fountain_drink_engine(gateway, messages)
+    player = fixtures.build_player().model_copy(
+        update={"honor_mode": False, "level": 3, "spts": 6},
+        deep=True,
+    )
+
+    handled = await engine.handle_command(
+        "hero", 38, command="drink", args=["water"], player=player
+    )
+
+    assert handled is True
+    assert player.spts == 6
+    assert messages.messages["DRINK0"] in _direct_texts(gateway)
+
+
+@pytest.mark.anyio
+async def test_fountain_drink_honor_player_uses_default_water_message():
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = _fountain_drink_engine(gateway, messages)
+    player = fixtures.build_player().model_copy(
+        update={"honor_mode": True, "level": 3, "spts": 2},
+        deep=True,
+    )
+
+    handled = await engine.handle_command(
+        "hero", 38, command="drink", args=["water"], player=player
+    )
+
+    assert handled is True
+    assert player.spts == 2
+    assert messages.messages["DRINK0"] in _direct_texts(gateway)
+
+
+@pytest.mark.anyio
+async def test_fountain_drink_force_honor_uses_default_water_message():
+    gateway = FakeGateway()
+    messages = fixtures.load_messages()
+    engine = _fountain_drink_engine(gateway, messages, force_honor_mode=True)
+    player = fixtures.build_player().model_copy(
+        update={"honor_mode": False, "level": 3, "spts": 2},
+        deep=True,
+    )
+
+    handled = await engine.handle_command(
+        "hero", 38, command="drink", args=["water"], player=player
+    )
+
+    assert handled is True
+    assert player.spts == 2
+    assert messages.messages["DRINK0"] in _direct_texts(gateway)
 
 
 @pytest.mark.anyio

@@ -53,6 +53,8 @@ async def test_register_creates_account_bound_to_first_login_player(account_env)
         assert session["account_userid"] == "Willow"
         assert session["session_kind"] == "game"
         assert session["first_login"] is True
+        assert session["honor_mode"] is True
+        assert session["effective_honor_mode"] is True
         assert session["lifecycle"] == {"state": "first_login_intro", "step": 2}
         assert [message["message_id"] for message in session["lifecycle_messages"]] == ["GOODPD"]
 
@@ -63,8 +65,36 @@ async def test_register_creates_account_bound_to_first_login_player(account_env)
         assert account is not None
         assert player is not None
         assert account.player_id == player.id
+        assert player.honor_mode is True
         assert account.password_hash != "correct horse battery staple"
         assert account.password_hash.startswith("$argon2")
+
+
+@pytest.mark.anyio
+async def test_register_can_store_non_honor_player_when_selectable(account_env):
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/auth/register",
+                json={
+                    "userid": "Modern",
+                    "password": "correct horse battery staple",
+                    "honor_mode": False,
+                },
+            )
+
+        assert response.status_code == 201
+        session = response.json()["session"]
+        assert session["honor_mode"] is False
+        assert session["effective_honor_mode"] is False
+
+        with app.state.session_factory() as db:
+            player = db.scalar(select(models.Player).where(models.Player.plyrid == "Modern"))
+            assert player is not None
+            assert player.honor_mode is False
 
 
 @pytest.mark.anyio

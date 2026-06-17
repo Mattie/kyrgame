@@ -24,6 +24,7 @@ const storageKeys = {
   sections: {
     target: 'kyrgame.navigator.adminSection.target',
     identity: 'kyrgame.navigator.adminSection.identity',
+    mode: 'kyrgame.navigator.adminSection.mode',
     stats: 'kyrgame.navigator.adminSection.stats',
     charms: 'kyrgame.navigator.adminSection.charms',
     inventory: 'kyrgame.navigator.adminSection.inventory',
@@ -37,6 +38,7 @@ type AdminSectionKey = keyof typeof storageKeys.sections
 const sectionLabels: Record<AdminSectionKey, string> = {
   target: 'Target',
   identity: 'Identity',
+  mode: 'Mode',
   stats: 'Stats & caps',
   charms: 'Charms',
   inventory: 'Inventory',
@@ -72,11 +74,12 @@ const resolveObjectReference = (
 }
 
 export const AdminControls = () => {
-  const { session, adminToken, applyAdminUpdate, fetchAdminPlayer, world } = useNavigator()
+  const { session, adminToken, applyAdminUpdate, fetchAdminPlayer, runtimeMode, world } = useNavigator()
   const [panelCollapsed, setPanelCollapsed] = useState(() => readStoredBool(storageKeys.panelCollapsed))
   const [sectionCollapsed, setSectionCollapsed] = useState<Record<AdminSectionKey, boolean>>(() => ({
     target: readStoredBool(storageKeys.sections.target),
     identity: readStoredBool(storageKeys.sections.identity),
+    mode: readStoredBool(storageKeys.sections.mode),
     stats: readStoredBool(storageKeys.sections.stats),
     charms: readStoredBool(storageKeys.sections.charms),
     inventory: readStoredBool(storageKeys.sections.inventory),
@@ -86,6 +89,8 @@ export const AdminControls = () => {
   const [playerId, setPlayerId] = useState(session?.playerId ?? '')
   const [alternateName, setAlternateName] = useState('')
   const [attireName, setAttireName] = useState('')
+  const [honorMode, setHonorMode] = useState(true)
+  const [honorModeInitialized, setHonorModeInitialized] = useState(false)
   const [flags, setFlags] = useState<Set<string>>(new Set())
   const [flagsInitialized, setFlagsInitialized] = useState(false)
   const [level, setLevel] = useState('')
@@ -175,6 +180,8 @@ export const AdminControls = () => {
     (player: AdminPlayerRecord) => {
       setAlternateName(player.altnam ?? '')
       setAttireName(player.attnam ?? '')
+      setHonorMode(player.honor_mode ?? true)
+      setHonorModeInitialized(true)
       const nextFlags = new Set(
         AVAILABLE_FLAGS.filter((flag) => (player.flags ?? 0) & (FLAG_MASKS[flag] ?? 0))
       )
@@ -262,6 +269,7 @@ export const AdminControls = () => {
     const payload: AdminUpdatePayload = {}
     if (alternateName.trim()) payload.altnam = alternateName.trim()
     if (attireName.trim()) payload.attnam = attireName.trim()
+    if (honorModeInitialized) payload.honor_mode = honorMode
     if (flagsInitialized) payload.flags = Array.from(flags)
 
     const parsedLevel = parseNumber(level)
@@ -360,7 +368,11 @@ export const AdminControls = () => {
     }
 
     try {
-      await applyAdminUpdate(playerId.trim(), payload)
+      const updatedPlayer = await applyAdminUpdate(playerId.trim(), payload)
+      hydrateFromPlayer(updatedPlayer)
+      setLoadedPlayer(updatedPlayer)
+      setLoadedPlayerId(updatedPlayer.plyrid)
+      setPlayerId(updatedPlayer.plyrid)
       setStatus('Admin update saved')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save admin update')
@@ -476,6 +488,48 @@ export const AdminControls = () => {
                         ))}
                       </div>
                     </div>
+                  </div>
+                )}
+              </fieldset>
+
+              <fieldset className={`admin-section ${sectionCollapsed.mode ? 'collapsed' : ''}`}>
+                <legend>
+                  <span>{sectionLabels.mode}</span>
+                  <button
+                    type="button"
+                    className="section-toggle"
+                    aria-label={`${sectionCollapsed.mode ? 'Expand' : 'Collapse'} mode section`}
+                    aria-expanded={!sectionCollapsed.mode}
+                    onClick={() => toggleSection('mode')}
+                  >
+                    {sectionCollapsed.mode ? 'Expand' : 'Collapse'}
+                  </button>
+                </legend>
+                {!sectionCollapsed.mode && (
+                  <div className="admin-section-body" data-testid="admin-section-body-mode">
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        name="admin-honor-mode"
+                        checked={honorMode}
+                        onChange={(event) => {
+                          setHonorModeInitialized(true)
+                          setHonorMode(event.target.checked)
+                        }}
+                      />
+                      Honor mode
+                    </label>
+                    <p className="field-hint">
+                      Effective mode:{' '}
+                      {loadedPlayer
+                        ? loadedPlayer.effective_honor_mode
+                          ? 'Honor mode'
+                          : 'Modern mode'
+                        : 'Unknown'}
+                    </p>
+                    {runtimeMode.forceHonorMode && (
+                      <p className="field-hint">Server is forcing honor mode.</p>
+                    )}
                   </div>
                 )}
               </fieldset>

@@ -21,9 +21,10 @@ from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
-from . import accounts, commands, constants, fixtures, models, repositories, spellbook
+from . import accounts, commands, constants, fixtures, models, modern_features, repositories, spellbook
 from .env import load_env_file
 from .gateway import RoomGateway
+from .honor_mode import HonorModePolicy
 from .player_lifecycle import initialize_player_for_first_login
 from .player_titles import legacy_title_for_level
 from .presence import PresenceService
@@ -93,6 +94,7 @@ class SessionRequest(BaseModel):
     create_player: bool = False
     gender: str | None = None
     background: str | None = None
+    honor_mode: bool | None = None
 
 
 class AccountAuthRequest(BaseModel):
@@ -101,6 +103,7 @@ class AccountAuthRequest(BaseModel):
     room_id: int | None = None
     background: str | None = None
     gender: str | None = None
+    honor_mode: bool | None = None
     session_kind: str = SESSION_KIND_GAME
     remember_me: bool = False
 
@@ -134,6 +137,8 @@ class SessionData(BaseModel):
     resumed: bool = False
     replaced_sessions: int = 0
     player_flags: int = 0
+    honor_mode: bool = True
+    effective_honor_mode: bool = True
     account_userid: str | None = None
     session_kind: str = SESSION_KIND_GAME
     admin_grants: AdminGrantData = Field(default_factory=AdminGrantData)
@@ -189,6 +194,7 @@ class PlayerAdminUpdate(BaseModel):
     altnam: str | None = None
     attnam: str | None = None
     flags: list[str] | None = None
+    honor_mode: bool | None = None
     level: int | None = None
     gamloc: int | None = None
     pgploc: int | None = None
@@ -211,6 +217,10 @@ class PlayerAdminUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PlayerAdminReplacement(models.PlayerModel):
+    effective_honor_mode: bool | None = None
+
+
 def _cors_origins_from_env() -> list[str]:
     configured = os.getenv("KYRGAME_CORS_ORIGINS")
     if not configured:
@@ -220,6 +230,23 @@ def _cors_origins_from_env() -> list[str]:
 
 def _truthy_env(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _honor_mode_policy(app: FastAPI) -> HonorModePolicy:
+    return getattr(app.state, "honor_mode_policy", HonorModePolicy())
+
+
+def _effective_honor_mode(app: FastAPI, player: object) -> bool:
+    return _honor_mode_policy(app).effective_honor_mode(
+        player, modern_features.FOUNTAIN_IMMEDIATE_SP_RESTORE
+    )
+
+
+def _player_admin_payload(app: FastAPI, player: models.PlayerModel) -> dict:
+    return {
+        **player.model_dump(),
+        "effective_honor_mode": _effective_honor_mode(app, player),
+    }
 
 
 def _http_rate_limit_max_client_keys() -> int:
@@ -598,6 +625,8 @@ def _apply_player_admin_update(
         editable_mask = int(constants.ADMIN_EDITABLE_PLAYER_FLAGS)
         new_mask = (current_mask & ~editable_mask) | constants.encode_player_flags(updates.flags)
         data["flags"] = new_mask
+    if updates.honor_mode is not None:
+        data["honor_mode"] = updates.honor_mode
 
     if updates.gamloc is not None:
         data["gamloc"] = updates.gamloc
@@ -761,6 +790,58 @@ def _set_player_in_cache(app: FastAPI, player: models.PlayerModel, *, original_a
     if not replaced:
         cache.append(player)
     app.state.fixture_cache["summary"]["players"] = len(cache)
+    _sync_active_player_model(app, player, original_alias=original_alias)
+
+
+def _copy_player_model_fields(target: models.PlayerModel, source: models.PlayerModel) -> None:
+    for field, value in source.model_dump().items():
+        object.__setattr__(target, field, value)
+
+
+def _sync_active_player_model(
+    app: FastAPI, player: models.PlayerModel, *, original_alias: str | None = None
+) -> None:
+    lookup = original_alias or player.plyrid
+    aliases = {lookup, player.plyrid}
+    synced: list[models.PlayerModel] = []
+
+    session_connections = getattr(app.state, "session_connections", {})
+    game_socket_players = getattr(app.state, "game_socket_players", {})
+    for token, active_player in _active_player_sessions(app).items():
+        if active_player.plyrid in aliases:
+            _copy_player_model_fields(active_player, player)
+            synced.append(active_player)
+            active_socket = session_connections.get(token)
+            if active_socket is not None:
+                game_socket_players[active_socket] = player.plyrid
+
+    active_players = getattr(app.state, "active_players", None)
+    if active_players is not None:
+        candidates: list[models.PlayerModel] = []
+        if lookup in active_players:
+            candidates.append(active_players.pop(lookup))
+        current = active_players.get(player.plyrid)
+        if current is not None and all(current is not candidate for candidate in candidates):
+            candidates.append(current)
+
+        for active_player in candidates:
+            _copy_player_model_fields(active_player, player)
+            if all(active_player is not synced_player for synced_player in synced):
+                synced.append(active_player)
+
+        if synced:
+            active_players[player.plyrid] = synced[0]
+
+    room_scripts = getattr(app.state, "room_scripts", None)
+    room_players = getattr(room_scripts, "players", None)
+    if room_players is not None:
+        existing = room_players.get(lookup) or room_players.get(player.plyrid)
+        if existing is not None:
+            replacement = synced[0] if synced else existing
+            _copy_player_model_fields(replacement, player)
+            if lookup != player.plyrid:
+                room_players.pop(lookup, None)
+            room_players[player.plyrid] = replacement
 
 
 def _remove_player_from_cache(app: FastAPI, alias: str):
@@ -1421,7 +1502,12 @@ def _elf_trigger_outcome(events) -> str:
 
 
 def _persist_first_login_player(
-    db: OrmSession, player_id: str, template: models.PlayerModel, *, female: bool = False
+    db: OrmSession,
+    player_id: str,
+    template: models.PlayerModel,
+    *,
+    female: bool = False,
+    honor_mode: bool = True,
 ) -> models.Player:
     player_model = template.model_copy(deep=True)
     initialize_player_for_first_login(
@@ -1432,6 +1518,7 @@ def _persist_first_login_player(
         female=female,
         room_id=0,
     )
+    player_model.honor_mode = honor_mode
     player = models.Player(**player_model.model_dump())
     db.add(player)
     db.flush([player])
@@ -1634,9 +1721,11 @@ def _session_payload(
     lifecycle_messages: list[dict[str, str]] | None = None,
     account: models.Account | None = None,
     admin_grant: AdminGrant | None = None,
+    honor_mode_policy: HonorModePolicy | None = None,
 ):
     expires_at = _as_utc(session_record.expires_at)
     now = datetime.now(timezone.utc)
+    policy = honor_mode_policy or HonorModePolicy()
     return {
         "token": session_record.session_token,
         "player_id": player.plyrid,
@@ -1647,6 +1736,10 @@ def _session_payload(
         "resumed": resumed,
         "replaced_sessions": replaced_sessions,
         "player_flags": int(player.flags),
+        "honor_mode": bool(player.honor_mode),
+        "effective_honor_mode": policy.effective_honor_mode(
+            player, modern_features.FOUNTAIN_IMMEDIATE_SP_RESTORE
+        ),
         "account_userid": account.userid if account is not None else None,
         "session_kind": session_record.session_kind,
         "admin_grants": _admin_grant_payload(admin_grant),
@@ -1782,6 +1875,7 @@ async def _issue_player_session(
             lifecycle_messages=lifecycle_messages,
             account=account,
             admin_grant=admin_grant,
+            honor_mode_policy=_honor_mode_policy(request.app),
         ),
     }
     return JSONResponse(content=body, status_code=status_code)
@@ -1857,6 +1951,9 @@ async def register_account(
                 canonical_userid,
                 request.app.state.fixture_cache["player_template"],
                 female=_is_female_creation_choice(payload.background, payload.gender),
+                honor_mode=_honor_mode_policy(request.app).stored_creation_value(
+                    payload.honor_mode
+                ),
             )
             first_login = True
             lifecycle_messages = _first_login_lifecycle_messages(
@@ -1977,6 +2074,9 @@ async def start_session(
                 canonical_player_id,
                 template,
                 female=_is_female_creation_choice(payload.background, payload.gender),
+                honor_mode=_honor_mode_policy(request.app).stored_creation_value(
+                    payload.honor_mode
+                ),
             )
             first_login = True
             lifecycle_messages = _first_login_lifecycle_messages(
@@ -2101,6 +2201,7 @@ async def start_session(
             replaced_sessions=len(replaced_tokens),
             lifecycle_messages=lifecycle_messages,
             account=session_account,
+            honor_mode_policy=_honor_mode_policy(request.app),
         ),
     }
     return JSONResponse(content=body, status_code=status_code)
@@ -2147,19 +2248,25 @@ async def advance_session_lifecycle(
             session_record.room_id,
             first_login=True,
             lifecycle_messages=lifecycle_messages,
+            honor_mode_policy=_honor_mode_policy(request.app),
         ),
     }
 
 
 @auth_router.get("/session", response_model=SessionResponse)
 async def validate_session(
+    request: Request,
     session_context: Annotated[tuple[models.PlayerSession, models.Player], Depends(require_active_session)]
 ):
     session_record, player = session_context
     return {
         "status": "active",
         "session": _session_payload(
-            session_record, player, session_record.room_id, first_login=False
+            session_record,
+            player,
+            session_record.room_id,
+            first_login=False,
+            honor_mode_policy=_honor_mode_policy(request.app),
         ),
     }
 
@@ -2271,6 +2378,11 @@ players_router = APIRouter(prefix="/players", tags=["players"])
 
 
 public_router = APIRouter(prefix="/public", tags=["public"])
+
+
+@public_router.get("/runtime-mode")
+async def public_runtime_mode(request: Request):
+    return _honor_mode_policy(request.app).runtime_payload()
 
 
 @admin_router.get("/fixtures")
@@ -2557,12 +2669,18 @@ async def admin_list_players(
     provider: Annotated[FixtureProvider, Depends(get_request_provider)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
-    return {"players": [player.model_dump() for player in provider.players]}
+    return {
+        "players": [
+            _player_admin_payload(provider.scope.app, player)
+            for player in provider.players
+        ]
+    }
 
 
 @admin_router.get("/players/{player_id}")
 async def admin_get_player(
     player_id: str,
+    request: Request,
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
 ):
@@ -2570,7 +2688,7 @@ async def admin_get_player(
     if record is None:
         raise HTTPException(status_code=404, detail="Player not found")
     model = _player_model_from_record(record)
-    return {"player": model.model_dump()}
+    return {"player": _player_admin_payload(request.app, model)}
 
 
 @admin_router.post("/players", status_code=status.HTTP_201_CREATED)
@@ -2587,13 +2705,13 @@ async def admin_create_player(
     db.add(models.Player(**player.model_dump()))
     db.commit()
     _set_player_in_cache(provider.scope.app, player)
-    return {"status": "created", "player": player.model_dump()}
+    return {"status": "created", "player": _player_admin_payload(provider.scope.app, player)}
 
 
 @admin_router.put("/players/{player_id}")
 async def admin_update_player(
     player_id: str,
-    player: models.PlayerModel,
+    player: PlayerAdminReplacement,
     provider: Annotated[FixtureProvider, Depends(get_request_provider)],
     db: Annotated[OrmSession, Depends(get_db_session)],
     admin: Annotated[AdminGrant, Depends(require_player_admin)],
@@ -2611,7 +2729,8 @@ async def admin_update_player(
         if conflict and conflict.id != record.id:
             raise HTTPException(status_code=409, detail="Player alias already exists")
 
-    for field, value in player.model_dump().items():
+    player_data = player.model_dump(exclude={"effective_honor_mode"})
+    for field, value in player_data.items():
         setattr(record, field, value)
 
     db.commit()
@@ -2621,7 +2740,15 @@ async def admin_update_player(
         updated,
         original_alias=original_player_id if player.plyrid != original_player_id else None,
     )
-    return {"status": "updated", "player": updated.model_dump()}
+    if updated.plyrid != original_player_id:
+        for token, active_player in _active_player_sessions(provider.scope.app).items():
+            if active_player.plyrid == updated.plyrid:
+                await provider.presence.set_location(
+                    updated.plyrid,
+                    active_player.gamloc,
+                    token,
+                )
+    return {"status": "updated", "player": _player_admin_payload(provider.scope.app, updated)}
 
 
 @admin_router.patch("/players/{player_id}")
@@ -2649,7 +2776,7 @@ async def admin_patch_player(
 
     db.commit()
     _set_player_in_cache(provider.scope.app, updated)
-    return {"status": "updated", "player": updated.model_dump()}
+    return {"status": "updated", "player": _player_admin_payload(provider.scope.app, updated)}
 
 
 @admin_router.delete("/players/{player_id}")
@@ -3599,29 +3726,34 @@ def create_app() -> FastAPI:
         session_connections[session_token] = websocket
         provider.scope.app.state.game_socket_players[websocket] = player_id
 
+        def current_player_id() -> str:
+            return player_state.plyrid
+
         async def send_player_json(message: dict) -> None:
+            active_player_id = current_player_id()
             await _send_game_socket_json(
                 provider.scope.app,
                 websocket,
                 message,
-                player_id=player_id,
+                player_id=active_player_id,
             )
             await provider.scope.app.state.telemetry_sink.record(
-                userid=player_id,
+                userid=active_player_id,
                 event_type="output",
                 payload=message,
             )
 
         async def record_player_input(command_text: str) -> None:
             payload = {"command": command_text}
+            active_player_id = current_player_id()
             await provider.scope.app.state.telemetry_sink.record(
-                userid=player_id,
+                userid=active_player_id,
                 event_type="input",
                 payload=payload,
             )
             await _publish_scry_event(
                 provider.scope.app,
-                player_id,
+                active_player_id,
                 {"event_type": "input", "payload": payload},
             )
 
@@ -3790,12 +3922,18 @@ def create_app() -> FastAPI:
         async def _sync_current_room_from_state() -> None:
             nonlocal current_room
             target_room = state.player.gamloc
-            if target_room == current_room:
-                return
             if target_room < 0 or target_room not in state.locations:
                 return
+            active_player_id = current_player_id()
+            if target_room == current_room:
+                await provider.presence.set_location(
+                    active_player_id, target_room, session_token
+                )
+                return
             await gateway.register(target_room, websocket, announce=False)
-            await provider.presence.set_location(player_id, target_room, session_token)
+            await provider.presence.set_location(
+                active_player_id, target_room, session_token
+            )
             with provider.scope.app.state.session_factory() as db:
                 repo = repositories.PlayerSessionRepository(db)
                 repo.set_room(session_token, target_room)
@@ -3818,7 +3956,9 @@ def create_app() -> FastAPI:
             await gateway.unregister(current_room, websocket)
             if session_connections.get(session_token) is websocket:
                 session_connections.pop(session_token, None)
-            _remove_active_player_session(provider.scope.app, session_token, player_id)
+            _remove_active_player_session(
+                provider.scope.app, session_token, current_player_id()
+            )
             if websocket.application_state == WebSocketState.CONNECTED:
                 await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
 
@@ -3833,7 +3973,7 @@ def create_app() -> FastAPI:
                         "scope": "player",
                         "event": "player_level_up",
                         "type": "player_level_up",
-                        "player": player_id,
+                        "player": current_player_id(),
                         "previous_level": previous_level,
                         "level": state.player.level,
                         "location": location,
@@ -3952,7 +4092,7 @@ def create_app() -> FastAPI:
                     # Legacy kyra() runs the room routine before the command table.
                     # See legacy/KYRCMDS.C:1251-1257.
                     handled = await provider.room_scripts.handle_command(
-                        player_id,
+                        current_player_id(),
                         current_room,
                         command=verb,
                         args=arg_list,
@@ -3967,7 +4107,7 @@ def create_app() -> FastAPI:
                         # rooms opt out to preserve raw margv/GAMUTILS macro boundaries.
                         # See legacy/GAMUTILS.C:55-106.
                         handled = await provider.room_scripts.handle_command(
-                            player_id,
+                            current_player_id(),
                             current_room,
                             command=normalized_verb,
                             args=normalized_args,
@@ -4046,7 +4186,6 @@ def create_app() -> FastAPI:
                                         provider.scope.app,
                                         target_socket,
                                         envelope,
-                                        player_id=target_id,
                                     )
                             elif scope == "target":
                                 target_id = event.get("player")
@@ -4062,7 +4201,7 @@ def create_app() -> FastAPI:
                                 # while silent command metadata keeps actor effects in the suppressible stream.
                                 silent = bool(meta and meta.get("silent"))
                                 envelope_type = "command_response"
-                                if target_id == player_id and not silent:
+                                if target_id == current_player_id() and not silent:
                                     envelope_type = "room_broadcast"
                                 envelope_room = event.get("room_id", current_room)
                                 envelope = {"type": envelope_type, "room": envelope_room, "payload": event}
@@ -4121,7 +4260,7 @@ def create_app() -> FastAPI:
                                             "scope": "room",
                                             "event": "room_message",
                                             "type": "room_message",
-                                            "player": player_id,
+                                            "player": current_player_id(),
                                             "from": current_room,
                                             "to": None,
                                             "direction": None,
@@ -4174,7 +4313,7 @@ def create_app() -> FastAPI:
 
                                     occupant_event = await _room_occupants_event(
                                         provider.presence,
-                                        player_id,
+                                        current_player_id(),
                                         target_room,
                                         state.messages,
                                         _active_player_flags(provider.scope.app),
@@ -4194,13 +4333,15 @@ def create_app() -> FastAPI:
                                             provider.scope.app,
                                             target_socket,
                                             envelope,
-                                            player_id=player_id,
+                                            player_id=current_player_id(),
                                         )
 
                                 transfer_tokens = {session_token}
                                 if death_reset:
                                     transfer_tokens.update(
-                                        await provider.presence.sessions_for_player(player_id)
+                                        await provider.presence.sessions_for_player(
+                                            current_player_id()
+                                        )
                                     )
 
                                 for target_token in transfer_tokens:
@@ -4215,7 +4356,7 @@ def create_app() -> FastAPI:
                                         )
 
                                     await provider.presence.set_location(
-                                        player_id, target_room, target_token
+                                        current_player_id(), target_room, target_token
                                     )
                                     with provider.scope.app.state.session_factory() as db:
                                         repo = repositories.PlayerSessionRepository(db)
@@ -4235,7 +4376,7 @@ def create_app() -> FastAPI:
 
                                 if death_reset:
                                     sync_active_player_state_from_db(
-                                        provider.scope.app, player_id
+                                        provider.scope.app, current_player_id()
                                     )
 
                             if arrive_text:
@@ -4250,7 +4391,7 @@ def create_app() -> FastAPI:
                                             "scope": "room",
                                             "event": "room_message",
                                             "type": "room_message",
-                                            "player": player_id,
+                                            "player": current_player_id(),
                                             "from": None,
                                             "to": current_room,
                                             "direction": None,
@@ -4308,7 +4449,9 @@ def create_app() -> FastAPI:
                     and target_room in state.locations
                 ):
                     await gateway.register(target_room, websocket, announce=False)
-                    await provider.presence.set_location(player_id, target_room, session_token)
+                    await provider.presence.set_location(
+                        current_player_id(), target_room, session_token
+                    )
                     with provider.scope.app.state.session_factory() as db:
                         repo = repositories.PlayerSessionRepository(db)
                         repo.set_room(session_token, target_room)
@@ -4317,7 +4460,7 @@ def create_app() -> FastAPI:
                     current_room = target_room
                     occupant_event = await _room_occupants_event(
                         provider.presence,
-                        player_id,
+                        current_player_id(),
                         current_room,
                         state.messages,
                         _active_player_flags(provider.scope.app),
@@ -4482,7 +4625,9 @@ def create_app() -> FastAPI:
             await gateway.unregister(current_room, websocket)
         finally:
             if session_connections.get(session_token) is websocket:
-                _remove_active_player_session(provider.scope.app, session_token, player_id)
+                _remove_active_player_session(
+                    provider.scope.app, session_token, current_player_id()
+                )
                 session_connections.pop(session_token, None)
             getattr(provider.scope.app.state, "game_socket_players", {}).pop(websocket, None)
             # Close the persistent database session

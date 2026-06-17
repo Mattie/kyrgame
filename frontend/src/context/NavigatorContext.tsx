@@ -43,6 +43,8 @@ export type SessionRecord = {
   expiresAt?: string | null
   expiresInSeconds?: number | null
   playerFlags?: number | null
+  honorMode?: boolean | null
+  effectiveHonorMode?: boolean | null
   accountUserId?: string | null
   sessionKind?: SessionKind
   adminGrants?: AdminGrants
@@ -78,6 +80,23 @@ export type ActivityEntry = {
   meta?: Record<string, unknown>
 }
 
+export type ModernFeatureRecord = {
+  id: string
+  title: string
+  scope?: string
+  status?: string
+  honorBehavior?: string
+  modernBehavior?: string
+  legacyRefs?: string[]
+}
+
+export type RuntimeMode = {
+  forceHonorMode: boolean
+  defaultHonorMode: boolean
+  selectableHonorMode: boolean
+  modernFeatures: ModernFeatureRecord[]
+}
+
 export type ActivePlayerSummary = {
   player_id: string
   display_name: string
@@ -111,6 +130,7 @@ export type AdminUpdatePayload = {
   altnam?: string
   attnam?: string
   flags?: string[]
+  honor_mode?: boolean
   level?: number
   gamloc?: number
   pgploc?: number
@@ -136,6 +156,8 @@ export type AdminPlayerRecord = {
   plyrid: string
   altnam: string
   attnam: string
+  honor_mode: boolean
+  effective_honor_mode?: boolean
   gpobjs: number[]
   nmpdes?: number | null
   modno?: number | null
@@ -303,6 +325,7 @@ type RememberedSessionRecord = {
 type StartSessionOptions = {
   createPlayer?: boolean
   background?: 'lord' | 'lady'
+  honorMode?: boolean
   password?: string
   authMode?: AccountAuthMode
   sessionKind?: SessionKind
@@ -324,6 +347,7 @@ type SendCommandOptions = {
 type NavigatorContextValue = {
   apiBaseUrl: string
   session: SessionRecord | null
+  runtimeMode: RuntimeMode
   world: WorldData | null
   currentRoom: number | null
   occupants: string[]
@@ -351,7 +375,7 @@ type NavigatorContextValue = {
     slotIndex: number,
     expectedObjectId: number
   ) => Promise<AdminDeleteRoomObjectResponse>
-  applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<unknown>
+  applyAdminUpdate: (playerId: string, payload: AdminUpdatePayload) => Promise<AdminPlayerRecord>
   startScry: (player: ActivePlayerSummary) => void
   stopScry: () => void
   advanceLifecycle: (input: string) => Promise<void>
@@ -771,6 +795,58 @@ const parseAdminGrants = (value: unknown): AdminGrants => {
   }
 }
 
+const DEFAULT_RUNTIME_MODE: RuntimeMode = {
+  forceHonorMode: false,
+  defaultHonorMode: true,
+  selectableHonorMode: false,
+  modernFeatures: [],
+}
+
+const parseRuntimeMode = (value: unknown): RuntimeMode => {
+  if (!value || typeof value !== 'object') return DEFAULT_RUNTIME_MODE
+  const payload = value as Record<string, unknown>
+  const modernFeatures = Array.isArray(payload.modern_features)
+    ? payload.modern_features
+        .filter((feature): feature is Record<string, unknown> =>
+          Boolean(feature && typeof feature === 'object')
+        )
+        .map((feature) => ({
+          id: typeof feature.id === 'string' ? feature.id : '',
+          title: typeof feature.title === 'string' ? feature.title : '',
+          scope: typeof feature.scope === 'string' ? feature.scope : undefined,
+          status: typeof feature.status === 'string' ? feature.status : undefined,
+          honorBehavior:
+            typeof feature.honor_behavior === 'string'
+              ? feature.honor_behavior
+              : undefined,
+          modernBehavior:
+            typeof feature.modern_behavior === 'string'
+              ? feature.modern_behavior
+              : undefined,
+          legacyRefs: Array.isArray(feature.legacy_refs)
+            ? feature.legacy_refs.filter((entry): entry is string => typeof entry === 'string')
+            : undefined,
+        }))
+        .filter((feature) => feature.id !== '')
+    : []
+
+  return {
+    forceHonorMode:
+      typeof payload.force_honor_mode === 'boolean'
+        ? payload.force_honor_mode
+        : DEFAULT_RUNTIME_MODE.forceHonorMode,
+    defaultHonorMode:
+      typeof payload.default_honor_mode === 'boolean'
+        ? payload.default_honor_mode
+        : DEFAULT_RUNTIME_MODE.defaultHonorMode,
+    selectableHonorMode:
+      typeof payload.selectable_honor_mode === 'boolean'
+        ? payload.selectable_honor_mode
+        : DEFAULT_RUNTIME_MODE.selectableHonorMode,
+    modernFeatures,
+  }
+}
+
 const parseSessionKind = (value: unknown): SessionKind =>
   value === 'admin' ? 'admin' : 'game'
 
@@ -807,6 +883,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), [])
   const wsBaseUrl = useMemo(() => getWebSocketUrl(), [])
   const [session, setSession] = useState<SessionRecord | null>(null)
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>(DEFAULT_RUNTIME_MODE)
   const [world, setWorld] = useState<WorldData | null>(null)
   const [activity, setActivity] = useState<ActivityEntry[]>([])
   const [currentRoom, setCurrentRoom] = useState<number | null>(null)
@@ -1643,6 +1720,19 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     return response.json()
   }, [])
 
+  const loadRuntimeMode = useCallback(async () => {
+    try {
+      const payload = await fetchJson(`${apiBaseUrl}/public/runtime-mode`)
+      setRuntimeMode(parseRuntimeMode(payload))
+    } catch {
+      setRuntimeMode(DEFAULT_RUNTIME_MODE)
+    }
+  }, [apiBaseUrl, fetchJson])
+
+  useEffect(() => {
+    void loadRuntimeMode()
+  }, [loadRuntimeMode])
+
   const logoutToken = useCallback(
     async (token: string | null | undefined) => {
       if (!token) return
@@ -1730,7 +1820,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         throw new Error(detail || 'Admin update failed')
       }
 
-      const data = await response.json()
+      const data = (await response.json()) as { player: AdminPlayerRecord }
       return data.player
     },
     [adminToken, apiBaseUrl]
@@ -1940,6 +2030,13 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         if (options?.background) {
           payload.background = options.background
         }
+        if (
+          options?.honorMode !== undefined &&
+          runtimeMode.selectableHonorMode &&
+          (options?.createPlayer || authMode === 'register')
+        ) {
+          payload.honor_mode = options.honorMode
+        }
         if (roomId !== undefined && roomId !== null && !Number.isNaN(roomId)) {
           payload.room_id = roomId
         }
@@ -1998,6 +2095,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               ? sessionPayload.expires_in_seconds
               : null,
           playerFlags,
+          honorMode:
+            typeof sessionPayload.honor_mode === 'boolean'
+              ? sessionPayload.honor_mode
+              : null,
+          effectiveHonorMode:
+            typeof sessionPayload.effective_honor_mode === 'boolean'
+              ? sessionPayload.effective_honor_mode
+              : null,
           accountUserId:
             typeof sessionPayload.account_userid === 'string'
               ? sessionPayload.account_userid
@@ -2070,6 +2175,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       logoutToken,
       parseSessionError,
       resetSocket,
+      runtimeMode.selectableHonorMode,
       setAdminToken,
       updateOccupants,
     ]
@@ -2191,6 +2297,14 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
               ? sessionPayload.expires_in_seconds
               : currentSession.expiresInSeconds ?? null,
           playerFlags,
+          honorMode:
+            typeof sessionPayload.honor_mode === 'boolean'
+              ? sessionPayload.honor_mode
+              : currentSession.honorMode ?? null,
+          effectiveHonorMode:
+            typeof sessionPayload.effective_honor_mode === 'boolean'
+              ? sessionPayload.effective_honor_mode
+              : currentSession.effectiveHonorMode ?? null,
           lifecycle,
         }
         setSession(nextRecord)
@@ -2314,6 +2428,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     () => ({
       apiBaseUrl,
       session,
+      runtimeMode,
       world,
       currentRoom,
       occupants,
@@ -2362,6 +2477,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       occupants,
       playerVisuals,
       resumeRememberedSession,
+      runtimeMode,
       scrySession,
       setAdminToken,
       sendMove,

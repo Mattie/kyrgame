@@ -21,7 +21,16 @@ class PresenceService:
         token = session_token or player_id
         async with self._lock:
             previous = self.session_rooms.get(token)
+            previous_player = self.session_players.get(token)
             if previous == room_id:
+                if previous_player != player_id:
+                    if previous_player is not None and previous_player in self.player_sessions:
+                        token_set = self.player_sessions[previous_player]
+                        token_set.discard(token)
+                        if not token_set:
+                            del self.player_sessions[previous_player]
+                    self.session_players[token] = player_id
+                    self.player_sessions[player_id].add(token)
                 return previous
 
             if previous is not None and previous in self.room_sessions:
@@ -29,6 +38,11 @@ class PresenceService:
                 room_set.discard(token)
                 if not room_set:
                     del self.room_sessions[previous]
+            if previous_player is not None and previous_player in self.player_sessions:
+                token_set = self.player_sessions[previous_player]
+                token_set.discard(token)
+                if not token_set:
+                    del self.player_sessions[previous_player]
 
             self.session_rooms[token] = room_id
             self.session_players[token] = player_id
