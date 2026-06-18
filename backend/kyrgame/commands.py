@@ -2169,7 +2169,7 @@ def _append_modern_death_drop_events(
                 state,
                 "DROPIT3",
                 plan.old_name,
-                _hisher(dead_player),
+                plan.old_possessive_pronoun,
                 obj.name if obj else str(object_id),
             )
             target_event = _message_event(

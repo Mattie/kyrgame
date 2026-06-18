@@ -796,6 +796,7 @@ def test_zarfood_uses_modern_death_recovery_for_non_honor_player():
         and event.payload.get("object_id") == 0
     )
     assert room_drop_event.payload.get("exclude_player") == "target"
+    assert "dropped its" in room_drop_event.message_text
     target_drop_event = next(
         event
         for event in events
@@ -804,6 +805,7 @@ def test_zarfood_uses_modern_death_recovery_for_non_honor_player():
         and event.payload.get("object_id") == 0
     )
     assert target_drop_event.payload.get("pre_death_drop") is True
+    assert "dropped its" in target_drop_event.payload["target_text"]
     target_drop_index = next(
         index
         for index, event in enumerate(events)

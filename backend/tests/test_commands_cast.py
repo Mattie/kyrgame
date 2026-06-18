@@ -1503,6 +1503,7 @@ async def test_cast_zelastone_target_hit_modern_death_recovery_drops_and_filters
         and event.get("object_id") == 0
     )
     assert room_drop_event.get("exclude_player") == "target"
+    assert "dropped its" in room_drop_event.get("text", "")
     target_drop_event = next(
         event
         for event in result.events
@@ -1511,6 +1512,7 @@ async def test_cast_zelastone_target_hit_modern_death_recovery_drops_and_filters
         and event.get("object_id") == 0
     )
     assert target_drop_event.get("pre_death_drop") is True
+    assert "dropped its" in target_drop_event.get("text", "")
     target_drop_index = next(
         index
         for index, event in enumerate(result.events)

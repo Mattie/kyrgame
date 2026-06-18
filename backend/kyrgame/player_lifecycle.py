@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import constants
+from . import constants, models
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,7 @@ class DeathRecoveryPlan:
     mode: str
     player_id: str
     old_name: str
+    old_possessive_pronoun: str
     old_room: int
     old_level: int
     new_level: int
@@ -158,6 +159,7 @@ def build_modern_death_recovery_plan(
         mode="modern_death_recovery",
         player_id=player.plyrid,
         old_name=player.altnam,
+        old_possessive_pronoun=models.possessive_pronoun(player),
         old_room=old_room,
         old_level=old_level,
         new_level=new_level,

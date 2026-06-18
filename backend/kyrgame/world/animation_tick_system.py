@@ -211,10 +211,6 @@ class _ChancePickerRandom:
         return self._chance_picker(low, high)
 
 
-def _player_pronoun_possessive(player: models.PlayerModel) -> str:
-    return "her" if player.flags & constants.PlayerFlag.FEMALE else "his"
-
-
 def _modern_death_metadata(
     plan: DeathRecoveryPlan,
     *,
@@ -535,7 +531,7 @@ class ZarDragonRoutine:
                 drop_text = self._message_formatter(
                     "DROPIT3",
                     plan.old_name,
-                    _player_pronoun_possessive(player),
+                    plan.old_possessive_pronoun,
                     self._object_name_lookup(object_id),
                 )
                 events.append(

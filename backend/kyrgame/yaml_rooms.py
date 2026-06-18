@@ -678,7 +678,7 @@ class YamlRoomEngine:
                         "text": self._message(
                             "DROPIT3",
                             plan.old_name,
-                            _player_pronoun_possessive(player),
+                            plan.old_possessive_pronoun,
                             obj.name if obj else str(object_id),
                         ),
                         "player": player.plyrid,
@@ -699,9 +699,9 @@ class YamlRoomEngine:
                 **target_metadata,
             }
         )
-        killed = self.messages.messages.get("KILLED", "")
-        if killed:
-            killed = killed % plan.old_name
+        # modern_death_recovery: keep KILLED formatting on the YAML-safe
+        # wrapper so a catalog placeholder issue cannot interrupt recovery.
+        killed = self._message("KILLED", plan.old_name)
         events.append(
             {
                 "scope": "broadcast",
@@ -1219,10 +1219,6 @@ class YamlRoomEngine:
                 entry["name"] = obj.name
             entries.append(entry)
         return entries
-
-
-def _player_pronoun_possessive(player: models.PlayerModel) -> str:
-    return "her" if player.flags & constants.PlayerFlag.FEMALE else "his"
 
 
 def _modern_death_metadata(

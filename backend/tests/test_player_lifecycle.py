@@ -207,6 +207,8 @@ def test_modern_death_recovery_clears_memorized_spells_but_preserves_spellbook()
     apply_death_recovery_plan(player, locations, plan)
 
     assert plan.mode == "modern_death_recovery"
+    assert plan.old_name == "Some willowisp"
+    assert plan.old_possessive_pronoun == "its"
     assert plan.old_room == 218
     assert plan.old_level == 10
     assert plan.new_level == 9

@@ -206,6 +206,7 @@ def test_damage_action_resets_only_when_damage_kills():
 
 def test_damage_action_uses_modern_death_recovery_for_non_honor_player():
     messages = fixtures.load_messages()
+    messages.messages["KILLED"] = "bad killed template %s %s"
     objects = fixtures.load_objects()
     spells = fixtures.load_spells()
     locations = {location.id: location for location in fixtures.load_locations()}
@@ -300,8 +301,13 @@ def test_damage_action_uses_modern_death_recovery_for_non_honor_player():
         evt.get("scope") == "broadcast"
         and evt.get("message_id") == "DROPIT3"
         and evt.get("object_id") == 0
+        and "dropped its" in evt.get("text", "")
         for evt in died.events
     )
+    killed_event = next(
+        evt for evt in died.events if evt.get("message_id") == "KILLED"
+    )
+    assert killed_event.get("text") == "bad killed template %s %s"
     drop_index = next(
         index
         for index, evt in enumerate(died.events)
