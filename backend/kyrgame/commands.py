@@ -2036,6 +2036,9 @@ def _append_modern_death_recovery_events(
     """Append command events after modern_death_recovery persistence succeeds."""
 
     target_metadata = _modern_death_event_metadata(plan, recipient_scope="target")
+    # modern_death_recovery: tell the victim and occupants about inventory
+    # drops before death/arrival messaging. See docs/MODERN_FEATURES.md.
+    _append_modern_death_drop_events(state, dead_player, command_id, events, plan)
     death_event = _message_event(
         "target",
         "DIEMSG",
@@ -2093,7 +2096,6 @@ def _append_modern_death_recovery_events(
             **nearby_metadata,
         },
     )
-    _append_modern_death_drop_events(state, dead_player, command_id, events, plan)
 
 
 def _append_modern_death_drop_events(
@@ -2106,6 +2108,9 @@ def _append_modern_death_drop_events(
     """Broadcast modern_death_recovery inventory drops room by room."""
 
     metadata = _modern_death_event_metadata(plan, recipient_scope="room")
+    target_metadata = _modern_death_event_metadata(plan, recipient_scope="target")
+    target_metadata.pop("death_reset", None)
+    target_metadata["pre_death_drop"] = True
     for room_update in plan.room_object_updates:
         location = state.locations.get(room_update.room_id)
         if location is None:
@@ -2118,10 +2123,41 @@ def _append_modern_death_drop_events(
             scope="room",
             include_sender=True,
         )
-        objects_event.update({"room_id": room_update.room_id, **metadata})
+        # modern_death_recovery: the victim gets the explicit pre-death
+        # DROPIT3 target event below; room fan-out is for other witnesses.
+        # See docs/MODERN_FEATURES.md.
+        objects_event.update(
+            {
+                "room_id": room_update.room_id,
+                "exclude_player": plan.player_id,
+                **metadata,
+            }
+        )
         events.append(objects_event)
         for object_id in room_update.dropped_items:
             obj = state.objects.get(object_id) if state.objects else None
+            drop_text = _format_message(
+                state,
+                "DROPIT3",
+                plan.old_name,
+                _hisher(dead_player),
+                obj.name if obj else str(object_id),
+            )
+            target_event = _message_event(
+                "target",
+                "DROPIT3",
+                drop_text,
+                command_id,
+            )
+            target_event.update(
+                {
+                    "player": plan.player_id,
+                    "room_id": room_update.room_id,
+                    "object_id": object_id,
+                    **target_metadata,
+                }
+            )
+            events.append(target_event)
             events.append(
                 {
                     "scope": "room",
@@ -2129,16 +2165,11 @@ def _append_modern_death_drop_events(
                     "event": "room_message",
                     "type": "room_message",
                     "player": plan.player_id,
-                    "text": _format_message(
-                        state,
-                        "DROPIT3",
-                        plan.old_name,
-                        _hisher(dead_player),
-                        obj.name if obj else str(object_id),
-                    ),
+                    "text": drop_text,
                     "message_id": "DROPIT3",
                     "command_id": command_id,
                     "include_sender": True,
+                    "exclude_player": plan.player_id,
                     "object_id": object_id,
                     **metadata,
                 }

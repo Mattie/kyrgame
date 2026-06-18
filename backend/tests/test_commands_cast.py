@@ -1435,13 +1435,57 @@ async def test_cast_zelastone_target_hit_modern_death_recovery_drops_and_filters
         == [constants.SOULSTONE_OBJECT_ID, constants.KYRAGEM_OBJECT_ID]
         for event in result.events
     )
-    assert any(
-        event.get("scope") == "room"
+    room_objects_event = next(
+        event
+        for event in result.events
+        if event.get("scope") == "room"
+        and event.get("room_id") == 302
+        and event.get("event") == "room_objects"
+    )
+    assert room_objects_event.get("exclude_player") == "target"
+    room_drop_event = next(
+        event
+        for event in result.events
+        if event.get("scope") == "room"
         and event.get("room_id") == 302
         and event.get("message_id") == "DROPIT3"
         and event.get("object_id") == 0
-        for event in result.events
     )
+    assert room_drop_event.get("exclude_player") == "target"
+    target_drop_event = next(
+        event
+        for event in result.events
+        if event.get("scope") == "target"
+        and event.get("message_id") == "DROPIT3"
+        and event.get("object_id") == 0
+    )
+    assert target_drop_event.get("pre_death_drop") is True
+    target_drop_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("scope") == "target"
+        and event.get("message_id") == "DROPIT3"
+        and event.get("object_id") == 0
+    )
+    target_death_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("scope") == "target" and event.get("message_id") == "DIEMSG"
+    )
+    room_drop_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("scope") == "room"
+        and event.get("room_id") == 302
+        and event.get("message_id") == "DROPIT3"
+    )
+    killed_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("message_id") == "KILLED"
+    )
+    assert target_drop_index < target_death_index
+    assert room_drop_index < killed_index
     assert not any(
         event.get("scope") == "nearby_room"
         and event.get("room_id") == 302

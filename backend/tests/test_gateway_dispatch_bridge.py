@@ -3470,6 +3470,12 @@ async def test_websocket_zar_death_uses_modern_recovery_for_non_honor_player(mon
                         )
                         await app.state.animation_tick_callback()
 
+                        hero_drop = await _recv_matching(
+                            hero_ws,
+                            lambda msg: msg.get("type") == "command_response"
+                            and msg.get("payload", {}).get("message_id") == "DROPIT3",
+                            timeout=2.0,
+                        )
                         death = await _recv_matching(
                             hero_ws,
                             lambda msg: msg.get("type") == "command_response"
@@ -3504,6 +3510,9 @@ async def test_websocket_zar_death_uses_modern_recovery_for_non_honor_player(mon
                             timeout=2.0,
                         )
 
+                        assert hero_drop["payload"]["pre_death_drop"] is True
+                        assert hero_drop["payload"]["object_id"] == 0
+                        assert hero_drop["payload"]["recipient_scope"] == "target"
                         assert death["payload"]["modern_death_recovery"] is True
                         assert death["payload"]["old_level"] == 10
                         assert death["payload"]["new_level"] == 9

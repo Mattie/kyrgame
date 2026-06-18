@@ -652,6 +652,42 @@ class YamlRoomEngine:
         """
         target_metadata = _modern_death_metadata(plan, recipient_scope="target")
         room_metadata = _modern_death_metadata(plan, recipient_scope="room")
+        # modern_death_recovery: YAML keeps the victim in the death room until
+        # room_transfer is processed, so these drop broadcasts intentionally
+        # reach them before DIEMSG. See docs/MODERN_FEATURES.md.
+        for room_update in plan.room_object_updates:
+            events.append(
+                {
+                    "scope": "broadcast",
+                    "event": "room_objects",
+                    "type": "room_objects",
+                    "room_id": room_update.room_id,
+                    "location": room_update.room_id,
+                    "objects": self._room_object_entries(room_update.object_ids),
+                    "include_sender": True,
+                    **room_metadata,
+                }
+            )
+            for object_id in room_update.dropped_items:
+                obj = self.objects_by_id.get(object_id)
+                events.append(
+                    {
+                        "scope": "broadcast",
+                        "event": "room_message",
+                        "message_id": "DROPIT3",
+                        "text": self._message(
+                            "DROPIT3",
+                            plan.old_name,
+                            _player_pronoun_possessive(player),
+                            obj.name if obj else str(object_id),
+                        ),
+                        "player": player.plyrid,
+                        "room_id": room_update.room_id,
+                        "include_sender": True,
+                        "object_id": object_id,
+                        **room_metadata,
+                    }
+                )
         events.append(
             {
                 "scope": "direct",
@@ -688,39 +724,6 @@ class YamlRoomEngine:
                 **target_metadata,
             }
         )
-        for room_update in plan.room_object_updates:
-            events.append(
-                {
-                    "scope": "broadcast",
-                    "event": "room_objects",
-                    "type": "room_objects",
-                    "room_id": room_update.room_id,
-                    "location": room_update.room_id,
-                    "objects": self._room_object_entries(room_update.object_ids),
-                    "include_sender": True,
-                    **room_metadata,
-                }
-            )
-            for object_id in room_update.dropped_items:
-                obj = self.objects_by_id.get(object_id)
-                events.append(
-                    {
-                        "scope": "broadcast",
-                        "event": "room_message",
-                        "message_id": "DROPIT3",
-                        "text": self._message(
-                            "DROPIT3",
-                            plan.old_name,
-                            _player_pronoun_possessive(player),
-                            obj.name if obj else str(object_id),
-                        ),
-                        "player": player.plyrid,
-                        "room_id": room_update.room_id,
-                        "include_sender": True,
-                        "object_id": object_id,
-                        **room_metadata,
-                    }
-                )
 
     def _action_grant_spell(
         self, action: dict, player: models.PlayerModel, context: dict[str, Any]

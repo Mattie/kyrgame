@@ -68,12 +68,13 @@ Inventory placement:
 - If every eligible room is full, remaining items vanish and death recovery still completes.
 - Ground objects store object ids only, so carried `obvals` are intentionally discarded.
 - Rooms that receive drops get `room_objects` refresh events and `DROPIT3` drop messages.
+- Drop notifications are intentionally emitted before `DIEMSG`, `KILLED`, and willow-arrival events. Command and Zar paths also send the victim a direct pre-death `DROPIT3` notice for each dropped item.
 
 Persistence and events:
 
 - Command and live Zar paths stage the recovered player row and changed room-object rows in one database commit when a session is available.
 - Success broadcasts are emitted after the recovery plan is applied and persisted.
-- Events include `death_reset`, `modern_death_recovery`, `old_level`, `new_level`, `filtered_items`, `vanished_items`, `dropped_rooms`, `refresh_location`, and `recipient_scope`.
+- Events include `death_reset`, `modern_death_recovery`, `old_level`, `new_level`, `filtered_items`, `vanished_items`, `dropped_rooms`, `refresh_location`, `recipient_scope`, and pre-death drop metadata where applicable.
 - Death messaging reuses `DIEMSG`, `KILLED`, holy-light arrival text, `room_objects`, and `DROPIT3`.
 
 ## Adding A Feature

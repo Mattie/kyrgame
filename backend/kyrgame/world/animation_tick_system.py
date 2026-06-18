@@ -509,51 +509,10 @@ class ZarDragonRoutine:
 
         target_metadata = _modern_death_metadata(plan, recipient_scope="target")
         room_metadata = _modern_death_metadata(plan, recipient_scope="room")
-        events = [
-            AnimationTickEvent(
-                flag="zarfood",
-                room_id=room_id,
-                payload={
-                    "target_only": True,
-                    "target_player": player.plyrid,
-                    "target_message_id": "DIEMSG",
-                    "target_text": self._message_formatter("DIEMSG"),
-                    **target_metadata,
-                },
-            ),
-            AnimationTickEvent(
-                flag="zarfood",
-                room_id=room_id,
-                message_id="KILLED",
-                message_text=self._message_formatter("KILLED", plan.old_name),
-                payload={"exclude_player": player.plyrid, **room_metadata},
-            ),
-            AnimationTickEvent(
-                flag="zarfood",
-                room_id=constants.WILLOW_ROOM_ID,
-                payload={
-                    "target_only": True,
-                    "target_player": player.plyrid,
-                    "target_event": "location_update",
-                    "target_type": "location_update",
-                    "location": constants.WILLOW_ROOM_ID,
-                    "move_player_to": constants.WILLOW_ROOM_ID,
-                    **target_metadata,
-                },
-            ),
-            AnimationTickEvent(
-                flag="zarfood",
-                room_id=constants.WILLOW_ROOM_ID,
-                message_text=f"*** {player.plyrid} has just appeared in a holy light!",
-                payload={
-                    "event": "room_message",
-                    "type": "room_message",
-                    "exclude_player": player.plyrid,
-                    "player": player.plyrid,
-                    **room_metadata,
-                },
-            ),
-        ]
+        predeath_target_metadata = dict(target_metadata)
+        predeath_target_metadata.pop("death_reset", None)
+        predeath_target_metadata["pre_death_drop"] = True
+        events: list[AnimationTickEvent] = []
         for room_update in plan.room_object_updates:
             events.append(
                 AnimationTickEvent(
@@ -563,30 +522,98 @@ class ZarDragonRoutine:
                         **_room_objects_payload(
                             room_update.room_id, room_update.object_ids
                         ),
+                        # modern_death_recovery: victim-facing pre-death drop
+                        # notices are target-only events; room broadcasts keep
+                        # notifying the nearby witnesses. See
+                        # docs/MODERN_FEATURES.md.
+                        "exclude_player": player.plyrid,
                         **room_metadata,
                     },
                 )
             )
             for object_id in room_update.dropped_items:
+                drop_text = self._message_formatter(
+                    "DROPIT3",
+                    plan.old_name,
+                    _player_pronoun_possessive(player),
+                    self._object_name_lookup(object_id),
+                )
+                events.append(
+                    AnimationTickEvent(
+                        flag="zarfood",
+                        room_id=room_update.room_id,
+                        payload={
+                            "target_only": True,
+                            "target_player": player.plyrid,
+                            "target_message_id": "DROPIT3",
+                            "target_text": drop_text,
+                            "object_id": object_id,
+                            **predeath_target_metadata,
+                        },
+                    )
+                )
                 events.append(
                     AnimationTickEvent(
                         flag="zarfood",
                         room_id=room_update.room_id,
                         message_id="DROPIT3",
-                        message_text=self._message_formatter(
-                            "DROPIT3",
-                            plan.old_name,
-                            _player_pronoun_possessive(player),
-                            self._object_name_lookup(object_id),
-                        ),
+                        message_text=drop_text,
                         payload={
                             "event": "room_message",
                             "type": "room_message",
+                            "exclude_player": player.plyrid,
                             "object_id": object_id,
                             **room_metadata,
                         },
                     )
                 )
+        events.extend(
+            [
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=room_id,
+                    payload={
+                        "target_only": True,
+                        "target_player": player.plyrid,
+                        "target_message_id": "DIEMSG",
+                        "target_text": self._message_formatter("DIEMSG"),
+                        **target_metadata,
+                    },
+                ),
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=room_id,
+                    message_id="KILLED",
+                    message_text=self._message_formatter("KILLED", plan.old_name),
+                    payload={"exclude_player": player.plyrid, **room_metadata},
+                ),
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=constants.WILLOW_ROOM_ID,
+                    payload={
+                        "target_only": True,
+                        "target_player": player.plyrid,
+                        "target_event": "location_update",
+                        "target_type": "location_update",
+                        "location": constants.WILLOW_ROOM_ID,
+                        "move_player_to": constants.WILLOW_ROOM_ID,
+                        **target_metadata,
+                    },
+                ),
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=constants.WILLOW_ROOM_ID,
+                    message_text=f"*** {player.plyrid} has just appeared in a holy light!",
+                    payload={
+                        "event": "room_message",
+                        "type": "room_message",
+                        "exclude_player": player.plyrid,
+                        "player": player.plyrid,
+                        **room_metadata,
+                    },
+                ),
+            ]
+        )
         return events
 
     def _reset_dead_player(self, player: models.PlayerModel):

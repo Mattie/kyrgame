@@ -302,6 +302,25 @@ def test_damage_action_uses_modern_death_recovery_for_non_honor_player():
         and evt.get("object_id") == 0
         for evt in died.events
     )
+    drop_index = next(
+        index
+        for index, evt in enumerate(died.events)
+        if evt.get("scope") == "broadcast"
+        and evt.get("message_id") == "DROPIT3"
+        and evt.get("object_id") == 0
+    )
+    death_index = next(
+        index
+        for index, evt in enumerate(died.events)
+        if evt.get("scope") == "direct" and evt.get("message_id") == "DIEMSG"
+    )
+    killed_index = next(
+        index
+        for index, evt in enumerate(died.events)
+        if evt.get("message_id") == "KILLED"
+    )
+    assert drop_index < death_index
+    assert drop_index < killed_index
 
 
 def test_nonlethal_damage_action_clamps_without_death_reset():

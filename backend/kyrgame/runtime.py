@@ -788,6 +788,8 @@ async def bootstrap_app(app: FastAPI):
                 "dropped_rooms",
                 "refresh_location",
                 "recipient_scope",
+                "pre_death_drop",
+                "object_id",
             ):
                 if metadata_key in event_payload:
                     target_payload[metadata_key] = event_payload[metadata_key]

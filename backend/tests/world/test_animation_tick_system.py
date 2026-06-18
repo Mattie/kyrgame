@@ -781,18 +781,53 @@ def test_zarfood_uses_modern_death_recovery_for_non_honor_player():
         == [constants.SOULSTONE_OBJECT_ID, constants.KYRAGEM_OBJECT_ID]
         for event in events
     )
-    assert any(
-        event.payload.get("event") == "room_objects"
-        and event.room_id == 302
-        and event.payload.get("modern_death_recovery") is True
+    room_objects_event = next(
+        event
         for event in events
+        if event.payload.get("event") == "room_objects" and event.room_id == 302
     )
-    assert any(
-        event.message_id == "DROPIT3"
+    assert room_objects_event.payload.get("modern_death_recovery") is True
+    assert room_objects_event.payload.get("exclude_player") == "target"
+    room_drop_event = next(
+        event
+        for event in events
+        if event.message_id == "DROPIT3"
         and event.room_id == 302
         and event.payload.get("object_id") == 0
-        for event in events
     )
+    assert room_drop_event.payload.get("exclude_player") == "target"
+    target_drop_event = next(
+        event
+        for event in events
+        if event.payload.get("target_message_id") == "DROPIT3"
+        and event.payload.get("target_player") == "target"
+        and event.payload.get("object_id") == 0
+    )
+    assert target_drop_event.payload.get("pre_death_drop") is True
+    target_drop_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.payload.get("target_message_id") == "DROPIT3"
+        and event.payload.get("target_player") == "target"
+        and event.payload.get("object_id") == 0
+    )
+    target_death_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.payload.get("target_message_id") == "DIEMSG"
+    )
+    room_drop_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.message_id == "DROPIT3"
+        and event.room_id == 302
+        and event.payload.get("object_id") == 0
+    )
+    killed_index = next(
+        index for index, event in enumerate(events) if event.message_id == "KILLED"
+    )
+    assert target_drop_index < target_death_index
+    assert room_drop_index < killed_index
 
 
 def test_zarfood_modern_death_persister_failure_keeps_predeath_state():
