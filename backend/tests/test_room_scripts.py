@@ -20,6 +20,17 @@ class FakeGateway:
         self.messages.append(message)
 
 
+class FixedDeathRecoveryRng:
+    def __init__(self):
+        self.shuffle_result = [2, 0, 95, 72]
+
+    def shuffle(self, values):
+        values[:] = self.shuffle_result[: len(values)]
+
+    def randrange(self, low: int, high: int) -> int:  # noqa: ARG002
+        return low
+
+
 ADMIN_TOKEN = "test-admin-token"
 ADMIN_HEADERS = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
@@ -946,6 +957,93 @@ async def test_fountain_drink_force_honor_uses_default_water_message():
     assert handled is True
     assert player.spts == 2
     assert messages.messages["DRINK0"] in _direct_texts(gateway)
+
+
+@pytest.mark.anyio
+async def test_yaml_modern_death_spill_updates_all_live_room_object_stores():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    locations = {location.id: location for location in fixtures.load_locations()}
+    locations[1] = locations[1].model_copy(
+        update={"objects": [10, 11, 12, 13, 14], "nlobjs": 5}
+    )
+    locations[2] = locations[2].model_copy(
+        update={"objects": [20, 21, 22, 23, 24], "nlobjs": 5}
+    )
+    room_objects = {
+        1: [10, 11, 12, 13, 14],
+        2: [20, 21, 22, 23, 24],
+    }
+    synced: list[tuple[int, list[int]]] = []
+    definitions = {
+        "rooms": [
+            {
+                "id": 1,
+                "triggers": [
+                    {
+                        "verbs": ["die"],
+                        "actions": [{"type": "damage", "amount": 99}],
+                    }
+                ],
+            }
+        ]
+    }
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=locations.values(),
+        messages=fixtures.load_messages(),
+        players=[],
+        room_scripts=definitions,
+        objects=fixtures.load_objects(),
+        spells=fixtures.load_spells(),
+        room_objects_getter=lambda room_id: room_objects.get(
+            room_id, list(locations[room_id].objects)
+        ),
+        room_objects_setter=lambda room_id, objects: (
+            room_objects.__setitem__(room_id, list(objects)),
+            synced.append((room_id, list(objects))),
+        ),
+    )
+    assert engine.yaml_engine is not None
+    engine.yaml_engine.rng = FixedDeathRecoveryRng()
+    player = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "ztspill",
+            "gamloc": 1,
+            "pgploc": 1,
+            "level": 10,
+            "hitpts": 1,
+            "gpobjs": [0, 1],
+            "obvals": [10, 20],
+            "npobjs": 2,
+            "honor_mode": False,
+        }
+    )
+
+    handled = await engine.handle_command(
+        player.plyrid,
+        1,
+        "die",
+        [],
+        player_level=player.level,
+        player=player,
+    )
+
+    assert handled is True
+    assert room_objects[1] == [10, 11, 12, 13, 14, 0]
+    assert room_objects[2] == [20, 21, 22, 23, 24, 1]
+    assert synced == [
+        (1, [10, 11, 12, 13, 14, 0]),
+        (2, [20, 21, 22, 23, 24, 1]),
+    ]
+    room_object_events = [
+        event
+        for event in engine.get_and_clear_pending_events()
+        if event.get("event") == "room_objects"
+    ]
+    assert [event["location"] for event in room_object_events] == [1, 2]
+    assert all(event.get("modern_death_recovery") is True for event in room_object_events)
 
 
 @pytest.mark.anyio

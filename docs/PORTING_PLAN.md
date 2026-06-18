@@ -99,7 +99,7 @@
 - [x] Audited and tightened upper-level journey room command boundaries against legacy macro behavior (`gi_bagthe`, `bagprep`, `bagwrd`, `rstrin`/`sameas`, and `hitoth`) so strict rooms no longer inherit generic normalized retry shortcuts.
 - [x] Fixed room 32 bubbling spring rose pickup parity so full inventories emit `GROSE3`/`GROSE4` and successful pickups grant object 40 before `GROSE1`/`GROSE2`, matching `rosutl()` (`legacy/KYRROUS.C:742-753`).
 - [x] Restored room 38 magic fountain offering parity so `drop`/`throw`/`toss <item> in fountain` consumes inventory, blessed pinecones spawn scroll object 35 in the live world every third offering, shards grant object 16 every sixth offering, and `FOUNTI` sets `BLESSD`, matching `magicf()` (`legacy/KYRROUS.C:759-819`).
-- [x] Added the honor-mode separation layer for future non-port features, including the `honor_mode` player flag, `KYRGAME_FORCE_HONOR_MODE` startup override, public runtime-mode policy endpoint, and the enumerated `docs/MODERN_FEATURES.md` registry. The first registered modern feature is room 38 fountain immediate spell-point restore for non-honor players.
+- [x] Added the honor-mode separation layer for future non-port features, including the `honor_mode` player flag, `KYRGAME_FORCE_HONOR_MODE` startup override, public runtime-mode policy endpoint, and the enumerated `docs/MODERN_FEATURES.md` registry. Registered modern features now include room 38 fountain immediate spell-point restore and `modern_death_recovery` for non-honor player deaths.
 - [x] Restored room 185 smooth-walled alcove key/crevice verb parity so `waller()` uses legacy `drpwrds` (`drop`/`insert`/`put`/`stick`/`thrust`) after `bagprep()` strips prepositions, matching `legacy/KYRROUS.C:109-115` and `legacy/KYRROUS.C:939-960`.
 - [x] Preserved room 185 `waller()` offered-object gating so only `key` succeeds at the crevice; wrong offerings still emit `WALM01`/`WALM02`.
 - [x] Added player-targeted GET parsing and getgp-style theft handling (including room/target broadcasts).
@@ -125,6 +125,7 @@
 ### Legacy Gameplay Support Gaps
 
 - [x] Shared `hitoth()` death handling for all spell/self/area damage paths, including reset, room fan-out, active-session relocation, and DB persistence. *(Extended coverage to the room-script `damage` action and readable scroll damage, including ruby cache, flaming thicket, and scroll RNG parity.)*
+- [x] Added `modern_death_recovery` behind the honor-mode policy so non-honor command damage, YAML `damage`, and Zar deaths lose one level, drop eligible inventory, clear temporary effects and memorized spells, preserve spellbook ownership/progress, and return exhausted to the willow while honor and forced-honor deaths keep the legacy full reset. [Registry: `docs/MODERN_FEATURES.md`]
 - [x] Restored readable-item vortex transfer parity so `SCRLM4` routes through legacy-style source-room vanish, destination refresh, destination-room arrival, final `SCRLM42`, and persisted `gamloc`/`pgploc`, while death-reset broadcasts remain scoped to the death room rather than full-game fan-out.
 - [x] Legacy `macros` fatigue gate from `kyrand()` case 7: increment per accepted command, emit `TIRED` on the 20th command before tick reset, with an allowlisted read-only UI refresh bypass for satellite status panels.
 - [x] First-login player-ID lifecycle parity: 3-9 letters, duplicate rejection, `Sysop` plus visible entity-name reservation (`Zar`, `dragon`, `dryad`, `elf`, `brownie`), `GETALS`/`BADPID`/`NTGOOD`/`GOODPD`, ENTER-gated `INTROA`/`INTROB`/`INTROC`/`INTROD` paging, delayed room entry, initgp-style player initialization, `APPEARFLASH` first-entry broadcast, and wizard player-name UI styling.
@@ -142,6 +143,17 @@
 ### Release/Ops Cleanup (Final Porting Lane)
 
 - [ ] Provide Docker Compose, Makefile targets, CI wiring, and package-content automation after gameplay parity is complete. *(In progress: added `backend/Dockerfile` with uvicorn startup, runtime env defaults, and default `/data` directory creation for SQLite deployments; added root `compose.yaml`, `.env.docker.example`, `.dockerignore`, Makefile targets, a Cloudflare tunnel profile using the frontend network namespace plus Vite proxying for backend paths, service restart policies for alpha testing, `docs/ALPHA_TESTING_RUNBOOK.md`, and file-contract tests for the dev stack. Remaining: CI wiring, package-content CI job, and full compose-up smoke.)* Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.
+
+## Manual E2E Demo Checklist
+
+### Modern Death Recovery
+
+- [ ] Start the local stack with force-honor disabled and create or edit a non-honor player.
+- [ ] Give the player level 10, memorized spells, spellbook ownership bits, gold, temporary effects, ordinary inventory, and soulstone or kyragem.
+- [ ] Place the player in castle room 302 with another observer present, then trigger a lethal Zar attack or equivalent command/YAML damage.
+- [ ] Verify the player receives `DIEMSG`, observers receive `KILLED`, the player returns to room 0 in holy light at level 9, HP/SP are full for level 9, gold and memorized spells are gone, spellbook ownership remains, temporary effects are cleared, and exhaustion is active.
+- [ ] Verify ordinary carried items appear in room 302 or spill rooms, soulstone/kyragem do not drop, and rooms that receive drops show item refresh/drop messages.
+- [ ] Repeat with an honor-mode or force-honor player and verify the legacy level-1 full reset still occurs.
 
 ## Remaining Implementation Task Plan
 

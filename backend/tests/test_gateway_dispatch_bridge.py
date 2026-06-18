@@ -3343,3 +3343,222 @@ async def test_websocket_zar_death_refreshes_target_room_and_arrival_witness(mon
     finally:
         server.should_exit = True
         await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_zar_death_uses_modern_recovery_for_non_honor_player(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+    monkeypatch.setenv("KYRGAME_RUN_MIGRATIONS", "0")
+    monkeypatch.setenv("KYRGAME_TICK_SECONDS", "1000")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+    seed_returning_players(app, ("zthero", "ztdeath", "ztwill"))
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session",
+                json={"player_id": "zthero", "room_id": 302, "honor_mode": False},
+            )
+            death_witness_session = await client.post(
+                "/auth/session", json={"player_id": "ztdeath", "room_id": 302}
+            )
+            willow_witness_session = await client.post(
+                "/auth/session", json={"player_id": "ztwill", "room_id": 0}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            death_witness_token = death_witness_session.json()["session"]["token"]
+            willow_witness_token = willow_witness_session.json()["session"]["token"]
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+                death_witness = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == "ztdeath")
+                )
+                willow_witness = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == "ztwill")
+                )
+                location = db.scalar(select(models.Location).where(models.Location.id == 302))
+                assert hero is not None
+                assert death_witness is not None
+                assert willow_witness is not None
+                assert location is not None
+                hero.altnam = "Some psuedo dragon"
+                hero.attnam = "psuedo dragon"
+                hero.flags = int(
+                    constants.PlayerFlag.LOADED
+                    | constants.PlayerFlag.GOTKYG
+                    | constants.PlayerFlag.INVISF
+                    | constants.PlayerFlag.PEGASU
+                    | constants.PlayerFlag.WILLOW
+                    | constants.PlayerFlag.PDRAGN
+                )
+                hero.honor_mode = False
+                hero.level = 10
+                hero.hitpts = 8
+                hero.spts = 21
+                hero.gold = 77
+                hero.gpobjs = [
+                    constants.SOULSTONE_OBJECT_ID,
+                    constants.KYRAGEM_OBJECT_ID,
+                    0,
+                ]
+                hero.obvals = [10, 20, 30]
+                hero.npobjs = 3
+                hero.nspells = 2
+                hero.spells = [1, 23]
+                hero.offspls = 123
+                hero.defspls = 456
+                hero.othspls = 789
+                hero.charms = [1] * constants.NCHARM
+                hero.macros = 0
+                hero.gamloc = 302
+                hero.pgploc = 302
+                death_witness.level = 25
+                death_witness.gamloc = 302
+                death_witness.pgploc = 302
+                willow_witness.level = 25
+                willow_witness.gamloc = 0
+                willow_witness.pgploc = 0
+                location.objects = [52]
+                location.nlobjs = 1
+                db.commit()
+                app.state.location_index[302] = app.state.location_index[302].model_copy(
+                    update={"objects": [52], "nlobjs": 1}
+                )
+
+            hero_uri = f"ws://{host}:{port}/ws/rooms/302?token={hero_token}"
+            death_witness_uri = (
+                f"ws://{host}:{port}/ws/rooms/302?token={death_witness_token}"
+            )
+            willow_witness_uri = (
+                f"ws://{host}:{port}/ws/rooms/0?token={willow_witness_token}"
+            )
+
+            async with websockets.connect(hero_uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                live_hero = app.state.active_player_sessions[hero_token]
+                async with websockets.connect(death_witness_uri) as death_witness_ws:
+                    await _recv_matching(
+                        death_witness_ws,
+                        lambda msg: msg.get("payload", {}).get("event")
+                        == "location_update",
+                    )
+                    async with websockets.connect(willow_witness_uri) as willow_witness_ws:
+                        await _recv_matching(
+                            willow_witness_ws,
+                            lambda msg: msg.get("payload", {}).get("event")
+                            == "location_update",
+                        )
+
+                        app.state.animation_tick_system.state.zar_location = 302
+                        app.state.animation_tick_system.state.zar_counter = 0
+                        app.state.animation_tick_system.state.zar_attack_index = 0
+                        app.state.animation_rng = _FixedAnimationRng(
+                            randrange_values=[2, 3, 4, 5, 12],
+                            randint_values=[12],
+                        )
+                        await app.state.animation_tick_callback()
+
+                        death = await _recv_matching(
+                            hero_ws,
+                            lambda msg: msg.get("type") == "command_response"
+                            and msg.get("payload", {}).get("message_id") == "DIEMSG",
+                            timeout=2.0,
+                        )
+                        location_update = await _recv_matching(
+                            hero_ws,
+                            lambda msg: msg.get("type") == "command_response"
+                            and msg.get("payload", {}).get("event") == "location_update"
+                            and msg.get("payload", {}).get("location") == 0,
+                            timeout=2.0,
+                        )
+                        drop_refresh = await _recv_matching(
+                            death_witness_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("event") == "room_objects"
+                            and msg.get("payload", {}).get("location") == 302,
+                            timeout=2.0,
+                        )
+                        drop_message = await _recv_matching(
+                            death_witness_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("message_id") == "DROPIT3",
+                            timeout=2.0,
+                        )
+                        arrival = await _recv_matching(
+                            willow_witness_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and "appeared in a holy light"
+                            in msg.get("payload", {}).get("text", ""),
+                            timeout=2.0,
+                        )
+
+                        assert death["payload"]["modern_death_recovery"] is True
+                        assert death["payload"]["old_level"] == 10
+                        assert death["payload"]["new_level"] == 9
+                        assert death["payload"]["filtered_items"] == [
+                            constants.SOULSTONE_OBJECT_ID,
+                            constants.KYRAGEM_OBJECT_ID,
+                        ]
+                        assert location_update["payload"]["modern_death_recovery"] is True
+                        assert drop_refresh["payload"]["modern_death_recovery"] is True
+                        assert {"id": 0} in drop_refresh["payload"]["objects"]
+                        assert {"id": constants.SOULSTONE_OBJECT_ID} not in drop_refresh[
+                            "payload"
+                        ]["objects"]
+                        assert {"id": constants.KYRAGEM_OBJECT_ID} not in drop_refresh[
+                            "payload"
+                        ]["objects"]
+                        assert drop_message["payload"]["object_id"] == 0
+                        assert arrival["payload"]["exclude_player"] == "zthero"
+                        assert live_hero.gamloc == 0
+                        assert live_hero.pgploc == 0
+                        assert live_hero.level == 9
+                        assert live_hero.hitpts == 36
+                        assert live_hero.spts == 18
+                        assert live_hero.gold == 0
+                        assert live_hero.spells == []
+                        assert live_hero.offspls == 123
+                        assert live_hero.defspls == 456
+                        assert live_hero.othspls == 789
+                        assert live_hero.charms == [0] * constants.NCHARM
+                        assert live_hero.macros == constants.MODERN_DEATH_EXHAUSTION_MACROS
+
+            with app.state.session_factory() as db:
+                hero = db.scalar(select(models.Player).where(models.Player.plyrid == "zthero"))
+                location = db.scalar(select(models.Location).where(models.Location.id == 302))
+                assert hero is not None
+                assert location is not None
+                assert hero.gamloc == 0
+                assert hero.pgploc == 0
+                assert hero.level == 9
+                assert hero.nmpdes == constants.level_to_nmpdes(9)
+                assert hero.hitpts == 36
+                assert hero.spts == 18
+                assert hero.gold == 0
+                assert hero.gpobjs == []
+                assert hero.obvals == []
+                assert hero.npobjs == 0
+                assert hero.nspells == 0
+                assert hero.spells == []
+                assert hero.offspls == 123
+                assert hero.defspls == 456
+                assert hero.othspls == 789
+                assert hero.charms == [0] * constants.NCHARM
+                assert hero.macros == constants.MODERN_DEATH_EXHAUSTION_MACROS
+                assert hero.flags == int(constants.PlayerFlag.LOADED)
+                assert location.objects == [52, 0]
+    finally:
+        server.should_exit = True
+        await server_task

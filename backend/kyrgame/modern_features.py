@@ -25,6 +25,7 @@ class ModernFeature:
 
 
 FOUNTAIN_IMMEDIATE_SP_RESTORE = "fountain_immediate_sp_restore"
+MODERN_DEATH_RECOVERY = "modern_death_recovery"
 
 
 MODERN_FEATURES = (
@@ -43,6 +44,33 @@ MODERN_FEATURES = (
         ),
         legacy_refs=("legacy/KYRROUS.C:759-819",),
         test_refs=("backend/tests/test_room_scripts.py",),
+    ),
+    ModernFeature(
+        id=MODERN_DEATH_RECOVERY,
+        title="Modern death recovery",
+        scope="player_lifecycle:death",
+        status="active",
+        honor_behavior=(
+            "Honor-mode and force-honor deaths keep the legacy hitoth()/initgp() "
+            "full reset to level 1 with inventory, gold, spells, spellbook bits, "
+            "birthstone progress, and temporary state cleared."
+        ),
+        modern_behavior=(
+            "Non-honor deaths lose one level, drop eligible inventory, clear temporary "
+            "effects and memorized spells, preserve spellbook ownership, restore HP/SP "
+            "for the new level, and return exhausted to the willow."
+        ),
+        legacy_refs=(
+            "legacy/KYRSPEL.C:303-321",
+            "legacy/KYRANDIA.C:325-356",
+            "legacy/KYRSYSP.C:148",
+        ),
+        test_refs=(
+            "backend/tests/test_player_lifecycle.py",
+            "backend/tests/test_commands_cast.py",
+            "backend/tests/test_yaml_room_engine.py",
+            "backend/tests/world/test_animation_tick_system.py",
+        ),
     ),
 )
 

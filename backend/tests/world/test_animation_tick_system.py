@@ -1,6 +1,7 @@
 import pytest
 
 from kyrgame import constants, database, fixtures
+from kyrgame.honor_mode import HonorModePolicy
 from kyrgame.world import animation_tick_system
 from kyrgame.world.animation_tick_system import (
     AnimationTickEvent,
@@ -411,6 +412,8 @@ def _build_zar_routine(
     chance_rolls=None,
     persisted=None,
     location_updates=None,
+    locations=None,
+    honor_mode_policy=None,
 ):
     room_roll_iter = iter(room_rolls or [])
     chance_roll_iter = iter(chance_rolls or [])
@@ -433,6 +436,9 @@ def _build_zar_routine(
             (player.plyrid, player.hitpts, player.gamloc)
         ),
         message_formatter=_message_formatter,
+        object_name_lookup=lambda object_id: f"object-{object_id}",
+        locations_getter=lambda: locations or {},
+        honor_mode_policy=honor_mode_policy,
     )
 
 
@@ -641,5 +647,147 @@ def test_zarfood_emits_existing_death_messages_when_attack_kills_player():
     assert any(
         "appeared in a holy light" in (event.message_text or "")
         and event.payload.get("exclude_player") == "target"
+        for event in events
+    )
+
+
+def test_zarfood_force_honor_keeps_legacy_death_reset_for_non_honor_player():
+    player = _build_player(
+        plyrid="target",
+        altnam="Some psuedo dragon",
+        attnam="psuedo dragon",
+        flags=int(constants.PlayerFlag.LOADED | constants.PlayerFlag.GOTKYG),
+        gamloc=302,
+        pgploc=302,
+        level=10,
+        hitpts=10,
+        spts=21,
+        gold=77,
+        gpobjs=[0],
+        obvals=[10],
+        npobjs=1,
+        nspells=1,
+        spells=[1],
+        offspls=123,
+        defspls=456,
+        othspls=789,
+        stones=[9, 8, 7, 6],
+        honor_mode=False,
+    )
+    routine = _build_zar_routine(
+        room_objects={302: [52]},
+        players=[player],
+        chance_rolls=[2, 3, 4, 5],
+        honor_mode_policy=HonorModePolicy(force_honor_mode=True),
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 302
+
+    _, events = routine.zarfood(state)
+
+    assert player.gamloc == constants.WILLOW_ROOM_ID
+    assert player.level == 1
+    assert player.hitpts == 4
+    assert player.spts == 2
+    assert player.gpobjs == []
+    assert player.spells == []
+    assert player.offspls == 0
+    assert player.defspls == 0
+    assert player.othspls == 0
+    assert player.stones == [2, 3, 4, 5]
+    assert player.flags == int(constants.PlayerFlag.LOADED)
+    assert any(event.payload.get("target_message_id") == "DIEMSG" for event in events)
+    assert not any(event.payload.get("modern_death_recovery") for event in events)
+
+
+def test_zarfood_uses_modern_death_recovery_for_non_honor_player():
+    player = _build_player(
+        plyrid="target",
+        altnam="Some psuedo dragon",
+        attnam="psuedo dragon",
+        flags=int(
+            constants.PlayerFlag.LOADED
+            | constants.PlayerFlag.GOTKYG
+            | constants.PlayerFlag.INVISF
+            | constants.PlayerFlag.PEGASU
+            | constants.PlayerFlag.WILLOW
+            | constants.PlayerFlag.PDRAGN
+        ),
+        gamloc=302,
+        pgploc=302,
+        level=10,
+        hitpts=10,
+        spts=21,
+        gold=77,
+        gpobjs=[
+            constants.SOULSTONE_OBJECT_ID,
+            constants.KYRAGEM_OBJECT_ID,
+            0,
+        ],
+        obvals=[10, 20, 30],
+        npobjs=3,
+        nspells=2,
+        spells=[1, 23],
+        offspls=123,
+        defspls=456,
+        othspls=789,
+        charms=[1] * constants.NCHARM,
+        macros=0,
+        honor_mode=False,
+    )
+    locations = {location.id: location for location in fixtures.load_locations()}
+    locations[302] = locations[302].model_copy(update={"objects": [52], "nlobjs": 1})
+    room_objects = {302: [52]}
+    location_updates: list[tuple[int, list[int]]] = []
+    routine = _build_zar_routine(
+        room_objects=room_objects,
+        players=[player],
+        location_updates=location_updates,
+        locations=locations,
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 302
+
+    _, events = routine.zarfood(state)
+
+    assert player.gamloc == constants.WILLOW_ROOM_ID
+    assert player.pgploc == constants.WILLOW_ROOM_ID
+    assert player.altnam == "target"
+    assert player.attnam == "target"
+    assert player.level == 9
+    assert player.nmpdes == constants.level_to_nmpdes(9)
+    assert player.hitpts == 36
+    assert player.spts == 18
+    assert player.gold == 0
+    assert player.gpobjs == []
+    assert player.obvals == []
+    assert player.npobjs == 0
+    assert player.spells == []
+    assert player.nspells == 0
+    assert (player.offspls, player.defspls, player.othspls) == (123, 456, 789)
+    assert player.charms == [0] * constants.NCHARM
+    assert player.macros == constants.MODERN_DEATH_EXHAUSTION_MACROS
+    assert player.flags == int(constants.PlayerFlag.LOADED)
+    assert locations[302].objects == [52, 0]
+    assert room_objects[302] == [52, 0]
+    assert any(
+        event.payload.get("target_message_id") == "DIEMSG"
+        and event.payload.get("modern_death_recovery") is True
+        and event.payload.get("old_level") == 10
+        and event.payload.get("new_level") == 9
+        and event.payload.get("filtered_items")
+        == [constants.SOULSTONE_OBJECT_ID, constants.KYRAGEM_OBJECT_ID]
+        for event in events
+    )
+    assert any(
+        event.payload.get("event") == "room_objects"
+        and event.room_id == 302
+        and event.payload.get("modern_death_recovery") is True
+        for event in events
+    )
+    assert any(
+        event.message_id == "DROPIT3"
+        and event.room_id == 302
+        and event.payload.get("object_id") == 0
         for event in events
     )

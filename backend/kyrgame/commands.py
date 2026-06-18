@@ -6,10 +6,16 @@ from typing import Any, Awaitable, Callable, Dict, List, Protocol, Set
 
 from sqlalchemy import select, update
 
-from . import constants, fixtures, models, repositories, room_spoilers
+from . import constants, fixtures, models, modern_features, repositories, room_spoilers
 from .effects import EffectError, ObjectEffectEngine, SpellEffectEngine
+from .honor_mode import HonorModePolicy
 from .inventory import pop_inventory_index
-from .player_lifecycle import reset_player_after_death
+from .player_lifecycle import (
+    DeathRecoveryPlan,
+    apply_death_recovery_plan,
+    build_modern_death_recovery_plan,
+    reset_player_after_death,
+)
 from .player_titles import legacy_title_for_level
 from .spellbook import (
     add_spell_to_book,
@@ -110,6 +116,7 @@ class GameState:
     global_player_lookup: Callable[[str], models.PlayerModel | None] | None = None
     zar_controller: Any | None = None
     zar_state: Any | None = None
+    honor_mode_policy: HonorModePolicy = field(default_factory=HonorModePolicy)
 
 
 @dataclass
@@ -1885,6 +1892,7 @@ def _location_refresh_events(
     *,
     scope: str,
     death_reset: bool = False,
+    metadata: dict[str, Any] | None = None,
 ) -> list[dict]:
     destination = state.locations[player.gamloc]
     description_id, long_description = _location_description(
@@ -1923,6 +1931,10 @@ def _location_refresh_events(
         location_update["death_reset"] = True
         description_event["death_reset"] = True
         objects_event["death_reset"] = True
+    if metadata:
+        location_update.update(metadata)
+        description_event.update(metadata)
+        objects_event.update(metadata)
     if scope == "target":
         location_update.update({"player": player.plyrid, "room_id": destination.id})
         description_event.update({"player": player.plyrid, "room_id": destination.id})
@@ -1936,6 +1948,26 @@ def _append_hitoth_death_events(
     command_id: int | None,
     events: list[dict],
 ) -> None:
+    if state.honor_mode_policy.modern_feature_enabled(
+        dead_player, modern_features.MODERN_DEATH_RECOVERY
+    ):
+        # modern_death_recovery: non-honor deaths use the documented recovery
+        # contract instead of legacy initgp(). See docs/MODERN_FEATURES.md.
+        plan = build_modern_death_recovery_plan(
+            dead_player,
+            locations=state.locations,
+            rng=state.rng,
+        )
+        _persist_death_recovery_plan(state, dead_player, plan)
+        apply_death_recovery_plan(dead_player, state.locations, plan)
+        if dead_player.plyrid == state.player.plyrid:
+            for event in events:
+                if event.get("scope") == "room":
+                    event["scope"] = "nearby_room"
+                    event.setdefault("room_id", plan.old_room)
+        _append_modern_death_recovery_events(state, dead_player, command_id, events, plan)
+        return
+
     # Legacy hitoth() sends the death text, runs initgp(), tells the old room,
     # and re-enters room 0 in holy light. (legacy/KYRSPEL.C:303-321)
     reset = reset_player_after_death(dead_player, state.rng.randrange)
@@ -1982,7 +2014,7 @@ def _append_hitoth_death_events(
     events.append(
         {
             "scope": "nearby_room",
-            "room_id": 0,
+            "room_id": constants.WILLOW_ROOM_ID,
             "event": "room_message",
             "type": "room_message",
             "player": dead_player.plyrid,
@@ -1992,6 +2024,136 @@ def _append_hitoth_death_events(
             "exclude_player": dead_player.plyrid,
         },
     )
+
+
+def _append_modern_death_recovery_events(
+    state: GameState,
+    dead_player: models.PlayerModel,
+    command_id: int | None,
+    events: list[dict],
+    plan: DeathRecoveryPlan,
+) -> None:
+    """Append command events after modern_death_recovery persistence succeeds."""
+
+    target_metadata = _modern_death_event_metadata(plan, recipient_scope="target")
+    death_event = _message_event(
+        "target",
+        "DIEMSG",
+        _format_message(state, "DIEMSG"),
+        command_id,
+    )
+    death_event.update(
+        {
+            "player": dead_player.plyrid,
+            "room_id": plan.old_room,
+            **target_metadata,
+        }
+    )
+    events.append(death_event)
+
+    nearby_metadata = _modern_death_event_metadata(
+        plan, recipient_scope="nearby_room"
+    )
+    events.append(
+        {
+            "scope": "nearby_room",
+            "room_id": plan.old_room,
+            "event": "room_message",
+            "type": "room_message",
+            "player": dead_player.plyrid,
+            "text": _format_message(state, "KILLED", plan.old_name),
+            "message_id": "KILLED",
+            "command_id": command_id,
+            "exclude_player": dead_player.plyrid,
+            **nearby_metadata,
+        },
+    )
+
+    events.extend(
+        _location_refresh_events(
+            state,
+            dead_player,
+            command_id,
+            scope="target",
+            death_reset=True,
+            metadata=target_metadata,
+        )
+    )
+    events.append(
+        {
+            "scope": "nearby_room",
+            "room_id": constants.WILLOW_ROOM_ID,
+            "event": "room_message",
+            "type": "room_message",
+            "player": dead_player.plyrid,
+            "text": f"*** {dead_player.plyrid} has just appeared in a holy light!",
+            "message_id": None,
+            "command_id": command_id,
+            "exclude_player": dead_player.plyrid,
+            **nearby_metadata,
+        },
+    )
+    _append_modern_death_drop_events(state, dead_player, command_id, events, plan)
+
+
+def _append_modern_death_drop_events(
+    state: GameState,
+    dead_player: models.PlayerModel,
+    command_id: int | None,
+    events: list[dict],
+    plan: DeathRecoveryPlan,
+) -> None:
+    """Broadcast modern_death_recovery inventory drops room by room."""
+
+    metadata = _modern_death_event_metadata(plan, recipient_scope="nearby_room")
+    for room_update in plan.room_object_updates:
+        location = state.locations.get(room_update.room_id)
+        if location is None:
+            continue
+        objects_event = _room_objects_event(
+            location,
+            state.objects or {},
+            command_id,
+            "room_objects",
+            scope="nearby_room",
+            include_sender=True,
+        )
+        objects_event.update({"room_id": room_update.room_id, **metadata})
+        events.append(objects_event)
+        for object_id in room_update.dropped_items:
+            obj = state.objects.get(object_id) if state.objects else None
+            events.append(
+                {
+                    "scope": "nearby_room",
+                    "room_id": room_update.room_id,
+                    "event": "room_message",
+                    "type": "room_message",
+                    "player": plan.player_id,
+                    "text": _format_message(
+                        state,
+                        "DROPIT3",
+                        plan.old_name,
+                        _hisher(dead_player),
+                        obj.name if obj else str(object_id),
+                    ),
+                    "message_id": "DROPIT3",
+                    "command_id": command_id,
+                    "include_sender": True,
+                    "object_id": object_id,
+                    **metadata,
+                }
+            )
+
+
+def _modern_death_event_metadata(
+    plan: DeathRecoveryPlan,
+    *,
+    recipient_scope: str,
+) -> dict[str, Any]:
+    metadata = dict(plan.metadata)
+    metadata["refresh_location"] = constants.WILLOW_ROOM_ID
+    metadata["recipient_scope"] = recipient_scope
+    return metadata
 
 
 async def _handle_shove(state: GameState, args: dict) -> CommandResult:
@@ -3360,11 +3522,38 @@ def _persist_player_state(state: GameState, player: models.PlayerModel):
     """Persist player state changes triggered by room scripts or commands."""
     if not state.db_session:
         return
+    if _stage_player_state_record(state, player):
+        state.db_session.commit()
+
+
+def _persist_death_recovery_plan(
+    state: GameState,
+    player: models.PlayerModel,
+    plan: DeathRecoveryPlan,
+) -> None:
+    """Persist modern_death_recovery player and room-object rows atomically."""
+    if not state.db_session:
+        return
+    try:
+        if not _stage_death_recovery_player_record(state, player, plan):
+            raise RuntimeError(
+                f"Cannot persist modern_death_recovery for missing player {player.plyrid}"
+            )
+        location_repo = repositories.LocationRepository(state.db_session)
+        for room_update in plan.room_object_updates:
+            location_repo.update_objects(room_update.room_id, list(room_update.object_ids))
+        state.db_session.commit()
+    except Exception:
+        state.db_session.rollback()
+        raise
+
+
+def _stage_player_state_record(state: GameState, player: models.PlayerModel) -> bool:
     record = state.db_session.scalar(
         select(models.Player).where(models.Player.plyrid == player.plyrid)
     )
     if not record:
-        return
+        return False
     record.altnam = player.altnam
     record.attnam = player.attnam
     record.level = player.level
@@ -3390,7 +3579,49 @@ def _persist_player_state(state: GameState, player: models.PlayerModel):
     record.stumpi = player.stumpi
     record.spouse = player.spouse
     record.honor_mode = player.honor_mode
-    state.db_session.commit()
+    return True
+
+
+def _stage_death_recovery_player_record(
+    state: GameState,
+    player: models.PlayerModel,
+    plan: DeathRecoveryPlan,
+) -> bool:
+    record = state.db_session.scalar(
+        select(models.Player).where(models.Player.plyrid == player.plyrid)
+    )
+    if not record:
+        return False
+
+    def value(field_name: str):
+        return plan.player_updates.get(field_name, getattr(player, field_name))
+
+    record.altnam = value("altnam")
+    record.attnam = value("attnam")
+    record.level = value("level")
+    record.nmpdes = value("nmpdes")
+    record.hitpts = value("hitpts")
+    record.spts = value("spts")
+    record.flags = value("flags")
+    record.gold = value("gold")
+    record.gpobjs = list(value("gpobjs"))
+    record.obvals = list(value("obvals"))
+    record.npobjs = value("npobjs")
+    record.nspells = value("nspells")
+    record.offspls = value("offspls")
+    record.defspls = value("defspls")
+    record.othspls = value("othspls")
+    record.spells = list(value("spells"))
+    record.charms = list(value("charms"))
+    record.gamloc = value("gamloc")
+    record.pgploc = value("pgploc")
+    record.gemidx = value("gemidx")
+    record.stones = list(value("stones"))
+    record.macros = value("macros")
+    record.stumpi = value("stumpi")
+    record.spouse = value("spouse")
+    record.honor_mode = value("honor_mode")
+    return True
 
 
 def room_object_entries(

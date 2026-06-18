@@ -3804,6 +3804,7 @@ def create_app() -> FastAPI:
                 "state",
                 None,
             ),
+            honor_mode_policy=_honor_mode_policy(provider.scope.app),
         )
 
         _register_active_player_session(
@@ -4244,6 +4245,20 @@ def create_app() -> FastAPI:
                                         f"*** {state.player.altnam} has just {arrive_text}!"
                                     )
                             death_reset = bool(transfer_event.get("death_reset"))
+                            transfer_metadata = {
+                                key: transfer_event[key]
+                                for key in (
+                                    "modern_death_recovery",
+                                    "old_level",
+                                    "new_level",
+                                    "filtered_items",
+                                    "vanished_items",
+                                    "dropped_rooms",
+                                    "refresh_location",
+                                    "recipient_scope",
+                                )
+                                if key in transfer_event
+                            }
                             # YAML hitoth() death resets mirror initgp()+entrgp(), so
                             # every active session for the player must relocate and refresh.
                             # Source: legacy/KYRSPEL.C:303-321, legacy/KYRANDIA.C:325-356,
@@ -4293,6 +4308,7 @@ def create_app() -> FastAPI:
                                             "long_description": long_description,
                                             "message_id": description_id,
                                             **({"death_reset": True} if death_reset else {}),
+                                            **transfer_metadata,
                                         },
                                         {
                                             "scope": "player",
@@ -4302,6 +4318,7 @@ def create_app() -> FastAPI:
                                             "message_id": description_id,
                                             "text": long_description or location.brfdes,
                                             **({"death_reset": True} if death_reset else {}),
+                                            **transfer_metadata,
                                         },
                                     ]
                                     room_objects_event = commands._room_objects_event(
@@ -4309,6 +4326,7 @@ def create_app() -> FastAPI:
                                     )
                                     if death_reset:
                                         room_objects_event["death_reset"] = True
+                                    room_objects_event.update(transfer_metadata)
                                     refresh_events.append(room_objects_event)
 
                                     occupant_event = await _room_occupants_event(

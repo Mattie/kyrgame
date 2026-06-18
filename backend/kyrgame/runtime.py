@@ -345,6 +345,68 @@ async def bootstrap_app(app: FastAPI):
             record.honor_mode = player.honor_mode
             db.commit()
 
+    def _animation_death_recovery_persister(player: models.PlayerModel, plan) -> None:
+        # modern_death_recovery: Zar death commits the recovered player and all
+        # changed room-object rows together. See docs/MODERN_FEATURES.md.
+        updated_locations: list[tuple[int, list[int]]] = []
+        with session_factory() as db:
+            try:
+                record = db.scalar(
+                    select(models.Player).where(models.Player.plyrid == player.plyrid)
+                )
+                if not record:
+                    db.rollback()
+                    raise RuntimeError(
+                        "Cannot persist modern_death_recovery for missing player "
+                        f"{player.plyrid}"
+                    )
+                def value(field_name: str):
+                    return plan.player_updates.get(field_name, getattr(player, field_name))
+
+                record.gamloc = value("gamloc")
+                record.pgploc = value("pgploc")
+                record.altnam = value("altnam")
+                record.attnam = value("attnam")
+                record.nmpdes = value("nmpdes")
+                record.flags = int(value("flags"))
+                record.level = value("level")
+                record.hitpts = value("hitpts")
+                record.spts = value("spts")
+                record.gold = value("gold")
+                record.gpobjs = list(value("gpobjs"))
+                record.obvals = list(value("obvals"))
+                record.npobjs = value("npobjs")
+                record.spells = list(value("spells"))
+                record.nspells = value("nspells")
+                record.offspls = value("offspls")
+                record.defspls = value("defspls")
+                record.othspls = value("othspls")
+                record.charms = list(value("charms"))
+                record.gemidx = value("gemidx")
+                record.stones = list(value("stones"))
+                record.macros = value("macros")
+                record.stumpi = value("stumpi")
+                record.spouse = value("spouse")
+                record.honor_mode = value("honor_mode")
+                location_repo = repositories.LocationRepository(db)
+                for room_update in plan.room_object_updates:
+                    location_repo.update_objects(
+                        room_update.room_id, list(room_update.object_ids)
+                    )
+                    updated_locations.append(
+                        (room_update.room_id, list(room_update.object_ids))
+                    )
+                db.commit()
+            except Exception:
+                db.rollback()
+                raise
+        for room_id, object_ids in updated_locations:
+            location = app.state.location_index.get(room_id)
+            if location:
+                app.state.location_index[room_id] = location.model_copy(
+                    update={"objects": object_ids, "nlobjs": len(object_ids)}
+                )
+
     def _set_zar_location(room_id: int) -> None:
         room_scripts = getattr(app.state, "room_scripts", None)
         yaml_engine = getattr(room_scripts, "yaml_engine", None)
@@ -371,7 +433,11 @@ async def bootstrap_app(app: FastAPI):
         players_getter=_animation_players_getter,
         player_persister=_animation_player_persister,
         message_formatter=_animation_message_formatter,
+        object_name_lookup=_animation_object_name_lookup,
         zar_location_setter=_set_zar_location,
+        locations_getter=lambda: app.state.location_index,
+        death_recovery_persister=_animation_death_recovery_persister,
+        honor_mode_policy=app.state.honor_mode_policy,
     )
     app.state.animation_zar_routine = zar_routine
     app.state.animation_tick_persistence = SQLAlchemyAnimationTickPersistence(session_factory)
@@ -712,6 +778,18 @@ async def bootstrap_app(app: FastAPI):
                 }
                 if event_payload.get("death_reset"):
                     target_payload["death_reset"] = True
+            for metadata_key in (
+                "modern_death_recovery",
+                "old_level",
+                "new_level",
+                "filtered_items",
+                "vanished_items",
+                "dropped_rooms",
+                "refresh_location",
+                "recipient_scope",
+            ):
+                if metadata_key in event_payload:
+                    target_payload[metadata_key] = event_payload[metadata_key]
             target_envelope = {
                 "type": "command_response",
                 "room": target_room,

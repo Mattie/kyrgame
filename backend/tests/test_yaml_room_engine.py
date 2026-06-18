@@ -204,6 +204,106 @@ def test_damage_action_resets_only_when_damage_kills():
     )
 
 
+def test_damage_action_uses_modern_death_recovery_for_non_honor_player():
+    messages = fixtures.load_messages()
+    objects = fixtures.load_objects()
+    spells = fixtures.load_spells()
+    locations = {location.id: location for location in fixtures.load_locations()}
+    locations[302] = locations[302].model_copy(update={"objects": [], "nlobjs": 0})
+    definitions = {
+        "rooms": [
+            {
+                "id": 302,
+                "triggers": [
+                    {
+                        "verbs": ["sting"],
+                        "actions": [{"type": "damage", "amount": 8}],
+                    }
+                ],
+            }
+        ]
+    }
+    engine = yaml_rooms.YamlRoomEngine(
+        definitions=definitions,
+        messages=messages,
+        objects=objects,
+        spells=spells,
+        locations=locations.values(),
+        rng=StubRandom([]),
+    )
+    player = fixtures.build_player().model_copy(
+        update={
+            "hitpts": 8,
+            "level": 10,
+            "gamloc": 302,
+            "pgploc": 302,
+            "gold": 55,
+            "gpobjs": [
+                constants.SOULSTONE_OBJECT_ID,
+                constants.KYRAGEM_OBJECT_ID,
+                0,
+            ],
+            "obvals": [1, 2, 3],
+            "npobjs": 3,
+            "spells": [66],
+            "nspells": 1,
+            "offspls": 11,
+            "defspls": 22,
+            "othspls": 33,
+            "charms": [1] * constants.NCHARM,
+            "macros": 0,
+            "flags": int(
+                constants.PlayerFlag.LOADED
+                | constants.PlayerFlag.GOTKYG
+                | constants.PlayerFlag.INVISF
+                | constants.PlayerFlag.PEGASU
+                | constants.PlayerFlag.WILLOW
+                | constants.PlayerFlag.PDRAGN
+            ),
+            "honor_mode": False,
+        }
+    )
+
+    died = engine.handle(player, 302, "sting", [])
+
+    assert died.handled is True
+    assert player.gamloc == constants.WILLOW_ROOM_ID
+    assert player.pgploc == constants.WILLOW_ROOM_ID
+    assert player.level == 9
+    assert player.hitpts == 36
+    assert player.spts == 18
+    assert player.gold == 0
+    assert player.gpobjs == []
+    assert player.spells == []
+    assert player.nspells == 0
+    assert (player.offspls, player.defspls, player.othspls) == (11, 22, 33)
+    assert player.charms == [0] * constants.NCHARM
+    assert player.macros == constants.MODERN_DEATH_EXHAUSTION_MACROS
+    assert player.flags == int(constants.PlayerFlag.LOADED)
+    assert engine.get_room_objects(302) == [0]
+    assert any(
+        evt.get("scope") == "direct"
+        and evt.get("message_id") == "DIEMSG"
+        and evt.get("modern_death_recovery") is True
+        and evt.get("filtered_items")
+        == [constants.SOULSTONE_OBJECT_ID, constants.KYRAGEM_OBJECT_ID]
+        for evt in died.events
+    )
+    assert any(
+        evt.get("scope") == "broadcast"
+        and evt.get("event") == "room_objects"
+        and evt.get("room_id") == 302
+        and evt.get("modern_death_recovery") is True
+        for evt in died.events
+    )
+    assert any(
+        evt.get("scope") == "broadcast"
+        and evt.get("message_id") == "DROPIT3"
+        and evt.get("object_id") == 0
+        for evt in died.events
+    )
+
+
 def test_nonlethal_damage_action_clamps_without_death_reset():
     engine = yaml_rooms.YamlRoomEngine(
         definitions={

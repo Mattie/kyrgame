@@ -150,6 +150,7 @@ class RoomScriptEngine:
                 objects=self.objects.values(),
                 spells=spells or [],
                 locations=self.locations.values(),
+                honor_mode_policy=self.honor_mode_policy,
             )
             if room_scripts
             else None
@@ -312,8 +313,16 @@ class RoomScriptEngine:
                         event = {**event, "scope": "room"}
                     self.pending_events.append(event)
                 if result.handled:
+                    synced_room_ids: set[int] = set()
+                    for room_update in self.yaml_engine.last_room_object_updates:
+                        # modern_death_recovery can spill drops into rooms other
+                        # than the triggering room. See docs/MODERN_FEATURES.md.
+                        self.set_room_objects(
+                            room_update.room_id, list(room_update.object_ids)
+                        )
+                        synced_room_ids.add(room_update.room_id)
                     after_objects = self.yaml_engine.get_room_objects(room_id)
-                    if after_objects != before_objects:
+                    if room_id not in synced_room_ids and after_objects != before_objects:
                         self.set_room_objects(room_id, after_objects)
                         self.pending_events.append(
                             {
