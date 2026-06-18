@@ -842,6 +842,57 @@ def test_modern_death_recovery_failed_persistence_does_not_mutate_live_state(tmp
 
 
 @pytest.mark.anyio
+async def test_cast_modern_death_failed_persistence_restores_pre_damage_target(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        player = _build_player(
+            flags=int(constants.PlayerFlag.LOADED),
+            level=25,
+            spts=25,
+            spells=[47],
+            nspells=1,
+            gamloc=7,
+            pgploc=7,
+        )
+        target = _build_player(
+            plyrid="target",
+            attnam="target",
+            altnam="Target Mask",
+            gamloc=7,
+            pgploc=7,
+            hitpts=2,
+            level=5,
+            flags=int(constants.PlayerFlag.LOADED),
+            honor_mode=False,
+            gpobjs=[0],
+            obvals=[10],
+            npobjs=1,
+        )
+        state = _build_state(player)
+        state.locations[7] = state.locations[7].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+        state.presence = TrackingPresence({player.plyrid, target.plyrid})
+        state.player_lookup = lambda pid: {
+            player.plyrid: player,
+            target.plyrid: target,
+        }.get(pid)
+        state.db_session = session
+        session.add(models.Player(**player.model_dump()))
+        session.commit()
+        before_target = target.model_dump()
+
+        registry = commands.build_default_registry()
+        dispatcher = commands.CommandDispatcher(registry)
+
+        with pytest.raises(RuntimeError, match="modern_death_recovery"):
+            await dispatcher.dispatch("cast", {"raw": "pocus target"}, state)
+
+        assert target.model_dump() == before_target
+
+
+@pytest.mark.anyio
 async def test_cast_target_death_refresh_uses_reset_target_brief_flag():
     player = _build_player(
         flags=int(constants.PlayerFlag.LOADED | constants.PlayerFlag.BRFSTF),

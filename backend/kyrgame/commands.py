@@ -1885,6 +1885,25 @@ def _target_location_events(
     return _location_refresh_events(state, target, command_id, scope="target")
 
 
+def _snapshot_player_model(player: models.PlayerModel) -> dict[str, Any]:
+    """Capture mutable active-player state before modern_death_recovery damage."""
+
+    return player.model_dump()
+
+
+def _restore_player_model(
+    player: models.PlayerModel, snapshot: dict[str, Any]
+) -> None:
+    """Restore active-player state after a failed modern_death_recovery commit."""
+
+    restored = models.PlayerModel(**snapshot)
+    for field_name in models.PlayerModel.model_fields:
+        value = getattr(restored, field_name)
+        if isinstance(value, list):
+            value = list(value)
+        object.__setattr__(player, field_name, value)
+
+
 def _location_refresh_events(
     state: GameState,
     player: models.PlayerModel,
@@ -1947,18 +1966,28 @@ def _append_hitoth_death_events(
     dead_player: models.PlayerModel,
     command_id: int | None,
     events: list[dict],
+    predeath_snapshot: dict[str, Any] | None = None,
 ) -> None:
     if state.honor_mode_policy.modern_feature_enabled(
         dead_player, modern_features.MODERN_DEATH_RECOVERY
     ):
         # modern_death_recovery: non-honor deaths use the documented recovery
         # contract instead of legacy initgp(). See docs/MODERN_FEATURES.md.
-        plan = build_modern_death_recovery_plan(
-            dead_player,
-            locations=state.locations,
-            rng=state.rng,
-        )
-        _persist_death_recovery_plan(state, dead_player, plan)
+        try:
+            plan = build_modern_death_recovery_plan(
+                dead_player,
+                locations=state.locations,
+                rng=state.rng,
+            )
+            _persist_death_recovery_plan(state, dead_player, plan)
+        except Exception:
+            # modern_death_recovery: command spell/backlash callers can mark a
+            # live active player dead before the atomic recovery commit runs.
+            # Restore that live snapshot when persistence fails so the DB and
+            # active session stay aligned. See docs/MODERN_FEATURES.md.
+            if predeath_snapshot is not None:
+                _restore_player_model(dead_player, predeath_snapshot)
+            raise
         apply_death_recovery_plan(dead_player, state.locations, plan)
         if dead_player.plyrid == state.player.plyrid:
             for event in events:
@@ -2718,6 +2747,10 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                 events=_spell_target_failure_events(state, target, command_id),
             )
 
+    caster_pre_damage_snapshot = _snapshot_player_model(state.player)
+    target_pre_damage_snapshot = (
+        _snapshot_player_model(target_player) if target_player is not None else None
+    )
     result = effect_engine.cast_spell(
         state.player, spell.id, target, target_player, apply_cost=False
     )
@@ -2863,9 +2896,21 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
             }
         )
     if hitoth_target == "target" and target_player and target_player.hitpts <= 0:
-        _append_hitoth_death_events(state, target_player, command_id, events)
+        _append_hitoth_death_events(
+            state,
+            target_player,
+            command_id,
+            events,
+            predeath_snapshot=target_pre_damage_snapshot,
+        )
     elif hitoth_target == "caster" and state.player.hitpts <= 0:
-        _append_hitoth_death_events(state, state.player, command_id, events)
+        _append_hitoth_death_events(
+            state,
+            state.player,
+            command_id,
+            events,
+            predeath_snapshot=caster_pre_damage_snapshot,
+        )
     if extra_events:
         for extra_event in extra_events:
             event_payload = dict(extra_event)
@@ -3002,6 +3047,7 @@ def _spell_target_failure_events(
     if obj:
         if obj.id == 52:
             # Legacy chkstf backlash for targeting the dragon (legacy/KYRSPEL.C:277-285).
+            predeath_snapshot = _snapshot_player_model(state.player)
             damage = state.rng.randint(20, 46)
             state.player.hitpts = max(0, state.player.hitpts - damage)
             events = [
@@ -3020,7 +3066,13 @@ def _spell_target_failure_events(
                 ),
             ]
             if state.player.hitpts <= 0:
-                _append_hitoth_death_events(state, state.player, command_id, events)
+                _append_hitoth_death_events(
+                    state,
+                    state.player,
+                    command_id,
+                    events,
+                    predeath_snapshot=predeath_snapshot,
+                )
             else:
                 _persist_player_state(state, state.player)
             return events
@@ -3134,6 +3186,7 @@ async def _apply_area_damage(
             )
             continue
 
+        predeath_snapshot = _snapshot_player_model(target)
         target.hitpts = max(0, target.hitpts - area_damage["damage"])
 
         target_text = _format_message(state, area_damage["hit_id"])
@@ -3155,7 +3208,13 @@ async def _apply_area_damage(
             )
         )
         if target.hitpts <= 0:
-            _append_hitoth_death_events(state, target, command_id, events)
+            _append_hitoth_death_events(
+                state,
+                target,
+                command_id,
+                events,
+                predeath_snapshot=predeath_snapshot,
+            )
         else:
             _persist_player_state(state, target)
 
@@ -5393,11 +5452,18 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
                 state.player.npobjs = len(state.player.gpobjs)
             events.append(_message_event("player", "SCRLM6", _format_message(state, "SCRLM6", read_item, label), command_id))
         else:
+            predeath_snapshot = _snapshot_player_model(state.player)
             damage = state.rng.randrange(2, 11)
             state.player.hitpts = max(0, state.player.hitpts - damage)
             events.append(_message_event("player", "SCRLM7", _format_message(state, "SCRLM7", read_item, damage), command_id))
             if state.player.hitpts <= 0:
-                _append_hitoth_death_events(state, state.player, command_id, events)
+                _append_hitoth_death_events(
+                    state,
+                    state.player,
+                    command_id,
+                    events,
+                    predeath_snapshot=predeath_snapshot,
+                )
                 return CommandResult(state=state, events=events)
 
     _persist_player_state(state, state.player)
