@@ -33,6 +33,19 @@ BIRTHSTONE_MAX = 11
 SPELL_ID_MIN = 0
 SPELL_ID_MAX = NGSPLS - 1
 
+# Modern feature constants live beside the legacy-derived limits so every
+# non-legacy branch can reference named values instead of scattered literals.
+# See docs/MODERN_FEATURES.md, feature id `modern_death_recovery`.
+WILLOW_ROOM_ID = 0
+MODERN_DEATH_CASTLE_MIN_ROOM = 219
+MODERN_DEATH_CASTLE_MAX_ROOM = 302
+MODERN_DEATH_DARK_FOREST_MIN_ROOM = 44
+MODERN_DEATH_DARK_FOREST_MAX_ROOM = 167
+MODERN_DEATH_EXHAUSTION_MACROS = MACROS_MAX
+SOULSTONE_OBJECT_ID = 28
+KYRAGEM_OBJECT_ID = 29
+MODERN_DEATH_GOTKYG_MIN_LEVEL = 9
+
 # Spellbook types
 OFFENS = 1
 DEFENS = 2

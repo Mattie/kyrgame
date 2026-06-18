@@ -8,8 +8,14 @@ from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Prot
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from .. import constants, models
-from ..player_lifecycle import reset_player_after_death
+from .. import constants, models, modern_features
+from ..honor_mode import HonorModePolicy
+from ..player_lifecycle import (
+    DeathRecoveryPlan,
+    apply_death_recovery_plan,
+    build_modern_death_recovery_plan,
+    reset_player_after_death,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -197,6 +203,25 @@ ZAR_SPECIAL_ROOM_OBJECTS = {
 ZAR_ATTACKS = ("bite", "breath", "claw", "lightning")
 
 
+class _ChancePickerRandom:
+    def __init__(self, chance_picker: Callable[[int, int], int]) -> None:
+        self._chance_picker = chance_picker
+
+    def randrange(self, low: int, high: int) -> int:
+        return self._chance_picker(low, high)
+
+
+def _modern_death_metadata(
+    plan: DeathRecoveryPlan,
+    *,
+    recipient_scope: str,
+) -> dict[str, object]:
+    metadata = dict(plan.metadata)
+    metadata["refresh_location"] = constants.WILLOW_ROOM_ID
+    metadata["recipient_scope"] = recipient_scope
+    return metadata
+
+
 class ZarDragonRoutine:
     """Port Zar's legacy animation, movement, and attack routines.
 
@@ -216,7 +241,14 @@ class ZarDragonRoutine:
         players_getter: Callable[[int], Sequence[models.PlayerModel]],
         player_persister: Callable[[models.PlayerModel], None],
         message_formatter: Callable[..., str],
+        object_name_lookup: Callable[[int], str] | None = None,
         zar_location_setter: Callable[[int], None] | None = None,
+        locations_getter: Callable[[], dict[int, models.LocationModel]] | None = None,
+        death_recovery_persister: Callable[
+            [models.PlayerModel, DeathRecoveryPlan], None
+        ]
+        | None = None,
+        honor_mode_policy: HonorModePolicy | None = None,
         home_room_id: int = ZAR_HOME_ROOM,
         dragon_object_id: int = ZAR_DRAGON_OBJECT_ID,
     ) -> None:
@@ -227,7 +259,11 @@ class ZarDragonRoutine:
         self._players_getter = players_getter
         self._player_persister = player_persister
         self._message_formatter = message_formatter
+        self._object_name_lookup = object_name_lookup or (lambda object_id: str(object_id))
         self._zar_location_setter = zar_location_setter
+        self._locations_getter = locations_getter
+        self._death_recovery_persister = death_recovery_persister
+        self._honor_mode_policy = honor_mode_policy or HonorModePolicy()
         self.home_room_id = home_room_id
         self.dragon_object_id = dragon_object_id
 
@@ -353,9 +389,6 @@ class ZarDragonRoutine:
         attack = self.attack_name(attack_index)
         message_id, damage = self._attack_message_and_damage(player, attack)
 
-        player.hitpts = max(0, player.hitpts - damage)
-        self._player_persister(player)
-
         events = [
             AnimationTickEvent(
                 flag="zarfood",
@@ -377,7 +410,36 @@ class ZarDragonRoutine:
                 },
             ),
         ]
+
+        remaining_hitpts = max(0, player.hitpts - damage)
+        if remaining_hitpts <= 0 and self._honor_mode_policy.modern_feature_enabled(
+            player, modern_features.MODERN_DEATH_RECOVERY
+        ):
+            # modern_death_recovery: Zar death recovery must commit before we
+            # mutate live HP/location state. See docs/MODERN_FEATURES.md.
+            locations = self._locations_getter() if self._locations_getter else {}
+            plan = build_modern_death_recovery_plan(
+                player,
+                locations=locations,
+                rng=_ChancePickerRandom(self._chance_picker),
+            )
+            if self._death_recovery_persister:
+                self._death_recovery_persister(player, plan)
+                apply_death_recovery_plan(player, locations, plan)
+            else:
+                apply_death_recovery_plan(player, locations, plan)
+                for room_update in plan.room_object_updates:
+                    self._room_objects_setter(
+                        room_update.room_id, list(room_update.object_ids)
+                    )
+                self._player_persister(player)
+            events.extend(self._modern_death_recovery_events(room_id, player, plan))
+            return events
+
+        player.hitpts = remaining_hitpts
+        self._player_persister(player)
         if player.hitpts <= 0:
+
             reset = self._reset_dead_player(player)
             self._player_persister(player)
             events.extend(
@@ -431,6 +493,123 @@ class ZarDragonRoutine:
                     ),
                 ]
             )
+        return events
+
+    def _modern_death_recovery_events(
+        self,
+        room_id: int,
+        player: models.PlayerModel,
+        plan: DeathRecoveryPlan,
+    ) -> list[AnimationTickEvent]:
+        """Build Zar animation events for modern_death_recovery."""
+
+        target_metadata = _modern_death_metadata(plan, recipient_scope="target")
+        room_metadata = _modern_death_metadata(plan, recipient_scope="room")
+        predeath_target_metadata = dict(target_metadata)
+        predeath_target_metadata.pop("death_reset", None)
+        predeath_target_metadata["pre_death_drop"] = True
+        events: list[AnimationTickEvent] = []
+        for room_update in plan.room_object_updates:
+            events.append(
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=room_update.room_id,
+                    payload={
+                        **_room_objects_payload(
+                            room_update.room_id, room_update.object_ids
+                        ),
+                        # modern_death_recovery: victim-facing pre-death drop
+                        # notices are target-only events; room broadcasts keep
+                        # notifying the nearby witnesses. See
+                        # docs/MODERN_FEATURES.md.
+                        "exclude_player": player.plyrid,
+                        **room_metadata,
+                    },
+                )
+            )
+            for object_id in room_update.dropped_items:
+                drop_text = self._message_formatter(
+                    "DROPIT3",
+                    plan.old_name,
+                    plan.old_possessive_pronoun,
+                    self._object_name_lookup(object_id),
+                )
+                events.append(
+                    AnimationTickEvent(
+                        flag="zarfood",
+                        room_id=room_update.room_id,
+                        payload={
+                            "target_only": True,
+                            "target_player": player.plyrid,
+                            "target_message_id": "DROPIT3",
+                            "target_text": drop_text,
+                            "object_id": object_id,
+                            **predeath_target_metadata,
+                        },
+                    )
+                )
+                events.append(
+                    AnimationTickEvent(
+                        flag="zarfood",
+                        room_id=room_update.room_id,
+                        message_id="DROPIT3",
+                        message_text=drop_text,
+                        payload={
+                            "event": "room_message",
+                            "type": "room_message",
+                            "exclude_player": player.plyrid,
+                            "object_id": object_id,
+                            **room_metadata,
+                        },
+                    )
+                )
+        events.extend(
+            [
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=room_id,
+                    payload={
+                        "target_only": True,
+                        "target_player": player.plyrid,
+                        "target_message_id": "DIEMSG",
+                        "target_text": self._message_formatter("DIEMSG"),
+                        **target_metadata,
+                    },
+                ),
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=room_id,
+                    message_id="KILLED",
+                    message_text=self._message_formatter("KILLED", plan.old_name),
+                    payload={"exclude_player": player.plyrid, **room_metadata},
+                ),
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=constants.WILLOW_ROOM_ID,
+                    payload={
+                        "target_only": True,
+                        "target_player": player.plyrid,
+                        "target_event": "location_update",
+                        "target_type": "location_update",
+                        "location": constants.WILLOW_ROOM_ID,
+                        "move_player_to": constants.WILLOW_ROOM_ID,
+                        **target_metadata,
+                    },
+                ),
+                AnimationTickEvent(
+                    flag="zarfood",
+                    room_id=constants.WILLOW_ROOM_ID,
+                    message_text=f"*** {player.plyrid} has just appeared in a holy light!",
+                    payload={
+                        "event": "room_message",
+                        "type": "room_message",
+                        "exclude_player": player.plyrid,
+                        "player": player.plyrid,
+                        **room_metadata,
+                    },
+                ),
+            ]
+        )
         return events
 
     def _reset_dead_player(self, player: models.PlayerModel):

@@ -807,6 +807,91 @@ async def test_cast_direct_damage_death_resets_target_refreshes_room_and_persist
         assert record.stones == [2, 3, 4, 5]
 
 
+def test_modern_death_recovery_failed_persistence_does_not_mutate_live_state(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        player = _build_player(
+            plyrid="target",
+            attnam="Target Mask",
+            altnam="Target Mask",
+            gamloc=302,
+            pgploc=302,
+            level=10,
+            hitpts=0,
+            gpobjs=[0],
+            obvals=[10],
+            npobjs=1,
+            honor_mode=False,
+        )
+        state = _build_state(player)
+        state.db_session = session
+        state.locations[302] = state.locations[302].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+        before_player = player.model_dump()
+        before_objects = list(state.locations[302].objects)
+        events: list[dict] = []
+
+        with pytest.raises(RuntimeError, match="modern_death_recovery"):
+            commands._append_hitoth_death_events(state, player, None, events)
+
+        assert player.model_dump() == before_player
+        assert state.locations[302].objects == before_objects
+        assert events == []
+
+
+@pytest.mark.anyio
+async def test_cast_modern_death_failed_persistence_restores_pre_damage_target(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        player = _build_player(
+            flags=int(constants.PlayerFlag.LOADED),
+            level=25,
+            spts=25,
+            spells=[47],
+            nspells=1,
+            gamloc=7,
+            pgploc=7,
+        )
+        target = _build_player(
+            plyrid="target",
+            attnam="target",
+            altnam="Target Mask",
+            gamloc=7,
+            pgploc=7,
+            hitpts=2,
+            level=5,
+            flags=int(constants.PlayerFlag.LOADED),
+            honor_mode=False,
+            gpobjs=[0],
+            obvals=[10],
+            npobjs=1,
+        )
+        state = _build_state(player)
+        state.locations[7] = state.locations[7].model_copy(
+            update={"objects": [], "nlobjs": 0}
+        )
+        state.presence = TrackingPresence({player.plyrid, target.plyrid})
+        state.player_lookup = lambda pid: {
+            player.plyrid: player,
+            target.plyrid: target,
+        }.get(pid)
+        state.db_session = session
+        session.add(models.Player(**player.model_dump()))
+        session.commit()
+        before_target = target.model_dump()
+
+        registry = commands.build_default_registry()
+        dispatcher = commands.CommandDispatcher(registry)
+
+        with pytest.raises(RuntimeError, match="modern_death_recovery"):
+            await dispatcher.dispatch("cast", {"raw": "pocus target"}, state)
+
+        assert target.model_dump() == before_target
+
+
 @pytest.mark.anyio
 async def test_cast_target_death_refresh_uses_reset_target_brief_flag():
     player = _build_player(
@@ -1313,6 +1398,151 @@ async def test_cast_zelastone_target_hit_death_resets_remote_target():
         and event.get("room_id") == 0
         and event.get("exclude_player") == "target"
         and "appeared in a holy light" in (event.get("text") or "")
+        for event in result.events
+    )
+
+
+@pytest.mark.anyio
+async def test_cast_zelastone_target_hit_modern_death_recovery_drops_and_filters_items():
+    player = _build_player(
+        flags=int(constants.PlayerFlag.LOADED),
+        level=25,
+        spts=25,
+        gamloc=7,
+        spells=[66],
+        nspells=1,
+    )
+    target = _build_player(
+        plyrid="target",
+        attnam="Target Mask",
+        altnam="Target Mask",
+        gamloc=302,
+        hitpts=30,
+        level=10,
+        gold=99,
+        gpobjs=[
+            constants.SOULSTONE_OBJECT_ID,
+            constants.KYRAGEM_OBJECT_ID,
+            0,
+        ],
+        obvals=[10, 20, 30],
+        npobjs=3,
+        spells=[66],
+        nspells=1,
+        offspls=123,
+        defspls=456,
+        othspls=789,
+        charms=[1, 1, 1, 1, 0, 1],
+        macros=0,
+        flags=int(
+            constants.PlayerFlag.LOADED
+            | constants.PlayerFlag.GOTKYG
+            | constants.PlayerFlag.INVISF
+            | constants.PlayerFlag.PEGASU
+            | constants.PlayerFlag.WILLOW
+            | constants.PlayerFlag.PDRAGN
+        ),
+        honor_mode=False,
+    )
+    state = _build_state(player)
+    state.locations[302] = state.locations[302].model_copy(
+        update={"objects": [], "nlobjs": 0}
+    )
+    state.rng = FixedRng(randint_values=[50, 40])
+    state.presence = RoomPresence({7: {player.plyrid}, 302: {target.plyrid}})
+    state.player_lookup = lambda pid: (
+        player if pid == player.plyrid else target if pid == target.plyrid else None
+    )
+    state.global_player_lookup = lambda name: target if name == target.plyrid else None
+    dispatcher = commands.CommandDispatcher(commands.build_default_registry())
+
+    result = await dispatcher.dispatch("cast", {"raw": "zelastone target"}, state)
+
+    assert target.gamloc == constants.WILLOW_ROOM_ID
+    assert target.pgploc == constants.WILLOW_ROOM_ID
+    assert target.level == 9
+    assert target.hitpts == 36
+    assert target.spts == 18
+    assert target.gold == 0
+    assert target.gpobjs == []
+    assert target.obvals == []
+    assert target.npobjs == 0
+    assert target.spells == []
+    assert target.nspells == 0
+    assert (target.offspls, target.defspls, target.othspls) == (123, 456, 789)
+    assert target.charms == [0] * constants.NCHARM
+    assert target.macros == constants.MODERN_DEATH_EXHAUSTION_MACROS
+    assert target.flags == int(constants.PlayerFlag.LOADED)
+    assert state.locations[302].objects == [0]
+    assert constants.SOULSTONE_OBJECT_ID not in state.locations[302].objects
+    assert constants.KYRAGEM_OBJECT_ID not in state.locations[302].objects
+    assert any(
+        event.get("scope") == "target"
+        and event.get("message_id") == "DIEMSG"
+        and event.get("modern_death_recovery") is True
+        and event.get("old_level") == 10
+        and event.get("new_level") == 9
+        and event.get("filtered_items")
+        == [constants.SOULSTONE_OBJECT_ID, constants.KYRAGEM_OBJECT_ID]
+        for event in result.events
+    )
+    room_objects_event = next(
+        event
+        for event in result.events
+        if event.get("scope") == "room"
+        and event.get("room_id") == 302
+        and event.get("event") == "room_objects"
+    )
+    assert room_objects_event.get("exclude_player") == "target"
+    room_drop_event = next(
+        event
+        for event in result.events
+        if event.get("scope") == "room"
+        and event.get("room_id") == 302
+        and event.get("message_id") == "DROPIT3"
+        and event.get("object_id") == 0
+    )
+    assert room_drop_event.get("exclude_player") == "target"
+    assert "dropped its" in room_drop_event.get("text", "")
+    target_drop_event = next(
+        event
+        for event in result.events
+        if event.get("scope") == "target"
+        and event.get("message_id") == "DROPIT3"
+        and event.get("object_id") == 0
+    )
+    assert target_drop_event.get("pre_death_drop") is True
+    assert "dropped its" in target_drop_event.get("text", "")
+    target_drop_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("scope") == "target"
+        and event.get("message_id") == "DROPIT3"
+        and event.get("object_id") == 0
+    )
+    target_death_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("scope") == "target" and event.get("message_id") == "DIEMSG"
+    )
+    room_drop_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("scope") == "room"
+        and event.get("room_id") == 302
+        and event.get("message_id") == "DROPIT3"
+    )
+    killed_index = next(
+        index
+        for index, event in enumerate(result.events)
+        if event.get("message_id") == "KILLED"
+    )
+    assert target_drop_index < target_death_index
+    assert room_drop_index < killed_index
+    assert not any(
+        event.get("scope") == "nearby_room"
+        and event.get("room_id") == 302
+        and event.get("include_sender") is True
         for event in result.events
     )
 

@@ -20,6 +20,17 @@ class FakeGateway:
         self.messages.append(message)
 
 
+class FixedDeathRecoveryRng:
+    def __init__(self):
+        self.shuffle_result = [2, 0, 95, 72]
+
+    def shuffle(self, values):
+        values[:] = self.shuffle_result[: len(values)]
+
+    def randrange(self, low: int, high: int) -> int:  # noqa: ARG002
+        return low
+
+
 ADMIN_TOKEN = "test-admin-token"
 ADMIN_HEADERS = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
@@ -946,6 +957,198 @@ async def test_fountain_drink_force_honor_uses_default_water_message():
     assert handled is True
     assert player.spts == 2
     assert messages.messages["DRINK0"] in _direct_texts(gateway)
+
+
+@pytest.mark.anyio
+async def test_yaml_modern_death_spill_updates_all_live_room_object_stores():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    locations = {location.id: location for location in fixtures.load_locations()}
+    locations[1] = locations[1].model_copy(
+        update={"objects": [10, 11, 12, 13, 14], "nlobjs": 5}
+    )
+    locations[2] = locations[2].model_copy(
+        update={"objects": [20, 21, 22, 23, 24], "nlobjs": 5}
+    )
+    room_objects = {
+        1: [10, 11, 12, 13, 14],
+        2: [20, 21, 22, 23, 24],
+    }
+    synced: list[tuple[int, list[int]]] = []
+    definitions = {
+        "rooms": [
+            {
+                "id": 1,
+                "triggers": [
+                    {
+                        "verbs": ["die"],
+                        "actions": [{"type": "damage", "amount": 99}],
+                    }
+                ],
+            }
+        ]
+    }
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=locations.values(),
+        messages=fixtures.load_messages(),
+        players=[],
+        room_scripts=definitions,
+        objects=fixtures.load_objects(),
+        spells=fixtures.load_spells(),
+        room_objects_getter=lambda room_id: room_objects.get(
+            room_id, list(locations[room_id].objects)
+        ),
+        room_objects_setter=lambda room_id, objects: (
+            room_objects.__setitem__(room_id, list(objects)),
+            synced.append((room_id, list(objects))),
+        ),
+    )
+    assert engine.yaml_engine is not None
+    engine.yaml_engine.rng = FixedDeathRecoveryRng()
+    player = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "ztspill",
+            "gamloc": 1,
+            "pgploc": 1,
+            "level": 10,
+            "hitpts": 1,
+            "gpobjs": [0, 1],
+            "obvals": [10, 20],
+            "npobjs": 2,
+            "honor_mode": False,
+        }
+    )
+
+    handled = await engine.handle_command(
+        player.plyrid,
+        1,
+        "die",
+        [],
+        player_level=player.level,
+        player=player,
+    )
+
+    assert handled is True
+    assert room_objects[1] == [10, 11, 12, 13, 14, 0]
+    assert room_objects[2] == [20, 21, 22, 23, 24, 1]
+    assert synced == [
+        (1, [10, 11, 12, 13, 14, 0]),
+        (2, [20, 21, 22, 23, 24, 1]),
+    ]
+    room_object_events = [
+        event
+        for event in engine.get_and_clear_pending_events()
+        if event.get("event") == "room_objects"
+    ]
+    assert [event["location"] for event in room_object_events] == [1, 2]
+    assert all(event.get("modern_death_recovery") is True for event in room_object_events)
+
+
+@pytest.mark.anyio
+async def test_yaml_modern_death_deferred_mode_stages_spill_until_caller_commits():
+    scheduler = SchedulerService()
+    gateway = FakeGateway()
+    locations = {location.id: location for location in fixtures.load_locations()}
+    locations[1] = locations[1].model_copy(
+        update={
+            "objects": [],
+            "nlobjs": 0,
+            "gi_north": 2,
+            "gi_south": -1,
+            "gi_east": -1,
+            "gi_west": -1,
+        }
+    )
+    locations[2] = locations[2].model_copy(update={"objects": [], "nlobjs": 0})
+    locations[44] = locations[44].model_copy(update={"objects": [], "nlobjs": 0})
+    room_objects = {
+        1: [10, 11, 12, 13, 14, 15],
+        2: [20, 21, 22, 23, 24, 25],
+        44: [],
+    }
+    synced: list[tuple[int, list[int]]] = []
+    definitions = {
+        "rooms": [
+            {
+                "id": 1,
+                "triggers": [
+                    {
+                        "verbs": ["die"],
+                        "actions": [{"type": "damage", "amount": 99}],
+                    }
+                ],
+            }
+        ]
+    }
+    engine = RoomScriptEngine(
+        gateway=gateway,
+        scheduler=scheduler,
+        locations=locations.values(),
+        messages=fixtures.load_messages(),
+        players=[],
+        room_scripts=definitions,
+        objects=fixtures.load_objects(),
+        spells=fixtures.load_spells(),
+        room_objects_getter=lambda room_id: room_objects.get(
+            room_id, list(locations[room_id].objects)
+        ),
+        room_objects_setter=lambda room_id, objects: (
+            room_objects.__setitem__(room_id, list(objects)),
+            synced.append((room_id, list(objects))),
+        ),
+        defer_modern_death_recovery=True,
+    )
+    assert engine.yaml_engine is not None
+    engine.yaml_engine.rng = FixedDeathRecoveryRng()
+    player = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "ztstage",
+            "gamloc": 1,
+            "pgploc": 1,
+            "level": 10,
+            "hitpts": 1,
+            "gpobjs": [0],
+            "obvals": [10],
+            "npobjs": 1,
+            "honor_mode": False,
+        }
+    )
+
+    handled = await engine.handle_command(
+        player.plyrid,
+        1,
+        "die",
+        [],
+        player_level=player.level,
+        player=player,
+    )
+
+    assert handled is True
+    assert synced == []
+    assert room_objects[1] == [10, 11, 12, 13, 14, 15]
+    assert room_objects[2] == [20, 21, 22, 23, 24, 25]
+    assert room_objects[44] == []
+    assert player.gamloc == 1
+    assert player.hitpts == 1
+    assert engine.last_death_recovery_plan is not None
+    assert engine.last_death_recovery_plan.old_room == 1
+    assert [
+        (update.room_id, list(update.object_ids))
+        for update in engine.last_death_recovery_plan.room_object_updates
+    ] == [(44, [0])]
+
+    engine.sync_deferred_modern_death_recovery(engine.last_death_recovery_plan)
+
+    assert synced == []
+    assert room_objects[44] == []
+    assert engine.yaml_engine.get_room_objects(1) == [10, 11, 12, 13, 14, 15]
+    assert engine.yaml_engine.get_room_objects(2) == [20, 21, 22, 23, 24, 25]
+    assert engine.yaml_engine.get_room_objects(44) == [0]
+    assert engine.locations[1].objects == [10, 11, 12, 13, 14, 15]
+    assert engine.locations[2].objects == [20, 21, 22, 23, 24, 25]
+    assert engine.locations[44].objects == [0]
 
 
 @pytest.mark.anyio

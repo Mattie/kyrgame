@@ -25,7 +25,7 @@ from . import accounts, commands, constants, fixtures, models, modern_features, 
 from .env import load_env_file
 from .gateway import RoomGateway
 from .honor_mode import HonorModePolicy
-from .player_lifecycle import initialize_player_for_first_login
+from .player_lifecycle import apply_death_recovery_plan, initialize_player_for_first_login
 from .player_titles import legacy_title_for_level
 from .presence import PresenceService
 from .rate_limit import RateLimiter
@@ -3804,6 +3804,7 @@ def create_app() -> FastAPI:
                 "state",
                 None,
             ),
+            honor_mode_policy=_honor_mode_policy(provider.scope.app),
         )
 
         _register_active_player_session(
@@ -4117,7 +4118,35 @@ def create_app() -> FastAPI:
                             verb = normalized_verb
                             arg_list = normalized_args
                     if handled:
-                        commands._persist_player_state(state, state.player)
+                        death_plan = getattr(
+                            provider.room_scripts, "last_death_recovery_plan", None
+                        )
+                        try:
+                            if death_plan is not None and getattr(
+                                provider.room_scripts,
+                                "defer_modern_death_recovery",
+                                False,
+                            ):
+                                # modern_death_recovery: commit the recovered
+                                # player and spill-room objects before live
+                                # mutation or broadcasts. See docs/MODERN_FEATURES.md.
+                                commands._persist_death_recovery_plan(
+                                    state, state.player, death_plan
+                                )
+                                apply_death_recovery_plan(
+                                    state.player, state.locations, death_plan
+                                )
+                                provider.room_scripts.sync_deferred_modern_death_recovery(
+                                    death_plan
+                                )
+                                provider.room_scripts.last_death_recovery_plan = None
+                            else:
+                                commands._persist_player_state(state, state.player)
+                        except Exception:
+                            if death_plan is not None:
+                                provider.room_scripts.get_and_clear_pending_events()
+                                provider.room_scripts.last_death_recovery_plan = None
+                            raise
                         ack_payload = {
                             "type": "command_response",
                             "room": current_room,
@@ -4244,6 +4273,20 @@ def create_app() -> FastAPI:
                                         f"*** {state.player.altnam} has just {arrive_text}!"
                                     )
                             death_reset = bool(transfer_event.get("death_reset"))
+                            transfer_metadata = {
+                                key: transfer_event[key]
+                                for key in (
+                                    "modern_death_recovery",
+                                    "old_level",
+                                    "new_level",
+                                    "filtered_items",
+                                    "vanished_items",
+                                    "dropped_rooms",
+                                    "refresh_location",
+                                    "recipient_scope",
+                                )
+                                if key in transfer_event
+                            }
                             # YAML hitoth() death resets mirror initgp()+entrgp(), so
                             # every active session for the player must relocate and refresh.
                             # Source: legacy/KYRSPEL.C:303-321, legacy/KYRANDIA.C:325-356,
@@ -4293,6 +4336,7 @@ def create_app() -> FastAPI:
                                             "long_description": long_description,
                                             "message_id": description_id,
                                             **({"death_reset": True} if death_reset else {}),
+                                            **transfer_metadata,
                                         },
                                         {
                                             "scope": "player",
@@ -4302,6 +4346,7 @@ def create_app() -> FastAPI:
                                             "message_id": description_id,
                                             "text": long_description or location.brfdes,
                                             **({"death_reset": True} if death_reset else {}),
+                                            **transfer_metadata,
                                         },
                                     ]
                                     room_objects_event = commands._room_objects_event(
@@ -4309,6 +4354,7 @@ def create_app() -> FastAPI:
                                     )
                                     if death_reset:
                                         room_objects_event["death_reset"] = True
+                                    room_objects_event.update(transfer_metadata)
                                     refresh_events.append(room_objects_event)
 
                                     occupant_event = await _room_occupants_event(

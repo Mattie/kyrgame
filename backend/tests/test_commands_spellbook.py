@@ -349,6 +349,39 @@ async def test_read_scroll_damage_failure_uses_death_reset_and_persists():
 
 
 @pytest.mark.anyio
+async def test_read_scroll_modern_death_failed_persistence_restores_precommand_inventory(tmp_path):
+    engine = get_engine(f"sqlite:///{tmp_path / 'kyrgame.db'}")
+    init_db_schema(engine)
+    with create_session(engine) as session:
+        player = _build_player(
+            flags=int(constants.PlayerFlag.LOADED),
+            honor_mode=False,
+            gamloc=4,
+            pgploc=4,
+            level=10,
+            hitpts=2,
+            gpobjs=[35],
+            obvals=[0],
+            npobjs=1,
+        )
+        state = _build_state(player)
+        state.db_session = session
+        state.rng = FixedRng([67, 7, 2, 0, 0, 0])
+        before_player = player.model_dump()
+        registry = commands.build_default_registry()
+        dispatcher = commands.CommandDispatcher(registry)
+
+        with pytest.raises(RuntimeError, match="modern_death_recovery"):
+            await dispatcher.dispatch(
+                "read",
+                {"raw": "scroll", commands.FATIGUE_CHECKED_ARG: True},
+                state,
+            )
+
+        assert player.model_dump() == before_player
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("values", "expected_calls", "raw"),
     [
