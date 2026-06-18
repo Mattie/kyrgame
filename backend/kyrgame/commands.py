@@ -2105,7 +2105,7 @@ def _append_modern_death_drop_events(
 ) -> None:
     """Broadcast modern_death_recovery inventory drops room by room."""
 
-    metadata = _modern_death_event_metadata(plan, recipient_scope="nearby_room")
+    metadata = _modern_death_event_metadata(plan, recipient_scope="room")
     for room_update in plan.room_object_updates:
         location = state.locations.get(room_update.room_id)
         if location is None:
@@ -2115,7 +2115,7 @@ def _append_modern_death_drop_events(
             state.objects or {},
             command_id,
             "room_objects",
-            scope="nearby_room",
+            scope="room",
             include_sender=True,
         )
         objects_event.update({"room_id": room_update.room_id, **metadata})
@@ -2124,7 +2124,7 @@ def _append_modern_death_drop_events(
             obj = state.objects.get(object_id) if state.objects else None
             events.append(
                 {
-                    "scope": "nearby_room",
+                    "scope": "room",
                     "room_id": room_update.room_id,
                     "event": "room_message",
                     "type": "room_message",

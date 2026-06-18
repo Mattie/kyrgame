@@ -1436,10 +1436,16 @@ async def test_cast_zelastone_target_hit_modern_death_recovery_drops_and_filters
         for event in result.events
     )
     assert any(
-        event.get("scope") == "nearby_room"
+        event.get("scope") == "room"
         and event.get("room_id") == 302
         and event.get("message_id") == "DROPIT3"
         and event.get("object_id") == 0
+        for event in result.events
+    )
+    assert not any(
+        event.get("scope") == "nearby_room"
+        and event.get("room_id") == 302
+        and event.get("include_sender") is True
         for event in result.events
     )
 

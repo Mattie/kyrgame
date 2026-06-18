@@ -414,6 +414,7 @@ def _build_zar_routine(
     location_updates=None,
     locations=None,
     honor_mode_policy=None,
+    death_recovery_persister=None,
 ):
     room_roll_iter = iter(room_rolls or [])
     chance_roll_iter = iter(chance_rolls or [])
@@ -439,6 +440,7 @@ def _build_zar_routine(
         object_name_lookup=lambda object_id: f"object-{object_id}",
         locations_getter=lambda: locations or {},
         honor_mode_policy=honor_mode_policy,
+        death_recovery_persister=death_recovery_persister,
     )
 
 
@@ -791,3 +793,47 @@ def test_zarfood_uses_modern_death_recovery_for_non_honor_player():
         and event.payload.get("object_id") == 0
         for event in events
     )
+
+
+def test_zarfood_modern_death_persister_failure_keeps_predeath_state():
+    player = _build_player(
+        plyrid="target",
+        gamloc=302,
+        pgploc=302,
+        level=10,
+        hitpts=10,
+        spts=21,
+        gold=77,
+        gpobjs=[0],
+        obvals=[30],
+        npobjs=1,
+        spells=[1],
+        nspells=1,
+        offspls=123,
+        honor_mode=False,
+    )
+    persisted_damage: list[tuple[str, int, int]] = []
+    room_objects = {302: [52]}
+    routine = _build_zar_routine(
+        room_objects=room_objects,
+        players=[player],
+        locations={location.id: location for location in fixtures.load_locations()},
+        persisted=persisted_damage,
+        death_recovery_persister=lambda _player, _plan: (_ for _ in ()).throw(
+            RuntimeError("boom")
+        ),
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 302
+
+    with pytest.raises(RuntimeError, match="boom"):
+        routine.zarfood(state)
+
+    assert persisted_damage == []
+    assert player.gamloc == 302
+    assert player.pgploc == 302
+    assert player.hitpts == 10
+    assert player.level == 10
+    assert player.gpobjs == [0]
+    assert player.spells == [1]
+    assert room_objects[302] == [52]

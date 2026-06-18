@@ -484,7 +484,7 @@ async def bootstrap_app(app: FastAPI):
     app.state.room_scripts = rooms.RoomScriptEngine(
         gateway=app.state.gateway,
         scheduler=app.state.scheduler,
-        locations=app.state.fixture_cache["locations"],
+        locations=app.state.location_index.values(),
         messages=default_messages,
         players=app.state.fixture_cache["players"],
         room_scripts=fixtures.load_room_scripts(seed_root),
@@ -495,6 +495,7 @@ async def bootstrap_app(app: FastAPI):
         room_objects_setter=_animation_set_room_objects,
         room_players_getter=_animation_players_getter,
         honor_mode_policy=app.state.honor_mode_policy,
+        defer_modern_death_recovery=True,
     )
     zar_routine.initialize(app.state.animation_tick_system.state)
     app.state.animation_tick_system.persist_state()

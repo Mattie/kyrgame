@@ -393,9 +393,6 @@ class ZarDragonRoutine:
         attack = self.attack_name(attack_index)
         message_id, damage = self._attack_message_and_damage(player, attack)
 
-        player.hitpts = max(0, player.hitpts - damage)
-        self._player_persister(player)
-
         events = [
             AnimationTickEvent(
                 flag="zarfood",
@@ -417,30 +414,35 @@ class ZarDragonRoutine:
                 },
             ),
         ]
+
+        remaining_hitpts = max(0, player.hitpts - damage)
+        if remaining_hitpts <= 0 and self._honor_mode_policy.modern_feature_enabled(
+            player, modern_features.MODERN_DEATH_RECOVERY
+        ):
+            # modern_death_recovery: Zar death recovery must commit before we
+            # mutate live HP/location state. See docs/MODERN_FEATURES.md.
+            locations = self._locations_getter() if self._locations_getter else {}
+            plan = build_modern_death_recovery_plan(
+                player,
+                locations=locations,
+                rng=_ChancePickerRandom(self._chance_picker),
+            )
+            if self._death_recovery_persister:
+                self._death_recovery_persister(player, plan)
+                apply_death_recovery_plan(player, locations, plan)
+            else:
+                apply_death_recovery_plan(player, locations, plan)
+                for room_update in plan.room_object_updates:
+                    self._room_objects_setter(
+                        room_update.room_id, list(room_update.object_ids)
+                    )
+                self._player_persister(player)
+            events.extend(self._modern_death_recovery_events(room_id, player, plan))
+            return events
+
+        player.hitpts = remaining_hitpts
+        self._player_persister(player)
         if player.hitpts <= 0:
-            if self._honor_mode_policy.modern_feature_enabled(
-                player, modern_features.MODERN_DEATH_RECOVERY
-            ):
-                # modern_death_recovery: Zar deaths share the documented
-                # non-honor recovery contract. See docs/MODERN_FEATURES.md.
-                locations = self._locations_getter() if self._locations_getter else {}
-                plan = build_modern_death_recovery_plan(
-                    player,
-                    locations=locations,
-                    rng=_ChancePickerRandom(self._chance_picker),
-                )
-                if self._death_recovery_persister:
-                    self._death_recovery_persister(player, plan)
-                    apply_death_recovery_plan(player, locations, plan)
-                else:
-                    apply_death_recovery_plan(player, locations, plan)
-                    for room_update in plan.room_object_updates:
-                        self._room_objects_setter(
-                            room_update.room_id, list(room_update.object_ids)
-                        )
-                    self._player_persister(player)
-                events.extend(self._modern_death_recovery_events(room_id, player, plan))
-                return events
 
             reset = self._reset_dead_player(player)
             self._player_persister(player)

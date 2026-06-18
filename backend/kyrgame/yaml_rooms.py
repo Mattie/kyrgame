@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 import random
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import yaml
 
@@ -59,6 +59,8 @@ class YamlRoomEngine:
         rng: random.Random | None = None,
         locations: Iterable[models.LocationModel] | None = None,
         honor_mode_policy: HonorModePolicy | None = None,
+        defer_modern_death_recovery: bool = False,
+        room_objects_getter: Callable[[int], list[int]] | None = None,
     ):
         object_list = list(objects)
         spell_list = list(spells)
@@ -69,6 +71,8 @@ class YamlRoomEngine:
         self.spells_by_name = {spell.name.lower(): spell for spell in spell_list}
         self.rng = rng or random.Random()
         self.honor_mode_policy = honor_mode_policy or HonorModePolicy()
+        self.defer_modern_death_recovery = defer_modern_death_recovery
+        self.room_objects_getter = room_objects_getter
         self.room_state_defaults: dict[int, dict] = {
             room_id: room.get("state", {})
             for room_id, room in ((room.get("id"), room) for room in self.rooms.values())
@@ -79,6 +83,7 @@ class YamlRoomEngine:
         self.room_objects: dict[int, list[int]] = {}
         self.locations: dict[int, models.LocationModel] = {}
         self.last_room_object_updates: list[RoomObjectUpdate] = []
+        self.last_death_recovery_plan: DeathRecoveryPlan | None = None
 
         for location in locations or []:
             if hasattr(location, "id"):
@@ -106,6 +111,7 @@ class YamlRoomEngine:
             return RoomHandleResult(handled=False, events=[])
 
         self.last_room_object_updates = []
+        self.last_death_recovery_plan = None
         context: dict[str, Any] = self._base_context(player, args)
         context.update(
             {
@@ -559,29 +565,35 @@ class YamlRoomEngine:
         # Legacy hitoth() deducts hit points, then initgp()/entrgp() resets dead
         # players to room 0 with DIEMSG/KILLED fan-out. Source: legacy/KYRSPEL.C:303-321.
         amount = max(0, int(action.get("amount", 0)))
-        player.hitpts -= amount
-        if player.hitpts > 0:
+        remaining_hitpts = player.hitpts - amount
+        if remaining_hitpts > 0:
+            player.hitpts = remaining_hitpts
             return
 
         if self.honor_mode_policy.modern_feature_enabled(
             player, modern_features.MODERN_DEATH_RECOVERY
         ):
-            # modern_death_recovery: YAML room damage shares the documented
-            # non-honor death contract. See docs/MODERN_FEATURES.md.
+            # modern_death_recovery: YAML room damage can be deferred so the
+            # WebSocket layer persists the player row and spill rooms atomically.
+            # See docs/MODERN_FEATURES.md.
+            self._refresh_modern_death_recovery_room_objects(player.gamloc)
             plan = build_modern_death_recovery_plan(
                 player,
                 locations=self.locations,
                 rng=self.rng,
             )
-            apply_death_recovery_plan(player, self.locations, plan)
+            self.last_death_recovery_plan = plan
             context["death_old_room"] = plan.old_room
             context["death_old_name"] = plan.old_name
-            for room_update in plan.room_object_updates:
-                self.set_room_objects(room_update.room_id, list(room_update.object_ids))
             self.last_room_object_updates = list(plan.room_object_updates)
+            if not self.defer_modern_death_recovery:
+                apply_death_recovery_plan(player, self.locations, plan)
+                for room_update in plan.room_object_updates:
+                    self.set_room_objects(room_update.room_id, list(room_update.object_ids))
             self._append_modern_death_recovery_events(player, events, plan)
             return
 
+        player.hitpts = remaining_hitpts
         old_room = player.gamloc
         old_name = player.altnam
         # Honor-mode YAML deaths stay on the legacy hitoth()/initgp() reset
@@ -1153,6 +1165,34 @@ class YamlRoomEngine:
             self.locations[room_id] = location.model_copy(
                 update={"objects": list(object_ids), "nlobjs": len(object_ids)}
             )
+
+    def _refresh_modern_death_recovery_room_objects(self, old_room: int) -> None:
+        if self.room_objects_getter is None:
+            return
+        room_ids = {old_room}
+        location = self.locations.get(old_room)
+        if location is not None:
+            for room_id in (
+                location.gi_north,
+                location.gi_south,
+                location.gi_east,
+                location.gi_west,
+            ):
+                if room_id >= 0 and room_id in self.locations:
+                    room_ids.add(room_id)
+        room_ids.update(
+            room_id
+            for room_id in range(
+                constants.MODERN_DEATH_DARK_FOREST_MIN_ROOM,
+                constants.MODERN_DEATH_DARK_FOREST_MAX_ROOM + 1,
+            )
+            if room_id in self.locations
+        )
+        for room_id in room_ids:
+            # modern_death_recovery placement must use current live room
+            # objects, since adjacent/fallback rooms may have changed after
+            # YAML fixtures loaded. See docs/MODERN_FEATURES.md.
+            self.set_room_objects(room_id, self.room_objects_getter(room_id))
 
     def _message(self, message_id: str, *args: object) -> str:
         template = self.messages.messages.get(message_id, "")

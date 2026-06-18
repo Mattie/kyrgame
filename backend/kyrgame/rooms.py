@@ -16,6 +16,7 @@ from .models import (
 )
 from . import yaml_rooms
 from .messaging import build_direct_and_others_events
+from .player_lifecycle import DeathRecoveryPlan
 from .player_progression import level_up_player
 from .spellbook import add_spell_to_book
 from .inventory import remove_inventory_item
@@ -125,6 +126,7 @@ class RoomScriptEngine:
         room_objects_setter: RoomObjectsSetter | None = None,
         room_players_getter: RoomPlayersGetter | None = None,
         honor_mode_policy: HonorModePolicy | None = None,
+        defer_modern_death_recovery: bool = False,
     ):
         self.gateway = gateway
         self.scheduler = scheduler
@@ -136,6 +138,7 @@ class RoomScriptEngine:
         self.room_objects_setter = room_objects_setter
         self.room_players_getter = room_players_getter
         self.honor_mode_policy = honor_mode_policy or HonorModePolicy()
+        self.defer_modern_death_recovery = defer_modern_death_recovery
         self.routines: Dict[int, RoomRoutine] = build_default_routines(messages)
         self.states: Dict[int, RoomState] = {}
         self.players: Dict[str, PlayerModel] = {
@@ -143,6 +146,7 @@ class RoomScriptEngine:
         }
         self.reloads = 0
         self.pending_events: list[dict] = []  # Events to be processed by webapp
+        self.last_death_recovery_plan: DeathRecoveryPlan | None = None
         self.yaml_engine = (
             yaml_rooms.YamlRoomEngine(
                 definitions=room_scripts,
@@ -151,6 +155,8 @@ class RoomScriptEngine:
                 spells=spells or [],
                 locations=self.locations.values(),
                 honor_mode_policy=self.honor_mode_policy,
+                defer_modern_death_recovery=self.defer_modern_death_recovery,
+                room_objects_getter=self.get_room_objects,
             )
             if room_scripts
             else None
@@ -244,11 +250,53 @@ class RoomScriptEngine:
         object_ids = list(object_ids)
         if self.room_objects_setter is not None:
             self.room_objects_setter(room_id, object_ids)
+        self._set_room_objects_local(room_id, object_ids)
+
+    def _set_room_objects_local(self, room_id: int, object_ids: list[int]) -> None:
+        object_ids = list(object_ids)
         location = self.locations.get(room_id)
         if location is not None:
             self.locations[room_id] = location.model_copy(
                 update={"objects": object_ids, "nlobjs": len(object_ids)}
             )
+
+    def sync_deferred_modern_death_recovery(self, plan: DeathRecoveryPlan) -> None:
+        """Apply post-commit room sync for deferred modern_death_recovery."""
+
+        if self.yaml_engine is not None:
+            for room_id in self._modern_death_recovery_candidate_rooms(plan.old_room):
+                self._set_room_objects_local(
+                    room_id, self.yaml_engine.get_room_objects(room_id)
+                )
+        for room_update in plan.room_object_updates:
+            # modern_death_recovery: these room-object rows were already
+            # persisted atomically by the caller. See docs/MODERN_FEATURES.md.
+            object_ids = list(room_update.object_ids)
+            self._set_room_objects_local(room_update.room_id, object_ids)
+            if self.yaml_engine is not None:
+                self.yaml_engine.set_room_objects(room_update.room_id, object_ids)
+
+    def _modern_death_recovery_candidate_rooms(self, old_room: int) -> set[int]:
+        room_ids = {old_room}
+        location = self.locations.get(old_room)
+        if location is not None:
+            for room_id in (
+                location.gi_north,
+                location.gi_south,
+                location.gi_east,
+                location.gi_west,
+            ):
+                if room_id >= 0 and room_id in self.locations:
+                    room_ids.add(room_id)
+        room_ids.update(
+            room_id
+            for room_id in range(
+                constants.MODERN_DEATH_DARK_FOREST_MIN_ROOM,
+                constants.MODERN_DEATH_DARK_FOREST_MAX_ROOM + 1,
+            )
+            if room_id in self.locations
+        )
+        return room_ids
 
     def room_objects_payload(self, room_id: int, *, scope: str = "room") -> dict:
         visible = []
@@ -283,6 +331,7 @@ class RoomScriptEngine:
         player_level: Optional[int] = None,
         player: Optional[PlayerModel] = None,
     ) -> bool:
+        self.last_death_recovery_plan = None
         # Try YAML engine first if available
         if self.yaml_engine:
             # Legacy room routines read current gmpptr state after prior command/spell
@@ -313,14 +362,21 @@ class RoomScriptEngine:
                         event = {**event, "scope": "room"}
                     self.pending_events.append(event)
                 if result.handled:
+                    self.last_death_recovery_plan = (
+                        self.yaml_engine.last_death_recovery_plan
+                    )
                     synced_room_ids: set[int] = set()
-                    for room_update in self.yaml_engine.last_room_object_updates:
-                        # modern_death_recovery can spill drops into rooms other
-                        # than the triggering room. See docs/MODERN_FEATURES.md.
-                        self.set_room_objects(
-                            room_update.room_id, list(room_update.object_ids)
-                        )
-                        synced_room_ids.add(room_update.room_id)
+                    if not (
+                        self.defer_modern_death_recovery
+                        and self.last_death_recovery_plan is not None
+                    ):
+                        for room_update in self.yaml_engine.last_room_object_updates:
+                            # modern_death_recovery can spill drops into rooms other
+                            # than the triggering room. See docs/MODERN_FEATURES.md.
+                            self.set_room_objects(
+                                room_update.room_id, list(room_update.object_ids)
+                            )
+                            synced_room_ids.add(room_update.room_id)
                     after_objects = self.yaml_engine.get_room_objects(room_id)
                     if room_id not in synced_room_ids and after_objects != before_objects:
                         self.set_room_objects(room_id, after_objects)
