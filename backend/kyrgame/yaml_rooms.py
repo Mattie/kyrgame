@@ -644,8 +644,12 @@ class YamlRoomEngine:
         events: list[dict],
         plan: DeathRecoveryPlan,
     ) -> None:
-        """Append YAML events for modern_death_recovery after state mutation."""
+        """Append YAML events for modern_death_recovery.
 
+        When `defer_modern_death_recovery=True`, these events are emitted before the
+        plan is applied so the caller can persist the staged player/room updates
+        atomically.
+        """
         target_metadata = _modern_death_metadata(plan, recipient_scope="target")
         room_metadata = _modern_death_metadata(plan, recipient_scope="room")
         events.append(
