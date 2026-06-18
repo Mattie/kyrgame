@@ -5366,6 +5366,10 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
             ],
         )
 
+    # modern_death_recovery: if the scroll-damage death recovery commit fails,
+    # restore the active session to the pre-consume inventory state that still
+    # matches the rolled-back DB row. See docs/MODERN_FEATURES.md.
+    scroll_preconsume_snapshot = _snapshot_player_model(state.player)
     # Ported from reader()/scroll() in legacy/KYRCMDS.C:1033-1145.
     pop_inventory_index(state.player, inventory_index)
     read_item = obj.name
@@ -5452,7 +5456,6 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
                 state.player.npobjs = len(state.player.gpobjs)
             events.append(_message_event("player", "SCRLM6", _format_message(state, "SCRLM6", read_item, label), command_id))
         else:
-            predeath_snapshot = _snapshot_player_model(state.player)
             damage = state.rng.randrange(2, 11)
             state.player.hitpts = max(0, state.player.hitpts - damage)
             events.append(_message_event("player", "SCRLM7", _format_message(state, "SCRLM7", read_item, damage), command_id))
@@ -5462,7 +5465,7 @@ def _handle_read(state: GameState, args: dict) -> CommandResult:
                     state.player,
                     command_id,
                     events,
-                    predeath_snapshot=predeath_snapshot,
+                    predeath_snapshot=scroll_preconsume_snapshot,
                 )
                 return CommandResult(state=state, events=events)
 
