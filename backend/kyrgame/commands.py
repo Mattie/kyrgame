@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Protocol, Set
+from typing import Any, Awaitable, Callable, Dict, Iterable, List, Protocol, Set
 
 from sqlalchemy import select, update
 
@@ -123,6 +123,14 @@ class GameState:
 class CommandResult:
     state: GameState
     events: List[dict] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class RoomOccupantDisplay:
+    player_id: str
+    display_name: str
+    flags: int = 0
+    invisible_seen: bool = False
 
 
 FATIGUE_CHECKED_ARG = "_fatigue_checked"
@@ -503,6 +511,7 @@ def _build_room_transition_events(
             "event": "player_enter",
             "type": "player_moved",
             "player": state.player.plyrid,
+            "display_name": state.player.altnam,
             "from": from_room,
             "to": destination.id,
             "description": destination.brfdes,
@@ -1201,6 +1210,126 @@ def _can_see_player(viewer: models.PlayerModel, target: models.PlayerModel) -> b
     # CINVIS is set by see-invisibility spells cadabra/iseeyou/icutwo in KYRSPEL.C.
     # Source trace: legacy/KYRUTIL.C:90-98, legacy/KYRSPEL.C:862-873.
     return viewer.charms[constants.CharmSlot.INVISIBILITY] > 0
+
+
+def _lookup_room_occupant_player(
+    player_lookup: Callable[[str], models.PlayerModel | None] | None, player_id: str
+) -> models.PlayerModel | None:
+    if not player_lookup:
+        return None
+    trimmed = player_id.strip()
+    if not trimmed:
+        return None
+    candidate_ids = [trimmed]
+    if player_id != trimmed:
+        candidate_ids.append(player_id)
+    for candidate_id in candidate_ids:
+        candidate = player_lookup(candidate_id)
+        if candidate is not None:
+            return candidate
+    return None
+
+
+def _room_occupant_flag(
+    player_flags_by_id: dict[str, int] | None, player_id: str, raw_id: str
+) -> int:
+    if not player_flags_by_id:
+        return 0
+    for candidate_id in (player_id, raw_id, raw_id.strip()):
+        if candidate_id in player_flags_by_id:
+            return int(player_flags_by_id[candidate_id])
+    folded = {key.strip().casefold(): int(value) for key, value in player_flags_by_id.items()}
+    return folded.get(player_id.strip().casefold(), folded.get(raw_id.strip().casefold(), 0))
+
+
+def _room_occupant_display_entries(
+    occupant_ids: Iterable[str],
+    *,
+    viewer_id: str,
+    viewer: models.PlayerModel | None = None,
+    player_lookup: Callable[[str], models.PlayerModel | None] | None = None,
+    player_flags_by_id: dict[str, int] | None = None,
+) -> list[RoomOccupantDisplay]:
+    """Resolve presence IDs to legacy locogps() display names.
+
+    Presence is keyed by true player id, while legacy locogps() renders each
+    visible occupant's altnam. Source: legacy/KYRUTIL.C:390-419.
+    """
+
+    viewer_key = (viewer.plyrid if viewer else viewer_id).strip().casefold()
+    entries: list[RoomOccupantDisplay] = []
+    seen: set[str] = set()
+    for raw_id in occupant_ids:
+        raw_text = str(raw_id or "").strip()
+        if not raw_text:
+            continue
+        candidate = _lookup_room_occupant_player(player_lookup, raw_text)
+        canonical_id = (candidate.plyrid if candidate else raw_text).strip()
+        if not canonical_id:
+            continue
+        if canonical_id.casefold() == viewer_key or raw_text.casefold() == viewer_key:
+            continue
+        if candidate is not None and viewer is not None and not _can_see_player(viewer, candidate):
+            continue
+        invisible_seen = (
+            candidate is not None
+            and viewer is not None
+            and candidate is not viewer
+            and bool(candidate.flags & constants.PlayerFlag.INVISF)
+        )
+        display_name = (
+            canonical_id
+            if invisible_seen
+            else (candidate.altnam if candidate is not None else raw_text)
+        ).strip()
+        if not display_name:
+            continue
+        identity_key = canonical_id.casefold()
+        if identity_key in seen:
+            continue
+        seen.add(identity_key)
+        flags = (
+            int(candidate.flags)
+            if candidate is not None
+            else _room_occupant_flag(player_flags_by_id, canonical_id, raw_text)
+        )
+        entries.append(
+            RoomOccupantDisplay(
+                player_id=canonical_id,
+                display_name=display_name,
+                flags=flags,
+                invisible_seen=invisible_seen,
+            )
+        )
+    return entries
+
+
+def _format_room_occupant_entries(
+    entries: Iterable[RoomOccupantDisplay], messages: models.MessageBundleModel | None
+) -> tuple[str | None, str | None]:
+    catalog = messages.messages if messages else {}
+    names: list[str] = []
+    for entry in entries:
+        name = entry.display_name
+        if entry.invisible_seen:
+            suffix = catalog.get("KUTM10", "(your eyes glow for a moment)")
+            separator = "" if suffix[:1].isspace() else " "
+            name = f"{name}{separator}{suffix}"
+        names.append(name)
+    return _format_room_occupants(names, messages)
+
+
+def _room_occupant_detail_payload(
+    entries: Iterable[RoomOccupantDisplay],
+) -> list[dict[str, str | int]]:
+    return [
+        {
+            "player_id": entry.player_id,
+            "display_name": entry.display_name,
+            "flags": int(entry.flags),
+        }
+        for entry in entries
+    ]
 
 
 async def _ordered_players_in_room(state: GameState, room_id: int) -> list[str]:
@@ -3802,15 +3931,14 @@ async def _room_occupants_event(state: GameState, room_id: int) -> dict | None:
     if not state.presence:
         return None
     occupants = await state.presence.players_in_room(room_id)
-    self_key = state.player.plyrid.strip().casefold()
-    others = _dedupe_room_occupants(
-        sorted(
-            occupant
-            for occupant in occupants
-            if str(occupant or "").strip().casefold() != self_key
-        )
+    entries = _room_occupant_display_entries(
+        sorted(occupants),
+        viewer_id=state.player.plyrid,
+        viewer=state.player,
+        player_lookup=state.player_lookup,
     )
-    text, message_id = _format_room_occupants(others, state.messages)
+    others = [entry.display_name for entry in entries]
+    text, message_id = _format_room_occupant_entries(entries, state.messages)
     if not text:
         return None
     return {
@@ -3819,6 +3947,7 @@ async def _room_occupants_event(state: GameState, room_id: int) -> dict | None:
         "type": "room_occupants",
         "location": room_id,
         "occupants": others,
+        "occupant_details": _room_occupant_detail_payload(entries),
         "text": text,
         "message_id": message_id,
     }

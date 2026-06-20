@@ -6,9 +6,10 @@ import httpx
 import pytest
 import uvicorn
 import websockets
+from sqlalchemy import select
 from starlette.websockets import WebSocketState
 
-from kyrgame import constants, fixtures
+from kyrgame import constants, fixtures, models
 from kyrgame.gateway import RoomGateway
 from kyrgame.presence import PresenceService
 from kyrgame.webapp import _room_occupants_event
@@ -40,6 +41,7 @@ async def test_room_occupants_event_includes_player_flags_for_ui_styling():
     assert event["occupant_details"] == [
         {
             "player_id": "Hero",
+            "display_name": "Hero",
             "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE),
         }
     ]
@@ -66,6 +68,41 @@ async def test_room_occupants_event_deduplicates_trimmed_presence_ids():
     assert event["text"] == "Merlin and Necro are here."
     assert "Merlin" in event["text"]
     assert event["text"].count("Necro") == 1
+
+
+@pytest.mark.anyio
+async def test_room_occupants_event_uses_active_transformed_altnam():
+    presence = PresenceService()
+    await presence.set_location("Hero", 0, "hero-token")
+    await presence.set_location("Necro", 0, "necro-token")
+    necro = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "Necro",
+            "attnam": "pegasus",
+            "altnam": "Some pegasus",
+            "gamloc": 0,
+        }
+    )
+
+    event = await _room_occupants_event(
+        presence,
+        "Hero",
+        0,
+        fixtures.load_message_bundle(),
+        {"Necro": int(constants.PlayerFlag.LOADED)},
+        lambda player_id: necro if player_id.strip() == "Necro" else None,
+    )
+
+    assert event is not None
+    assert event["occupants"] == ["Some pegasus"]
+    assert event["text"] == "Some pegasus is here."
+    assert event["occupant_details"] == [
+        {
+            "player_id": "Necro",
+            "display_name": "Some pegasus",
+            "flags": int(necro.flags),
+        }
+    ]
 
 
 class DummyWebSocket:
@@ -178,6 +215,12 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
         rogue_token = rogue_session.json()["session"]["token"]
         seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 1})
         seer_token = seer_session.json()["session"]["token"]
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert hero is not None
+            hero.altnam = "Some pegasus"
+            hero.attnam = "Some pegasus"
+            db.commit()
 
     uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
     uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
@@ -219,6 +262,7 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
                 assert seer_broadcast["type"] == "room_broadcast"
                 assert seer_broadcast["room"] == 1
                 assert seer_broadcast["payload"]["player"] == "hero"
+                assert seer_broadcast["payload"]["display_name"] == "Some pegasus"
 
                 departure_notice = await _receive_until(
                     rogue_ws,
@@ -227,7 +271,7 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
                 )
                 assert departure_notice["room"] == 0
                 assert departure_notice["payload"]["text"] == (
-                    "*** Hero Alt has just moved off to the north!"
+                    "*** Some pegasus has just moved off to the north!"
                 )
 
                 chat_payload = {"type": "command", "command": "chat", "args": {"text": "hail"}}
@@ -352,6 +396,57 @@ async def test_room_broadcast_on_login_uses_entrance_text():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_room_broadcast_on_login_uses_transformed_entrance_name():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    try:
+        while not server.started:
+            await asyncio.sleep(0.05)
+
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+            hero_token = hero_session.json()["session"]["token"]
+            rogue_session = await client.post("/auth/session", json={"player_id": "rogue", "room_id": 0})
+            rogue_token = rogue_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            rogue = db.scalar(select(models.Player).where(models.Player.plyrid == "rogue"))
+            assert rogue is not None
+            rogue.altnam = "Some pegasus"
+            rogue.attnam = "pegasus"
+            db.commit()
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await _drain_pending_messages(hero_ws)
+
+            async with websockets.connect(uri_room0_rogue) as rogue_ws:
+                await asyncio.wait_for(rogue_ws.recv(), timeout=1)
+                await _drain_pending_messages(rogue_ws)
+
+                entrance_message = await _receive_until(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("event") == "room_message",
+                )
+
+                payload = entrance_message["payload"]
+                assert payload["player"] == "rogue"
+                assert payload["text"] == "*** Some pegasus has just appeared in a cloud of mists!"
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio

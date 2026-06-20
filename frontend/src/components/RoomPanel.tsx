@@ -4,6 +4,7 @@ import { isDevEnvironment } from '../config/devMode'
 import { LocationRecord, useNavigator } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
 import { GemstoneBadge } from './GemstoneBadge'
+import { INLINE_DECORATION_NONE } from './inlineDecorations'
 
 type DirectionKey = 'north' | 'south' | 'east' | 'west'
 
@@ -119,7 +120,10 @@ export const RoomPanel = () => {
             <div>
               <h3>Look description</h3>
               <p className="muted" data-testid="room-look-description">
-                <AnsiText text={lookDescription ?? 'No description available'} />
+                <AnsiText
+                  text={lookDescription ?? 'No description available'}
+                  inlineDecorations={INLINE_DECORATION_NONE}
+                />
               </p>
             </div>
 
@@ -180,8 +184,8 @@ export const RoomPanel = () => {
               {occupants.length === 0 && <p className="muted">No one here</p>}
               {occupants.length > 0 && (
                 <ul>
-                  {occupants.map((name) => (
-                    <li key={name}>{name}</li>
+                  {occupants.map((name, index) => (
+                    <li key={`${name}-${index}`}>{name}</li>
                   ))}
                 </ul>
               )}

@@ -517,5 +517,6 @@ env/
 
 # Local scratch notes
 /TODO_local.md
+/.agents.md
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudio,c,c++

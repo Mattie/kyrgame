@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { PlayerVisual } from '../context/NavigatorContext'
 import { AnsiText } from './AnsiText'
+import { InlineDecorationPolicy } from './inlineDecorations'
 
 type ModemLineWriterProps = {
   text: string
@@ -11,6 +12,7 @@ type ModemLineWriterProps = {
   onProgress?: () => void
   onDone?: () => void
   playerVisuals?: Record<string, PlayerVisual>
+  inlineDecorations?: InlineDecorationPolicy
 }
 
 const ANSI_ESCAPE = String.fromCharCode(27)
@@ -62,6 +64,7 @@ export const ModemLineWriter = ({
   onProgress,
   onDone,
   playerVisuals,
+  inlineDecorations,
 }: ModemLineWriterProps) => {
   const totalVisibleChars = useMemo(() => clearAnsiCount(text), [text])
   const resolvedCharsPerSecond = normalizeCharsPerSecond(charsPerSecond)
@@ -108,5 +111,11 @@ export const ModemLineWriter = ({
     [enabled, text, visibleChars]
   )
 
-  return <AnsiText text={renderedText} playerVisuals={playerVisuals} />
+  return (
+    <AnsiText
+      text={renderedText}
+      playerVisuals={playerVisuals}
+      inlineDecorations={inlineDecorations}
+    />
+  )
 }

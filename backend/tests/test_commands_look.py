@@ -414,6 +414,108 @@ async def test_look_room_occupants_deduplicates_trailing_space_presence_ids():
 
 
 @pytest.mark.anyio
+async def test_look_room_occupants_use_transformed_altnam():
+    other = _build_player(
+        plyrid="Necro",
+        attnam="pegasus",
+        altnam="Some pegasus",
+        flags=int(constants.PlayerFlag.PEGASU),
+    )
+    player = _build_player(plyrid="Hero", flags=int(constants.PlayerFlag.BRFSTF))
+    state = _build_state(player, [other])
+    state.presence = FakePresence({player.gamloc: {"Hero", "Necro"}})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": ""}, state)
+
+    occupants_event = next(
+        event for event in result.events if event.get("type") == "room_occupants"
+    )
+    assert occupants_event["occupants"] == ["Some pegasus"]
+    assert occupants_event["text"] == "Some pegasus is here."
+    assert occupants_event["occupant_details"] == [
+        {
+            "player_id": "Necro",
+            "display_name": "Some pegasus",
+            "flags": int(other.flags),
+        }
+    ]
+
+
+@pytest.mark.anyio
+async def test_look_room_occupants_keep_duplicate_transformed_altnams():
+    first = _build_player(
+        plyrid="Alpha",
+        attnam="pegasus",
+        altnam="Some pegasus",
+        flags=int(constants.PlayerFlag.PEGASU),
+    )
+    second = _build_player(
+        plyrid="Beta",
+        attnam="pegasus",
+        altnam="Some pegasus",
+        flags=int(constants.PlayerFlag.PEGASU),
+    )
+    player = _build_player(plyrid="Hero", flags=int(constants.PlayerFlag.BRFSTF))
+    state = _build_state(player, [first, second])
+    state.presence = FakePresence({player.gamloc: {"Hero", "Alpha", "Beta"}})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": ""}, state)
+
+    occupants_event = next(
+        event for event in result.events if event.get("type") == "room_occupants"
+    )
+    assert occupants_event["occupants"] == ["Some pegasus", "Some pegasus"]
+    assert occupants_event["text"] == "Some pegasus and Some pegasus are here."
+    assert occupants_event["occupant_details"] == [
+        {
+            "player_id": "Alpha",
+            "display_name": "Some pegasus",
+            "flags": int(first.flags),
+        },
+        {
+            "player_id": "Beta",
+            "display_name": "Some pegasus",
+            "flags": int(second.flags),
+        },
+    ]
+
+
+@pytest.mark.anyio
+async def test_look_room_occupants_mark_invisible_player_seen_with_charm():
+    other = _build_player(
+        plyrid="Ghost",
+        attnam="force",
+        altnam="Some Unseen Force",
+        flags=int(constants.PlayerFlag.INVISF),
+    )
+    player = _build_player(plyrid="Hero", flags=int(constants.PlayerFlag.BRFSTF))
+    player.charms[constants.CharmSlot.INVISIBILITY] = 1
+    state = _build_state(player, [other])
+    state.presence = FakePresence({player.gamloc: {"Hero", "Ghost"}})
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": ""}, state)
+
+    occupants_event = next(
+        event for event in result.events if event.get("type") == "room_occupants"
+    )
+    assert occupants_event["occupants"] == ["Ghost"]
+    assert occupants_event["text"] == "Ghost (your eyes glow for a moment) is here."
+    assert occupants_event["occupant_details"] == [
+        {
+            "player_id": "Ghost",
+            "display_name": "Ghost",
+            "flags": int(other.flags),
+        }
+    ]
+
+
+@pytest.mark.anyio
 async def test_look_keeps_transform_description_when_viewer_has_whoub_charm():
     other = _build_player(
         plyrid="truth",

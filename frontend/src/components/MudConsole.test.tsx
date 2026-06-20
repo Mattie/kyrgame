@@ -2007,6 +2007,125 @@ describe('MudConsole', () => {
     expect(line.querySelector('.player-wizard')).toHaveStyle({ color: '#a78bfa' })
   })
 
+  it('keeps player emoji out of spellbook ascii art', () => {
+    navigatorState.playerVisuals = {
+      Merlin: {
+        emoji: '\u{1F9D9}\u200D\u2642\uFE0F',
+        className: 'player-wizard',
+        color: '#a78bfa',
+      },
+    }
+    navigatorState.activity = [
+      {
+        id: 'spellbook-header',
+        type: 'command_response',
+        summary: '|  Spell Book of Lord Merlin   |',
+        payload: {
+          scope: 'player',
+          event: 'room_message',
+          type: 'room_message',
+          message_id: 'SBOOK1',
+          text: '|  Spell Book of Lord Merlin   |',
+        },
+      },
+      {
+        id: 'spellbook-row',
+        type: 'command_response',
+        summary: '|  Zar ruby Merlin             |',
+        payload: {
+          scope: 'player',
+          event: 'room_message',
+          type: 'room_message',
+          message_id: 'SBOOK2',
+          text: '|  Zar ruby Merlin             |',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    const header = getConsoleLine('|  Spell Book of Lord Merlin   |')
+    const row = getConsoleLine('|  Zar ruby Merlin             |')
+    expect(header.querySelector('.player-wizard')).toBeNull()
+    expect(row.querySelector('.player-wizard')).toBeNull()
+    expect(row.querySelector('.creature-dragon')).toBeNull()
+    expect(row.querySelector('.gemstone-inline')).toBeNull()
+  })
+
+  it('keeps static room description prose plain while decorating generated object lines', () => {
+    navigatorState.world = {
+      locations: [
+        {
+          id: 0,
+          brfdes: 'A hall',
+          londes: 'KRD999',
+          objlds: 'here',
+          objects: [45],
+        },
+      ],
+      objects: [{ id: 45, name: 'dryad', flags: ['VISIBL'] }],
+      commands: [],
+      messages: {
+        KRD999: 'The wall says Zar was here long ago.',
+        KUTM05: 'There is a dryad standing here.',
+      },
+    }
+    navigatorState.activity = [
+      {
+        id: 'look-description',
+        type: 'command_response',
+        summary: 'The wall says Zar was here long ago.',
+        payload: {
+          event: 'location_description',
+          type: 'location_description',
+          location: 0,
+          message_id: 'KRD999',
+          text: 'The wall says Zar was here long ago.',
+          objects: [45],
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    const description = getConsoleLine('The wall says Zar was here long ago.')
+    const objectLine = getConsoleLineContaining('dryad', 'standing here.')
+    expect(description.querySelector('.creature-dragon')).toBeNull()
+    expect(objectLine.querySelector('.creature-dryad')).toBeInTheDocument()
+  })
+
+  it('keeps player-authored speech plain even when it mentions styled names', () => {
+    navigatorState.playerVisuals = {
+      Merlin: {
+        emoji: '\u{1F9D9}\u200D\u2642\uFE0F',
+        className: 'player-wizard',
+        color: '#a78bfa',
+      },
+    }
+    navigatorState.activity = [
+      {
+        id: 'speech-line',
+        type: 'room_broadcast',
+        summary: '*** Merlin says: Zar and ruby',
+        payload: {
+          scope: 'room',
+          event: 'room_message',
+          type: 'room_message',
+          command_id: 53,
+          message_id: 'CMD053',
+          text: '*** Merlin says: Zar and ruby',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    const line = getConsoleLine('*** Merlin says: Zar and ruby')
+    expect(line.querySelector('.player-wizard')).toBeNull()
+    expect(line.querySelector('.creature-dragon')).toBeNull()
+    expect(line.querySelector('.gemstone-inline')).toBeNull()
+  })
+
   it('renders status command output in the CRT without status sidebars or auto-refresh', () => {
     vi.useFakeTimers()
     navigatorState.activity = [

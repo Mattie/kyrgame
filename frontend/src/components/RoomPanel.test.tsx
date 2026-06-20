@@ -1,9 +1,11 @@
 import { render, screen } from '@testing-library/react'
-import { vi } from 'vitest'
+import { beforeEach, vi } from 'vitest'
 
 import { getGemstoneVisual } from '../data/gemstonePalette'
 import { getGroundObjectVisual } from '../data/groundObjectVisuals'
 import { RoomPanel } from './RoomPanel'
+
+let mockedOccupants: string[] = []
 
 const highlightedGroundObjectNames = [
   'scroll',
@@ -40,15 +42,21 @@ vi.mock('../context/NavigatorContext', () => ({
         { id: 45, name: 'dryad' },
       ],
       commands: [],
-      messages: {},
+      messages: {
+        KRD001: 'The wall says Zar was here long ago.',
+      },
     },
     currentRoom: 1,
-    occupants: [],
+    occupants: mockedOccupants,
     sendMove: vi.fn(),
   }),
 }))
 
 describe('RoomPanel', () => {
+  beforeEach(() => {
+    mockedOccupants = []
+  })
+
   it('renders gemstone badges with unique emoji and colors', () => {
     render(<RoomPanel />)
 
@@ -80,5 +88,21 @@ describe('RoomPanel', () => {
         '--gem-dark': visual.darkColor,
       })
     })
+  })
+
+  it('keeps static look description prose plain', () => {
+    render(<RoomPanel />)
+
+    const description = screen.getByTestId('room-look-description')
+    expect(description).toHaveTextContent('The wall says Zar was here long ago.')
+    expect(description.querySelector('.creature-dragon')).toBeNull()
+  })
+
+  it('renders duplicate transformed occupant display names', () => {
+    mockedOccupants = ['Some pegasus', 'Some pegasus']
+
+    render(<RoomPanel />)
+
+    expect(screen.getAllByText('Some pegasus')).toHaveLength(2)
   })
 })

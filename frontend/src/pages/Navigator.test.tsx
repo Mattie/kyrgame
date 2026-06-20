@@ -1,8 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useEffect, useRef } from 'react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 
 import App from '../App'
+import { NavigatorProvider, useNavigator } from '../context/NavigatorContext'
 
 vi.mock('../config/endpoints', () => ({
   getApiBaseUrl: () => 'http://api.local',
@@ -96,6 +98,25 @@ const maybeActivePlayerRosterFetch = (input: RequestInfo | URL) => {
 
 const rememberedSessionStorageKey = 'kyrgame.navigator.rememberedSession'
 const scrollbackStorageKey = 'kyrgame.navigator.scrollback.v1:game:hero'
+
+const OccupantsProbe = () => {
+  const { occupants, startSession } = useNavigator()
+  const started = useRef(false)
+
+  useEffect(() => {
+    if (started.current) return
+    started.current = true
+    void startSession('hero', 7)
+  }, [startSession])
+
+  return (
+    <ul data-testid="occupants-probe">
+      {occupants.map((occupant, index) => (
+        <li key={`${occupant}-${index}`}>{occupant}</li>
+      ))}
+    </ul>
+  )
+}
 
 describe('Navigator flow', () => {
   const locations = [
@@ -2385,6 +2406,121 @@ describe('Navigator flow', () => {
 
     expect(queryConsoleLines('hero is here.')).toHaveLength(0)
     expect(queryConsoleLines('room_occupants')).toHaveLength(0)
+  })
+
+  it('preserves duplicate transformed occupant display names and partial detail fallbacks', async () => {
+    const responses = [
+      {
+        ok: true,
+        json: async () => ({
+          status: 'created',
+          session: { token: 'abc123', player_id: 'hero', room_id: 7 },
+        }),
+      },
+      { ok: true, json: async () => locations },
+      { ok: true, json: async () => objects },
+      { ok: true, json: async () => commands },
+      { ok: true, json: async () => ({ messages }) },
+    ]
+
+    vi.spyOn(global, 'fetch').mockImplementation(input => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const next = responses.shift()
+      if (!next) throw new Error('Unexpected fetch call')
+      return Promise.resolve(next as unknown as Response)
+    })
+
+    render(
+      <NavigatorProvider>
+        <OccupantsProbe />
+      </NavigatorProvider>
+    )
+
+    await waitFor(() => expect(MockWebSocket.instances[0]).toBeDefined())
+    const socket = MockWebSocket.instances[0]
+    const occupantsProbe = screen.getByTestId('occupants-probe')
+
+    act(() => {
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'player_enter',
+          player: 'Alpha',
+          display_name: 'Some pegasus',
+          player_flags: 0,
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(within(occupantsProbe).getAllByText('Some pegasus')).toHaveLength(1)
+    )
+
+    act(() => {
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'player_enter',
+          player: 'Beta',
+          display_name: 'Some pegasus',
+          player_flags: 0,
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(within(occupantsProbe).getAllByText('Some pegasus')).toHaveLength(2)
+    )
+
+    act(() => {
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_occupants',
+          type: 'room_occupants',
+          location: 7,
+          occupants: ['Some pegasus', 'Some pegasus'],
+          occupant_details: [
+            { player_id: 'Alpha', display_name: 'Some pegasus', flags: 0 },
+            { player_id: 'Beta', display_name: 'Some pegasus', flags: 0 },
+          ],
+          text: 'Some pegasus and Some pegasus are here.',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(within(occupantsProbe).getAllByText('Some pegasus')).toHaveLength(2)
+    )
+
+    act(() => {
+      socket.triggerMessage({
+        type: 'room_broadcast',
+        room: 7,
+        payload: {
+          event: 'room_occupants',
+          type: 'room_occupants',
+          location: 7,
+          occupants: ['Some pegasus', 'Unindexed mage'],
+          occupant_details: [
+            { player_id: 'Alpha', display_name: 'Some pegasus', flags: 0 },
+          ],
+          text: 'Some pegasus and Unindexed mage are here.',
+        },
+      })
+    })
+
+    await waitFor(() =>
+      expect(
+        within(occupantsProbe)
+          .getAllByRole('listitem')
+          .map((item) => item.textContent)
+      ).toEqual(['Some pegasus', 'Unindexed mage'])
+    )
   })
 
   it('does not duplicate room occupants on look after occupant state is known', async () => {

@@ -527,6 +527,18 @@ async def bootstrap_app(app: FastAPI):
             flags[player.plyrid] = int(player.flags)
         return flags
 
+    def _runtime_active_player_index() -> dict[str, models.PlayerModel]:
+        indexed_players: dict[str, models.PlayerModel] = {}
+        for player in getattr(app.state, "active_players", {}).values():
+            player_key = player.plyrid.strip().casefold()
+            if player_key:
+                indexed_players[player_key] = player
+        for player in getattr(app.state, "active_player_sessions", {}).values():
+            player_key = player.plyrid.strip().casefold()
+            if player_key:
+                indexed_players[player_key] = player
+        return indexed_players
+
     async def _room_occupants_refresh_payload(
         player_id: str,
         room_id: int,
@@ -536,15 +548,23 @@ async def bootstrap_app(app: FastAPI):
     ) -> dict | None:
         if occupants is None:
             occupants = await app.state.presence.players_in_room(room_id)
-        player_key = player_id.strip().casefold()
-        others = commands._dedupe_room_occupants(
-            sorted(
-                occupant
-                for occupant in occupants
-                if str(occupant or "").strip().casefold() != player_key
-            )
+        active_player_index = _runtime_active_player_index()
+
+        def payload_active_player_lookup(lookup_player_id: str):
+            return active_player_index.get(lookup_player_id.strip().casefold())
+
+        viewer = payload_active_player_lookup(player_id)
+        entries = commands._room_occupant_display_entries(
+            sorted(occupants),
+            viewer_id=player_id,
+            viewer=viewer,
+            player_lookup=payload_active_player_lookup,
+            player_flags_by_id=player_flags_by_id,
         )
-        text, message_id = commands._format_room_occupants(others, default_messages)
+        others = [entry.display_name for entry in entries]
+        text, message_id = commands._format_room_occupant_entries(
+            entries, default_messages
+        )
         if not text:
             return None
         if player_flags_by_id is None:
@@ -555,10 +575,7 @@ async def bootstrap_app(app: FastAPI):
             "type": "room_occupants",
             "location": room_id,
             "occupants": others,
-            "occupant_details": [
-                {"player_id": occupant, "flags": int(player_flags_by_id.get(occupant, 0))}
-                for occupant in others
-            ],
+            "occupant_details": commands._room_occupant_detail_payload(entries),
             "text": text,
             "message_id": message_id,
         }

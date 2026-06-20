@@ -62,6 +62,18 @@ export type PlayerVisual = {
   color: string
 }
 
+type RoomOccupantDetail = {
+  player_id?: string
+  player?: string
+  display_name?: string
+  flags?: number | null
+}
+
+type RoomOccupantEntry = {
+  key: string
+  displayName: string
+}
+
 export type WorldData = {
   locations: LocationRecord[]
   objects: GameObject[]
@@ -667,6 +679,54 @@ const normalizeObjectName = (name?: string | null) => (name ?? '').trim().toLowe
 const PLAYER_FLAG_FEMALE = 0x00000002
 const PLAYER_WIZARD_COLOR = '#a78bfa'
 
+const rawOccupantEntries = (occupants: string[]): RoomOccupantEntry[] => {
+  const seen = new Set<string>()
+  return occupants.flatMap((occupant) => {
+    const displayName = occupant.trim()
+    const key = normalizePlayerName(displayName)
+    if (!displayName || !key || seen.has(key)) return []
+    seen.add(key)
+    return [{ key, displayName }]
+  })
+}
+
+const rawFallbackEntry = (occupant: string | undefined, index: number): RoomOccupantEntry[] => {
+  const displayName = occupant?.trim()
+  if (!displayName) return []
+  return [
+    {
+      key: `raw:${index}:${normalizePlayerName(displayName)}`,
+      displayName,
+    },
+  ]
+}
+
+const occupantEntriesFromPayload = (
+  occupants: string[],
+  occupantDetails: RoomOccupantDetail[]
+): RoomOccupantEntry[] => {
+  if (occupantDetails.length === 0) {
+    return rawOccupantEntries(occupants)
+  }
+  const seen = new Set<string>()
+  const entries = occupantDetails.flatMap((detail, index) => {
+    const rawFallback = occupants[index]?.trim()
+    const playerId = (detail.player_id ?? detail.player ?? '').trim()
+    const playerKey = normalizePlayerName(playerId)
+    if (!playerKey) return rawFallbackEntry(rawFallback, index)
+    if (seen.has(playerKey)) return []
+    seen.add(playerKey)
+    const displayName = (detail.display_name ?? playerId).trim()
+    return displayName ? [{ key: playerKey, displayName }] : rawFallbackEntry(rawFallback, index)
+  })
+  entries.push(
+    ...occupants
+      .slice(occupantDetails.length)
+      .flatMap((occupant, index) => rawFallbackEntry(occupant, occupantDetails.length + index))
+  )
+  return entries.length > 0 ? entries : rawOccupantEntries(occupants)
+}
+
 // Player-name styling is derived only from backend player flags carried on
 // session, entrance, and occupant events. That keeps the visual treatment a
 // client concern while preserving raw legacy message text and payload shapes.
@@ -902,6 +962,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
   const currentRoomRef = useRef<number | null>(null)
   const adminTokenRef = useRef<string | null>(null)
   const occupantsRef = useRef<string[]>([])
+  const occupantEntriesRef = useRef<RoomOccupantEntry[]>([])
   const suppressedSocketRef = useRef<WebSocket | null>(null)
   const activityRef = useRef<ActivityEntry[]>([])
   const scrollbackKeyRef = useRef<string | null>(null)
@@ -1016,16 +1077,33 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     replaceActivity([])
   }, [replaceActivity])
 
-  const updateOccupants = useCallback((players: string[]) => {
-    const unique = Array.from(new Set(players))
-    occupantsRef.current = unique
-    setOccupants(unique)
+  const updateOccupantEntries = useCallback((entries: RoomOccupantEntry[]) => {
+    occupantEntriesRef.current = entries
+    const players = entries.map((entry) => entry.displayName)
+    occupantsRef.current = players
+    setOccupants(players)
   }, [])
+
+  const updateOccupants = useCallback(
+    (players: string[]) => {
+      updateOccupantEntries(rawOccupantEntries(players))
+    },
+    [updateOccupantEntries]
+  )
+
+  const addOccupantEntry = useCallback(
+    (entry: RoomOccupantEntry) => {
+      const current = occupantEntriesRef.current
+      if (current.some((occupant) => occupant.key === entry.key)) return
+      updateOccupantEntries([...current, entry])
+    },
+    [updateOccupantEntries]
+  )
 
   const mergePlayerVisuals = useCallback(
     (
       entries:
-        | Array<{ player_id?: string; player?: string; flags?: number | null }>
+        | RoomOccupantDetail[]
         | null
         | undefined
     ) => {
@@ -1140,38 +1218,44 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
 
           // Handle player_enter events - update occupants but don't display (the text comes in a separate room_message)
           if (normalizedPayload.event === 'player_enter' && normalizedPayload.player) {
-            const enteringPlayer = normalizedPayload.player
+            const enteringPlayerId = normalizedPayload.player
+            const enteringPlayer = normalizedPayload.display_name || enteringPlayerId
+            const enteringPlayerKey = normalizePlayerName(enteringPlayerId)
             // Don't add current player to occupants list (matches legacy KYRUTIL.C behavior)
             if (
               !readOnlyPerspective &&
-              normalizePlayerName(enteringPlayer) !== normalizePlayerName(perspectivePlayerId)
+              enteringPlayerKey &&
+              enteringPlayerKey !== normalizePlayerName(perspectivePlayerId)
             ) {
-              setOccupants((current) => {
-                const next = Array.from(new Set([...(current || []), enteringPlayer]))
-                occupantsRef.current = next
-                return next
+              addOccupantEntry({
+                key: enteringPlayerKey,
+                displayName: String(enteringPlayer),
               })
             }
             break // Don't display this event - the message text comes separately
           }
 
           if (normalizedPayload.event === 'room_occupants') {
-            const nextOccupants = Array.isArray(normalizedPayload.occupants)
+            const rawOccupants = Array.isArray(normalizedPayload.occupants)
               ? (normalizedPayload.occupants as string[]).filter(Boolean)
               : []
+            const occupantDetails = Array.isArray(normalizedPayload.occupant_details)
+              ? (normalizedPayload.occupant_details as RoomOccupantDetail[])
+              : []
+            const nextOccupantEntries = occupantEntriesFromPayload(rawOccupants, occupantDetails)
+            const nextOccupants = nextOccupantEntries.map((entry) => entry.displayName)
             if (
-              nextOccupants.some(
-                (occupant) => normalizePlayerName(occupant) === currentPlayerName
+              rawOccupants.some((occupant) => normalizePlayerName(occupant) === currentPlayerName) ||
+              occupantDetails.some(
+                (detail) =>
+                  normalizePlayerName(detail.player_id ?? detail.player) === currentPlayerName
               )
             ) {
               break
             }
-            const occupantDetails = Array.isArray(normalizedPayload.occupant_details)
-              ? (normalizedPayload.occupant_details as Array<{ player_id?: string; flags?: number | null }>)
-              : []
             if (!readOnlyPerspective) {
               mergePlayerVisuals(occupantDetails)
-              updateOccupants(nextOccupants)
+              updateOccupantEntries(nextOccupantEntries)
             }
             const occupantsText =
               normalizedPayload.text ??
@@ -1274,15 +1358,17 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           }
 
           if (payloadEvent === 'room_occupants') {
-            const occupants = Array.isArray(message.payload?.occupants)
+            const rawOccupants = Array.isArray(message.payload?.occupants)
               ? (message.payload?.occupants as string[]).filter(Boolean)
               : []
             const occupantDetails = Array.isArray(message.payload?.occupant_details)
-              ? (message.payload?.occupant_details as Array<{ player_id?: string; flags?: number | null }>)
+              ? (message.payload?.occupant_details as RoomOccupantDetail[])
               : []
+            const occupantEntries = occupantEntriesFromPayload(rawOccupants, occupantDetails)
+            const occupants = occupantEntries.map((entry) => entry.displayName)
             if (!readOnlyPerspective) {
               mergePlayerVisuals(occupantDetails)
-              updateOccupants(occupants)
+              updateOccupantEntries(occupantEntries)
             }
             summary =
               message.payload?.text ??
@@ -1454,10 +1540,11 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     },
     [
       appendActivity,
+      addOccupantEntry,
       clearLevelUpCueTimer,
       handleRoomChange,
       mergePlayerVisuals,
-      updateOccupants,
+      updateOccupantEntries,
     ]
   )
 

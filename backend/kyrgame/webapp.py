@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Sequence
+from typing import Annotated, Callable, Sequence
 
 import yaml
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
@@ -1658,6 +1658,26 @@ def _active_player_flags(app: FastAPI) -> dict[str, int]:
     return flags
 
 
+def _active_player_lookup(app: FastAPI) -> Callable[[str], models.PlayerModel | None]:
+    indexed_players: dict[str, models.PlayerModel] = {}
+    for player in getattr(app.state, "active_players", {}).values():
+        player_key = player.plyrid.strip().casefold()
+        if player_key:
+            indexed_players[player_key] = player
+    for player in _active_player_sessions(app).values():
+        player_key = player.plyrid.strip().casefold()
+        if player_key:
+            indexed_players[player_key] = player
+
+    def lookup(player_id: str) -> models.PlayerModel | None:
+        target = player_id.strip().casefold()
+        if not target:
+            return None
+        return indexed_players.get(target)
+
+    return lookup
+
+
 def _env_int(name: str, *, default: int, minimum: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -3128,17 +3148,19 @@ async def _room_occupants_event(
     room_id: int,
     messages: models.MessageBundleModel | None,
     player_flags_by_id: dict[str, int] | None = None,
+    player_lookup: Callable[[str], models.PlayerModel | None] | None = None,
 ):
     occupants = await presence.players_in_room(room_id)
-    player_key = player_id.strip().casefold()
-    others = commands._dedupe_room_occupants(
-        sorted(
-            occupant
-            for occupant in occupants
-            if str(occupant or "").strip().casefold() != player_key
-        )
+    viewer = player_lookup(player_id) if player_lookup else None
+    entries = commands._room_occupant_display_entries(
+        sorted(occupants),
+        viewer_id=player_id,
+        viewer=viewer,
+        player_lookup=player_lookup,
+        player_flags_by_id=player_flags_by_id,
     )
-    text, message_id = _format_room_occupants(others, messages)
+    others = [entry.display_name for entry in entries]
+    text, message_id = commands._format_room_occupant_entries(entries, messages)
     if not others or not text:
         return None
 
@@ -3148,10 +3170,7 @@ async def _room_occupants_event(
         "type": "room_occupants",
         "location": room_id,
         "occupants": others,
-        "occupant_details": [
-            {"player_id": occupant, "flags": int((player_flags_by_id or {}).get(occupant, 0))}
-            for occupant in others
-        ],
+        "occupant_details": commands._room_occupant_detail_payload(entries),
         "text": text,
         "message_id": message_id,
     }
@@ -3291,6 +3310,7 @@ async def _initial_scry_output_messages(
         room_id,
         state.messages,
         _active_player_flags(provider.scope.app),
+        _active_player_lookup(provider.scope.app),
     )
     if occupants_event:
         messages.append(
@@ -3308,6 +3328,7 @@ def _entrance_room_message(
     room_id: int,
     player_flags: int | None = None,
     entrance_text: str = "appeared in a cloud of mists",
+    display_name: str | None = None,
 ) -> dict:
     """Legacy-style entrance broadcast when a player appears in a room.
 
@@ -3315,15 +3336,19 @@ def _entrance_room_message(
     the world with the APPEARCLOUDMIST text from ``KYRANDIA.C``.【F:legacy/KYRUTIL.C†L236-L260】【F:legacy/KYRANDIA.C†L135-L211】
     """
 
+    # Legacy entrgp() formats the room-facing entrance line with gp->altnam
+    # (legacy/KYRUTIL.C:236-260).
+    resolved_display_name = (display_name or player_id).strip() or player_id
     return {
         "scope": "room",
         "event": "room_message",
         "type": "room_message",
         "player": player_id,
+        "display_name": resolved_display_name,
         "from": None,
         "to": room_id,
         "direction": None,
-        "text": f"*** {player_id} has just {entrance_text}!",
+        "text": f"*** {resolved_display_name} has just {entrance_text}!",
         "player_flags": player_flags,
         "message_id": None,
         "command_id": None,
@@ -3502,6 +3527,7 @@ def create_app() -> FastAPI:
                     "payload": {
                         "event": "player_enter",
                         "player": player_id,
+                        "display_name": player.altnam,
                         "player_flags": int(player.flags),
                     },
                 },
@@ -3514,7 +3540,10 @@ def create_app() -> FastAPI:
                     "type": "room_broadcast",
                     "room": current_room,
                     "payload": _entrance_room_message(
-                        player_id, current_room, int(player.flags)
+                        player_id,
+                        current_room,
+                        int(player.flags),
+                        display_name=player.altnam,
                     ),
                 },
             )
@@ -3525,6 +3554,7 @@ def create_app() -> FastAPI:
                 current_room,
                 provider.message_bundles.get("en-US"),
                 _active_player_flags(provider.scope.app),
+                _active_player_lookup(provider.scope.app),
             )
             if occupant_event:
                 # Legacy entrgp() sends locogps() to the entering player before the room
@@ -3762,10 +3792,13 @@ def create_app() -> FastAPI:
         # Create a persistent database session for this WebSocket connection
         persistent_session = provider.scope.app.state.session_factory()
         
-        active_players = provider.scope.app.state.active_players
+        command_active_player_lookup: Callable[[str], models.PlayerModel | None] | None = None
+
+        def current_active_player_lookup() -> Callable[[str], models.PlayerModel | None]:
+            return command_active_player_lookup or _active_player_lookup(provider.scope.app)
 
         def lookup_player(player_alias: str) -> models.PlayerModel | None:
-            active_player = active_players.get(player_alias)
+            active_player = current_active_player_lookup()(player_alias)
             if active_player:
                 return active_player
             record = persistent_session.scalar(
@@ -3776,17 +3809,10 @@ def create_app() -> FastAPI:
             return _player_model_from_record(record)
 
         def lookup_active_player(player_alias: str) -> models.PlayerModel | None:
-            alias = player_alias.lower()
             # Legacy fgamgp() scans only active in-memory players by true plyrid
             # (legacy/KYRUTIL.C:486-494), so DB-only player records must stay
             # invisible to remote-target spells.
-            for player in active_players.values():
-                if player.plyrid.lower() == alias:
-                    return player
-            for player in _active_player_sessions(provider.scope.app).values():
-                if player.plyrid.lower() == alias:
-                    return player
-            return None
+            return current_active_player_lookup()(player_alias)
 
         state = commands.GameState(
             player=player_state,
@@ -3859,6 +3885,7 @@ def create_app() -> FastAPI:
             current_room,
             state.messages,
             _active_player_flags(provider.scope.app),
+            _active_player_lookup(provider.scope.app),
         )
         if location is not None:
             await send_player_json(
@@ -3889,6 +3916,7 @@ def create_app() -> FastAPI:
                 "payload": {
                     "event": "player_enter",
                     "player": player_id,
+                    "display_name": player_state.altnam,
                     "player_flags": int(player_state.flags),
                 },
             },
@@ -3908,6 +3936,7 @@ def create_app() -> FastAPI:
                     "appeared in a flash"
                     if first_login_entry_pending
                     else "appeared in a cloud of mists",
+                    display_name=player_state.altnam,
                 ),
             },
             sender=websocket,
@@ -4363,6 +4392,7 @@ def create_app() -> FastAPI:
                                         target_room,
                                         state.messages,
                                         _active_player_flags(provider.scope.app),
+                                        _active_player_lookup(provider.scope.app),
                                     )
                                     if occupant_event:
                                         refresh_events.append(occupant_event)
@@ -4467,6 +4497,7 @@ def create_app() -> FastAPI:
                     continue
 
                 try:
+                    command_active_player_lookup = _active_player_lookup(provider.scope.app)
                     result = await provider.command_dispatcher.dispatch_parsed(parsed, state)
                 except commands.CommandError as exc:  # type: ignore[attr-defined]
                     await send_player_json(
@@ -4483,6 +4514,8 @@ def create_app() -> FastAPI:
                         }
                     )
                     continue
+                finally:
+                    command_active_player_lookup = None
 
                 session_exit_requested = any(
                     event.get("event") == "session_exit" for event in result.events
@@ -4510,6 +4543,7 @@ def create_app() -> FastAPI:
                         current_room,
                         state.messages,
                         _active_player_flags(provider.scope.app),
+                        _active_player_lookup(provider.scope.app),
                     )
 
                 if occupant_event:
@@ -4640,6 +4674,7 @@ def create_app() -> FastAPI:
                                     location,
                                     state.messages,
                                     _active_player_flags(provider.scope.app),
+                                    _active_player_lookup(provider.scope.app),
                                 )
                                 if occupants_event:
                                     occupants_envelope = {

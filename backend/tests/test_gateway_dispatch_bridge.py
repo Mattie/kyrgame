@@ -1127,6 +1127,78 @@ async def test_websocket_look_uses_persisted_altnam_for_looker3():
 
 
 @pytest.mark.anyio
+async def test_websocket_look_room_occupants_uses_live_transformed_altnam():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+        viewer_id = "looker"
+        target_id = "target"
+        viewer_session = await client.post("/auth/session", json={"player_id": viewer_id, "room_id": 0})
+        viewer_token = viewer_session.json()["session"]["token"]
+        room_zero = viewer_session.json()["session"]["room_id"]
+
+        target_session = await client.post("/auth/session", json={"player_id": target_id, "room_id": room_zero})
+        target_token = target_session.json()["session"]["token"]
+
+        viewer_uri = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={viewer_token}"
+        target_uri = f"ws://{host}:{port}/ws/rooms/{room_zero}?token={target_token}"
+
+        async with websockets.connect(viewer_uri) as viewer_ws:
+            await _recv_matching(
+                viewer_ws,
+                lambda msg: msg.get("payload", {}).get("event") == "location_update",
+            )
+            async with websockets.connect(target_uri) as target_ws:
+                await _recv_matching(
+                    target_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+
+                live_target = app.state.active_player_sessions[target_token]
+                live_target.altnam = "Some pegasus"
+                live_target.attnam = "pegasus"
+                live_target.flags = int(live_target.flags) | int(constants.PlayerFlag.PEGASU)
+                app.state.active_players[target_id] = live_target.model_copy(
+                    update={
+                        "altnam": target_id,
+                        "attnam": target_id,
+                        "flags": int(live_target.flags)
+                        & ~int(constants.PlayerFlag.PEGASU),
+                    }
+                )
+                assert app.state.active_players[target_id].altnam != "Some pegasus"
+                expected_flags = int(live_target.flags)
+
+                await viewer_ws.send(json.dumps({"type": "command", "command": "look"}))
+
+                occupants_event = await _recv_matching(
+                    viewer_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "room_occupants"
+                    and msg.get("payload", {}).get("text") == "Some pegasus is here.",
+                )
+                payload = occupants_event["payload"]
+                assert payload["occupants"] == ["Some pegasus"]
+                assert payload["occupant_details"] == [
+                    {
+                        "player_id": target_id,
+                        "display_name": "Some pegasus",
+                        "flags": expected_flags,
+                    }
+                ]
+
+    server.should_exit = True
+    await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_bridge_echoes_silent_metadata_on_responses():
     app = create_app()
     host = "127.0.0.1"

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { getGemstoneVisual } from '../data/gemstonePalette'
 import { getGroundObjectVisual } from '../data/groundObjectVisuals'
 import { GemstoneText } from './GemstoneText'
+import { INLINE_DECORATION_NONE } from './inlineDecorations'
 
 describe('GemstoneText', () => {
   const ghostEmoji = '\u{1F47B}'
@@ -164,5 +165,26 @@ describe('GemstoneText', () => {
     expect(screen.getByText('🧙‍♀️ Morgana')).toHaveClass('player-wizard')
     expect(screen.getByText('🐲 Zar')).toHaveClass('creature-dragon')
     expect(screen.getByText('🧙‍♂️ Merlin')).toHaveStyle({ color: '#a78bfa' })
+  })
+
+  it('can suppress all inline decorations for fixed-width or prose-only text', () => {
+    const { container } = render(
+      <GemstoneText
+        text="Spell Book of Lord Merlin near Zar and a ruby"
+        inlineDecorations={INLINE_DECORATION_NONE}
+        playerVisuals={{
+          Merlin: {
+            emoji: '\u{1F9D9}\u200D\u2642\uFE0F',
+            className: 'player-wizard',
+            color: '#a78bfa',
+          },
+        }}
+      />
+    )
+
+    expect(container).toHaveTextContent('Spell Book of Lord Merlin near Zar and a ruby')
+    expect(container.querySelector('.player-wizard')).toBeNull()
+    expect(container.querySelector('.creature-dragon')).toBeNull()
+    expect(container.querySelector('.gemstone-inline')).toBeNull()
   })
 })
