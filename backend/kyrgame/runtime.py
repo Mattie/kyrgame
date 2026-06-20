@@ -533,7 +533,7 @@ async def bootstrap_app(app: FastAPI):
             player_key = player.plyrid.strip().casefold()
             if player_key:
                 indexed_players[player_key] = player
-        for player in reversed(list(getattr(app.state, "active_player_sessions", {}).values())):
+        for player in getattr(app.state, "active_player_sessions", {}).values():
             player_key = player.plyrid.strip().casefold()
             if player_key:
                 indexed_players[player_key] = player
