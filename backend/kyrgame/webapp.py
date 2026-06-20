@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Sequence
+from typing import Annotated, Callable, Sequence
 
 import yaml
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
@@ -1658,6 +1658,22 @@ def _active_player_flags(app: FastAPI) -> dict[str, int]:
     return flags
 
 
+def _active_player_lookup(app: FastAPI) -> Callable[[str], models.PlayerModel | None]:
+    def lookup(player_id: str) -> models.PlayerModel | None:
+        target = player_id.strip().casefold()
+        if not target:
+            return None
+        for player in _active_player_sessions(app).values():
+            if player.plyrid.strip().casefold() == target:
+                return player
+        for player in getattr(app.state, "active_players", {}).values():
+            if player.plyrid.strip().casefold() == target:
+                return player
+        return None
+
+    return lookup
+
+
 def _env_int(name: str, *, default: int, minimum: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -3128,17 +3144,19 @@ async def _room_occupants_event(
     room_id: int,
     messages: models.MessageBundleModel | None,
     player_flags_by_id: dict[str, int] | None = None,
+    player_lookup: Callable[[str], models.PlayerModel | None] | None = None,
 ):
     occupants = await presence.players_in_room(room_id)
-    player_key = player_id.strip().casefold()
-    others = commands._dedupe_room_occupants(
-        sorted(
-            occupant
-            for occupant in occupants
-            if str(occupant or "").strip().casefold() != player_key
-        )
+    viewer = player_lookup(player_id) if player_lookup else None
+    entries = commands._room_occupant_display_entries(
+        sorted(occupants),
+        viewer_id=player_id,
+        viewer=viewer,
+        player_lookup=player_lookup,
+        player_flags_by_id=player_flags_by_id,
     )
-    text, message_id = _format_room_occupants(others, messages)
+    others = [entry.display_name for entry in entries]
+    text, message_id = commands._format_room_occupant_entries(entries, messages)
     if not others or not text:
         return None
 
@@ -3148,10 +3166,7 @@ async def _room_occupants_event(
         "type": "room_occupants",
         "location": room_id,
         "occupants": others,
-        "occupant_details": [
-            {"player_id": occupant, "flags": int((player_flags_by_id or {}).get(occupant, 0))}
-            for occupant in others
-        ],
+        "occupant_details": commands._room_occupant_detail_payload(entries),
         "text": text,
         "message_id": message_id,
     }
@@ -3291,6 +3306,7 @@ async def _initial_scry_output_messages(
         room_id,
         state.messages,
         _active_player_flags(provider.scope.app),
+        _active_player_lookup(provider.scope.app),
     )
     if occupants_event:
         messages.append(
@@ -3525,6 +3541,7 @@ def create_app() -> FastAPI:
                 current_room,
                 provider.message_bundles.get("en-US"),
                 _active_player_flags(provider.scope.app),
+                _active_player_lookup(provider.scope.app),
             )
             if occupant_event:
                 # Legacy entrgp() sends locogps() to the entering player before the room
@@ -3762,10 +3779,10 @@ def create_app() -> FastAPI:
         # Create a persistent database session for this WebSocket connection
         persistent_session = provider.scope.app.state.session_factory()
         
-        active_players = provider.scope.app.state.active_players
+        active_player_lookup = _active_player_lookup(provider.scope.app)
 
         def lookup_player(player_alias: str) -> models.PlayerModel | None:
-            active_player = active_players.get(player_alias)
+            active_player = active_player_lookup(player_alias)
             if active_player:
                 return active_player
             record = persistent_session.scalar(
@@ -3776,17 +3793,10 @@ def create_app() -> FastAPI:
             return _player_model_from_record(record)
 
         def lookup_active_player(player_alias: str) -> models.PlayerModel | None:
-            alias = player_alias.lower()
             # Legacy fgamgp() scans only active in-memory players by true plyrid
             # (legacy/KYRUTIL.C:486-494), so DB-only player records must stay
             # invisible to remote-target spells.
-            for player in active_players.values():
-                if player.plyrid.lower() == alias:
-                    return player
-            for player in _active_player_sessions(provider.scope.app).values():
-                if player.plyrid.lower() == alias:
-                    return player
-            return None
+            return active_player_lookup(player_alias)
 
         state = commands.GameState(
             player=player_state,
@@ -3859,6 +3869,7 @@ def create_app() -> FastAPI:
             current_room,
             state.messages,
             _active_player_flags(provider.scope.app),
+            _active_player_lookup(provider.scope.app),
         )
         if location is not None:
             await send_player_json(
@@ -4363,6 +4374,7 @@ def create_app() -> FastAPI:
                                         target_room,
                                         state.messages,
                                         _active_player_flags(provider.scope.app),
+                                        _active_player_lookup(provider.scope.app),
                                     )
                                     if occupant_event:
                                         refresh_events.append(occupant_event)
@@ -4510,6 +4522,7 @@ def create_app() -> FastAPI:
                         current_room,
                         state.messages,
                         _active_player_flags(provider.scope.app),
+                        _active_player_lookup(provider.scope.app),
                     )
 
                 if occupant_event:
@@ -4640,6 +4653,7 @@ def create_app() -> FastAPI:
                                     location,
                                     state.messages,
                                     _active_player_flags(provider.scope.app),
+                                    _active_player_lookup(provider.scope.app),
                                 )
                                 if occupants_event:
                                     occupants_envelope = {

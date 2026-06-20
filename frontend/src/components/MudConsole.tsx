@@ -21,6 +21,7 @@ import {
 import { getConsoleStreamConfig } from '../config/consoleStream'
 import { stripAnsiSgrSequences } from '../utils/ansi'
 import { AnsiText } from './AnsiText'
+import { INLINE_DECORATION_NONE, InlineDecorationPolicy } from './inlineDecorations'
 import { ModemLineWriter } from './ModemLineWriter'
 import {
   defaultFireBorderEffectPreset,
@@ -91,6 +92,7 @@ type ConsoleLine = {
   payloadText?: string
   pagerEligible?: boolean
   hydratedScrollback?: boolean
+  inlineDecorations?: InlineDecorationPolicy
 }
 
 type ScreenReaderConsoleLine = {
@@ -288,6 +290,42 @@ const isLifecycleMessagePayload = (payload: ActivityEntry['payload']) =>
   typeof payload === 'object' &&
   payload !== null &&
   (payload as Record<string, unknown>).event === 'lifecycle_message'
+
+const getPayloadRecord = (payload: ActivityEntry['payload']): Record<string, unknown> | null =>
+  typeof payload === 'object' && payload !== null ? payload : null
+
+const plainInlineMessageId = (messageId: unknown): boolean => {
+  if (typeof messageId !== 'string') return false
+  return (
+    /^(?:SBOOK|ASBOOK)\d+$/.test(messageId) ||
+    /^(?:SPEAK|YELLER|WHISPR)/.test(messageId)
+  )
+}
+
+const plainInlineCommandId = (commandId: unknown): boolean => {
+  const parsed =
+    typeof commandId === 'number'
+      ? commandId
+      : typeof commandId === 'string'
+        ? Number(commandId)
+        : NaN
+  return parsed === 7 || parsed === 39 || parsed === 53
+}
+
+const inlineDecorationsForEntry = (
+  entry: ActivityEntry,
+  lineKind: 'summary' | 'detail'
+): InlineDecorationPolicy | undefined => {
+  if (lineKind === 'detail') return undefined
+  const payload = getPayloadRecord(entry.payload)
+  if (!payload) return undefined
+  if (payload.event === 'location_description' || payload.event === 'chat') {
+    return INLINE_DECORATION_NONE
+  }
+  return plainInlineMessageId(payload.message_id) || plainInlineCommandId(payload.command_id)
+    ? INLINE_DECORATION_NONE
+    : undefined
+}
 
 const getTerminalPagerRenderInfo = (
   line: ConsoleLine,
@@ -802,6 +840,7 @@ export const MudConsole = () => {
         payloadText: payloadText ?? undefined,
         pagerEligible,
         hydratedScrollback,
+        inlineDecorations: inlineDecorationsForEntry(entry, 'summary'),
       })
 
       legacyLines?.forEach((line, lineIndex) => {
@@ -810,6 +849,7 @@ export const MudConsole = () => {
           text: line,
           className: `crt-line ${entry.type} detail`,
           hydratedScrollback,
+          inlineDecorations: inlineDecorationsForEntry(entry, 'detail'),
         })
       })
     })
@@ -1312,7 +1352,11 @@ export const MudConsole = () => {
               &gt;
             </span>
           ) : null}
-          <AnsiText text={text} playerVisuals={playerVisuals} />
+          <AnsiText
+            text={text}
+            playerVisuals={playerVisuals}
+            inlineDecorations={line.inlineDecorations}
+          />
           {line.payloadText && <span className="payload-inline">{line.payloadText}</span>}
         </p>
       ) : null
@@ -1346,6 +1390,7 @@ export const MudConsole = () => {
             onProgress={handleConsoleOutputProgress}
             onDone={() => handleLineDone(line)}
             playerVisuals={playerVisuals}
+            inlineDecorations={line.inlineDecorations}
           />
           {line.payloadText && <span className="payload-inline">{line.payloadText}</span>}
         </p>

@@ -40,6 +40,7 @@ async def test_room_occupants_event_includes_player_flags_for_ui_styling():
     assert event["occupant_details"] == [
         {
             "player_id": "Hero",
+            "display_name": "Hero",
             "flags": int(constants.PlayerFlag.LOADED | constants.PlayerFlag.FEMALE),
         }
     ]
@@ -66,6 +67,41 @@ async def test_room_occupants_event_deduplicates_trimmed_presence_ids():
     assert event["text"] == "Merlin and Necro are here."
     assert "Merlin" in event["text"]
     assert event["text"].count("Necro") == 1
+
+
+@pytest.mark.anyio
+async def test_room_occupants_event_uses_active_transformed_altnam():
+    presence = PresenceService()
+    await presence.set_location("Hero", 0, "hero-token")
+    await presence.set_location("Necro", 0, "necro-token")
+    necro = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "Necro",
+            "attnam": "pegasus",
+            "altnam": "Some pegasus",
+            "gamloc": 0,
+        }
+    )
+
+    event = await _room_occupants_event(
+        presence,
+        "Hero",
+        0,
+        fixtures.load_message_bundle(),
+        {"Necro": int(constants.PlayerFlag.LOADED)},
+        lambda player_id: necro if player_id.strip() == "Necro" else None,
+    )
+
+    assert event is not None
+    assert event["occupants"] == ["Some pegasus"]
+    assert event["text"] == "Some pegasus is here."
+    assert event["occupant_details"] == [
+        {
+            "player_id": "Necro",
+            "display_name": "Some pegasus",
+            "flags": int(necro.flags),
+        }
+    ]
 
 
 class DummyWebSocket:

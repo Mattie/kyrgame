@@ -17,7 +17,7 @@ const navigatorState = vi.hoisted(() => ({
           eventCount: number
         }
       | null,
-    startScry: vi.fn((_player: { player_id: string; display_name: string }) => {}),
+    startScry: vi.fn(() => {}),
     stopScry: vi.fn(() => {}),
     logoutSession: vi.fn(async () => {}),
   },
@@ -73,7 +73,7 @@ describe('ActivePlayerIndicator', () => {
       adminToken: null,
       session: null,
       scrySession: null,
-      startScry: vi.fn((_player: { player_id: string; display_name: string }) => {}),
+      startScry: vi.fn(() => {}),
       stopScry: vi.fn(() => {}),
       logoutSession: vi.fn(async () => {}),
     }
@@ -129,7 +129,7 @@ describe('ActivePlayerIndicator', () => {
       adminToken: null,
       session: { playerId: 'Hero', sessionKind: 'game' },
       scrySession: null,
-      startScry: vi.fn((_player: { player_id: string; display_name: string }) => {}),
+      startScry: vi.fn(() => {}),
       stopScry: vi.fn(() => {}),
       logoutSession,
     }
@@ -147,7 +147,7 @@ describe('ActivePlayerIndicator', () => {
   })
 
   it('starts and stops SCRY through navigator state for admins', async () => {
-    const startScry = vi.fn((_player: { player_id: string; display_name: string }) => {})
+    const startScry = vi.fn()
     const stopScry = vi.fn(() => {})
     navigatorState.value = {
       apiBaseUrl: 'http://api.local',

@@ -527,6 +527,18 @@ async def bootstrap_app(app: FastAPI):
             flags[player.plyrid] = int(player.flags)
         return flags
 
+    def _runtime_active_player_lookup(player_id: str):
+        target = player_id.strip().casefold()
+        if not target:
+            return None
+        for player in getattr(app.state, "active_player_sessions", {}).values():
+            if player.plyrid.strip().casefold() == target:
+                return player
+        for player in getattr(app.state, "active_players", {}).values():
+            if player.plyrid.strip().casefold() == target:
+                return player
+        return None
+
     async def _room_occupants_refresh_payload(
         player_id: str,
         room_id: int,
@@ -536,15 +548,18 @@ async def bootstrap_app(app: FastAPI):
     ) -> dict | None:
         if occupants is None:
             occupants = await app.state.presence.players_in_room(room_id)
-        player_key = player_id.strip().casefold()
-        others = commands._dedupe_room_occupants(
-            sorted(
-                occupant
-                for occupant in occupants
-                if str(occupant or "").strip().casefold() != player_key
-            )
+        viewer = _runtime_active_player_lookup(player_id)
+        entries = commands._room_occupant_display_entries(
+            sorted(occupants),
+            viewer_id=player_id,
+            viewer=viewer,
+            player_lookup=_runtime_active_player_lookup,
+            player_flags_by_id=player_flags_by_id,
         )
-        text, message_id = commands._format_room_occupants(others, default_messages)
+        others = [entry.display_name for entry in entries]
+        text, message_id = commands._format_room_occupant_entries(
+            entries, default_messages
+        )
         if not text:
             return None
         if player_flags_by_id is None:
@@ -555,10 +570,7 @@ async def bootstrap_app(app: FastAPI):
             "type": "room_occupants",
             "location": room_id,
             "occupants": others,
-            "occupant_details": [
-                {"player_id": occupant, "flags": int(player_flags_by_id.get(occupant, 0))}
-                for occupant in others
-            ],
+            "occupant_details": commands._room_occupant_detail_payload(entries),
             "text": text,
             "message_id": message_id,
         }

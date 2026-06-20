@@ -9,6 +9,11 @@ import {
   getTransformationVisual,
   transformationVisualAliases,
 } from '../data/transformationVisuals'
+import {
+  INLINE_DECORATION_ALL,
+  InlineDecorationPolicy,
+  ResolvedInlineDecorationPolicy,
+} from './inlineDecorations'
 
 export type PlayerVisual = {
   emoji: string
@@ -29,6 +34,13 @@ const creaturePalette: Record<
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+const resolveInlineDecorations = (
+  inlineDecorations: InlineDecorationPolicy | undefined
+): ResolvedInlineDecorationPolicy => ({
+  ...INLINE_DECORATION_ALL,
+  ...(inlineDecorations ?? {}),
+})
+
 /**
  * Parses text and renders legacy named things with emoji and color styling.
  * Matches names case-insensitively and replaces whole-word hits with styled spans.
@@ -36,19 +48,22 @@ const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$
 export const GemstoneText = ({
   text,
   playerVisuals = {},
+  inlineDecorations,
 }: {
   text: string
   playerVisuals?: Record<string, PlayerVisual>
+  inlineDecorations?: InlineDecorationPolicy
 }): JSX.Element => {
-  const gemstoneNames = Object.keys(gemstonePalette)
-  const creatureNames = Object.keys(creaturePalette)
-  const groundObjectNames = groundObjectVisualAliases
-  const transformationNames = transformationVisualAliases
+  const decorations = resolveInlineDecorations(inlineDecorations)
+  const gemstoneNames = decorations.gemstones ? Object.keys(gemstonePalette) : []
+  const creatureNames = decorations.creatures ? Object.keys(creaturePalette) : []
+  const groundObjectNames = decorations.groundObjects ? groundObjectVisualAliases : []
+  const transformationNames = decorations.transformations ? transformationVisualAliases : []
   const playerEntries = Object.entries(playerVisuals)
   const playerVisualsByName = Object.fromEntries(
     playerEntries.map(([name, visual]) => [name.toLowerCase(), visual])
   )
-  const playerNames = playerEntries.map(([name]) => name)
+  const playerNames = decorations.players ? playerEntries.map(([name]) => name) : []
   // Live Player-IDs are matched first; the backend reserves creature names
   // so "dragon" and "dryad" remain unambiguous in console text.
   const inlineNames = [
@@ -85,7 +100,9 @@ export const GemstoneText = ({
       parts.push(text.slice(lastIndex, matchedTextIndex))
     }
 
-    const playerVisual = playerVisualsByName[matchedText.toLowerCase()]
+    const playerVisual = decorations.players
+      ? playerVisualsByName[matchedText.toLowerCase()]
+      : undefined
 
     if (playerVisual) {
       parts.push(
@@ -98,7 +115,9 @@ export const GemstoneText = ({
         </span>
       )
     } else {
-      const transformationVisual = getTransformationVisual(matchedText)
+      const transformationVisual = decorations.transformations
+        ? getTransformationVisual(matchedText)
+        : null
       if (transformationVisual) {
         parts.push(
           <span
@@ -113,7 +132,9 @@ export const GemstoneText = ({
           </span>
         )
       } else {
-        const groundObjectVisual = getGroundObjectVisual(matchedText)
+        const groundObjectVisual = decorations.groundObjects
+          ? getGroundObjectVisual(matchedText)
+          : null
         if (groundObjectVisual) {
           parts.push(
             <span
@@ -125,7 +146,7 @@ export const GemstoneText = ({
             </span>
           )
         } else {
-          const visual = getGemstoneVisual(matchedText)
+          const visual = decorations.gemstones ? getGemstoneVisual(matchedText) : null
           if (visual) {
             parts.push(
               <span
@@ -137,7 +158,9 @@ export const GemstoneText = ({
               </span>
             )
           } else {
-            const creatureVisual = creaturePalette[matchedText.toLowerCase()]
+            const creatureVisual = decorations.creatures
+              ? creaturePalette[matchedText.toLowerCase()]
+              : undefined
             if (creatureVisual) {
               parts.push(
                 <span

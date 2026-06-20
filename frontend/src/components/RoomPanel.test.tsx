@@ -40,7 +40,9 @@ vi.mock('../context/NavigatorContext', () => ({
         { id: 45, name: 'dryad' },
       ],
       commands: [],
-      messages: {},
+      messages: {
+        KRD001: 'The wall says Zar was here long ago.',
+      },
     },
     currentRoom: 1,
     occupants: [],
@@ -80,5 +82,13 @@ describe('RoomPanel', () => {
         '--gem-dark': visual.darkColor,
       })
     })
+  })
+
+  it('keeps static look description prose plain', () => {
+    render(<RoomPanel />)
+
+    const description = screen.getByTestId('room-look-description')
+    expect(description).toHaveTextContent('The wall says Zar was here long ago.')
+    expect(description.querySelector('.creature-dragon')).toBeNull()
   })
 })

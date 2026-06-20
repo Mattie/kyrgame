@@ -710,10 +710,31 @@ async def test_animation_move_refresh_deduplicates_room_occupants(monkeypatch):
     target_player = fixtures.build_player().model_copy(
         update={"plyrid": "hero", "altnam": "Hero", "attnam": "Hero", "gamloc": 12}
     )
+    transformed_necro = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "Necro",
+            "altnam": "Some pegasus",
+            "attnam": "pegasus",
+            "gamloc": 7,
+            "flags": int(constants.PlayerFlag.PEGASU),
+        }
+    )
+    stale_necro = fixtures.build_player().model_copy(
+        update={
+            "plyrid": "Necro",
+            "altnam": "Necro",
+            "attnam": "Necro",
+            "gamloc": 7,
+        }
+    )
     app.state.session_connections = {"hero-token": target_socket}
     app.state.active_players = {}
-    app.state.active_player_sessions = {"hero-token": target_player}
+    app.state.active_player_sessions = {
+        "hero-token": target_player,
+        "necro-token": transformed_necro,
+    }
     app.state.active_players["hero"] = target_player
+    app.state.active_players["Necro"] = stale_necro
     await app.state.presence.set_location("hero", 12, "hero-token")
     await app.state.presence.set_location("hero ", 7, "hero-stale-token")
     await app.state.presence.set_location("Necro", 7, "necro-token")
@@ -744,8 +765,15 @@ async def test_animation_move_refresh_deduplicates_room_occupants(monkeypatch):
         for message in target_socket.sent
         if message.get("payload", {}).get("event") == "room_occupants"
     )
-    assert occupant_envelope["payload"]["occupants"] == ["Necro"]
-    assert occupant_envelope["payload"]["text"] == "Necro is here."
+    assert occupant_envelope["payload"]["occupants"] == ["Some pegasus"]
+    assert occupant_envelope["payload"]["text"] == "Some pegasus is here."
+    assert occupant_envelope["payload"]["occupant_details"] == [
+        {
+            "player_id": "Necro",
+            "display_name": "Some pegasus",
+            "flags": int(transformed_necro.flags),
+        }
+    ]
 
     await shutdown_app(app)
 
