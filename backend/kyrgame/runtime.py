@@ -539,12 +539,6 @@ async def bootstrap_app(app: FastAPI):
                 indexed_players[player_key] = player
         return indexed_players
 
-    def _runtime_active_player_lookup(player_id: str):
-        target = player_id.strip().casefold()
-        if not target:
-            return None
-        return _runtime_active_player_index().get(target)
-
     async def _room_occupants_refresh_payload(
         player_id: str,
         room_id: int,

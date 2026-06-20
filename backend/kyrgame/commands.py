@@ -511,6 +511,7 @@ def _build_room_transition_events(
             "event": "player_enter",
             "type": "player_moved",
             "player": state.player.plyrid,
+            "display_name": state.player.altnam,
             "from": from_room,
             "to": destination.id,
             "description": destination.brfdes,

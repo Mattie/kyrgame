@@ -215,6 +215,12 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
         rogue_token = rogue_session.json()["session"]["token"]
         seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 1})
         seer_token = seer_session.json()["session"]["token"]
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            assert hero is not None
+            hero.altnam = "Some pegasus"
+            hero.attnam = "Some pegasus"
+            db.commit()
 
     uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
     uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
@@ -256,6 +262,7 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
                 assert seer_broadcast["type"] == "room_broadcast"
                 assert seer_broadcast["room"] == 1
                 assert seer_broadcast["payload"]["player"] == "hero"
+                assert seer_broadcast["payload"]["display_name"] == "Some pegasus"
 
                 departure_notice = await _receive_until(
                     rogue_ws,
@@ -264,7 +271,7 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
                 )
                 assert departure_notice["room"] == 0
                 assert departure_notice["payload"]["text"] == (
-                    "*** Hero Alt has just moved off to the north!"
+                    "*** Some pegasus has just moved off to the north!"
                 )
 
                 chat_payload = {"type": "command", "command": "chat", "args": {"text": "hail"}}
