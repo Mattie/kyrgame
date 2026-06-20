@@ -1217,9 +1217,12 @@ def _lookup_room_occupant_player(
     if not player_lookup:
         return None
     trimmed = player_id.strip()
-    for candidate_id in (player_id, trimmed):
-        if not candidate_id:
-            continue
+    if not trimmed:
+        return None
+    candidate_ids = [trimmed]
+    if player_id != trimmed:
+        candidate_ids.append(player_id)
+    for candidate_id in candidate_ids:
         candidate = player_lookup(candidate_id)
         if candidate is not None:
             return candidate

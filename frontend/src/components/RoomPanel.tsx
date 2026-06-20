@@ -184,8 +184,8 @@ export const RoomPanel = () => {
               {occupants.length === 0 && <p className="muted">No one here</p>}
               {occupants.length > 0 && (
                 <ul>
-                  {occupants.map((name) => (
-                    <li key={name}>{name}</li>
+                  {occupants.map((name, index) => (
+                    <li key={`${name}-${index}`}>{name}</li>
                   ))}
                 </ul>
               )}

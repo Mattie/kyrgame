@@ -527,17 +527,23 @@ async def bootstrap_app(app: FastAPI):
             flags[player.plyrid] = int(player.flags)
         return flags
 
+    def _runtime_active_player_index() -> dict[str, models.PlayerModel]:
+        indexed_players: dict[str, models.PlayerModel] = {}
+        for player in getattr(app.state, "active_players", {}).values():
+            player_key = player.plyrid.strip().casefold()
+            if player_key:
+                indexed_players[player_key] = player
+        for player in reversed(list(getattr(app.state, "active_player_sessions", {}).values())):
+            player_key = player.plyrid.strip().casefold()
+            if player_key:
+                indexed_players[player_key] = player
+        return indexed_players
+
     def _runtime_active_player_lookup(player_id: str):
         target = player_id.strip().casefold()
         if not target:
             return None
-        for player in getattr(app.state, "active_player_sessions", {}).values():
-            if player.plyrid.strip().casefold() == target:
-                return player
-        for player in getattr(app.state, "active_players", {}).values():
-            if player.plyrid.strip().casefold() == target:
-                return player
-        return None
+        return _runtime_active_player_index().get(target)
 
     async def _room_occupants_refresh_payload(
         player_id: str,
@@ -548,12 +554,17 @@ async def bootstrap_app(app: FastAPI):
     ) -> dict | None:
         if occupants is None:
             occupants = await app.state.presence.players_in_room(room_id)
-        viewer = _runtime_active_player_lookup(player_id)
+        active_player_index = _runtime_active_player_index()
+
+        def payload_active_player_lookup(lookup_player_id: str):
+            return active_player_index.get(lookup_player_id.strip().casefold())
+
+        viewer = payload_active_player_lookup(player_id)
         entries = commands._room_occupant_display_entries(
             sorted(occupants),
             viewer_id=player_id,
             viewer=viewer,
-            player_lookup=_runtime_active_player_lookup,
+            player_lookup=payload_active_player_lookup,
             player_flags_by_id=player_flags_by_id,
         )
         others = [entry.display_name for entry in entries]

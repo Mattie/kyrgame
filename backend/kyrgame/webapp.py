@@ -1659,17 +1659,21 @@ def _active_player_flags(app: FastAPI) -> dict[str, int]:
 
 
 def _active_player_lookup(app: FastAPI) -> Callable[[str], models.PlayerModel | None]:
+    indexed_players: dict[str, models.PlayerModel] = {}
+    for player in getattr(app.state, "active_players", {}).values():
+        player_key = player.plyrid.strip().casefold()
+        if player_key:
+            indexed_players[player_key] = player
+    for player in reversed(list(_active_player_sessions(app).values())):
+        player_key = player.plyrid.strip().casefold()
+        if player_key:
+            indexed_players[player_key] = player
+
     def lookup(player_id: str) -> models.PlayerModel | None:
         target = player_id.strip().casefold()
         if not target:
             return None
-        for player in _active_player_sessions(app).values():
-            if player.plyrid.strip().casefold() == target:
-                return player
-        for player in getattr(app.state, "active_players", {}).values():
-            if player.plyrid.strip().casefold() == target:
-                return player
-        return None
+        return indexed_players.get(target)
 
     return lookup
 
@@ -3324,6 +3328,7 @@ def _entrance_room_message(
     room_id: int,
     player_flags: int | None = None,
     entrance_text: str = "appeared in a cloud of mists",
+    display_name: str | None = None,
 ) -> dict:
     """Legacy-style entrance broadcast when a player appears in a room.
 
@@ -3331,15 +3336,19 @@ def _entrance_room_message(
     the world with the APPEARCLOUDMIST text from ``KYRANDIA.C``.【F:legacy/KYRUTIL.C†L236-L260】【F:legacy/KYRANDIA.C†L135-L211】
     """
 
+    # Legacy entrgp() formats the room-facing entrance line with gp->altnam
+    # (legacy/KYRUTIL.C:236-260).
+    resolved_display_name = (display_name or player_id).strip() or player_id
     return {
         "scope": "room",
         "event": "room_message",
         "type": "room_message",
         "player": player_id,
+        "display_name": resolved_display_name,
         "from": None,
         "to": room_id,
         "direction": None,
-        "text": f"*** {player_id} has just {entrance_text}!",
+        "text": f"*** {resolved_display_name} has just {entrance_text}!",
         "player_flags": player_flags,
         "message_id": None,
         "command_id": None,
@@ -3518,6 +3527,7 @@ def create_app() -> FastAPI:
                     "payload": {
                         "event": "player_enter",
                         "player": player_id,
+                        "display_name": player.altnam,
                         "player_flags": int(player.flags),
                     },
                 },
@@ -3530,7 +3540,10 @@ def create_app() -> FastAPI:
                     "type": "room_broadcast",
                     "room": current_room,
                     "payload": _entrance_room_message(
-                        player_id, current_room, int(player.flags)
+                        player_id,
+                        current_room,
+                        int(player.flags),
+                        display_name=player.altnam,
                     ),
                 },
             )
@@ -3779,10 +3792,13 @@ def create_app() -> FastAPI:
         # Create a persistent database session for this WebSocket connection
         persistent_session = provider.scope.app.state.session_factory()
         
-        active_player_lookup = _active_player_lookup(provider.scope.app)
+        command_active_player_lookup: Callable[[str], models.PlayerModel | None] | None = None
+
+        def current_active_player_lookup() -> Callable[[str], models.PlayerModel | None]:
+            return command_active_player_lookup or _active_player_lookup(provider.scope.app)
 
         def lookup_player(player_alias: str) -> models.PlayerModel | None:
-            active_player = active_player_lookup(player_alias)
+            active_player = current_active_player_lookup()(player_alias)
             if active_player:
                 return active_player
             record = persistent_session.scalar(
@@ -3796,7 +3812,7 @@ def create_app() -> FastAPI:
             # Legacy fgamgp() scans only active in-memory players by true plyrid
             # (legacy/KYRUTIL.C:486-494), so DB-only player records must stay
             # invisible to remote-target spells.
-            return active_player_lookup(player_alias)
+            return current_active_player_lookup()(player_alias)
 
         state = commands.GameState(
             player=player_state,
@@ -3900,6 +3916,7 @@ def create_app() -> FastAPI:
                 "payload": {
                     "event": "player_enter",
                     "player": player_id,
+                    "display_name": player_state.altnam,
                     "player_flags": int(player_state.flags),
                 },
             },
@@ -3919,6 +3936,7 @@ def create_app() -> FastAPI:
                     "appeared in a flash"
                     if first_login_entry_pending
                     else "appeared in a cloud of mists",
+                    display_name=player_state.altnam,
                 ),
             },
             sender=websocket,
@@ -4479,6 +4497,7 @@ def create_app() -> FastAPI:
                     continue
 
                 try:
+                    command_active_player_lookup = _active_player_lookup(provider.scope.app)
                     result = await provider.command_dispatcher.dispatch_parsed(parsed, state)
                 except commands.CommandError as exc:  # type: ignore[attr-defined]
                     await send_player_json(
@@ -4495,6 +4514,8 @@ def create_app() -> FastAPI:
                         }
                     )
                     continue
+                finally:
+                    command_active_player_lookup = None
 
                 session_exit_requested = any(
                     event.get("event") == "session_exit" for event in result.events

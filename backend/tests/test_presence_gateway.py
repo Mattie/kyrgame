@@ -6,9 +6,10 @@ import httpx
 import pytest
 import uvicorn
 import websockets
+from sqlalchemy import select
 from starlette.websockets import WebSocketState
 
-from kyrgame import constants, fixtures
+from kyrgame import constants, fixtures, models
 from kyrgame.gateway import RoomGateway
 from kyrgame.presence import PresenceService
 from kyrgame.webapp import _room_occupants_event
@@ -388,6 +389,57 @@ async def test_room_broadcast_on_login_uses_entrance_text():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_room_broadcast_on_login_uses_transformed_entrance_name():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    try:
+        while not server.started:
+            await asyncio.sleep(0.05)
+
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+            hero_token = hero_session.json()["session"]["token"]
+            rogue_session = await client.post("/auth/session", json={"player_id": "rogue", "room_id": 0})
+            rogue_token = rogue_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            rogue = db.scalar(select(models.Player).where(models.Player.plyrid == "rogue"))
+            assert rogue is not None
+            rogue.altnam = "Some pegasus"
+            rogue.attnam = "pegasus"
+            db.commit()
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await _drain_pending_messages(hero_ws)
+
+            async with websockets.connect(uri_room0_rogue) as rogue_ws:
+                await asyncio.wait_for(rogue_ws.recv(), timeout=1)
+                await _drain_pending_messages(rogue_ws)
+
+                entrance_message = await _receive_until(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "room_broadcast"
+                    and msg.get("payload", {}).get("event") == "room_message",
+                )
+
+                payload = entrance_message["payload"]
+                assert payload["player"] == "rogue"
+                assert payload["text"] == "*** Some pegasus has just appeared in a cloud of mists!"
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio

@@ -302,6 +302,10 @@ const plainInlineMessageId = (messageId: unknown): boolean => {
   )
 }
 
+// Legacy command ids for comment/note/say speech commands whose body text should
+// stay literal instead of gaining live-entity decoration.
+const PLAIN_INLINE_SPEECH_COMMAND_IDS = new Set([7, 39, 53])
+
 const plainInlineCommandId = (commandId: unknown): boolean => {
   const parsed =
     typeof commandId === 'number'
@@ -309,7 +313,7 @@ const plainInlineCommandId = (commandId: unknown): boolean => {
       : typeof commandId === 'string'
         ? Number(commandId)
         : NaN
-  return parsed === 7 || parsed === 39 || parsed === 53
+  return PLAIN_INLINE_SPEECH_COMMAND_IDS.has(parsed)
 }
 
 const inlineDecorationsForEntry = (
