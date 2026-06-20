@@ -1664,7 +1664,7 @@ def _active_player_lookup(app: FastAPI) -> Callable[[str], models.PlayerModel | 
         player_key = player.plyrid.strip().casefold()
         if player_key:
             indexed_players[player_key] = player
-    for player in reversed(list(_active_player_sessions(app).values())):
+    for player in _active_player_sessions(app).values():
         player_key = player.plyrid.strip().casefold()
         if player_key:
             indexed_players[player_key] = player
