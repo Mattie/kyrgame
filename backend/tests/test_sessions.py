@@ -802,8 +802,18 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
 
 
 @pytest.mark.anyio
-async def test_websocket_idle_timeout_closes_live_presence_but_preserves_session(monkeypatch):
+@pytest.mark.parametrize(
+    "idle_frame",
+    [
+        pytest.param({"type": "client_ping"}, id="non-command-frame"),
+        pytest.param({"type": "command"}, id="empty-command-envelope"),
+    ],
+)
+async def test_websocket_idle_timeout_closes_live_presence_but_preserves_session(
+    monkeypatch, idle_frame
+):
     monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "2")
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "100")
     app = create_app()
     host = "127.0.0.1"
     port = _get_open_port()
@@ -830,10 +840,12 @@ async def test_websocket_idle_timeout_closes_live_presence_but_preserves_session
                 assert player_id in await app.state.presence.players_in_room(7)
                 assert token in getattr(app.state, "active_player_sessions", {})
 
+                await asyncio.sleep(0.75)
+                await ws.send(json.dumps(idle_frame))
                 idle_notice = await _receive_until(
                     ws,
                     lambda msg: msg.get("payload", {}).get("event") == "idle_timeout",
-                    timeout=4,
+                    timeout=1.8,
                 )
                 assert idle_notice["payload"]["type"] == "idle_timeout"
                 assert "reconnect" in idle_notice["payload"]["text"].lower()

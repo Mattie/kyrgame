@@ -4117,40 +4117,57 @@ def create_app() -> FastAPI:
                 }
             )
 
+        async def _send_idle_timeout_and_close() -> None:
+            await send_player_json(
+                {
+                    "type": "command_response",
+                    "room": current_room,
+                    "payload": {
+                        "scope": "player",
+                        "event": "idle_timeout",
+                        "type": "idle_timeout",
+                        "text": (
+                            "Idle timeout. Use Reconnect session to return "
+                            "to Kyrandia."
+                        ),
+                    },
+                }
+            )
+            await _remove_live_connection()
+            if websocket.application_state == WebSocketState.CONNECTED:
+                await websocket.close(
+                    code=status.WS_1000_NORMAL_CLOSURE,
+                    reason="Idle timeout",
+                )
+
         idle_timeout_seconds = _player_idle_timeout_seconds()
+        last_player_command_at = time.monotonic()
 
         try:
             while True:
+                idle_timeout_remaining = idle_timeout_seconds - (
+                    time.monotonic() - last_player_command_at
+                )
+                if idle_timeout_remaining <= 0:
+                    await _send_idle_timeout_and_close()
+                    break
                 try:
                     payload = await asyncio.wait_for(
                         websocket.receive_json(),
-                        timeout=idle_timeout_seconds,
+                        timeout=idle_timeout_remaining,
                     )
                 except asyncio.TimeoutError:
-                    await send_player_json(
-                        {
-                            "type": "command_response",
-                            "room": current_room,
-                            "payload": {
-                                "scope": "player",
-                                "event": "idle_timeout",
-                                "type": "idle_timeout",
-                                "text": (
-                                    "Idle timeout. Use Reconnect session to return "
-                                    "to Kyrandia."
-                                ),
-                            },
-                        }
-                    )
-                    await _remove_live_connection()
-                    if websocket.application_state == WebSocketState.CONNECTED:
-                        await websocket.close(
-                            code=status.WS_1000_NORMAL_CLOSURE,
-                            reason="Idle timeout",
-                        )
+                    await _send_idle_timeout_and_close()
                     break
                 meta = payload.get("meta") or None
-                if payload.get("type") == "command":
+                command_text = payload.get("command", "")
+                is_player_command = (
+                    payload.get("type") == "command"
+                    and isinstance(command_text, str)
+                    and bool(command_text.strip())
+                )
+                if is_player_command:
+                    last_player_command_at = time.monotonic()
                     _mark_current_session_seen()
                 if not limiter.allow():
                     await send_player_json(
@@ -4163,7 +4180,6 @@ def create_app() -> FastAPI:
                     continue
 
                 await _sync_current_room_from_state()
-                command_text = payload.get("command", "")
                 await record_player_input(str(command_text))
                 command_room = current_room
                 previous_level = state.player.level
