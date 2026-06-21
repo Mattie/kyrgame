@@ -1063,12 +1063,28 @@ async def test_cast_goto_moves_caster_with_standard_room_transition_events():
     assert state.player.gamloc == 1
     assert state.player.pgploc == 0
     assert result.events[0]["message_id"] == "S23M02"
-    assert any(
-        event.get("event") == "player_enter"
+    transfer_messages = [
+        event
+        for event in result.events
+        if event.get("event") == "room_message"
         and event.get("from") == 0
         and event.get("to") == 1
-        for event in result.events
+    ]
+    assert transfer_messages
+    assert all(event["_legacy_visibility"] == "sndcgp" for event in transfer_messages)
+    assert all(
+        event["_visibility_player_flags"] == int(state.player.flags)
+        for event in transfer_messages
     )
+    player_enter = next(
+        event
+        for event in result.events
+        if event.get("event") == "player_enter"
+        and event.get("from") == 0
+        and event.get("to") == 1
+    )
+    assert player_enter["_legacy_visibility"] == "sndcgp"
+    assert player_enter["_visibility_player_flags"] == int(state.player.flags)
     assert any(
         event.get("event") == "location_update" and event.get("location") == 1
         for event in result.events

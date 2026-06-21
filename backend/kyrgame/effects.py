@@ -980,7 +980,7 @@ class SpellEffectEngine:
                     "move_to_room": room_id,
                     "move_from_room": previous_room,
                     "departure_emote": f"*** {player.altnam} has just vanished in a blue light!",
-                    "arrival_text": f"*** {player.plyrid} has just appeared in a blue!",
+                    "arrival_text": f"*** {player.altnam} has just appeared in a blue!",
                 },
             )
 

@@ -3221,6 +3221,74 @@ async def _send_game_socket_json(
     await _publish_scry_output(app, player_id or _game_socket_player_id(app, socket), message)
 
 
+_SERVER_ONLY_ROOM_EVENT_KEYS = frozenset(
+    {"_legacy_visibility", "_visibility_player", "_visibility_player_flags"}
+)
+
+
+def _client_room_event_payload(event: dict) -> dict:
+    return {
+        key: value
+        for key, value in event.items()
+        if key not in _SERVER_ONLY_ROOM_EVENT_KEYS
+    }
+
+
+def _player_has_cinvis(player: models.PlayerModel | None) -> bool:
+    if player is None:
+        return False
+    charms = list(player.charms or [])
+    slot = int(constants.CharmSlot.INVISIBILITY)
+    return len(charms) > slot and charms[slot] > 0
+
+
+def _visibility_player_flags(app: FastAPI, event: dict, player_id: str | None) -> int:
+    player = _active_player_lookup(app)(player_id or "")
+    if player is not None:
+        return int(player.flags)
+    flags = event.get("_visibility_player_flags", event.get("player_flags", 0))
+    try:
+        return int(flags)
+    except (TypeError, ValueError):
+        return 0
+
+
+async def _room_event_excluded_sockets(
+    app: FastAPI,
+    event: dict,
+) -> set[WebSocket]:
+    excluded_sockets: set[WebSocket] = set()
+    excluded_players = set(event.get("exclude_players") or [])
+    excluded_player = event.get("exclude_player")
+    if excluded_player:
+        excluded_players.add(excluded_player)
+
+    visibility = event.get("_legacy_visibility")
+    visibility_player = event.get("_visibility_player") or event.get("player")
+    visibility_player_id = str(visibility_player) if visibility_player else ""
+    if visibility == "sndcgp" and visibility_player_id:
+        # Mirrors sndcgp(): the actor never receives their own room-facing
+        # remvgp()/entrgp() message; invisible actors are seen only by CINVIS.
+        excluded_players.add(visibility_player_id)
+        actor_flags = _visibility_player_flags(app, event, visibility_player_id)
+        if actor_flags & constants.PlayerFlag.INVISF:
+            for token, recipient in _active_player_sessions(app).items():
+                if recipient.plyrid.strip().casefold() == visibility_player_id.casefold():
+                    continue
+                if _player_has_cinvis(recipient):
+                    continue
+                target_socket = app.state.session_connections.get(token)
+                if target_socket:
+                    excluded_sockets.add(target_socket)
+
+    for excluded_player_id in excluded_players:
+        for token in await app.state.presence.sessions_for_player(str(excluded_player_id)):
+            target_socket = app.state.session_connections.get(token)
+            if target_socket:
+                excluded_sockets.add(target_socket)
+    return excluded_sockets
+
+
 async def _broadcast_game_json(
     app: FastAPI,
     gateway: RoomGateway,
@@ -3352,6 +3420,9 @@ def _entrance_room_message(
         "player_flags": player_flags,
         "message_id": None,
         "command_id": None,
+        "_legacy_visibility": "sndcgp",
+        "_visibility_player": player_id,
+        "_visibility_player_flags": int(player_flags or 0),
     }
 
 
@@ -3906,6 +3977,13 @@ def create_app() -> FastAPI:
                 }
             )
 
+        enter_payload = {
+            "event": "player_enter",
+            "player": player_id,
+            "display_name": player_state.altnam,
+            "player_flags": int(player_state.flags),
+            **commands._legacy_sndcgp_visibility_payload(player_state),
+        }
         await _broadcast_game_json(
             provider.scope.app,
             gateway,
@@ -3913,14 +3991,22 @@ def create_app() -> FastAPI:
             {
                 "type": "room_broadcast",
                 "room": current_room,
-                "payload": {
-                    "event": "player_enter",
-                    "player": player_id,
-                    "display_name": player_state.altnam,
-                    "player_flags": int(player_state.flags),
-                },
+                "payload": _client_room_event_payload(enter_payload),
             },
             sender=websocket,
+            exclude=await _room_event_excluded_sockets(
+                provider.scope.app,
+                enter_payload,
+            ),
+        )
+        entrance_payload = _entrance_room_message(
+            player_id,
+            current_room,
+            int(player_state.flags),
+            "appeared in a flash"
+            if first_login_entry_pending
+            else "appeared in a cloud of mists",
+            display_name=player_state.altnam,
         )
         await _broadcast_game_json(
             provider.scope.app,
@@ -3929,17 +4015,13 @@ def create_app() -> FastAPI:
             {
                 "type": "room_broadcast",
                 "room": current_room,
-                "payload": _entrance_room_message(
-                    player_id,
-                    current_room,
-                    int(player_state.flags),
-                    "appeared in a flash"
-                    if first_login_entry_pending
-                    else "appeared in a cloud of mists",
-                    display_name=player_state.altnam,
-                ),
+                "payload": _client_room_event_payload(entrance_payload),
             },
             sender=websocket,
+            exclude=await _room_event_excluded_sockets(
+                provider.scope.app,
+                entrance_payload,
+            ),
         )
 
         if first_login_entry_pending:
@@ -4209,21 +4291,17 @@ def create_app() -> FastAPI:
                                 event_room = (
                                     current_room if event_room_value is None else int(event_room_value)
                                 )
-                                envelope = {"type": "room_broadcast", "room": event_room, "payload": event}
+                                envelope = {
+                                    "type": "room_broadcast",
+                                    "room": event_room,
+                                    "payload": _client_room_event_payload(event),
+                                }
                                 if meta:
                                     envelope["meta"] = meta
-                                excluded_player = event.get("exclude_player")
-                                excluded_players = set(event.get("exclude_players") or [])
-                                if excluded_player:
-                                    excluded_players.add(excluded_player)
-                                excluded_sockets = set()
-                                for excluded_player_id in excluded_players:
-                                    for token in await provider.presence.sessions_for_player(
-                                        excluded_player_id
-                                    ):
-                                        target_socket = session_connections.get(token)
-                                        if target_socket:
-                                            excluded_sockets.add(target_socket)
+                                excluded_sockets = await _room_event_excluded_sockets(
+                                    provider.scope.app,
+                                    event,
+                                )
                                 sender_socket = None if event.get("include_sender") else websocket
                                 await _broadcast_game_json(
                                     provider.scope.app,
@@ -4302,6 +4380,12 @@ def create_app() -> FastAPI:
                                         f"*** {state.player.altnam} has just {arrive_text}!"
                                     )
                             death_reset = bool(transfer_event.get("death_reset"))
+                            transfer_uses_sndcgp = legacy_transfer_format or death_reset
+                            transfer_visibility_payload = (
+                                commands._legacy_sndcgp_visibility_payload(player_state)
+                                if transfer_uses_sndcgp
+                                else {}
+                            )
                             transfer_metadata = {
                                 key: transfer_event[key]
                                 for key in (
@@ -4321,6 +4405,18 @@ def create_app() -> FastAPI:
                             # Source: legacy/KYRSPEL.C:303-321, legacy/KYRANDIA.C:325-356,
                             # and legacy/KYRUTIL.C:236-260.
                             if leave_text:
+                                leave_payload = {
+                                    "scope": "room",
+                                    "event": "room_message",
+                                    "type": "room_message",
+                                    "player": current_player_id(),
+                                    "from": current_room,
+                                    "to": None,
+                                    "direction": None,
+                                    "text": leave_text,
+                                    "message_id": None,
+                                    **transfer_visibility_payload,
+                                }
                                 await _broadcast_game_json(
                                     provider.scope.app,
                                     gateway,
@@ -4328,19 +4424,13 @@ def create_app() -> FastAPI:
                                     {
                                         "type": "room_broadcast",
                                         "room": current_room,
-                                        "payload": {
-                                            "scope": "room",
-                                            "event": "room_message",
-                                            "type": "room_message",
-                                            "player": current_player_id(),
-                                            "from": current_room,
-                                            "to": None,
-                                            "direction": None,
-                                            "text": leave_text,
-                                            "message_id": None,
-                                        },
+                                        "payload": _client_room_event_payload(leave_payload),
                                     },
                                     sender=websocket,
+                                    exclude=await _room_event_excluded_sockets(
+                                        provider.scope.app,
+                                        leave_payload,
+                                    ),
                                 )
 
                             if target_room != current_room:
@@ -4456,6 +4546,18 @@ def create_app() -> FastAPI:
                                     )
 
                             if arrive_text:
+                                arrive_payload = {
+                                    "scope": "room",
+                                    "event": "room_message",
+                                    "type": "room_message",
+                                    "player": current_player_id(),
+                                    "from": None,
+                                    "to": current_room,
+                                    "direction": None,
+                                    "text": arrive_text,
+                                    "message_id": None,
+                                    **transfer_visibility_payload,
+                                }
                                 await _broadcast_game_json(
                                     provider.scope.app,
                                     gateway,
@@ -4463,19 +4565,13 @@ def create_app() -> FastAPI:
                                     {
                                         "type": "room_broadcast",
                                         "room": current_room,
-                                        "payload": {
-                                            "scope": "room",
-                                            "event": "room_message",
-                                            "type": "room_message",
-                                            "player": current_player_id(),
-                                            "from": None,
-                                            "to": current_room,
-                                            "direction": None,
-                                            "text": arrive_text,
-                                            "message_id": None,
-                                        },
+                                        "payload": _client_room_event_payload(arrive_payload),
                                     },
                                     sender=websocket,
+                                    exclude=await _room_event_excluded_sockets(
+                                        provider.scope.app,
+                                        arrive_payload,
+                                    ),
                                 )
                         
                         continue
@@ -4571,21 +4667,17 @@ def create_app() -> FastAPI:
                         event_room = (
                             current_room if event_room_value is None else int(event_room_value)
                         )
-                        envelope = {"type": "room_broadcast", "room": event_room, "payload": event}
+                        envelope = {
+                            "type": "room_broadcast",
+                            "room": event_room,
+                            "payload": _client_room_event_payload(event),
+                        }
                         if meta:
                             envelope["meta"] = meta
-                        excluded_player = event.get("exclude_player")
-                        excluded_players = set(event.get("exclude_players") or [])
-                        if excluded_player:
-                            excluded_players.add(excluded_player)
-                        excluded_sockets = set()
-                        for excluded_player_id in excluded_players:
-                            for token in await provider.presence.sessions_for_player(
-                                excluded_player_id
-                            ):
-                                target_socket = session_connections.get(token)
-                                if target_socket:
-                                    excluded_sockets.add(target_socket)
+                        excluded_sockets = await _room_event_excluded_sockets(
+                            provider.scope.app,
+                            event,
+                        )
                         sender_socket = None if event.get("include_sender") else websocket
                         await _broadcast_game_json(
                             provider.scope.app,
@@ -4612,21 +4704,17 @@ def create_app() -> FastAPI:
                         # See legacy/KYRUTIL.C:193-208.
                         nearby_room_id = event.get("room_id")
                         if nearby_room_id is not None:
-                            envelope = {"type": "room_broadcast", "room": nearby_room_id, "payload": event}
+                            envelope = {
+                                "type": "room_broadcast",
+                                "room": nearby_room_id,
+                                "payload": _client_room_event_payload(event),
+                            }
                             if meta:
                                 envelope["meta"] = meta
-                            excluded_player = event.get("exclude_player")
-                            excluded_players = set(event.get("exclude_players") or [])
-                            if excluded_player:
-                                excluded_players.add(excluded_player)
-                            excluded_sockets = set()
-                            for excluded_player_id in excluded_players:
-                                for token in await provider.presence.sessions_for_player(
-                                    excluded_player_id
-                                ):
-                                    target_socket = session_connections.get(token)
-                                    if target_socket:
-                                        excluded_sockets.add(target_socket)
+                            excluded_sockets = await _room_event_excluded_sockets(
+                                provider.scope.app,
+                                event,
+                            )
                             await _broadcast_game_json(
                                 provider.scope.app,
                                 gateway,

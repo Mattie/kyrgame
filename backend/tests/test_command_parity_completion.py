@@ -295,6 +295,8 @@ async def test_fly_willow_moves_between_chasm_rooms(base_state):
         event.get("scope") == "nearby_room"
         and event.get("room_id") == 179
         and "gracefully flown across the chasm" in event.get("text", "")
+        and event.get("_legacy_visibility") == "sndcgp"
+        and event.get("_visibility_player") == base_state.player.plyrid
         for event in result.events
     )
     assert any(
@@ -377,12 +379,23 @@ async def test_shove_moves_target_and_notifies_actor_target_and_rooms(base_state
         and event.get("room_id") == 1
         and event.get("player") == target.plyrid
         and event.get("exclude_player") == target.plyrid
+        and event.get("_legacy_visibility") == "sndcgp"
+        and event.get("_visibility_player") == target.plyrid
         for event in result.events
     )
     assert any(
         event.get("scope") == "nearby_room"
         and event.get("room_id") == 1
         and "been shoved from the south" in event.get("text", "")
+        and event.get("_legacy_visibility") == "sndcgp"
+        and event.get("_visibility_player") == target.plyrid
+        for event in result.events
+    )
+    assert any(
+        event.get("scope") == "room"
+        and "been shoved north by" in event.get("text", "")
+        and event.get("_legacy_visibility") == "sndcgp"
+        and event.get("_visibility_player") == target.plyrid
         for event in result.events
     )
 
@@ -433,6 +446,7 @@ async def test_simple_emote_without_text_uses_smputl_messages(base_state):
     assert result.events[0]["text"] == "...Blink!"
     assert result.events[1]["text"] == "***\r\nHero Alt is blinking her eyes in disbelief!"
     assert result.events[1]["exclude_player"] == base_state.player.plyrid
+    assert "_legacy_visibility" not in result.events[1]
 
 
 @pytest.mark.anyio
@@ -459,6 +473,7 @@ async def test_simple_emote_with_speak_flag_delegates_to_speech(
         event.get("scope") == "room" and expected_text in event.get("text", "")
         for event in result.events
     )
+    assert all("_legacy_visibility" not in event for event in result.events)
 
 
 @pytest.mark.anyio

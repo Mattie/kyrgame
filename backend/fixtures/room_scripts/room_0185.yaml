@@ -23,10 +23,9 @@ triggers:
             message_id: WALM00
           - type: transfer_player
             target_room: 186
-            leave_text: "*** %s has just vanished in a golden flash of light!"
-            leave_format: [player_altnam]
-            arrive_text: "*** %s has just appeared in a golden flash of light!"
-            arrive_format: [player_altnam]
+            leave_text: "vanished in a golden flash of light"
+            arrive_text: "appeared in a golden flash of light"
+            legacy_transfer_format: true
         else:
           - type: message
             message_id: WALM01
