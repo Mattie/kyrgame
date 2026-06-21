@@ -55,6 +55,18 @@ async def _assert_no_matching(websocket, predicate, timeout: float = 0.35):
             raise AssertionError(f"Unexpected message received: {message}")
 
 
+async def _receive_until(websocket, predicate, timeout: float = 1.5):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise AssertionError("Timed out waiting for matching message")
+        message = json.loads(await asyncio.wait_for(websocket.recv(), timeout=remaining))
+        if predicate(message):
+            return message
+
+
 async def _wait_until(predicate, timeout: float = 2.0):
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
@@ -1065,6 +1077,7 @@ async def test_invisible_first_login_flash_only_reaches_cinvis_observers():
                 async with websockets.connect(seer_uri) as seer_ws:
                     await _receive_initial_room_payloads(seer_ws)
                     await _drain_pending_messages(witness_ws)
+                    await _drain_pending_messages(seer_ws)
 
                     create_payload = {"player_id": "Merlin", "create_player": True}
                     create_resp = await client.post("/auth/session", json=create_payload)
@@ -1094,21 +1107,15 @@ async def test_invisible_first_login_flash_only_reaches_cinvis_observers():
                         welcome = json.loads(await asyncio.wait_for(player_ws.recv(), timeout=1))
                         assert welcome["type"] == "room_welcome"
 
-                        seen_flash = False
-                        for _ in range(4):
-                            message = json.loads(await asyncio.wait_for(seer_ws.recv(), timeout=1))
-                            payload = message.get("payload", {})
-                            if (
-                                message.get("type") == "room_broadcast"
-                                and payload.get("event") == "room_message"
-                                and payload.get("player") == "Merlin"
-                            ):
-                                assert payload["text"] == (
-                                    "*** Some Unseen Force has just appeared in a flash!"
-                                )
-                                seen_flash = True
-                                break
-                        assert seen_flash
+                        flash_message = await _receive_until(
+                            seer_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("event") == "room_message"
+                            and msg.get("payload", {}).get("player") == "Merlin",
+                        )
+                        assert flash_message["payload"]["text"] == (
+                            "*** Some Unseen Force has just appeared in a flash!"
+                        )
 
                         await _assert_no_matching(
                             witness_ws,
