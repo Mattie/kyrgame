@@ -305,6 +305,12 @@ export const SessionForm = ({
     if (!session) return
     setSubmitting(true)
     try {
+      const resumed = session.sessionKind === 'game'
+        ? await resumeRememberedSession()
+        : false
+      if (resumed) {
+        return
+      }
       await startSession(session.playerId, currentRoom ?? session.roomId)
     } catch {
       // `startSession` is responsible for updating shared error state.

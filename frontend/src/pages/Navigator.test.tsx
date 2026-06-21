@@ -1594,6 +1594,141 @@ describe('Navigator flow', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows idle timeout guidance and reconnects remembered sessions with the saved token', async () => {
+    window.history.replaceState(null, '', '/play')
+    const fetchMock = vi.spyOn(global, 'fetch').mockImplementation((input, init) => {
+      const rosterResponse = maybeActivePlayerRosterFetch(input)
+      if (rosterResponse) return rosterResponse
+      const url = String(input)
+      if (url.includes('/public/player-id/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            player_id: 'Hero',
+            canonical_player_id: 'Hero',
+            valid: true,
+            exists: true,
+            available: false,
+            reserved: false,
+            status: 'existing',
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/auth/login')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          userid: 'Hero',
+          password: 'secret-password',
+          session_kind: 'game',
+          remember_me: true,
+        })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'created',
+            session: {
+              token: 'remembered-token',
+              player_id: 'Hero',
+              account_userid: 'Hero',
+              session_kind: 'game',
+              room_id: 7,
+              expires_at: '2026-07-10T12:00:00+00:00',
+              expires_in_seconds: 2592000,
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/auth/session')) {
+        expect(JSON.parse(String(init?.body))).toEqual({
+          player_id: 'Hero',
+          resume_token: 'remembered-token',
+        })
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'recovered',
+            session: {
+              token: 'remembered-token',
+              player_id: 'Hero',
+              account_userid: 'Hero',
+              session_kind: 'game',
+              room_id: 7,
+              expires_at: '2026-07-10T12:00:00+00:00',
+              expires_in_seconds: 2591900,
+            },
+          }),
+        } as unknown as Response)
+      }
+      if (url.includes('/locations')) {
+        return Promise.resolve({ ok: true, json: async () => locations } as unknown as Response)
+      }
+      if (url.includes('/objects')) {
+        return Promise.resolve({ ok: true, json: async () => objects } as unknown as Response)
+      }
+      if (url.includes('/commands')) {
+        return Promise.resolve({ ok: true, json: async () => commands } as unknown as Response)
+      }
+      if (url.includes('/i18n/en-US/messages')) {
+        return Promise.resolve({ ok: true, json: async () => ({ messages }) } as unknown as Response)
+      }
+      throw new Error(`Unexpected fetch call: ${url}`)
+    })
+
+    render(<App />)
+
+    const user = userEvent.setup()
+    await act(async () => {
+      await user.type(screen.getByLabelText(/^player id$/i), 'Hero')
+      await user.type(screen.getByLabelText(/^password$/i), 'secret-password')
+      await user.click(screen.getByRole('checkbox', { name: /remember me/i }))
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /login as hero/i })).toBeEnabled()
+    )
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /login as hero/i }))
+    })
+
+    const firstSocket = await waitFor(() => MockWebSocket.instances[0])
+    expect(firstSocket.url).toContain('/rooms/7?token=remembered-token')
+
+    act(() => {
+      firstSocket.triggerMessage({
+        type: 'command_response',
+        room: 7,
+        payload: {
+          scope: 'player',
+          event: 'idle_timeout',
+          type: 'idle_timeout',
+          text: 'Idle timeout. Use Reconnect session to return to Kyrandia.',
+        },
+      })
+      firstSocket.close(1000, 'Idle timeout')
+    })
+
+    await screen.findByLabelText(/disconnected - Room 7: Edge of the forest/i)
+    expect(
+      screen.getAllByText(/Idle timeout\. Use Reconnect session/i).length
+    ).toBeGreaterThan(0)
+    expect(localStorage.getItem(rememberedSessionStorageKey)).toContain('remembered-token')
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: /reconnect session/i }))
+    })
+
+    const secondSocket = await waitFor(() => MockWebSocket.instances[1])
+    expect(secondSocket.url).toContain('/rooms/7?token=remembered-token')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.local/auth/session',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          player_id: 'Hero',
+          resume_token: 'remembered-token',
+        }),
+      })
+    )
+  })
+
   it('automatically reconnects transient websocket drops with the same token and room', async () => {
     const fetchMock = vi.spyOn(global, 'fetch')
     const responses = [

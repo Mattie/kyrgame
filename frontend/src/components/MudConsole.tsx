@@ -374,14 +374,20 @@ const isCommandHistoryEligible = (command: string): boolean => {
   return !isCardinalMove
 }
 
-export const MudConsole = () => {
+type MudConsoleProps = {
+  showReconnectAction?: boolean
+}
+
+export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {}) => {
   const {
     activity,
     connectionStatus,
     currentRoom,
     playerVisuals,
+    resumeRememberedSession,
     sendCommand,
     sendMove,
+    startSession,
     advanceLifecycle,
     session,
     scrySession,
@@ -416,6 +422,7 @@ export const MudConsole = () => {
   const [terminalPagerPageRows, setTerminalPagerPageRows] = useState(
     TERMINAL_PAGER_DESKTOP_ROWS
   )
+  const [reconnectPending, setReconnectPending] = useState(false)
   const [screenReaderStreamLines, setScreenReaderStreamLines] = useState<
     ScreenReaderConsoleLine[]
   >([])
@@ -1244,6 +1251,24 @@ export const MudConsole = () => {
     setInput('')
   }
 
+  const handleReconnect = async () => {
+    if (!session) return
+    setReconnectPending(true)
+    try {
+      const resumed = session.sessionKind === 'game'
+        ? await resumeRememberedSession()
+        : false
+      if (resumed) {
+        return
+      }
+      await startSession(session.playerId, currentRoom ?? session.roomId)
+    } catch {
+      // Shared session state records reconnect errors for the UI.
+    } finally {
+      setReconnectPending(false)
+    }
+  }
+
   const compassLabel = navMode ? 'Navigation mode active' : 'Toggle navigation mode'
   const sendButtonLabel = activeTerminalPagerLineId
     ? 'Continue'
@@ -1254,6 +1279,12 @@ export const MudConsole = () => {
     !activeTerminalPagerLineId && (lifecycleAdvancePending || gamePromptReadOnly)
   const canFocusCommandInput =
     connectionStatus === 'connected' && Boolean(session) && !promptControlsDisabled
+  const shouldShowReconnectAction =
+    showReconnectAction &&
+    connectionStatus === 'disconnected' &&
+    Boolean(session) &&
+    session?.sessionKind === 'game' &&
+    !scrySession
   const sessionLineText = scrySession
     ? `SCRY ${scrySession.displayName}`
     : adminSessionActive
@@ -1485,6 +1516,17 @@ export const MudConsole = () => {
                 onClick={() => handleTerminalPagerCommand('c')}
               >
                 Continue
+              </button>
+            </div>
+          )}
+          {shouldShowReconnectAction && (
+            <div className="terminal-action-row reconnect-actions" aria-label="Reconnect controls">
+              <button
+                type="button"
+                onClick={handleReconnect}
+                disabled={reconnectPending}
+              >
+                Reconnect session
               </button>
             </div>
           )}

@@ -569,9 +569,13 @@ const isAuthWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boole
   event.code === 1008 || /invalid session token/i.test(event.reason ?? '')
 
 const REPLACED_GAME_SOCKET_REASON = 'Game session replaced by another connection'
+const IDLE_TIMEOUT_SOCKET_REASON = 'Idle timeout'
 
 const isReplacedWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
   event.code === 1013 && event.reason === REPLACED_GAME_SOCKET_REASON
+
+const isIdleTimeoutWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
+  event.code === 1000 && event.reason === IDLE_TIMEOUT_SOCKET_REASON
 
 const readRememberedSessionRaw = (): string | null => {
   try {
@@ -1499,6 +1503,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           } else if (message.payload?.event === 'unimplemented') {
             summary = 'Sorry, that command exists, but it is not implemented (yet).'
             payload = { ...message.payload, text: summary }
+          } else if (typeof message.payload?.text === 'string') {
+            summary = message.payload.text
           }
 
           appendActivity({
@@ -1596,6 +1602,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         if (isReplacedWebSocketClose(event)) {
           setGameSessionReplaced(true)
           setError('This game session is open in another tab or window.')
+          return
+        }
+        if (isIdleTimeoutWebSocketClose(event)) {
+          setError('Idle timeout. Use Reconnect session to return to Kyrandia.')
           return
         }
         if (event.code !== 1000) {

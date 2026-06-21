@@ -9,7 +9,11 @@ import websockets
 from sqlalchemy import func, select
 
 from kyrgame import accounts, constants, models
-from kyrgame.webapp import create_app, _websocket_command_rate_limiter
+from kyrgame.webapp import (
+    create_app,
+    _player_idle_timeout_seconds,
+    _websocket_command_rate_limiter,
+)
 from session_test_helpers import seed_returning_players
 
 
@@ -736,6 +740,20 @@ def test_websocket_command_rate_limit_env_uses_validated_defaults(monkeypatch):
     assert configured.window_seconds == 0.25
 
 
+def test_player_idle_timeout_uses_environment_overrides(monkeypatch):
+    monkeypatch.delenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", raising=False)
+    assert _player_idle_timeout_seconds() == 1800
+
+    monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "12")
+    assert _player_idle_timeout_seconds() == 12
+
+    monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "not-an-int")
+    assert _player_idle_timeout_seconds() == 1800
+
+    monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "0")
+    assert _player_idle_timeout_seconds() == 1800
+
+
 @pytest.mark.anyio
 async def test_websocket_requires_valid_token_and_tracks_reconnects():
     app = create_app()
@@ -781,6 +799,67 @@ async def test_websocket_requires_valid_token_and_tracks_reconnects():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_idle_timeout_closes_live_presence_but_preserves_session(monkeypatch):
+    monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "2")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+    seed_returning_players(app, ("scout",))
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            session_resp = await client.post(
+                "/auth/session", json={"player_id": "scout", "room_id": 7}
+            )
+            session = session_resp.json()["session"]
+            token = session["token"]
+            player_id = session["player_id"]
+            uri = f"ws://{host}:{port}/ws/rooms/7?token={token}"
+
+            async with websockets.connect(uri) as ws:
+                await _receive_initial_room_payloads(ws)
+                assert player_id in await app.state.presence.players_in_room(7)
+                assert token in getattr(app.state, "active_player_sessions", {})
+
+                idle_notice = await _receive_until(
+                    ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "idle_timeout",
+                    timeout=4,
+                )
+                assert idle_notice["payload"]["type"] == "idle_timeout"
+                assert "reconnect" in idle_notice["payload"]["text"].lower()
+                await _wait_until(lambda: ws.closed)
+
+            assert ws.close_code == 1000
+            assert ws.close_reason == "Idle timeout"
+            await _wait_until(
+                lambda: token not in getattr(app.state, "active_player_sessions", {})
+            )
+            assert player_id not in await app.state.presence.players_in_room(7)
+
+            validate_after_idle = await client.get(
+                "/auth/session", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert validate_after_idle.status_code == 200
+            assert validate_after_idle.json()["session"]["token"] == token
+
+            async with websockets.connect(uri) as reconnected_ws:
+                welcome_again = json.loads(
+                    await asyncio.wait_for(reconnected_ws.recv(), timeout=1)
+                )
+                assert welcome_again["type"] == "room_welcome"
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio

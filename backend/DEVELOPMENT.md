@@ -253,6 +253,7 @@ These routes are backed by the in-memory fixtures loaded during app startup. Unl
   ```
 
 - `remember_me: true` creates a 30-day game session for browser-side token resume. Omitted or false account logins keep the standard 24-hour session expiry. Admin sessions keep the standard expiry.
+- Normal play WebSockets close after 30 minutes without inbound commands so long-AFK players leave live room presence and animation targeting while their bearer token remains resumable. Override the timeout with `KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS`; the default is `1800`.
 
 ```bash
 curl -X POST http://localhost:8000/auth/session \
@@ -436,6 +437,8 @@ Chat fan-out swaps the movement fields for text and mode:
 ```
 
 Command acknowledgements are delivered privately to the sender in the same envelope shape but with `type: "command_response"` and a payload that echoes `command_id`/`message_id` for the initiating verb.
+
+When a normal play WebSocket reaches `KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS` without an inbound command, the server sends a final private `idle_timeout` command response and then closes the socket with code `1000` and reason `Idle timeout`. The session row stays active until normal token expiry or logout, so the player can reconnect from the current tab or resume a remembered session later.
 
 Room refresh responses include `location_description` before `room_objects`. The description payload carries an `objects` array using the same `{id, name}` entries so clients can render the visible room-object line from the live snapshot that matched that description:
 

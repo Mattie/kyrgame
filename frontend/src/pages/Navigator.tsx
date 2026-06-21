@@ -76,7 +76,7 @@ const NavigatorContent = ({ mode = 'admin' }: NavigatorProps) => {
               />
             </section>
           )}
-          <MudConsole />
+          <MudConsole showReconnectAction={!isAdmin} />
         </div>
         {isAdmin && (
           <aside

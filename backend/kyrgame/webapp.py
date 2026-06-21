@@ -42,6 +42,8 @@ DEFAULT_WS_COMMAND_RATE_LIMIT_MAX_EVENTS = 2
 DEFAULT_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS = 0.5
 WS_COMMAND_RATE_LIMIT_MAX_EVENTS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS"
 WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS"
+DEFAULT_PLAYER_IDLE_TIMEOUT_SECONDS = 1800
+PLAYER_IDLE_TIMEOUT_SECONDS_ENV = "KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS"
 GAME_VERSION = "7.20"
 RECENT_PUBLIC_PLAYER_LIMIT = 5
 PUBLIC_ACTIVE_PLAYER_LIMIT = 25
@@ -1720,6 +1722,14 @@ def _websocket_command_rate_limiter() -> RateLimiter:
             default=DEFAULT_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS,
             minimum=0.001,
         ),
+    )
+
+
+def _player_idle_timeout_seconds() -> int:
+    return _env_int(
+        PLAYER_IDLE_TIMEOUT_SECONDS_ENV,
+        default=DEFAULT_PLAYER_IDLE_TIMEOUT_SECONDS,
+        minimum=1,
     )
 
 
@@ -4054,6 +4064,21 @@ def create_app() -> FastAPI:
             current_room = target_room
 
         session_exit_started = False
+        live_connection_removed = False
+
+        async def _remove_live_connection() -> None:
+            nonlocal live_connection_removed
+            if live_connection_removed:
+                return
+            live_connection_removed = True
+            await provider.presence.remove(session_token)
+            await gateway.unregister(current_room, websocket)
+
+        def _mark_current_session_seen() -> None:
+            with provider.scope.app.state.session_factory() as db:
+                repo = repositories.PlayerSessionRepository(db)
+                repo.mark_seen(session_token)
+                db.commit()
 
         async def _deactivate_current_session() -> None:
             nonlocal session_exit_started
@@ -4064,8 +4089,7 @@ def create_app() -> FastAPI:
                 repo = repositories.PlayerSessionRepository(db)
                 repo.deactivate(session_token)
                 db.commit()
-            await provider.presence.remove(session_token)
-            await gateway.unregister(current_room, websocket)
+            await _remove_live_connection()
             if session_connections.get(session_token) is websocket:
                 session_connections.pop(session_token, None)
             _remove_active_player_session(
@@ -4093,10 +4117,41 @@ def create_app() -> FastAPI:
                 }
             )
 
+        idle_timeout_seconds = _player_idle_timeout_seconds()
+
         try:
             while True:
-                payload = await websocket.receive_json()
+                try:
+                    payload = await asyncio.wait_for(
+                        websocket.receive_json(),
+                        timeout=idle_timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    await send_player_json(
+                        {
+                            "type": "command_response",
+                            "room": current_room,
+                            "payload": {
+                                "scope": "player",
+                                "event": "idle_timeout",
+                                "type": "idle_timeout",
+                                "text": (
+                                    "Idle timeout. Use Reconnect session to return "
+                                    "to Kyrandia."
+                                ),
+                            },
+                        }
+                    )
+                    await _remove_live_connection()
+                    if websocket.application_state == WebSocketState.CONNECTED:
+                        await websocket.close(
+                            code=status.WS_1000_NORMAL_CLOSURE,
+                            reason="Idle timeout",
+                        )
+                    break
                 meta = payload.get("meta") or None
+                if payload.get("type") == "command":
+                    _mark_current_session_seen()
                 if not limiter.allow():
                     await send_player_json(
                         {"type": "rate_limited", "detail": "Too many commands, slow down."}
@@ -4790,9 +4845,9 @@ def create_app() -> FastAPI:
                     await _deactivate_current_session()
                     break
         except WebSocketDisconnect:
-            await provider.presence.remove(session_token)
-            await gateway.unregister(current_room, websocket)
+            await _remove_live_connection()
         finally:
+            await _remove_live_connection()
             if session_connections.get(session_token) is websocket:
                 _remove_active_player_session(
                     provider.scope.app, session_token, current_player_id()
