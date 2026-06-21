@@ -466,6 +466,16 @@ def _departure_text(direction: str) -> str:
     return "left"
 
 
+def _legacy_sndcgp_visibility_payload(player: models.PlayerModel) -> dict[str, object]:
+    """Server-only recipient filter metadata for legacy sndcgp() room fan-out."""
+
+    return {
+        "_legacy_visibility": "sndcgp",
+        "_visibility_player": player.plyrid,
+        "_visibility_player_flags": int(player.flags),
+    }
+
+
 def _room_departure_event(
     state: GameState,
     *,
@@ -489,6 +499,7 @@ def _room_departure_event(
         "message_id": None,
         "command_id": command_id,
         "exclude_player": state.player.plyrid,
+        **_legacy_sndcgp_visibility_payload(state.player),
     }
 
 
@@ -517,6 +528,8 @@ def _build_room_transition_events(
             "description": destination.brfdes,
             "command_id": command_id,
             "message_id": message_id,
+            "exclude_player": state.player.plyrid,
+            **_legacy_sndcgp_visibility_payload(state.player),
         },
         {
             "scope": "room",
@@ -529,6 +542,8 @@ def _build_room_transition_events(
             "text": arrival_text,
             "message_id": None,
             "command_id": command_id,
+            "exclude_player": state.player.plyrid,
+            **_legacy_sndcgp_visibility_payload(state.player),
         },
         {
             "scope": "player",
@@ -1917,6 +1932,7 @@ def _flight_events(
             "message_id": None,
             "command_id": command_id,
             "exclude_player": state.player.plyrid,
+            **_legacy_sndcgp_visibility_payload(state.player),
         },
     ]
     events.extend(
@@ -2412,14 +2428,17 @@ async def _handle_shove(state: GameState, args: dict) -> CommandResult:
             _format_message(state, "SHVUTL1", target.plyrid),
             command_id,
         ),
-        _message_event(
-            "room",
-            None,
-            f"*** {target.altnam} has just been shoved {direction} by {state.player.altnam}!",
-            command_id,
-            exclude_player=target.plyrid,
-            exclude_players=_sndbt2_excluded_players(state, target),
-        ),
+        {
+            **_message_event(
+                "room",
+                None,
+                f"*** {target.altnam} has just been shoved {direction} by {state.player.altnam}!",
+                command_id,
+                exclude_player=target.plyrid,
+                exclude_players=_sndbt2_excluded_players(state, target),
+            ),
+            **_legacy_sndcgp_visibility_payload(target),
+        },
         {
             **_message_event(
                 "target",
@@ -2445,6 +2464,7 @@ async def _handle_shove(state: GameState, args: dict) -> CommandResult:
             "command_id": command_id,
             "message_id": _command_message_id(command_id),
             "exclude_player": target.plyrid,
+            **_legacy_sndcgp_visibility_payload(target),
         }
     )
     events.append(
@@ -2460,6 +2480,7 @@ async def _handle_shove(state: GameState, args: dict) -> CommandResult:
             "message_id": None,
             "command_id": command_id,
             "exclude_player": target.plyrid,
+            **_legacy_sndcgp_visibility_payload(target),
         }
     )
     return CommandResult(state=state, events=events)
@@ -3118,6 +3139,8 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                     "text": departure_broadcast,
                     "message_id": departure_broadcast_message_id,
                     "command_id": command_id,
+                    "exclude_player": state.player.plyrid,
+                    **_legacy_sndcgp_visibility_payload(state.player),
                 }
             )
         if departure_emote:
@@ -3138,6 +3161,7 @@ async def _handle_cast(state: GameState, args: dict) -> CommandResult:
                     "message_id": None,
                     "command_id": command_id,
                     "exclude_player": state.player.plyrid,
+                    **_legacy_sndcgp_visibility_payload(state.player),
                 }
             )
         transition_events = _build_room_transition_events(

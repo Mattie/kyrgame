@@ -137,6 +137,21 @@ async def _drain_pending_messages(websocket):
             break
 
 
+async def _assert_no_matching(websocket, predicate, timeout: float = 0.35):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return
+        try:
+            message = json.loads(await asyncio.wait_for(websocket.recv(), timeout=remaining))
+        except asyncio.TimeoutError:
+            return
+        if predicate(message):
+            raise AssertionError(f"Unexpected message received: {message}")
+
+
 async def _wait_until(predicate, timeout: float = 1.5):
     loop = asyncio.get_running_loop()
     deadline = loop.time() + timeout
@@ -294,6 +309,174 @@ async def test_movement_command_switches_room_subscription_and_scopes_broadcasts
 
 
 @pytest.mark.anyio
+async def test_invisible_movement_announcements_only_reach_cinvis_observers():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+            hero_token = hero_session.json()["session"]["token"]
+            rogue_session = await client.post("/auth/session", json={"player_id": "rogue", "room_id": 0})
+            rogue_token = rogue_session.json()["session"]["token"]
+            seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 1})
+            seer_token = seer_session.json()["session"]["token"]
+            mystic_session = await client.post("/auth/session", json={"player_id": "mystic", "room_id": 1})
+            mystic_token = mystic_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            seer = db.scalar(select(models.Player).where(models.Player.plyrid == "seer"))
+            assert hero is not None
+            assert seer is not None
+            hero.flags = int(hero.flags | constants.PlayerFlag.INVISF)
+            hero.altnam = "Some Unseen Force"
+            hero.attnam = "Unseen Force"
+            seer.charms = [
+                1 if index == constants.CharmSlot.INVISIBILITY else 0
+                for index in range(constants.NCHARM)
+            ]
+            db.commit()
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
+        uri_room1_seer = f"ws://{host}:{port}/ws/rooms/1?token={seer_token}"
+        uri_room1_mystic = f"ws://{host}:{port}/ws/rooms/1?token={mystic_token}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await _drain_pending_messages(hero_ws)
+            async with websockets.connect(uri_room0_rogue) as rogue_ws:
+                await asyncio.wait_for(rogue_ws.recv(), timeout=1)
+                await _drain_pending_messages(rogue_ws)
+                await _drain_pending_messages(hero_ws)
+                async with websockets.connect(uri_room1_seer) as seer_ws:
+                    await asyncio.wait_for(seer_ws.recv(), timeout=1)
+                    await _drain_pending_messages(seer_ws)
+                    async with websockets.connect(uri_room1_mystic) as mystic_ws:
+                        await asyncio.wait_for(mystic_ws.recv(), timeout=1)
+                        await _drain_pending_messages(mystic_ws)
+                        await _drain_pending_messages(seer_ws)
+
+                        await hero_ws.send(
+                            json.dumps(
+                                {
+                                    "type": "command",
+                                    "command": "move",
+                                    "args": {"direction": "north"},
+                                }
+                            )
+                        )
+
+                        await _receive_until(
+                            hero_ws,
+                            lambda msg: msg.get("type") == "command_response"
+                            and msg.get("room") == 1,
+                        )
+                        seer_enter = await _receive_until(
+                            seer_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("event") == "player_enter"
+                            and msg.get("payload", {}).get("player") == "hero",
+                        )
+                        assert seer_enter["payload"]["display_name"] == "Some Unseen Force"
+                        seer_arrival = await _receive_until(
+                            seer_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("event") == "room_message"
+                            and msg.get("payload", {}).get("player") == "hero",
+                        )
+                        assert seer_arrival["payload"]["text"] == (
+                            "*** Some Unseen Force has just appeared from the south!"
+                        )
+
+                        await _assert_no_matching(
+                            rogue_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("player") == "hero",
+                        )
+                        await _assert_no_matching(
+                            mystic_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("player") == "hero",
+                        )
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_look_at_invisible_active_player_with_cinvis_returns_invdes():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+            hero_token = hero_session.json()["session"]["token"]
+            rogue_session = await client.post("/auth/session", json={"player_id": "rogue", "room_id": 0})
+            rogue_token = rogue_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            hero = db.scalar(select(models.Player).where(models.Player.plyrid == "hero"))
+            rogue = db.scalar(select(models.Player).where(models.Player.plyrid == "rogue"))
+            assert hero is not None
+            assert rogue is not None
+            hero.charms = [
+                1 if index == constants.CharmSlot.INVISIBILITY else 0
+                for index in range(constants.NCHARM)
+            ]
+            rogue.flags = int(rogue.flags | constants.PlayerFlag.INVISF)
+            rogue.altnam = "Some Unseen Force"
+            rogue.attnam = "Unseen Force"
+            db.commit()
+
+        uri_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        uri_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
+
+        async with websockets.connect(uri_rogue) as rogue_ws:
+            await asyncio.wait_for(rogue_ws.recv(), timeout=1)
+            await _drain_pending_messages(rogue_ws)
+            async with websockets.connect(uri_hero) as hero_ws:
+                await asyncio.wait_for(hero_ws.recv(), timeout=1)
+                await _drain_pending_messages(hero_ws)
+                await _drain_pending_messages(rogue_ws)
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "look at unseen"}))
+
+                invdes = await _receive_until(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "INVDES",
+                )
+                assert invdes["payload"]["text"] == "...The force is unseen!"
+
+                looker3 = await _receive_until(
+                    rogue_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("message_id") == "LOOKER3",
+                )
+                assert "Hero" in looker3["payload"]["text"]
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_x_command_broadcasts_departure_and_deactivates_session():
     app = create_app()
     host = "127.0.0.1"
@@ -396,6 +579,84 @@ async def test_room_broadcast_on_login_uses_entrance_text():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_invisible_login_announcements_only_reach_cinvis_observers():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post("/auth/session", json={"player_id": "hero", "room_id": 0})
+            hero_token = hero_session.json()["session"]["token"]
+            seer_session = await client.post("/auth/session", json={"player_id": "seer", "room_id": 0})
+            seer_token = seer_session.json()["session"]["token"]
+            rogue_session = await client.post("/auth/session", json={"player_id": "rogue", "room_id": 0})
+            rogue_token = rogue_session.json()["session"]["token"]
+
+        with app.state.session_factory() as db:
+            seer = db.scalar(select(models.Player).where(models.Player.plyrid == "seer"))
+            rogue = db.scalar(select(models.Player).where(models.Player.plyrid == "rogue"))
+            assert seer is not None
+            assert rogue is not None
+            seer.charms = [
+                1 if index == constants.CharmSlot.INVISIBILITY else 0
+                for index in range(constants.NCHARM)
+            ]
+            rogue.flags = int(rogue.flags | constants.PlayerFlag.INVISF)
+            rogue.altnam = "Some Unseen Force"
+            rogue.attnam = "Unseen Force"
+            db.commit()
+
+        uri_room0_hero = f"ws://{host}:{port}/ws/rooms/0?token={hero_token}"
+        uri_room0_seer = f"ws://{host}:{port}/ws/rooms/0?token={seer_token}"
+        uri_room0_rogue = f"ws://{host}:{port}/ws/rooms/0?token={rogue_token}"
+
+        async with websockets.connect(uri_room0_hero) as hero_ws:
+            await asyncio.wait_for(hero_ws.recv(), timeout=1)
+            await _drain_pending_messages(hero_ws)
+            async with websockets.connect(uri_room0_seer) as seer_ws:
+                await asyncio.wait_for(seer_ws.recv(), timeout=1)
+                await _drain_pending_messages(seer_ws)
+                await _drain_pending_messages(hero_ws)
+
+                async with websockets.connect(uri_room0_rogue) as rogue_ws:
+                    await asyncio.wait_for(rogue_ws.recv(), timeout=1)
+                    await _drain_pending_messages(rogue_ws)
+
+                    seer_enter = await _receive_until(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("event") == "player_enter"
+                        and msg.get("payload", {}).get("player") == "rogue",
+                    )
+                    assert seer_enter["payload"]["display_name"] == "Some Unseen Force"
+                    seer_message = await _receive_until(
+                        seer_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("event") == "room_message"
+                        and msg.get("payload", {}).get("player") == "rogue",
+                    )
+                    assert seer_message["payload"]["text"] == (
+                        "*** Some Unseen Force has just appeared in a cloud of mists!"
+                    )
+
+                    await _assert_no_matching(
+                        hero_ws,
+                        lambda msg: msg.get("type") == "room_broadcast"
+                        and msg.get("payload", {}).get("player") == "rogue",
+                    )
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio

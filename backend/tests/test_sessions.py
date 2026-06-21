@@ -32,6 +32,41 @@ async def _receive_initial_room_payloads(websocket):
         assert message["type"] == "command_response"
 
 
+async def _drain_pending_messages(websocket):
+    while True:
+        try:
+            await asyncio.wait_for(websocket.recv(), timeout=0.05)
+        except asyncio.TimeoutError:
+            break
+
+
+async def _assert_no_matching(websocket, predicate, timeout: float = 0.35):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return
+        try:
+            message = json.loads(await asyncio.wait_for(websocket.recv(), timeout=remaining))
+        except asyncio.TimeoutError:
+            return
+        if predicate(message):
+            raise AssertionError(f"Unexpected message received: {message}")
+
+
+async def _receive_until(websocket, predicate, timeout: float = 1.5):
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise AssertionError("Timed out waiting for matching message")
+        message = json.loads(await asyncio.wait_for(websocket.recv(), timeout=remaining))
+        if predicate(message):
+            return message
+
+
 async def _wait_until(predicate, timeout: float = 2.0):
     deadline = asyncio.get_running_loop().time() + timeout
     while asyncio.get_running_loop().time() < deadline:
@@ -992,6 +1027,101 @@ async def test_first_login_blocks_room_socket_until_intro_finishes_and_enters_in
                     "/auth/session", headers={"Authorization": f"Bearer {token}"}
                 )
                 assert validate.json()["session"]["lifecycle"] is None
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_invisible_first_login_flash_only_reaches_cinvis_observers():
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+    seed_returning_players(app, ("seer",))
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            witness_resp = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 0}
+            )
+            assert witness_resp.status_code == 201
+            witness_session = witness_resp.json()["session"]
+            witness_uri = (
+                f"ws://{host}:{port}/ws/rooms/0?token={witness_session['token']}"
+            )
+
+            seer_resp = await client.post(
+                "/auth/session", json={"player_id": "seer", "room_id": 0}
+            )
+            assert seer_resp.status_code == 201
+            seer_session = seer_resp.json()["session"]
+            seer_uri = f"ws://{host}:{port}/ws/rooms/0?token={seer_session['token']}"
+
+            with app.state.session_factory() as db:
+                seer = db.scalar(select(models.Player).where(models.Player.plyrid == "seer"))
+                assert seer is not None
+                seer.charms = [
+                    1 if index == constants.CharmSlot.INVISIBILITY else 0
+                    for index in range(constants.NCHARM)
+                ]
+                db.commit()
+
+            async with websockets.connect(witness_uri) as witness_ws:
+                await _receive_initial_room_payloads(witness_ws)
+                async with websockets.connect(seer_uri) as seer_ws:
+                    await _receive_initial_room_payloads(seer_ws)
+                    await _drain_pending_messages(witness_ws)
+                    await _drain_pending_messages(seer_ws)
+
+                    create_payload = {"player_id": "Merlin", "create_player": True}
+                    create_resp = await client.post("/auth/session", json=create_payload)
+                    assert create_resp.status_code == 201
+                    token = create_resp.json()["session"]["token"]
+
+                    for _ in range(5):
+                        advance = await client.post(
+                            "/auth/session/lifecycle/advance",
+                            headers={"Authorization": f"Bearer {token}"},
+                            json={"input": ""},
+                        )
+                        assert advance.status_code == 200
+
+                    with app.state.session_factory() as db:
+                        merlin = db.scalar(
+                            select(models.Player).where(models.Player.plyrid == "Merlin")
+                        )
+                        assert merlin is not None
+                        merlin.flags = int(merlin.flags | constants.PlayerFlag.INVISF)
+                        merlin.altnam = "Some Unseen Force"
+                        merlin.attnam = "Unseen Force"
+                        db.commit()
+
+                    player_uri = f"ws://{host}:{port}/ws/rooms/0?token={token}"
+                    async with websockets.connect(player_uri) as player_ws:
+                        welcome = json.loads(await asyncio.wait_for(player_ws.recv(), timeout=1))
+                        assert welcome["type"] == "room_welcome"
+
+                        flash_message = await _receive_until(
+                            seer_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("event") == "room_message"
+                            and msg.get("payload", {}).get("player") == "Merlin",
+                        )
+                        assert flash_message["payload"]["text"] == (
+                            "*** Some Unseen Force has just appeared in a flash!"
+                        )
+
+                        await _assert_no_matching(
+                            witness_ws,
+                            lambda msg: msg.get("type") == "room_broadcast"
+                            and msg.get("payload", {}).get("player") == "Merlin",
+                        )
     finally:
         server.should_exit = True
         await server_task

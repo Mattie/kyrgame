@@ -341,6 +341,61 @@ async def test_look_invisible_player_falls_back_to_room_description():
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("command_text", ["look at unseen", "examine unseen"])
+async def test_look_invisible_player_with_see_invis_uses_invdes(command_text):
+    other = _build_player(
+        plyrid="Necro",
+        attnam="Unseen Force",
+        altnam="Some Unseen Force",
+        flags=int(constants.PlayerFlag.INVISF),
+        nmpdes=1,
+    )
+    player = _build_player(plyrid="Hero", flags=0)
+    player.charms[constants.CharmSlot.INVISIBILITY] = 1
+    state = _build_state(player, [other])
+    state.locations[player.gamloc] = state.locations[player.gamloc].model_copy(
+        update={"objects": [], "nlobjs": 0}
+    )
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+    vocabulary = commands.CommandVocabulary(fixtures.load_commands(), fixtures.load_messages())
+    parsed = vocabulary.parse_text(command_text)
+
+    result = await dispatcher.dispatch_parsed(parsed, state)
+
+    message_ids = {event.get("message_id") for event in result.events}
+    assert "INVDES" in message_ids
+    assert "LOOKER3" in message_ids
+    assert "LOOKER4" in message_ids
+    assert "KRD000" not in message_ids
+
+
+@pytest.mark.anyio
+async def test_look_invisible_player_true_id_does_not_bypass_attnam_matching():
+    other = _build_player(
+        plyrid="Necro",
+        attnam="Unseen Force",
+        altnam="Some Unseen Force",
+        flags=int(constants.PlayerFlag.INVISF),
+        nmpdes=1,
+    )
+    player = _build_player(plyrid="Hero", flags=0)
+    player.charms[constants.CharmSlot.INVISIBILITY] = 1
+    state = _build_state(player, [other])
+    state.locations[player.gamloc] = state.locations[player.gamloc].model_copy(
+        update={"objects": [], "nlobjs": 0}
+    )
+    registry = commands.build_default_registry()
+    dispatcher = commands.CommandDispatcher(registry)
+
+    result = await dispatcher.dispatch("look", {"raw": "necro"}, state)
+
+    message_ids = {event.get("message_id") for event in result.events}
+    assert "KRD000" in message_ids
+    assert "INVDES" not in message_ids
+
+
+@pytest.mark.anyio
 async def test_look_transformed_player_uses_transformation_message():
     other = _build_player(
         plyrid="pegasus",

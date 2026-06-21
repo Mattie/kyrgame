@@ -1435,6 +1435,7 @@ def test_waller_transfer_requires_sesame_and_key(room_engine, base_player):
     transfer_events = [evt for evt in success.events if evt.get("event") == "room_transfer"]
     assert transfer_events
     assert transfer_events[0]["target_room"] == 186
+    assert transfer_events[0]["legacy_transfer_format"] is True
 
     direct_texts = [evt["text"] for evt in success.events if evt["scope"] == "direct"]
     assert room_engine.messages.messages["WALM00"] in direct_texts

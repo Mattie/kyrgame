@@ -29,6 +29,7 @@
 - [x] Align looker player descriptions with FEMALE flag (FDES vs MDES) for parity with `KYRANDIA.C`/`KYRSYSP.C`.
 - [x] Ensure WebSocket sessions hydrate player identity fields (altnam/attnam) from persisted records for looker messaging.
 - [x] Match LOOK player targeting and level-driven appearance updates to legacy `findgp`/`glvutl`/`kyraedit` behavior.
+- [x] Pinned invisible-player `look`/`examine` targeting through legacy `findgp()` semantics: `CINVIS` viewers can inspect by transformed `attnam` such as `unseen`, receiving `INVDES`, while true player IDs remain hidden during transformations.
 - [x] Enforced `findgp`-style invisibility gating (`ckinvs`) for targeted player verbs (`whisper`/`give`/`wink`/player-targeted `get`) so invisible occupants cannot be resolved without see-invisibility parity.
 - [x] Restored `aimer()` gating so `aim`/`point` rejects non-`AIMABL` inventory objects with `OBJM04`, matching legacy `KYROBJR.C` weapon checks.
 - [x] Added structured room spoiler metadata (legacy routines + YAML scripts) and a spoiler command for runtime parity guidance.
@@ -92,6 +93,9 @@
 - [x] Deduped trimmed room occupant presence identifiers so room `look`/entry text cannot list the same player twice with trailing-space variants.
 - [x] Prevented the React console from rendering room occupants twice when explicit `room_occupants` events overlap with local room snapshot state, and centralized legacy KUTM11/KUTM12 suffix formatting across command, WebSocket, and runtime refresh paths.
 - [x] Restored legacy `locogps()` display-name resolution for room occupants so `look`, WebSocket entry, and runtime movement refreshes render transformed players by `altnam` while retaining canonical player IDs in `occupant_details`.
+- [x] Restored legacy `sndcgp()` recipient visibility for `remvgp()`/`entrgp()` style WebSocket fan-out so invisible movement, login, first-login flash, and source-traced transfer announcements only reach `CINVIS` observers.
+- [x] Extended `sndcgp()` transfer parity to shove, flight, room 185 golden-flash travel, and `feeluck` arrival text so source-traced `remvgp()`/`entrgp()` paths use transformed `altnam` text and visibility-filtered room fan-out.
+- [x] Audited actor-authored speech/simple-emote broadcasts against legacy `sndoth()`/`sndnear()` and left commands such as `say`, `yell`, and `dance` as ordinary room broadcasts rather than `sndcgp()`-filtered movement/entry events.
 - [x] Extended pickup command synonyms (get/grab/take/snatch/steal/pilfer/pickpocket) in the parser/registry to mirror legacy getter aliases.
 - [x] Matched MajorBBS `sameto` prefix lookup for generic current-room/player/object targets: `get`/`grab` resolves visible player `attnam` prefixes before room objects, `look` checks room objects before inventory objects before visible players, and matching keeps legacy first-hit/no-ambiguity behavior.
 - [x] Preserved transformed-player look targeting through legacy `attnam` lookup, including transformed self-look via names like `willowisp`.
@@ -146,6 +150,16 @@
 - [ ] Provide Docker Compose, Makefile targets, CI wiring, and package-content automation after gameplay parity is complete. *(In progress: added `backend/Dockerfile` with uvicorn startup, runtime env defaults, and default `/data` directory creation for SQLite deployments; added root `compose.yaml`, `.env.docker.example`, `.dockerignore`, Makefile targets, a Cloudflare tunnel profile using the frontend network namespace plus Vite proxying for backend paths, service restart policies for alpha testing, `docs/ALPHA_TESTING_RUNBOOK.md`, and file-contract tests for the dev stack. Remaining: CI wiring, package-content CI job, and full compose-up smoke.)* Acceptance criteria: `docker compose up` brings up API + DB + seed path, `make up/test/seed/package-content` are documented and runnable in CI, and CI executes backend pytest + packaging smoke checks.
 
 ## Manual E2E Demo Checklist
+
+### Invisible Movement And Login Visibility
+
+- [ ] Create or edit three active players in the same local stack: an invisible mover/login player, an ordinary observer, and a `CINVIS` observer.
+- [ ] Log the invisible player into a room with both observers present and verify only the `CINVIS` observer receives the `appeared in a cloud of mists` or first-login flash announcement.
+- [ ] Move the invisible player out of the ordinary observer's room and into the `CINVIS` observer's room.
+- [ ] Verify the ordinary observer receives no departure or entry metadata/text for the invisible player, while the `CINVIS` observer receives the expected transformed-name arrival line.
+- [ ] Repeat a source-traced transfer path such as `feeluck`, room 185 key/crevice, or shoving an invisible target, and verify only eligible `CINVIS` observers receive the transfer text.
+- [ ] As the `CINVIS` observer, run `look at unseen` or `examine unseen` and verify `...The force is unseen!`; verify the transformed player's true Player-ID does not resolve while the invisible body name is active.
+- [ ] Repeat with the player visible and verify ordinary observers receive the same movement/login announcements as before.
 
 ### Modern Death Recovery
 

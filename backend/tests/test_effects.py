@@ -1150,7 +1150,14 @@ def test_feeluck_uses_legacy_exclusive_room_bound():
         messages=messages,
         rng=_FeeluckBoundaryRng(),
     )
-    player = _build_caster(gamloc=7, pgploc=7)
+    player = _build_caster(
+        gamloc=7,
+        pgploc=7,
+        plyrid="Necro",
+        altnam="Some Unseen Force",
+        attnam="Unseen Force",
+        flags=int(constants.PlayerFlag.LOADED | constants.PlayerFlag.INVISF),
+    )
 
     luck = engine.cast_spell(
         player=player,
@@ -1168,7 +1175,9 @@ def test_feeluck_uses_legacy_exclusive_room_bound():
     assert player.gamloc == 217
     assert player.pgploc == 7
     assert "blue light" in luck.context["departure_emote"]
-    assert "appeared in a blue" in luck.context["arrival_text"]
+    assert luck.context["arrival_text"] == (
+        "*** Some Unseen Force has just appeared in a blue!"
+    )
 
 
 def test_hocus_detect_scry_and_servant_spells_surface_legacy_payloads():

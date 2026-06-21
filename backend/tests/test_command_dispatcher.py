@@ -150,6 +150,8 @@ async def test_move_arrival_notice_uses_transformed_player_name(base_state):
         if event["event"] == "room_message" and event.get("to") == 1 and "room_id" not in event
     )
     assert room_message["text"] == "*** Some willowisp has just appeared from the south!"
+    assert room_message["_legacy_visibility"] == "sndcgp"
+    assert room_message["_visibility_player_flags"] == int(base_state.player.flags)
 
 
 @pytest.mark.anyio
@@ -172,6 +174,8 @@ async def test_move_emits_legacy_departure_notice_for_source_room(base_state):
     )
     assert departure["text"] == "*** Some willowisp has just moved off to the north!"
     assert departure["exclude_player"] == "necro"
+    assert departure["_legacy_visibility"] == "sndcgp"
+    assert departure["_visibility_player_flags"] == int(base_state.player.flags)
 
 
 @pytest.mark.anyio
