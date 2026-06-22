@@ -3160,6 +3160,7 @@ async def _room_occupants_event(
     messages: models.MessageBundleModel | None,
     player_flags_by_id: dict[str, int] | None = None,
     player_lookup: Callable[[str], models.PlayerModel | None] | None = None,
+    include_empty: bool = False,
 ):
     occupants = await presence.players_in_room(room_id)
     viewer = player_lookup(player_id) if player_lookup else None
@@ -3172,8 +3173,10 @@ async def _room_occupants_event(
     )
     others = [entry.display_name for entry in entries]
     text, message_id = commands._format_room_occupant_entries(entries, messages)
-    if not others or not text:
+    if (not others or not text) and not include_empty:
         return None
+    if not text:
+        text = "No one else is here."
 
     return {
         "scope": "player",
@@ -4076,6 +4079,45 @@ def create_app() -> FastAPI:
             await provider.presence.remove(session_token)
             await gateway.unregister(current_room, websocket)
 
+        async def _send_room_occupants_refresh_to_live_room(room_id: int) -> None:
+            remaining_players = commands._dedupe_room_occupants(
+                sorted(await provider.presence.players_in_room(room_id))
+            )
+            if not remaining_players:
+                return
+            player_flags_by_id = _active_player_flags(provider.scope.app)
+            player_lookup = _active_player_lookup(provider.scope.app)
+            for viewer_id in remaining_players:
+                occupant_event = await _room_occupants_event(
+                    provider.presence,
+                    viewer_id,
+                    room_id,
+                    state.messages,
+                    player_flags_by_id,
+                    player_lookup,
+                    include_empty=True,
+                )
+                if not occupant_event:
+                    continue
+                envelope = {
+                    "type": "command_response",
+                    "room": room_id,
+                    "payload": occupant_event,
+                }
+                for target_token in await provider.presence.sessions_for_player(viewer_id):
+                    target_socket = session_connections.get(target_token)
+                    if (
+                        target_socket is None
+                        or target_socket.application_state != WebSocketState.CONNECTED
+                    ):
+                        continue
+                    await _send_game_socket_json(
+                        provider.scope.app,
+                        target_socket,
+                        envelope,
+                        player_id=viewer_id,
+                    )
+
         def _mark_current_session_seen() -> None:
             nonlocal last_session_seen_update_at
             now = time.monotonic()
@@ -4141,6 +4183,7 @@ def create_app() -> FastAPI:
                 }
             )
             await _remove_live_connection()
+            await _send_room_occupants_refresh_to_live_room(current_room)
             if websocket.application_state == WebSocketState.CONNECTED:
                 await websocket.close(
                     code=status.WS_1000_NORMAL_CLOSURE,
@@ -4176,14 +4219,15 @@ def create_app() -> FastAPI:
                 if is_player_command:
                     last_player_command_at = time.monotonic()
                     _mark_current_session_seen()
+
+                if payload.get("type") != "command":
+                    await send_player_json({"type": "noop", "room": current_room})
+                    continue
+
                 if not limiter.allow():
                     await send_player_json(
                         {"type": "rate_limited", "detail": "Too many commands, slow down."}
                     )
-                    continue
-
-                if payload.get("type") != "command":
-                    await send_player_json({"type": "noop", "room": current_room})
                     continue
 
                 await _sync_current_room_from_state()

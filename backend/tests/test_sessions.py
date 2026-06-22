@@ -876,6 +876,58 @@ async def test_websocket_idle_timeout_closes_live_presence_but_preserves_session
 
 
 @pytest.mark.anyio
+async def test_websocket_idle_timeout_refreshes_remaining_room_occupants(monkeypatch):
+    monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "5")
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "100")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+    seed_returning_players(app, ("observer", "scout"))
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            observer_resp = await client.post(
+                "/auth/session", json={"player_id": "observer", "room_id": 7}
+            )
+            observer_token = observer_resp.json()["session"]["token"]
+            scout_resp = await client.post(
+                "/auth/session", json={"player_id": "scout", "room_id": 7}
+            )
+            scout_token = scout_resp.json()["session"]["token"]
+
+        scout_uri = f"ws://{host}:{port}/ws/rooms/7?token={scout_token}"
+        observer_uri = f"ws://{host}:{port}/ws/rooms/7?token={observer_token}"
+        async with websockets.connect(scout_uri) as scout_ws:
+            await _receive_initial_room_payloads(scout_ws)
+
+            async with websockets.connect(observer_uri) as observer_ws:
+                await _receive_initial_room_payloads(observer_ws)
+                await observer_ws.send(json.dumps({"type": "command", "command": "look"}))
+
+                refresh = await _receive_until(
+                    observer_ws,
+                    lambda msg: (
+                        msg.get("payload", {}).get("event") == "room_occupants"
+                        and "scout" not in msg.get("payload", {}).get("occupants", [])
+                    ),
+                    timeout=7,
+                )
+                assert refresh["payload"]["occupants"] == []
+                await _wait_until(lambda: scout_ws.closed)
+                assert scout_ws.close_code == 1000
+                assert scout_ws.close_reason == "Idle timeout"
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
 async def test_websocket_player_commands_throttle_session_last_seen_updates(monkeypatch):
     monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "60")
     monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "100")
@@ -938,6 +990,62 @@ async def test_websocket_player_commands_throttle_session_last_seen_updates(monk
                 )
 
             assert seen_tokens == [token]
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_non_command_frames_do_not_consume_command_rate_limit(monkeypatch):
+    monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "60")
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "1")
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS", "60")
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+    seed_returning_players(app, ("scout",))
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            session_resp = await client.post(
+                "/auth/session", json={"player_id": "scout", "room_id": 7}
+            )
+            session = session_resp.json()["session"]
+            token = session["token"]
+            uri = f"ws://{host}:{port}/ws/rooms/7?token={token}"
+
+            async with websockets.connect(uri) as ws:
+                await _receive_initial_room_payloads(ws)
+
+                await ws.send(json.dumps({"type": "client_ping"}))
+                first_noop = await _receive_until(
+                    ws,
+                    lambda msg: msg.get("type") in {"noop", "rate_limited"},
+                    timeout=1,
+                )
+                assert first_noop["type"] == "noop"
+
+                await ws.send(json.dumps({"type": "client_ping"}))
+                second_noop = await _receive_until(
+                    ws,
+                    lambda msg: msg.get("type") in {"noop", "rate_limited"},
+                    timeout=1,
+                )
+                assert second_noop["type"] == "noop"
+
+                await ws.send(json.dumps({"type": "command", "command": "look"}))
+                response = await _receive_until(
+                    ws,
+                    lambda msg: msg.get("type") in {"command_response", "rate_limited"},
+                    timeout=1,
+                )
+                assert response["type"] == "command_response"
     finally:
         server.should_exit = True
         await server_task

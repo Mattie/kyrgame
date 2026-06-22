@@ -399,6 +399,7 @@ type NavigatorContextValue = {
   advanceLifecycle: (input: string) => Promise<void>
   logoutSession: () => Promise<void>
   resumeRememberedSession: (options?: ResumeRememberedSessionOptions) => Promise<boolean>
+  reconnectSession: () => Promise<void>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (command: string, options?: SendCommandOptions) => void
 }
@@ -2316,6 +2317,32 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     }
   }, [startSession])
 
+  const reconnectSession = useCallback(async () => {
+    const currentSession = sessionRef.current
+    if (!currentSession || gameSessionReplaced) return
+
+    const reconnectRoom = currentRoomRef.current ?? currentSession.roomId
+    if (currentSession.sessionKind === 'game') {
+      try {
+        await startSession(currentSession.playerId, reconnectRoom, {
+          resumeToken: currentSession.token,
+          sessionKind: 'game',
+        })
+        return
+      } catch {
+        const rememberedResumed = await resumeRememberedSession({
+          playerId: currentSession.playerId,
+          roomId: reconnectRoom,
+        })
+        if (rememberedResumed) {
+          return
+        }
+      }
+    }
+
+    await startSession(currentSession.playerId, reconnectRoom)
+  }, [gameSessionReplaced, resumeRememberedSession, startSession])
+
   useEffect(() => {
     if (!adminToken && scrySocketRef.current) {
       stopScry()
@@ -2569,6 +2596,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       advanceLifecycle,
       logoutSession,
       resumeRememberedSession,
+      reconnectSession,
       sendMove,
       sendCommand,
     }),
@@ -2591,6 +2619,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       logoutSession,
       occupants,
       playerVisuals,
+      reconnectSession,
       resumeRememberedSession,
       runtimeMode,
       scrySession,

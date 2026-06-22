@@ -62,12 +62,13 @@ export const SessionForm = ({
   const {
     startSession,
     connectionStatus,
+    gameSessionReplaced,
     error,
     apiBaseUrl,
     setAdminToken,
     session,
-    currentRoom,
     resumeRememberedSession,
+    reconnectSession,
     runtimeMode,
   } = useNavigator()
   const [playerId, setPlayerId] = useState('')
@@ -302,28 +303,9 @@ export const SessionForm = ({
   }
 
   const handleReconnect = async () => {
-    if (!session) return
-    const reconnectRoom = currentRoom ?? session.roomId
     setSubmitting(true)
     try {
-      if (session.sessionKind === 'game') {
-        try {
-          await startSession(session.playerId, reconnectRoom, {
-            resumeToken: session.token,
-            sessionKind: 'game',
-          })
-          return
-        } catch {
-          const rememberedResumed = await resumeRememberedSession({
-            playerId: session.playerId,
-            roomId: reconnectRoom,
-          })
-          if (rememberedResumed) {
-            return
-          }
-        }
-      }
-      await startSession(session.playerId, reconnectRoom)
+      await reconnectSession()
     } catch {
       // `startSession` is responsible for updating shared error state.
       // Swallow reconnect failures here to avoid an unhandled promise rejection
@@ -645,7 +627,7 @@ export const SessionForm = ({
             <AnsiText text={error} />
           </p>
         )}
-        {session && connectionStatus === 'disconnected' && (
+        {session && connectionStatus === 'disconnected' && !gameSessionReplaced && (
           <button type="button" onClick={handleReconnect} disabled={submitting}>
             Reconnect session
           </button>

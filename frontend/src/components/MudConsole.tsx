@@ -391,11 +391,11 @@ export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {})
     activity,
     connectionStatus,
     currentRoom,
+    gameSessionReplaced,
     playerVisuals,
-    resumeRememberedSession,
+    reconnectSession,
     sendCommand,
     sendMove,
-    startSession,
     advanceLifecycle,
     session,
     scrySession,
@@ -1260,28 +1260,9 @@ export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {})
   }
 
   const handleReconnect = async () => {
-    if (!session) return
-    const reconnectRoom = currentRoom ?? session.roomId
     setReconnectPending(true)
     try {
-      if (session.sessionKind === 'game') {
-        try {
-          await startSession(session.playerId, reconnectRoom, {
-            resumeToken: session.token,
-            sessionKind: 'game',
-          })
-          return
-        } catch {
-          const rememberedResumed = await resumeRememberedSession({
-            playerId: session.playerId,
-            roomId: reconnectRoom,
-          })
-          if (rememberedResumed) {
-            return
-          }
-        }
-      }
-      await startSession(session.playerId, reconnectRoom)
+      await reconnectSession()
     } catch {
       // Shared session state records reconnect errors for the UI.
     } finally {
@@ -1304,6 +1285,7 @@ export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {})
     connectionStatus === 'disconnected' &&
     Boolean(session) &&
     session?.sessionKind === 'game' &&
+    !gameSessionReplaced &&
     !scrySession
   const latestActivity = activity.length > 0 ? activity[activity.length - 1] : undefined
   const shouldShowIdleReconnectIndicator =
