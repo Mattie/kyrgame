@@ -1709,10 +1709,13 @@ describe('Navigator flow', () => {
     expect(
       screen.getAllByText(/Idle timeout\. Use Reconnect session/i).length
     ).toBeGreaterThan(0)
+    expect(
+      screen.getByText(/You were disconnected for being idle-- reconnect to keep playing!/i)
+    ).toBeInTheDocument()
     expect(localStorage.getItem(rememberedSessionStorageKey)).toContain('remembered-token')
 
     await act(async () => {
-      await user.click(screen.getByRole('button', { name: /reconnect session/i }))
+      await user.click(screen.getByRole('button', { name: /^reconnect$/i }))
     })
 
     const secondSocket = await waitFor(() => MockWebSocket.instances[1])

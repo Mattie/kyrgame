@@ -14,6 +14,7 @@ import { MudConsole } from './MudConsole'
 const mockSendCommand = vi.fn()
 const mockSendMove = vi.fn()
 const mockAdvanceLifecycle = vi.fn()
+const mockResumeRememberedSession = vi.fn()
 const highlightedGroundObjectNames = [
   'scroll',
   'elixir',
@@ -71,6 +72,7 @@ type MockNavigatorState = {
     roomId?: number | null
   } | null
   startSession: ReturnType<typeof vi.fn>
+  resumeRememberedSession: ReturnType<typeof vi.fn>
   adminToken: string | null
   setAdminToken: ReturnType<typeof vi.fn>
   applyAdminUpdate: ReturnType<typeof vi.fn>
@@ -113,6 +115,7 @@ const navigatorState: MockNavigatorState = {
   error: null,
   scrySession: null,
   startSession: vi.fn(),
+  resumeRememberedSession: mockResumeRememberedSession,
   adminToken: null,
   setAdminToken: vi.fn(),
   applyAdminUpdate: vi.fn(),
@@ -232,6 +235,8 @@ describe('MudConsole', () => {
     mockSendCommand.mockReset()
     mockSendMove.mockReset()
     mockAdvanceLifecycle.mockReset()
+    mockResumeRememberedSession.mockReset()
+    navigatorState.startSession.mockReset()
     mockAdvanceLifecycle.mockImplementation(() => new Promise<void>(() => undefined))
     localStorage.clear()
     sessionStorage.clear()
@@ -1162,6 +1167,81 @@ describe('MudConsole', () => {
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 420 })
     expect(screen.queryByRole('button', { name: /scroll to latest console output/i })).toBeNull()
+  })
+
+  it('keeps the console pinned when idle reconnect controls appear', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      sessionKind: 'game',
+    }
+    navigatorState.connectionStatus = 'connected'
+    navigatorState.activity = [
+      {
+        id: 'idle-scroll-entry',
+        type: 'command_response',
+        summary: 'Idle timeout. Use Reconnect session to return to Kyrandia.',
+        payload: {
+          event: 'idle_timeout',
+          type: 'idle_timeout',
+          text: 'Idle timeout. Use Reconnect session to return to Kyrandia.',
+        },
+      },
+    ]
+
+    const { container, rerender } = render(<MudConsole />)
+    const consoleElement = container.querySelector<HTMLElement>('.crt') as HTMLElement
+    const scrollTo = installConsoleScrollTo(consoleElement)
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 100,
+      scrollHeight: 300,
+      scrollTop: 200,
+    })
+    fireEvent.scroll(consoleElement)
+    scrollTo.mockClear()
+
+    navigatorState.connectionStatus = 'disconnected'
+    setConsoleScrollMetrics(consoleElement, {
+      clientHeight: 80,
+      scrollHeight: 300,
+      scrollTop: 200,
+    })
+    rerender(<MudConsole />)
+
+    expect(screen.getByRole('button', { name: /^reconnect$/i })).toBeInTheDocument()
+    expect(
+      screen.getByText(/You were disconnected for being idle-- reconnect to keep playing!/i)
+    ).toBeInTheDocument()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 300 })
+  })
+
+  it('does not label ordinary reconnect controls as idle timeouts', () => {
+    navigatorState.session = {
+      token: 'token',
+      playerId: 'Hero',
+      roomId: 0,
+      sessionKind: 'game',
+    }
+    navigatorState.connectionStatus = 'disconnected'
+    navigatorState.activity = [
+      {
+        id: 'network-drop-entry',
+        type: 'command_response',
+        summary: 'Connection lost.',
+        payload: {
+          event: 'connection_lost',
+          text: 'Connection lost.',
+        },
+      },
+    ]
+
+    render(<MudConsole />)
+
+    expect(screen.getByRole('button', { name: /^reconnect$/i })).toBeInTheDocument()
+    expect(
+      screen.queryByText(/You were disconnected for being idle-- reconnect to keep playing!/i)
+    ).toBeNull()
   })
 
   it('uses blank ENTER to advance first-login lifecycle pages', () => {

@@ -2147,6 +2147,16 @@ p {
   outline-offset: 2px;
 }
 
+.reconnect-actions {
+  align-items: center;
+}
+
+.reconnect-idle-indicator {
+  color: #ffdca3;
+  font-family: 'DM Mono', 'Segoe UI', sans-serif;
+  font-size: 0.78rem;
+}
+
 .mode-hint {
   margin-top: 0.25rem;
   font-size: 0.7rem;

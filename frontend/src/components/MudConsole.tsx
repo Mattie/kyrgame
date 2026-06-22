@@ -378,6 +378,14 @@ type MudConsoleProps = {
   showReconnectAction?: boolean
 }
 
+const IDLE_RECONNECT_MESSAGE = 'You were disconnected for being idle-- reconnect to keep playing!'
+
+const isIdleTimeoutActivity = (entry: ActivityEntry | undefined): boolean => {
+  const payload = entry?.payload
+  if (!payload || typeof payload !== 'object') return false
+  return payload.event === 'idle_timeout' || payload.type === 'idle_timeout'
+}
+
 export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {}) => {
   const {
     activity,
@@ -1285,6 +1293,14 @@ export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {})
     Boolean(session) &&
     session?.sessionKind === 'game' &&
     !scrySession
+  const latestActivity = activity.length > 0 ? activity[activity.length - 1] : undefined
+  const shouldShowIdleReconnectIndicator =
+    shouldShowReconnectAction && isIdleTimeoutActivity(latestActivity)
+  useLayoutEffect(() => {
+    if (shouldShowReconnectAction && isConsoleFollowingRef.current) {
+      scrollConsoleToBottom()
+    }
+  }, [scrollConsoleToBottom, shouldShowReconnectAction])
   const sessionLineText = scrySession
     ? `SCRY ${scrySession.displayName}`
     : adminSessionActive
@@ -1526,8 +1542,13 @@ export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {})
                 onClick={handleReconnect}
                 disabled={reconnectPending}
               >
-                Reconnect session
+                Reconnect
               </button>
+              {shouldShowIdleReconnectIndicator && (
+                <span className="reconnect-idle-indicator" role="status">
+                  {IDLE_RECONNECT_MESSAGE}
+                </span>
+              )}
             </div>
           )}
           <form className="prompt-row" onSubmit={handleSubmit}>
