@@ -343,6 +343,12 @@ type StartSessionOptions = {
   sessionKind?: SessionKind
   rememberMe?: boolean
   resumeToken?: string
+  persistResumeToken?: boolean
+}
+
+type ResumeRememberedSessionOptions = {
+  playerId?: string
+  roomId?: number | null
 }
 
 type SendCommandOptions = {
@@ -392,7 +398,8 @@ type NavigatorContextValue = {
   stopScry: () => void
   advanceLifecycle: (input: string) => Promise<void>
   logoutSession: () => Promise<void>
-  resumeRememberedSession: () => Promise<boolean>
+  resumeRememberedSession: (options?: ResumeRememberedSessionOptions) => Promise<boolean>
+  reconnectSession: () => Promise<void>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (command: string, options?: SendCommandOptions) => void
 }
@@ -569,9 +576,13 @@ const isAuthWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boole
   event.code === 1008 || /invalid session token/i.test(event.reason ?? '')
 
 const REPLACED_GAME_SOCKET_REASON = 'Game session replaced by another connection'
+const IDLE_TIMEOUT_SOCKET_REASON = 'Idle timeout'
 
 const isReplacedWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
   event.code === 1013 && event.reason === REPLACED_GAME_SOCKET_REASON
+
+const isIdleTimeoutWebSocketClose = (event: Pick<CloseEvent, 'code' | 'reason'>): boolean =>
+  event.code === 1000 && event.reason === IDLE_TIMEOUT_SOCKET_REASON
 
 const readRememberedSessionRaw = (): string | null => {
   try {
@@ -1499,6 +1510,8 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           } else if (message.payload?.event === 'unimplemented') {
             summary = 'Sorry, that command exists, but it is not implemented (yet).'
             payload = { ...message.payload, text: summary }
+          } else if (typeof message.payload?.text === 'string') {
+            summary = message.payload.text
           }
 
           appendActivity({
@@ -1596,6 +1609,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
         if (isReplacedWebSocketClose(event)) {
           setGameSessionReplaced(true)
           setError('This game session is open in another tab or window.')
+          return
+        }
+        if (isIdleTimeoutWebSocketClose(event)) {
+          setError('Idle timeout. Use Reconnect session to return to Kyrandia.')
           return
         }
         if (event.code !== 1000) {
@@ -2202,7 +2219,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           setAdminToken(elevatedAdminToken)
         }
         setSession(record)
-        if (record.sessionKind === 'game' && (options?.rememberMe || options?.resumeToken)) {
+        if (
+          record.sessionKind === 'game' &&
+          (options?.rememberMe || options?.persistResumeToken)
+        ) {
           writeRememberedSession(record)
         } else if (useAccountAuth && record.sessionKind === 'game') {
           clearRememberedSession()
@@ -2268,14 +2288,23 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     ]
   )
 
-  const resumeRememberedSession = useCallback(async () => {
+  const resumeRememberedSession = useCallback(async (
+    options?: ResumeRememberedSessionOptions
+  ) => {
     const remembered = readRememberedSession()
     if (!remembered) return false
+    if (
+      options?.playerId &&
+      remembered.playerId.trim().toLowerCase() !== options.playerId.trim().toLowerCase()
+    ) {
+      return false
+    }
 
     try {
-      await startSession(remembered.playerId, null, {
+      await startSession(remembered.playerId, options?.roomId ?? null, {
         resumeToken: remembered.token,
         sessionKind: 'game',
+        persistResumeToken: true,
       })
       return true
     } catch (err) {
@@ -2287,6 +2316,32 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       return false
     }
   }, [startSession])
+
+  const reconnectSession = useCallback(async () => {
+    const currentSession = sessionRef.current
+    if (!currentSession || gameSessionReplaced) return
+
+    const reconnectRoom = currentRoomRef.current ?? currentSession.roomId
+    if (currentSession.sessionKind === 'game') {
+      try {
+        await startSession(currentSession.playerId, reconnectRoom, {
+          resumeToken: currentSession.token,
+          sessionKind: 'game',
+        })
+        return
+      } catch {
+        const rememberedResumed = await resumeRememberedSession({
+          playerId: currentSession.playerId,
+          roomId: reconnectRoom,
+        })
+        if (rememberedResumed) {
+          return
+        }
+      }
+    }
+
+    await startSession(currentSession.playerId, reconnectRoom)
+  }, [gameSessionReplaced, resumeRememberedSession, startSession])
 
   useEffect(() => {
     if (!adminToken && scrySocketRef.current) {
@@ -2541,6 +2596,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       advanceLifecycle,
       logoutSession,
       resumeRememberedSession,
+      reconnectSession,
       sendMove,
       sendCommand,
     }),
@@ -2563,6 +2619,7 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
       logoutSession,
       occupants,
       playerVisuals,
+      reconnectSession,
       resumeRememberedSession,
       runtimeMode,
       scrySession,

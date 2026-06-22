@@ -113,6 +113,18 @@ const TestHarness = () => {
       </button>
       <button
         type="button"
+        onClick={() => void navigator.resumeRememberedSession({ playerId: 'Scout', roomId: 7 })}
+      >
+        Resume remembered for Scout
+      </button>
+      <button
+        type="button"
+        onClick={() => void navigator.reconnectSession()}
+      >
+        Reconnect current session
+      </button>
+      <button
+        type="button"
         onClick={() =>
           void navigator.startSession('Opal', 7, {
             createPlayer: true,
@@ -433,6 +445,99 @@ describe('NavigatorContext SCRY state handling', () => {
       })
     )
     expect(authSessionBodies[0]).not.toHaveProperty('honor_mode')
+  })
+
+  it('does not resume a remembered token for a different player', async () => {
+    localStorage.setItem(
+      'kyrgame.navigator.rememberedSession',
+      JSON.stringify({
+        token: 'hero-remembered-token',
+        playerId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      })
+    )
+
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('runtime-mode-selectable')).toHaveTextContent('true')
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /resume remembered for scout/i }))
+    })
+
+    expect(authSessionBodies).toEqual([])
+  })
+
+  it('reconnects with the current game session token', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances[0]).toBeDefined())
+    const firstSocket = MockWebSocket.instances[0]
+    act(() => {
+      firstSocket.close(1000, 'Idle timeout')
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId('connection-status')).toHaveTextContent('disconnected')
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /reconnect current session/i }))
+    })
+
+    await waitFor(() => expect(authSessionBodies).toHaveLength(2))
+    expect(authSessionBodies[1]).toEqual({
+      player_id: 'Opal',
+      room_id: 7,
+      resume_token: 'game-token',
+    })
+  })
+
+  it('does not reconnect from a replaced game session', async () => {
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start game/i }))
+    })
+
+    await waitFor(() => expect(MockWebSocket.instances[0]).toBeDefined())
+    const firstSocket = MockWebSocket.instances[0]
+    act(() => {
+      firstSocket.close(1013, 'Game session replaced by another connection')
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId('game-session-replaced')).toHaveTextContent('true')
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /reconnect current session/i }))
+    })
+
+    expect(authSessionBodies).toEqual([
+      {
+        player_id: 'Opal',
+        room_id: 7,
+      },
+    ])
   })
 
   it('clears a stale admin token when starting a new game session', async () => {

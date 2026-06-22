@@ -117,6 +117,7 @@
 - [x] Attached live room-object snapshots to `location_description` payloads and rendered console object lines from that snapshot, preventing stale item text after pickups, drops, reconnects, and room entry refreshes.
 - [x] Synced YAML room-object mutations back into the live room-object store with sender-inclusive refresh events, covering room 26 shard spawning and live setter persistence.
 - [x] Added 30-day player remember-me sessions for account login/register, direct `/play` token resume, remembered-token cleanup on rejection, and a player logout action in the active-player popover.
+- [x] Added normal play WebSocket idle timeout protection (`KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS`, default 30 minutes) so long-AFK players leave live presence and animation targeting without expiring resumable sessions; the play console now shows the idle notice and reconnect action.
 
 ### Complete Playable Game Parity (Completed Gameplay Lane)
 
@@ -169,6 +170,14 @@
 - [ ] Verify the player receives `DIEMSG`, observers receive `KILLED`, the player returns to room 0 in holy light at level 9, HP/SP are full for level 9, gold and memorized spells are gone, spellbook ownership remains, temporary effects are cleared, and exhaustion is active.
 - [ ] Verify ordinary carried items appear in room 302 or spill rooms, soulstone/kyragem do not drop, and rooms that receive drops show item refresh/drop messages.
 - [ ] Repeat with an honor-mode or force-honor player and verify the legacy level-1 full reset still occurs.
+
+### Player Idle Timeout Protection
+
+- [ ] Start the local stack with `KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS` set to a short value such as `10`.
+- [ ] Log into `/play` with an account and Remember me enabled, then move to a forest or brownie path room.
+- [ ] Wait for the idle timeout and verify the console shows the idle notice, the socket disconnects, and the player disappears from active occupants/admin mob targeting.
+- [ ] Use Reconnect session and verify the same remembered token resumes the player in the saved room.
+- [ ] Repeat with an admin/SCRY session and verify admin monitoring stays under its existing lifecycle.
 
 ## Remaining Implementation Task Plan
 

@@ -51,10 +51,13 @@ The FastAPI runtime bootstraps a low-level `SchedulerService` plus a `TickSchedu
 - `app.state.scheduler`: second-based scheduling primitives
 - `app.state.tick_scheduler`: tick-based adapter for gameplay timers
 - `KYRGAME_TICK_SECONDS`: env knob for tick length (defaults to `1.0`)
+- `KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS`: normal play WebSocket idle limit (defaults to `1800` seconds)
 
 When porting timer-driven logic from `KYRSPEL.C`/`KYRANIM.C`, register recurring callbacks through `TickScheduler` (`register_spell_tick`, `register_animation_tick`, or `register_recurring_timer`) so cadence remains explicit and consistent. Runtime shutdown cancels registered tick handles before stopping the scheduler task, preventing timer leakage across restarts.
 
 Animation ticks mirror `legacy/KYRANIM.C`: `inianm()` schedules the first `animat()` call after 30 ticks, then `animat()` repeats every 15 ticks. The rotating animation state (`routine_index`, Zar counters/location, gem counter, dryad location, brownie path index/location, elf state, and timed flags) is stored in the `runtime_state` table under `animation_tick` so backend restarts keep the same world cadence.
 
 When `KYRGAME_TELEMETRY_DIR` is configured, scheduled animation callbacks write system JSONL events to `system.jsonl`. These audit records include timing, routine rotation, timed flags, dispatch outcomes, and brownie step details for future parity investigations.
+
+Normal play WebSockets use the idle limit to remove AFK players from live presence and animation target scans without expiring their bearer sessions. Admin and SCRY sockets keep their existing lifecycle.
 

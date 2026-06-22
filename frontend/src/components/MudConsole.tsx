@@ -374,12 +374,26 @@ const isCommandHistoryEligible = (command: string): boolean => {
   return !isCardinalMove
 }
 
-export const MudConsole = () => {
+type MudConsoleProps = {
+  showReconnectAction?: boolean
+}
+
+const IDLE_RECONNECT_MESSAGE = 'You were disconnected for being idle-- reconnect to keep playing!'
+
+const isIdleTimeoutActivity = (entry: ActivityEntry | undefined): boolean => {
+  const payload = entry?.payload
+  if (!payload || typeof payload !== 'object') return false
+  return payload.event === 'idle_timeout' || payload.type === 'idle_timeout'
+}
+
+export const MudConsole = ({ showReconnectAction = true }: MudConsoleProps = {}) => {
   const {
     activity,
     connectionStatus,
     currentRoom,
+    gameSessionReplaced,
     playerVisuals,
+    reconnectSession,
     sendCommand,
     sendMove,
     advanceLifecycle,
@@ -416,6 +430,7 @@ export const MudConsole = () => {
   const [terminalPagerPageRows, setTerminalPagerPageRows] = useState(
     TERMINAL_PAGER_DESKTOP_ROWS
   )
+  const [reconnectPending, setReconnectPending] = useState(false)
   const [screenReaderStreamLines, setScreenReaderStreamLines] = useState<
     ScreenReaderConsoleLine[]
   >([])
@@ -1244,6 +1259,17 @@ export const MudConsole = () => {
     setInput('')
   }
 
+  const handleReconnect = async () => {
+    setReconnectPending(true)
+    try {
+      await reconnectSession()
+    } catch {
+      // Shared session state records reconnect errors for the UI.
+    } finally {
+      setReconnectPending(false)
+    }
+  }
+
   const compassLabel = navMode ? 'Navigation mode active' : 'Toggle navigation mode'
   const sendButtonLabel = activeTerminalPagerLineId
     ? 'Continue'
@@ -1254,6 +1280,21 @@ export const MudConsole = () => {
     !activeTerminalPagerLineId && (lifecycleAdvancePending || gamePromptReadOnly)
   const canFocusCommandInput =
     connectionStatus === 'connected' && Boolean(session) && !promptControlsDisabled
+  const shouldShowReconnectAction =
+    showReconnectAction &&
+    connectionStatus === 'disconnected' &&
+    Boolean(session) &&
+    session?.sessionKind === 'game' &&
+    !gameSessionReplaced &&
+    !scrySession
+  const latestActivity = activity.length > 0 ? activity[activity.length - 1] : undefined
+  const shouldShowIdleReconnectIndicator =
+    shouldShowReconnectAction && isIdleTimeoutActivity(latestActivity)
+  useLayoutEffect(() => {
+    if (shouldShowReconnectAction && isConsoleFollowingRef.current) {
+      scrollConsoleToBottom()
+    }
+  }, [scrollConsoleToBottom, shouldShowReconnectAction])
   const sessionLineText = scrySession
     ? `SCRY ${scrySession.displayName}`
     : adminSessionActive
@@ -1486,6 +1527,22 @@ export const MudConsole = () => {
               >
                 Continue
               </button>
+            </div>
+          )}
+          {shouldShowReconnectAction && (
+            <div className="terminal-action-row reconnect-actions" aria-label="Reconnect controls">
+              <button
+                type="button"
+                onClick={handleReconnect}
+                disabled={reconnectPending}
+              >
+                Reconnect
+              </button>
+              {shouldShowIdleReconnectIndicator && (
+                <span className="reconnect-idle-indicator" role="status">
+                  {IDLE_RECONNECT_MESSAGE}
+                </span>
+              )}
             </div>
           )}
           <form className="prompt-row" onSubmit={handleSubmit}>
