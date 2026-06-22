@@ -353,9 +353,10 @@ class ZarDragonRoutine:
         objects = self._placement_objects(room_id)
         state.zar_location = room_id
         self._sync_zar_location(room_id)
-        self._remove_stale_dragons(room_id)
+        stale_removal_events = self._remove_stale_dragons(room_id)
         self._set_zar_room_objects(room_id, objects)
         return [
+            *stale_removal_events,
             AnimationTickEvent(
                 flag="pzinlc",
                 room_id=room_id,
@@ -651,17 +652,29 @@ class ZarDragonRoutine:
         if self._zar_location_setter:
             self._zar_location_setter(room_id)
 
-    def _remove_stale_dragons(self, active_room_id: int) -> None:
+    def _remove_stale_dragons(self, active_room_id: int) -> list[AnimationTickEvent]:
+        events: list[AnimationTickEvent] = []
         for room_id in self._known_room_ids(active_room_id):
             if room_id == active_room_id:
                 continue
             objects = list(self._room_objects_getter(room_id))
             if self.dragon_object_id not in objects:
                 continue
+            updated = [
+                object_id for object_id in objects if object_id != self.dragon_object_id
+            ]
             self._set_zar_room_objects(
                 room_id,
-                [object_id for object_id in objects if object_id != self.dragon_object_id],
+                updated,
             )
+            events.append(
+                AnimationTickEvent(
+                    flag="rmvzar",
+                    room_id=room_id,
+                    payload=_room_objects_payload(room_id, updated),
+                )
+            )
+        return events
 
     def _known_room_ids(self, *required_room_ids: int) -> list[int]:
         room_ids = {int(room_id) for room_id in required_room_ids}

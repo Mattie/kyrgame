@@ -62,7 +62,7 @@ def run_cleanup(args: argparse.Namespace) -> int:
         try:
             result = cleanup_moving_mobs(
                 session,
-                dry_run=not args.apply,
+                dry_run=args.dry_run or not args.apply,
                 apply=args.apply,
                 confirm=args.confirm,
             )

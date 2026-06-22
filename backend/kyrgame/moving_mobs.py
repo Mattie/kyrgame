@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from . import models
+from . import constants, models
 
 
 ANIMATION_STATE_KEY = "animation_tick"
@@ -74,6 +74,8 @@ def _canonical_after_objects(spec: SingletonMobSpec, room_id: int, before: Seque
         return _dragon_placement_objects(room_id, before)
 
     without_mob = [object_id for object_id in before if object_id != spec.object_id]
+    if len(without_mob) >= constants.MXLOBS:
+        without_mob = without_mob[: constants.MXLOBS - 1]
     return [*without_mob, spec.object_id]
 
 
@@ -278,12 +280,15 @@ def cleanup_moving_mobs(
     token = cleanup_confirmation_token(audit)
     changes = _cleanup_changes(audit)
 
+    if not dry_run and not apply:
+        raise ValueError("cleanup writes require apply=True and a matching confirmation token")
+
     if apply:
         dry_run = False
         if confirm != token:
             raise ValueError(f"cleanup requires confirmation token {token}")
 
-    if not dry_run:
+    if apply:
         for change in changes:
             location = session.get(models.Location, int(change["room_id"]))
             if location is None:

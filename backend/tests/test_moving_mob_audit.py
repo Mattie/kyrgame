@@ -1,3 +1,4 @@
+import json
 import importlib.util
 from pathlib import Path
 
@@ -90,6 +91,25 @@ def test_audit_reports_singleton_duplicates_and_virtual_mobs(tmp_path):
     assert mobs["elf"]["tracker_room_id"] == 35
 
 
+def test_audit_caps_dryad_cleanup_to_room_capacity(tmp_path):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'full-room.db'}")
+    database.init_db_schema(engine)
+    session = database.create_session(engine)
+    _seed_location(session, 5, [45])
+    _seed_location(session, 18, [1, 2, 3, 4, 5, 6])
+    _seed_location(session, 250, [52])
+    _seed_runtime_state(session, dryad_location=18, zar_location=250)
+    session.commit()
+
+    audit = audit_moving_mobs(session)
+    dryad = {mob["id"]: mob for mob in audit["mobs"]}["dryad"]
+
+    assert dryad["proposed_changes"] == [
+        {"room_id": 5, "before": [45], "after": []},
+        {"room_id": 18, "before": [1, 2, 3, 4, 5, 6], "after": [1, 2, 3, 4, 5, 45]},
+    ]
+
+
 def test_cleanup_dry_run_and_confirmed_apply(tmp_path):
     session = _session_with_mob_drift(tmp_path)
 
@@ -101,6 +121,8 @@ def test_cleanup_dry_run_and_confirmed_apply(tmp_path):
 
     with pytest.raises(ValueError, match="confirmation token"):
         cleanup_moving_mobs(session, apply=True)
+    with pytest.raises(ValueError, match="apply=True"):
+        cleanup_moving_mobs(session, dry_run=False)
 
     token = cleanup_confirmation_token(audit_moving_mobs(session))
     applied = cleanup_moving_mobs(session, apply=True, confirm=token)
@@ -155,6 +177,35 @@ def test_cli_cleanup_apply_requires_confirmation_token(tmp_path, capsys):
     captured = capsys.readouterr()
     assert code == 2
     assert "confirmation token" in captured.err
+
+    engine = database.get_engine(f"sqlite+pysqlite:///{db_path}")
+    with database.create_session(engine) as verify_session:
+        assert verify_session.get(models.Location, 5).objects == [45]
+        assert verify_session.get(models.Location, 18).objects == [45, 45, 2]
+
+
+def test_cli_cleanup_dry_run_flag_previews_without_writing(tmp_path, capsys):
+    session = _session_with_mob_drift(tmp_path)
+    session.close()
+    db_path = tmp_path / "mobs.db"
+
+    code = audit_cli.main(
+        [
+            "--database-url",
+            f"sqlite+pysqlite:///{db_path}",
+            "cleanup",
+            "--dry-run",
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert code == 0
+    assert result["applied"] is False
+    assert result["dry_run"] is True
+    assert result["changes"]
 
     engine = database.get_engine(f"sqlite+pysqlite:///{db_path}")
     with database.create_session(engine) as verify_session:

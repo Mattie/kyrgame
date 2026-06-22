@@ -488,7 +488,18 @@ def test_zar_placement_clears_room_adds_special_prop_and_preserves_dryad():
 
     assert state.zar_location == 7
     assert room_objects[7] == [52, 47, 45]
+    assert room_objects[302] == []
     assert events == [
+        AnimationTickEvent(
+            flag="rmvzar",
+            room_id=302,
+            payload={
+                "type": "room_objects",
+                "event": "room_objects",
+                "location": 302,
+                "objects": [],
+            },
+        ),
         AnimationTickEvent(flag="pzinlc", room_id=7, message_id="ZMSG11"),
         AnimationTickEvent(
             flag="pzinlc",
@@ -501,6 +512,7 @@ def test_zar_placement_clears_room_adds_special_prop_and_preserves_dryad():
             },
         ),
     ]
+    assert location_updates[0] == (302, [])
     assert location_updates[-1] == (7, [52, 47, 45])
 
 
@@ -546,11 +558,23 @@ def test_zar_chkzar_removes_stale_dragons_during_relocation():
     state.zar_location = 302
     state.zar_counter = 5
 
-    routine.chkzar(state)
+    events = routine.chkzar(state)
 
     assert room_objects[250] == [52]
     assert room_objects[260] == []
     assert room_objects[302] == []
+    assert [
+        event.payload
+        for event in events
+        if event.room_id == 260 and event.payload is not None
+    ] == [
+        {
+            "type": "room_objects",
+            "event": "room_objects",
+            "location": 260,
+            "objects": [],
+        }
+    ]
 
 
 def test_zar_chkzar_returns_home_after_legacy_counter_limit():
