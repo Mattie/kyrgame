@@ -303,15 +303,27 @@ export const SessionForm = ({
 
   const handleReconnect = async () => {
     if (!session) return
+    const reconnectRoom = currentRoom ?? session.roomId
     setSubmitting(true)
     try {
-      const resumed = session.sessionKind === 'game'
-        ? await resumeRememberedSession()
-        : false
-      if (resumed) {
-        return
+      if (session.sessionKind === 'game') {
+        try {
+          await startSession(session.playerId, reconnectRoom, {
+            resumeToken: session.token,
+            sessionKind: 'game',
+          })
+          return
+        } catch {
+          const rememberedResumed = await resumeRememberedSession({
+            playerId: session.playerId,
+            roomId: reconnectRoom,
+          })
+          if (rememberedResumed) {
+            return
+          }
+        }
       }
-      await startSession(session.playerId, currentRoom ?? session.roomId)
+      await startSession(session.playerId, reconnectRoom)
     } catch {
       // `startSession` is responsible for updating shared error state.
       // Swallow reconnect failures here to avoid an unhandled promise rejection

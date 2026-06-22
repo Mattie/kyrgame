@@ -44,6 +44,7 @@ WS_COMMAND_RATE_LIMIT_MAX_EVENTS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS
 WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS_ENV = "KYRGAME_WS_COMMAND_RATE_LIMIT_WINDOW_SECONDS"
 DEFAULT_PLAYER_IDLE_TIMEOUT_SECONDS = 1800
 PLAYER_IDLE_TIMEOUT_SECONDS_ENV = "KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS"
+PLAYER_LAST_SEEN_UPDATE_INTERVAL_SECONDS = 30.0
 GAME_VERSION = "7.20"
 RECENT_PUBLIC_PLAYER_LIMIT = 5
 PUBLIC_ACTIVE_PLAYER_LIMIT = 25
@@ -4065,6 +4066,7 @@ def create_app() -> FastAPI:
 
         session_exit_started = False
         live_connection_removed = False
+        last_session_seen_update_at = time.monotonic()
 
         async def _remove_live_connection() -> None:
             nonlocal live_connection_removed
@@ -4075,6 +4077,11 @@ def create_app() -> FastAPI:
             await gateway.unregister(current_room, websocket)
 
         def _mark_current_session_seen() -> None:
+            nonlocal last_session_seen_update_at
+            now = time.monotonic()
+            if now - last_session_seen_update_at < PLAYER_LAST_SEEN_UPDATE_INTERVAL_SECONDS:
+                return
+            last_session_seen_update_at = now
             with provider.scope.app.state.session_factory() as db:
                 repo = repositories.PlayerSessionRepository(db)
                 repo.mark_seen(session_token)

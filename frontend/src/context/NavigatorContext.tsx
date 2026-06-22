@@ -343,6 +343,12 @@ type StartSessionOptions = {
   sessionKind?: SessionKind
   rememberMe?: boolean
   resumeToken?: string
+  persistResumeToken?: boolean
+}
+
+type ResumeRememberedSessionOptions = {
+  playerId?: string
+  roomId?: number | null
 }
 
 type SendCommandOptions = {
@@ -392,7 +398,7 @@ type NavigatorContextValue = {
   stopScry: () => void
   advanceLifecycle: (input: string) => Promise<void>
   logoutSession: () => Promise<void>
-  resumeRememberedSession: () => Promise<boolean>
+  resumeRememberedSession: (options?: ResumeRememberedSessionOptions) => Promise<boolean>
   sendMove: (direction: 'north' | 'south' | 'east' | 'west') => void
   sendCommand: (command: string, options?: SendCommandOptions) => void
 }
@@ -2212,7 +2218,10 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
           setAdminToken(elevatedAdminToken)
         }
         setSession(record)
-        if (record.sessionKind === 'game' && (options?.rememberMe || options?.resumeToken)) {
+        if (
+          record.sessionKind === 'game' &&
+          (options?.rememberMe || options?.persistResumeToken)
+        ) {
           writeRememberedSession(record)
         } else if (useAccountAuth && record.sessionKind === 'game') {
           clearRememberedSession()
@@ -2278,14 +2287,23 @@ export const NavigatorProvider = ({ children }: PropsWithChildren) => {
     ]
   )
 
-  const resumeRememberedSession = useCallback(async () => {
+  const resumeRememberedSession = useCallback(async (
+    options?: ResumeRememberedSessionOptions
+  ) => {
     const remembered = readRememberedSession()
     if (!remembered) return false
+    if (
+      options?.playerId &&
+      remembered.playerId.trim().toLowerCase() !== options.playerId.trim().toLowerCase()
+    ) {
+      return false
+    }
 
     try {
-      await startSession(remembered.playerId, null, {
+      await startSession(remembered.playerId, options?.roomId ?? null, {
         resumeToken: remembered.token,
         sessionKind: 'game',
+        persistResumeToken: true,
       })
       return true
     } catch (err) {

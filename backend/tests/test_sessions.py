@@ -8,7 +8,8 @@ import uvicorn
 import websockets
 from sqlalchemy import func, select
 
-from kyrgame import accounts, constants, models
+from kyrgame import accounts, constants, models, repositories
+from kyrgame import webapp as webapp_module
 from kyrgame.webapp import (
     create_app,
     _player_idle_timeout_seconds,
@@ -869,6 +870,74 @@ async def test_websocket_idle_timeout_closes_live_presence_but_preserves_session
                     await asyncio.wait_for(reconnected_ws.recv(), timeout=1)
                 )
                 assert welcome_again["type"] == "room_welcome"
+    finally:
+        server.should_exit = True
+        await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_player_commands_throttle_session_last_seen_updates(monkeypatch):
+    monkeypatch.setenv("KYRGAME_PLAYER_IDLE_TIMEOUT_SECONDS", "60")
+    monkeypatch.setenv("KYRGAME_WS_COMMAND_RATE_LIMIT_MAX_EVENTS", "100")
+    monkeypatch.setattr(
+        webapp_module,
+        "PLAYER_LAST_SEEN_UPDATE_INTERVAL_SECONDS",
+        3600.0,
+    )
+    seen_tokens: list[str] = []
+    tracked_token: list[str] = []
+    original_mark_seen = repositories.PlayerSessionRepository.mark_seen
+
+    def counting_mark_seen(self, session_token, timestamp=None):
+        if tracked_token and session_token == tracked_token[0]:
+            seen_tokens.append(session_token)
+        return original_mark_seen(self, session_token, timestamp=timestamp)
+
+    monkeypatch.setattr(
+        repositories.PlayerSessionRepository,
+        "mark_seen",
+        counting_mark_seen,
+    )
+
+    app = create_app()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+    seed_returning_players(app, ("scout",))
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            session_resp = await client.post(
+                "/auth/session", json={"player_id": "scout", "room_id": 7}
+            )
+            session = session_resp.json()["session"]
+            token = session["token"]
+            tracked_token.append(token)
+            uri = f"ws://{host}:{port}/ws/rooms/7?token={token}"
+
+            async with websockets.connect(uri) as ws:
+                await _receive_initial_room_payloads(ws)
+                assert seen_tokens == [token]
+
+                await ws.send(json.dumps({"type": "command", "command": "look"}))
+                await _receive_until(
+                    ws,
+                    lambda msg: msg.get("type") == "command_response",
+                    timeout=1,
+                )
+                await ws.send(json.dumps({"type": "command", "command": "look"}))
+                await _receive_until(
+                    ws,
+                    lambda msg: msg.get("type") == "command_response",
+                    timeout=1,
+                )
+
+            assert seen_tokens == [token]
     finally:
         server.should_exit = True
         await server_task

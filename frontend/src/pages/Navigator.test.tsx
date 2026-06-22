@@ -1641,6 +1641,7 @@ describe('Navigator flow', () => {
         expect(JSON.parse(String(init?.body))).toEqual({
           player_id: 'Hero',
           resume_token: 'remembered-token',
+          room_id: 7,
         })
         return Promise.resolve({
           ok: true,
@@ -1718,7 +1719,8 @@ describe('Navigator flow', () => {
       await user.click(screen.getByRole('button', { name: /^reconnect$/i }))
     })
 
-    const secondSocket = await waitFor(() => MockWebSocket.instances[1])
+    await waitFor(() => expect(MockWebSocket.instances[1]).toBeDefined())
+    const secondSocket = MockWebSocket.instances[1]
     expect(secondSocket.url).toContain('/rooms/7?token=remembered-token')
     expect(fetchMock).toHaveBeenCalledWith(
       'http://api.local/auth/session',
@@ -1727,6 +1729,7 @@ describe('Navigator flow', () => {
         body: JSON.stringify({
           player_id: 'Hero',
           resume_token: 'remembered-token',
+          room_id: 7,
         }),
       })
     )

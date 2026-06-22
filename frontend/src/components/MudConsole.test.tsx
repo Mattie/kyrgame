@@ -1216,6 +1216,43 @@ describe('MudConsole', () => {
     expect(scrollTo).toHaveBeenCalledWith({ top: 300 })
   })
 
+  it('reconnects a disconnected game session with the current session token', async () => {
+    navigatorState.session = {
+      token: 'scout-current-token',
+      playerId: 'Scout',
+      roomId: 7,
+      sessionKind: 'game',
+    }
+    navigatorState.currentRoom = 7
+    navigatorState.connectionStatus = 'disconnected'
+    navigatorState.activity = [
+      {
+        id: 'idle-reconnect-current-session',
+        type: 'command_response',
+        summary: 'Idle timeout. Use Reconnect session to return to Kyrandia.',
+        payload: {
+          event: 'idle_timeout',
+          type: 'idle_timeout',
+          text: 'Idle timeout. Use Reconnect session to return to Kyrandia.',
+        },
+      },
+    ]
+    navigatorState.startSession.mockResolvedValue(undefined)
+    mockResumeRememberedSession.mockResolvedValue(true)
+
+    render(<MudConsole />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^reconnect$/i }))
+    })
+
+    expect(navigatorState.startSession).toHaveBeenCalledWith('Scout', 7, {
+      resumeToken: 'scout-current-token',
+      sessionKind: 'game',
+    })
+    expect(mockResumeRememberedSession).not.toHaveBeenCalled()
+  })
+
   it('does not label ordinary reconnect controls as idle timeouts', () => {
     navigatorState.session = {
       token: 'token',

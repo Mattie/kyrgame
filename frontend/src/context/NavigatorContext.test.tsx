@@ -113,6 +113,12 @@ const TestHarness = () => {
       </button>
       <button
         type="button"
+        onClick={() => void navigator.resumeRememberedSession({ playerId: 'Scout', roomId: 7 })}
+      >
+        Resume remembered for Scout
+      </button>
+      <button
+        type="button"
         onClick={() =>
           void navigator.startSession('Opal', 7, {
             createPlayer: true,
@@ -433,6 +439,35 @@ describe('NavigatorContext SCRY state handling', () => {
       })
     )
     expect(authSessionBodies[0]).not.toHaveProperty('honor_mode')
+  })
+
+  it('does not resume a remembered token for a different player', async () => {
+    localStorage.setItem(
+      'kyrgame.navigator.rememberedSession',
+      JSON.stringify({
+        token: 'hero-remembered-token',
+        playerId: 'Hero',
+        sessionKind: 'game',
+        roomId: 7,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      })
+    )
+
+    render(
+      <NavigatorProvider>
+        <TestHarness />
+      </NavigatorProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('runtime-mode-selectable')).toHaveTextContent('true')
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /resume remembered for scout/i }))
+    })
+
+    expect(authSessionBodies).toEqual([])
   })
 
   it('clears a stale admin token when starting a new game session', async () => {
