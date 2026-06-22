@@ -739,6 +739,13 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         app.state.location_index[18] = app.state.location_index[18].model_copy(
             update={"objects": room_18_objects, "nlobjs": len(room_18_objects)}
         )
+        room_19_objects = [*app.state.location_index[19].objects, 45]
+        app.state.location_index[19] = app.state.location_index[19].model_copy(
+            update={"objects": room_19_objects, "nlobjs": len(room_19_objects)}
+        )
+        app.state.location_index[251] = app.state.location_index[251].model_copy(
+            update={"objects": [52], "nlobjs": 1}
+        )
 
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             missing_auth = await client.get("/admin/mobs")
@@ -767,6 +774,10 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         mobs = {mob["id"]: mob for mob in payload["mobs"]}
         assert mobs["dryad"]["room_id"] == 18
         assert mobs["dryad"]["room"]["brief"] == app.state.location_index[18].brfdes
+        assert mobs["dryad"]["tracker_room_id"] == 18
+        assert mobs["dryad"]["object_rooms"] == [18, 19]
+        assert mobs["dryad"]["copy_count"] == 2
+        assert mobs["dryad"]["singleton_status"] == "duplicate"
         assert mobs["brownie"]["room_id"] == 0
         assert mobs["brownie"]["room"]["brief"] == "near a mystical willow tree"
         assert mobs["brownie"]["path_index"] == 19
@@ -776,6 +787,10 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
         assert mobs["elf"]["status"] == "last_seen"
         assert mobs["dragon"]["room_id"] == 250
         assert mobs["dragon"]["state_room_id"] == 250
+        assert mobs["dragon"]["tracker_room_id"] == 250
+        assert mobs["dragon"]["object_rooms"] == [250, 251]
+        assert mobs["dragon"]["copy_count"] == 2
+        assert mobs["dragon"]["singleton_status"] == "duplicate"
         assert mobs["dragon"]["counter"] == 8
         assert mobs["dragon"]["attack_index"] == 2
         assert mobs["dragon"]["next_attack"] == "claw"
@@ -944,11 +959,18 @@ async def test_admin_drop_item_resolves_object_id_and_rejects_missing_object(mon
                 headers=_auth("content-token"),
                 json={"object_ref": "missing catalog item"},
             )
+            singleton_mob = await client.post(
+                "/admin/rooms/7/objects/drop",
+                headers=_auth("content-token"),
+                json={"object_ref": "dryad"},
+            )
 
         assert from_id.status_code == 200
         assert from_id.json()["object"] == {"id": 1, "name": "emerald"}
         assert missing_object.status_code == 422
         assert "catalog object" in missing_object.text
+        assert singleton_mob.status_code == 409
+        assert "moving mob singleton" in singleton_mob.text.lower()
 
         with app.state.session_factory() as db:
             refreshed = db.get(models.Location, 7)

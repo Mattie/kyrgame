@@ -285,6 +285,35 @@ def test_dryad_routine_moves_dryad_and_evicts_full_destination_room():
     assert events[-1].payload["objects"] == [{"id": 0}, {"id": 1}, {"id": 2}, {"id": 3}, {"id": 4}, {"id": 45}]
 
 
+def test_dryad_routine_reanchors_when_tracker_origin_lost():
+    room_objects = {0: [], 12: [45], 20: [1, 2]}
+
+    routine = DryadWanderRoutine(
+        room_picker=lambda low, high: 20,
+        room_objects_getter=lambda room_id: room_objects.get(room_id, []),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(room_id, list(objects)),
+        room_ids_getter=lambda: room_objects.keys(),
+        object_name_lookup=lambda object_id: f"object {object_id}",
+        location_phrase_lookup=lambda room_id: "nearby",
+        message_formatter=_message_formatter,
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.dryad_location = 0
+
+    events = routine(state)
+
+    assert state.dryad_location == 20
+    assert room_objects[0] == []
+    assert room_objects[12] == []
+    assert room_objects[20] == [1, 2, 45]
+    audit_events = [event for event in events if event.payload.get("audit_only")]
+    assert audit_events
+    assert audit_events[0].payload["audit"]["event_type"] == "animation.mob_singleton_drift"
+    assert audit_events[0].payload["audit"]["mob_id"] == "dryad"
+    assert audit_events[0].payload["audit"]["tracker_room_id"] == 0
+    assert audit_events[0].payload["audit"]["source_room_id"] == 12
+
+
 def test_elf_routine_alternates_hints_and_gold_rewards():
     player = _build_player(plyrid="hero", altnam="Hero", gamloc=50, gold=5)
     persisted: list[int] = []
@@ -413,6 +442,7 @@ def _build_zar_routine(
     persisted=None,
     location_updates=None,
     locations=None,
+    room_ids=None,
     honor_mode_policy=None,
     death_recovery_persister=None,
 ):
@@ -438,6 +468,7 @@ def _build_zar_routine(
         ),
         message_formatter=_message_formatter,
         object_name_lookup=lambda object_id: f"object-{object_id}",
+        room_ids_getter=lambda: room_ids if room_ids is not None else room_objects.keys(),
         locations_getter=lambda: locations or {},
         honor_mode_policy=honor_mode_policy,
         death_recovery_persister=death_recovery_persister,
@@ -473,6 +504,21 @@ def test_zar_placement_clears_room_adds_special_prop_and_preserves_dryad():
     assert location_updates[-1] == (7, [52, 47, 45])
 
 
+def test_zar_initialize_removes_stale_dragons_before_tracking_room():
+    room_objects = {250: [], 302: [52]}
+    routine = _build_zar_routine(
+        room_objects=room_objects,
+        room_ids=[250, 302],
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 250
+
+    routine.initialize(state)
+
+    assert room_objects[250] == [52]
+    assert room_objects[302] == []
+
+
 def test_zar_chkzar_relocates_when_hungry_and_room_is_empty():
     room_objects = {250: [], 302: [52]}
     routine = _build_zar_routine(room_objects=room_objects, room_rolls=[250])
@@ -487,6 +533,24 @@ def test_zar_chkzar_relocates_when_hungry_and_room_is_empty():
     assert room_objects[250] == [52]
     assert state.zar_location == 250
     assert state.zar_counter == 6
+
+
+def test_zar_chkzar_removes_stale_dragons_during_relocation():
+    room_objects = {250: [], 260: [52], 302: []}
+    routine = _build_zar_routine(
+        room_objects=room_objects,
+        room_rolls=[250],
+        room_ids=[250, 260, 302],
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.zar_location = 302
+    state.zar_counter = 5
+
+    routine.chkzar(state)
+
+    assert room_objects[250] == [52]
+    assert room_objects[260] == []
+    assert room_objects[302] == []
 
 
 def test_zar_chkzar_returns_home_after_legacy_counter_limit():

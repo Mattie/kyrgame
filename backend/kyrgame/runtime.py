@@ -270,6 +270,9 @@ async def bootstrap_app(app: FastAPI):
                 update={"objects": list(object_ids), "nlobjs": len(object_ids)}
             )
 
+    def _animation_room_ids() -> list[int]:
+        return sorted(int(room_id) for room_id in app.state.location_index)
+
     def _animation_object_name_lookup(object_id: int) -> str:
         return object_names_by_id.get(object_id, "object")
 
@@ -435,6 +438,7 @@ async def bootstrap_app(app: FastAPI):
         message_formatter=_animation_message_formatter,
         object_name_lookup=_animation_object_name_lookup,
         zar_location_setter=_set_zar_location,
+        room_ids_getter=_animation_room_ids,
         locations_getter=lambda: app.state.location_index,
         death_recovery_persister=_animation_death_recovery_persister,
         honor_mode_policy=app.state.honor_mode_policy,
@@ -448,6 +452,7 @@ async def bootstrap_app(app: FastAPI):
                 room_picker=_animation_room_picker,
                 room_objects_getter=_animation_get_room_objects,
                 room_objects_setter=_animation_set_room_objects,
+                room_ids_getter=_animation_room_ids,
                 object_name_lookup=_animation_object_name_lookup,
                 location_phrase_lookup=_animation_location_phrase_lookup,
                 message_formatter=_animation_message_formatter,

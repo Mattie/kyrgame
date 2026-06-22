@@ -21,7 +21,17 @@ from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session as OrmSession
 from starlette.websockets import WebSocketState
 
-from . import accounts, commands, constants, fixtures, models, modern_features, repositories, spellbook
+from . import (
+    accounts,
+    commands,
+    constants,
+    fixtures,
+    models,
+    modern_features,
+    moving_mobs,
+    repositories,
+    spellbook,
+)
 from .env import load_env_file
 from .gateway import RoomGateway
 from .honor_mode import HonorModePolicy
@@ -1308,13 +1318,6 @@ def _admin_delete_announcement(
     }
 
 
-def _find_room_containing_object(provider: FixtureProvider, object_id: int) -> int | None:
-    for location in sorted(provider.location_index.values(), key=lambda loc: loc.id):
-        if object_id in location.objects:
-            return location.id
-    return None
-
-
 def _ticks_until_next_routine(
     sequence: Sequence[str], routine_index: int, target_name: str
 ) -> int | None:
@@ -1360,20 +1363,24 @@ def _admin_mob_snapshot(provider: FixtureProvider):
     brownie_path = BrownieRoutine.path()
     next_brownie_room_id = BrownieRoutine.path_room(state.brownie_path_index)
 
-    dryad_object_room_id = _find_room_containing_object(provider, 45)
-    dryad_state_room_id = state.dryad_location
-    dryad_room_id = (
-        dryad_object_room_id if dryad_object_room_id is not None else dryad_state_room_id
+    singleton_audit = moving_mobs.build_moving_mob_audit(
+        {
+            int(room_id): list(location.objects)
+            for room_id, location in provider.location_index.items()
+        },
+        {
+            "dryad_location": state.dryad_location,
+            "zar_location": state.zar_location,
+            "brownie_location": state.brownie_location,
+            "brownie_path_index": state.brownie_path_index,
+            "elf_last_room": state.elf_last_room,
+        },
     )
-    # Normalize the primary dryad room value so downstream snapshot fields use
-    # the fallback-backed room id even when the object lookup is temporarily out
-    # of sync with animation state.
-    dryad_object_room_id = dryad_room_id
-    dragon_room_id = _find_room_containing_object(provider, 52)
-    dragon_state_room_id = state.zar_location
-    dragon_display_room_id = (
-        dragon_room_id if dragon_room_id is not None else dragon_state_room_id
-    )
+    singleton_mobs = {mob["id"]: mob for mob in singleton_audit["mobs"]}
+    dryad_audit = singleton_mobs["dryad"]
+    dragon_audit = singleton_mobs["dragon"]
+    dryad_room_id = dryad_audit["room_id"]
+    dragon_display_room_id = dragon_audit["room_id"]
 
     # Legacy mob state comes from KYRANIM.C globals and routines:
     # dloc/dryads lines 67,326-348; bpath/bpidx/bloc/browns lines 69-80,393-426;
@@ -1405,12 +1412,19 @@ def _admin_mob_snapshot(provider: FixtureProvider):
                 "id": "dryad",
                 "name": "Dryad",
                 "kind": "persistent_room_object",
-                "status": "present" if dryad_object_room_id is not None else "unknown",
+                "status": "present" if dryad_audit["copy_count"] else "unknown",
                 "object_id": 45,
-                "room_id": dryad_object_room_id,
+                "room_id": dryad_room_id,
                 "state_room_id": state.dryad_location,
-                "object_room_id": dryad_object_room_id,
-                "room": _admin_room_summary(provider, dryad_object_room_id),
+                "object_room_id": dryad_audit["object_room_id"],
+                "tracker_room_id": dryad_audit["tracker_room_id"],
+                "object_rooms": dryad_audit["object_rooms"],
+                "copy_count": dryad_audit["copy_count"],
+                "duplicate_room_counts": dryad_audit["duplicate_room_counts"],
+                "tracker_mismatch": dryad_audit["tracker_mismatch"],
+                "singleton_status": dryad_audit["singleton_status"],
+                "proposed_changes": dryad_audit["proposed_changes"],
+                "room": _admin_room_summary(provider, dryad_room_id),
                 "legacy_source": "legacy/KYRANIM.C:326-348",
             },
             {
@@ -1467,11 +1481,18 @@ def _admin_mob_snapshot(provider: FixtureProvider):
                 "id": "dragon",
                 "name": "Zar",
                 "kind": "persistent_room_object",
-                "status": "present" if dragon_room_id is not None else "state_only",
+                "status": "present" if dragon_audit["copy_count"] else "state_only",
                 "object_id": 52,
                 "room_id": dragon_display_room_id,
-                "state_room_id": dragon_state_room_id,
-                "object_room_id": dragon_room_id,
+                "state_room_id": state.zar_location,
+                "object_room_id": dragon_audit["object_room_id"],
+                "tracker_room_id": dragon_audit["tracker_room_id"],
+                "object_rooms": dragon_audit["object_rooms"],
+                "copy_count": dragon_audit["copy_count"],
+                "duplicate_room_counts": dragon_audit["duplicate_room_counts"],
+                "tracker_mismatch": dragon_audit["tracker_mismatch"],
+                "singleton_status": dragon_audit["singleton_status"],
+                "proposed_changes": dragon_audit["proposed_changes"],
                 "room": _admin_room_summary(provider, dragon_display_room_id),
                 "counter": state.zar_counter,
                 "attack_index": state.zar_attack_index % 4,
@@ -2515,6 +2536,14 @@ async def admin_drop_item_in_room(
         objects_by_name,
         field_name="object_ref",
     )
+    if object_id in moving_mobs.SINGLETON_MOVING_MOB_OBJECT_IDS:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Moving mob singleton objects must be managed with "
+                "python -m kyrgame.scripts.audit_moving_mobs cleanup."
+            ),
+        )
     obj = objects_by_id[object_id]
 
     room_objects = list(record.objects)
