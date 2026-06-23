@@ -66,6 +66,7 @@ describe('App CSS', () => {
     ;[
       '.site-nav-cta',
       '.site-primary-link',
+      '.site-actions .site-primary-link',
       '.send-button',
       '.session-form button',
       '.admin-controls button',
@@ -76,7 +77,7 @@ describe('App CSS', () => {
 
   it('uses the secondary beveled treatment on supporting controls', () => {
     ;[
-      '.site-actions a',
+      '.site-actions a:not(.site-primary-link)',
       '.terminal-action-row button',
       '.exits button',
       '.admin-mob-panel button',
