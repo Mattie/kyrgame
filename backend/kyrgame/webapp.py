@@ -3261,6 +3261,31 @@ async def _publish_scry_output(app: FastAPI, player_id: str | None, message: dic
     )
 
 
+async def _record_gameplay_telemetry(
+    app: FastAPI,
+    *,
+    userid: str,
+    event_type: str,
+    payload: dict,
+) -> None:
+    telemetry_sink = getattr(app.state, "telemetry_sink", None)
+    if telemetry_sink is None:
+        return
+    try:
+        await telemetry_sink.record(
+            userid=userid,
+            event_type=event_type,
+            payload=payload,
+        )
+    except Exception:
+        logger.warning(
+            "Gameplay telemetry write failed for user %s event %s",
+            userid,
+            event_type,
+            exc_info=True,
+        )
+
+
 async def _send_game_socket_json(
     app: FastAPI,
     socket: WebSocket,
@@ -3889,7 +3914,8 @@ def create_app() -> FastAPI:
                 message,
                 player_id=active_player_id,
             )
-            await provider.scope.app.state.telemetry_sink.record(
+            await _record_gameplay_telemetry(
+                provider.scope.app,
                 userid=active_player_id,
                 event_type="output",
                 payload=message,
@@ -3898,7 +3924,8 @@ def create_app() -> FastAPI:
         async def record_player_input(command_text: str) -> None:
             payload = {"command": command_text}
             active_player_id = current_player_id()
-            await provider.scope.app.state.telemetry_sink.record(
+            await _record_gameplay_telemetry(
+                provider.scope.app,
                 userid=active_player_id,
                 event_type="input",
                 payload=payload,

@@ -59,6 +59,14 @@ class _FixedAnimationRng:
         return self._randint_values.pop(0)
 
 
+class _FailingTelemetrySink:
+    async def record(self, *, userid, event_type, payload):  # noqa: ARG002
+        raise OSError("telemetry path unavailable")
+
+    async def record_system(self, *, event_type, payload):  # noqa: ARG002
+        raise OSError("telemetry path unavailable")
+
+
 def _seed_fountain_scroll_probe(
     app,
     *,
@@ -1431,6 +1439,61 @@ async def test_websocket_room_command_handles_unknown_verbs():
 
     server.should_exit = True
     await server_task
+
+
+@pytest.mark.anyio
+async def test_websocket_gameplay_continues_when_telemetry_sink_fails():
+    app = create_app()
+    app.state.telemetry_sink = _FailingTelemetrySink()
+    host = "127.0.0.1"
+    port = _get_open_port()
+
+    config = uvicorn.Config(app, host=host, port=port, log_level="error", lifespan="on")
+    server = uvicorn.Server(config)
+    server_task = asyncio.create_task(server.serve())
+    while not server.started:
+        await asyncio.sleep(0.05)
+
+    try:
+        async with httpx.AsyncClient(base_url=f"http://{host}:{port}") as client:
+            hero_session = await client.post(
+                "/auth/session", json={"player_id": "hero", "room_id": 7}
+            )
+            hero_token = hero_session.json()["session"]["token"]
+            room_id = hero_session.json()["session"]["room_id"]
+
+            uri = f"ws://{host}:{port}/ws/rooms/{room_id}?token={hero_token}"
+
+            async with websockets.connect(uri) as hero_ws:
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event") == "location_update",
+                )
+                await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("payload", {}).get("event")
+                    == "location_description",
+                )
+
+                await hero_ws.send(json.dumps({"type": "command", "command": "look"}))
+
+                ack = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("verb") == "look",
+                )
+                description = await _recv_matching(
+                    hero_ws,
+                    lambda msg: msg.get("type") == "command_response"
+                    and msg.get("payload", {}).get("event")
+                    == "location_description",
+                )
+
+                assert ack["room"] == room_id
+                assert description["room"] == room_id
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 @pytest.mark.anyio
