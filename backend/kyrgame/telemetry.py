@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+logger = logging.getLogger(__name__)
 
 SENSITIVE_PAYLOAD_KEYS = {
     "password",
@@ -50,7 +52,15 @@ class TelemetryEventSink:
             "event_type": event_type,
             "payload": _redacted_payload(payload),
         }
-        await asyncio.to_thread(self._write_event, userid, event)
+        try:
+            await asyncio.to_thread(self._write_event, userid, event)
+        except OSError:
+            logger.warning(
+                "Telemetry write failed for user %s event %s",
+                userid,
+                event_type,
+                exc_info=True,
+            )
 
     async def record_system(self, *, event_type: str, payload: dict[str, Any]) -> None:
         await self.record(userid="__system__", event_type=event_type, payload=payload)
