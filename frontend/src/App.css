@@ -2546,6 +2546,7 @@ p {
 .session-form button:disabled,
 .send-button:disabled,
 .admin-controls button:disabled,
+.terminal-action-row button:disabled,
 .admin-mob-panel button:disabled,
 .admin-drop-panel button:disabled {
   background: var(--button-3d-disabled-bg);
