@@ -14,15 +14,26 @@ const readRule = (selector: string) => {
   return match?.[1] ?? ''
 }
 
-const primaryButtonGradient = 'linear-gradient(125deg, #d788da, #8de1c6)'
+const readRulesContainingSelector = (selector: string) =>
+  [...appCss.matchAll(/(?:^|\n)([^{}]+)\s*{([^}]*)}/g)]
+    .filter((match) =>
+      match[1]
+        .split(',')
+        .map((candidate) => candidate.trim())
+        .includes(selector)
+    )
+    .map((match) => match[2])
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const expectButtonTreatment = (selector: string, kind: 'primary' | 'secondary') => {
+  const rules = readRulesContainingSelector(selector)
+  const hasTreatment = rules.some(
+    (rule) =>
+      rule.includes(`background: var(--button-3d-${kind}-bg);`) &&
+      rule.includes(`border: 1px solid var(--button-3d-${kind}-border);`) &&
+      rule.includes(`box-shadow: var(--button-3d-${kind}-shadow);`)
+  )
 
-const expectBackgroundDeclaration = (selector: string, background: string) => {
-  const rule = readRule(selector)
-  const escapedBackground = escapeRegExp(background)
-
-  expect(rule).toMatch(new RegExp(`(?:^|\\n)\\s*background:\\s*${escapedBackground};`))
+  expect(hasTreatment).toBe(true)
 }
 
 describe('App CSS', () => {
@@ -40,18 +51,49 @@ describe('App CSS', () => {
     expect(rule).toContain('font-size: 0.7rem;')
   })
 
-  it('uses the shared purple-to-mint gradient on interactive gradient buttons', () => {
-    expectBackgroundDeclaration('.send-button', primaryButtonGradient)
-    expectBackgroundDeclaration('.session-form button', primaryButtonGradient)
-    expectBackgroundDeclaration('.admin-controls button', primaryButtonGradient)
-    expectBackgroundDeclaration('.compass', primaryButtonGradient)
-    expectBackgroundDeclaration('.compass.active', primaryButtonGradient)
+  it('defines shared beveled button tokens', () => {
+    const rootRule = readRule(':root')
+
+    expect(rootRule).toContain('--button-3d-primary-bg:')
+    expect(rootRule).toContain('--button-3d-primary-border:')
+    expect(rootRule).toContain('--button-3d-primary-shadow:')
+    expect(rootRule).toContain('--button-3d-secondary-bg:')
+    expect(rootRule).toContain('--button-3d-secondary-border:')
+    expect(rootRule).toContain('--button-3d-secondary-shadow:')
   })
 
-  it('keeps the compass text icon readable against the shared gradient', () => {
+  it('uses the primary beveled treatment on major action buttons', () => {
+    ;[
+      '.site-nav-cta',
+      '.site-primary-link',
+      '.site-actions .site-primary-link',
+      '.send-button',
+      '.session-form button',
+      '.admin-controls button',
+      '.compass',
+      '.compass.active',
+    ].forEach((selector) => expectButtonTreatment(selector, 'primary'))
+  })
+
+  it('uses the secondary beveled treatment on supporting controls', () => {
+    ;[
+      '.site-actions a:not(.site-primary-link)',
+      '.terminal-action-row button',
+      '.exits button',
+      '.admin-mob-panel button',
+      '.admin-drop-panel button',
+      '.scry-button',
+      '.scry-banner button',
+      '.vfx-palette-actions button',
+      '.mobile-controls-toggle',
+      '.character-choice input:checked + span',
+    ].forEach((selector) => expectButtonTreatment(selector, 'secondary'))
+  })
+
+  it('keeps the compass text icon readable against the beveled treatment', () => {
     const rule = readRule('.compass')
 
-    expect(rule).toContain('color: #000;')
+    expect(rule).toContain('color: #fff7e8;')
   })
 
   it('reserves a legacy terminal-sized text viewport in the MUD console', () => {
