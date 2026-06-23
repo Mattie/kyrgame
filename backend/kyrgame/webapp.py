@@ -1379,8 +1379,16 @@ def _admin_mob_snapshot(provider: FixtureProvider):
     singleton_mobs = {mob["id"]: mob for mob in singleton_audit["mobs"]}
     dryad_audit = singleton_mobs["dryad"]
     dragon_audit = singleton_mobs["dragon"]
-    dryad_room_id = dryad_audit["room_id"]
-    dragon_display_room_id = dragon_audit["room_id"]
+    dryad_room_id = (
+        dryad_audit["object_room_id"]
+        if dryad_audit["object_room_id"] is not None
+        else dryad_audit["tracker_room_id"]
+    )
+    dragon_display_room_id = (
+        dragon_audit["object_room_id"]
+        if dragon_audit["object_room_id"] is not None
+        else dragon_audit["tracker_room_id"]
+    )
 
     # Legacy mob state comes from KYRANIM.C globals and routines:
     # dloc/dryads lines 67,326-348; bpath/bpidx/bloc/browns lines 69-80,393-426;

@@ -62,11 +62,16 @@ def _dragon_placement_objects(room_id: int, before: Sequence[int]) -> list[int]:
     # preserve unrelated live objects while normalizing the singleton dragon.
     dragon_count = before.count(ZAR_DRAGON_OBJECT_ID)
     existing = [object_id for object_id in before if object_id != ZAR_DRAGON_OBJECT_ID]
+    existing_without_dryad = [
+        object_id for object_id in existing if object_id != DRYAD_OBJECT_ID
+    ]
     objects = [ZAR_DRAGON_OBJECT_ID]
     special = ZAR_SPECIAL_ROOM_OBJECTS.get(room_id)
     if dragon_count != 1 and special is not None and special not in existing:
         objects.append(special)
-    objects.extend(existing)
+    if DRYAD_OBJECT_ID in existing:
+        objects.append(DRYAD_OBJECT_ID)
+    objects.extend(existing_without_dryad)
     return objects[: constants.MXLOBS]
 
 
@@ -78,6 +83,29 @@ def _canonical_after_objects(spec: SingletonMobSpec, room_id: int, before: Seque
     if len(without_mob) >= constants.MXLOBS:
         without_mob = without_mob[: constants.MXLOBS - 1]
     return [*without_mob, spec.object_id]
+
+
+def _apply_singleton_cleanup(
+    *, mob_id: str, room_id: int, tracker_room_id: int | None, objects: Sequence[int]
+) -> list[int]:
+    if mob_id == "dryad":
+        without_dryad = [
+            object_id for object_id in objects if object_id != DRYAD_OBJECT_ID
+        ]
+        if room_id != tracker_room_id:
+            return without_dryad
+        if len(without_dryad) >= constants.MXLOBS:
+            without_dryad = without_dryad[: constants.MXLOBS - 1]
+        return [*without_dryad, DRYAD_OBJECT_ID]
+
+    if mob_id == "dragon":
+        if room_id != tracker_room_id:
+            return [
+                object_id for object_id in objects if object_id != ZAR_DRAGON_OBJECT_ID
+            ]
+        return _dragon_placement_objects(room_id, objects)
+
+    return list(objects)
 
 
 def _proposed_changes(
@@ -259,14 +287,48 @@ def cleanup_confirmation_token(audit: Mapping[str, object]) -> str:
 
 
 def _cleanup_changes(audit: Mapping[str, object]) -> list[dict[str, object]]:
-    changes: list[dict[str, object]] = []
+    room_changes: dict[int, dict[str, object]] = {}
+    mob_changes_by_room: dict[int, list[tuple[str, int | None]]] = {}
+
     for mob in audit.get("mobs", []):
         if mob.get("id") not in {"dryad", "dragon"}:
             continue
+        mob_id = str(mob["id"])
+        tracker_room_id = _optional_int(mob.get("tracker_room_id"))
         for change in mob.get("proposed_changes", []):
             if change["before"] == change["after"]:
                 continue
-            changes.append({"mob_id": mob["id"], **change})
+            room_id = int(change["room_id"])
+            room_changes.setdefault(
+                room_id,
+                {"room_id": room_id, "before": list(change["before"])},
+            )
+            mob_changes_by_room.setdefault(room_id, []).append((mob_id, tracker_room_id))
+
+    changes: list[dict[str, object]] = []
+    for room_id in sorted(room_changes):
+        before = list(room_changes[room_id]["before"])
+        after = list(before)
+        mob_ids: list[str] = []
+        for mob_id, tracker_room_id in mob_changes_by_room[room_id]:
+            after = _apply_singleton_cleanup(
+                mob_id=mob_id,
+                room_id=room_id,
+                tracker_room_id=tracker_room_id,
+                objects=after,
+            )
+            mob_ids.append(mob_id)
+        if before == after:
+            continue
+        changes.append(
+            {
+                "mob_id": "+".join(mob_ids),
+                "mob_ids": mob_ids,
+                "room_id": room_id,
+                "before": before,
+                "after": after,
+            }
+        )
     return changes
 
 

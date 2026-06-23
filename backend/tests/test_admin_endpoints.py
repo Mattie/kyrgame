@@ -810,6 +810,53 @@ async def test_admin_mob_tracker_reports_legacy_animation_state(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_admin_mob_tracker_keeps_object_room_display_during_tracker_drift(monkeypatch):
+    monkeypatch.setenv(
+        ADMIN_MAP_ENV,
+        json.dumps({"content-token": {"roles": ["content_admin"]}}),
+    )
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+
+    async with app.router.lifespan_context(app):
+        app.state.tick_runtime.stop()
+        state = app.state.animation_tick_system.state
+        state.dryad_location = 18
+        state.zar_location = 250
+        for room_id, location in list(app.state.location_index.items()):
+            objects = [
+                object_id for object_id in location.objects if object_id not in {45, 52}
+            ]
+            if objects != location.objects:
+                app.state.location_index[room_id] = location.model_copy(
+                    update={"objects": objects, "nlobjs": len(objects)}
+                )
+        app.state.location_index[0] = app.state.location_index[0].model_copy(
+            update={"objects": [45], "nlobjs": 1}
+        )
+        app.state.location_index[251] = app.state.location_index[251].model_copy(
+            update={"objects": [52], "nlobjs": 1}
+        )
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/admin/mobs", headers=_auth("content-token"))
+
+        assert resp.status_code == 200
+        mobs = {mob["id"]: mob for mob in resp.json()["mobs"]}
+        assert mobs["dryad"]["room_id"] == 0
+        assert mobs["dryad"]["room"]["brief"] == app.state.location_index[0].brfdes
+        assert mobs["dryad"]["object_room_id"] == 0
+        assert mobs["dryad"]["tracker_room_id"] == 18
+        assert mobs["dryad"]["singleton_status"] == "tracker_mismatch"
+        assert mobs["dragon"]["room_id"] == 251
+        assert mobs["dragon"]["room"]["brief"] == app.state.location_index[251].brfdes
+        assert mobs["dragon"]["object_room_id"] == 251
+        assert mobs["dragon"]["tracker_room_id"] == 250
+        assert mobs["dragon"]["singleton_status"] == "tracker_mismatch"
+
+
+@pytest.mark.anyio
 async def test_admin_mob_tracker_keeps_last_gem_spawn_after_capacity_skip(monkeypatch):
     monkeypatch.setenv(
         ADMIN_MAP_ENV,

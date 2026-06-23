@@ -155,6 +155,78 @@ def test_cleanup_dry_run_and_confirmed_apply(tmp_path):
     assert session.get(models.Location, 302).objects == [47]
 
 
+def test_cleanup_apply_merges_overlapping_room_changes(tmp_path):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'overlap.db'}")
+    database.init_db_schema(engine)
+    session = database.create_session(engine)
+    _seed_location(session, 10, [45])
+    _seed_location(session, 20, [45, 1])
+    _seed_location(session, 30, [52])
+    _seed_runtime_state(session, dryad_location=10, zar_location=20)
+    session.commit()
+
+    dry_run = cleanup_moving_mobs(session, dry_run=True)
+    changes = {change["room_id"]: change for change in dry_run["changes"]}
+
+    assert changes[20]["mob_ids"] == ["dryad", "dragon"]
+    assert changes[20]["before"] == [45, 1]
+    assert changes[20]["after"] == [52, 1]
+    assert changes[30]["mob_ids"] == ["dragon"]
+    assert changes[30]["after"] == []
+
+    token = cleanup_confirmation_token(audit_moving_mobs(session))
+    cleanup_moving_mobs(session, apply=True, confirm=token)
+
+    assert session.get(models.Location, 10).objects == [45]
+    assert session.get(models.Location, 20).objects == [52, 1]
+    assert session.get(models.Location, 30).objects == []
+
+
+def test_cleanup_merge_preserves_dryad_when_zar_shares_full_tracker_room(tmp_path):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'shared-tracker.db'}")
+    database.init_db_schema(engine)
+    session = database.create_session(engine)
+    _seed_location(session, 20, [1, 2, 3, 4, 5, 6])
+    _seed_location(session, 30, [45, 52])
+    _seed_runtime_state(session, dryad_location=20, zar_location=20)
+    session.commit()
+
+    dry_run = cleanup_moving_mobs(session, dry_run=True)
+    changes = {change["room_id"]: change for change in dry_run["changes"]}
+
+    assert changes[20]["mob_ids"] == ["dryad", "dragon"]
+    assert changes[20]["after"] == [52, 45, 1, 2, 3, 4]
+    assert changes[30]["after"] == []
+
+    token = cleanup_confirmation_token(audit_moving_mobs(session))
+    cleanup_moving_mobs(session, apply=True, confirm=token)
+
+    assert session.get(models.Location, 20).objects == [52, 45, 1, 2, 3, 4]
+    assert session.get(models.Location, 30).objects == []
+
+
+def test_cleanup_merge_removes_stale_zar_from_dryad_tracker_room(tmp_path):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'reverse-overlap.db'}")
+    database.init_db_schema(engine)
+    session = database.create_session(engine)
+    _seed_location(session, 20, [52, 1, 2, 3, 4, 5])
+    _seed_location(session, 30, [52])
+    _seed_runtime_state(session, dryad_location=20, zar_location=30)
+    session.commit()
+
+    dry_run = cleanup_moving_mobs(session, dry_run=True)
+    changes = {change["room_id"]: change for change in dry_run["changes"]}
+
+    assert changes[20]["mob_ids"] == ["dryad", "dragon"]
+    assert changes[20]["after"] == [1, 2, 3, 4, 45]
+
+    token = cleanup_confirmation_token(audit_moving_mobs(session))
+    cleanup_moving_mobs(session, apply=True, confirm=token)
+
+    assert session.get(models.Location, 20).objects == [1, 2, 3, 4, 45]
+    assert session.get(models.Location, 30).objects == [52]
+
+
 def test_cleanup_does_not_remove_mobs_without_tracker_state(tmp_path):
     engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'missing-tracker.db'}")
     database.init_db_schema(engine)
