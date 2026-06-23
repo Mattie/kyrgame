@@ -110,6 +110,27 @@ def test_audit_caps_dryad_cleanup_to_room_capacity(tmp_path):
     ]
 
 
+def test_audit_preserves_non_mob_objects_in_zar_tracker_room(tmp_path):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'zar-objects.db'}")
+    database.init_db_schema(engine)
+    session = database.create_session(engine)
+    _seed_location(session, 18, [45])
+    _seed_location(session, 7, [52, 1])
+    _seed_runtime_state(session, dryad_location=18, zar_location=7)
+    session.commit()
+
+    audit = audit_moving_mobs(session)
+    dragon = {mob["id"]: mob for mob in audit["mobs"]}["dragon"]
+    dry_run = cleanup_moving_mobs(session, dry_run=True)
+
+    assert dragon["singleton_status"] == "ok"
+    assert dragon["proposed_changes"] == [
+        {"room_id": 7, "before": [52, 1], "after": [52, 1]}
+    ]
+    assert dry_run["changes"] == []
+    assert session.get(models.Location, 7).objects == [52, 1]
+
+
 def test_cleanup_dry_run_and_confirmed_apply(tmp_path):
     session = _session_with_mob_drift(tmp_path)
 

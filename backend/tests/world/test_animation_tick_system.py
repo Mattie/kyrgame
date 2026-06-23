@@ -314,6 +314,48 @@ def test_dryad_routine_reanchors_when_tracker_origin_lost():
     assert audit_events[0].payload["audit"]["source_room_id"] == 12
 
 
+def test_dryad_routine_removes_stale_copy_when_tracker_origin_valid():
+    room_objects = {0: [45], 12: [45, 9], 20: [1, 2]}
+
+    routine = DryadWanderRoutine(
+        room_picker=lambda low, high: 20,
+        room_objects_getter=lambda room_id: room_objects.get(room_id, []),
+        room_objects_setter=lambda room_id, objects: room_objects.__setitem__(room_id, list(objects)),
+        room_ids_getter=lambda: room_objects.keys(),
+        object_name_lookup=lambda object_id: f"object {object_id}",
+        location_phrase_lookup=lambda room_id: "nearby",
+        message_formatter=_message_formatter,
+    )
+    state = AnimationTickSystem(persistence=InMemoryAnimationTickPersistence()).state
+    state.dryad_location = 0
+
+    events = routine(state)
+
+    assert state.dryad_location == 20
+    assert room_objects[0] == []
+    assert room_objects[12] == [9]
+    assert room_objects[20] == [1, 2, 45]
+    stale_audit = next(
+        event.payload["audit"]
+        for event in events
+        if event.payload.get("audit", {}).get("reason") == "stale_copy"
+    )
+    assert stale_audit["tracker_room_id"] == 0
+    assert stale_audit["source_room_id"] == 0
+    assert stale_audit["stale_room_id"] == 12
+    assert stale_audit["stale_copy_count"] == 1
+    assert any(
+        event.room_id == 12
+        and event.payload == {
+            "type": "room_objects",
+            "event": "room_objects",
+            "location": 12,
+            "objects": [{"id": 9}],
+        }
+        for event in events
+    )
+
+
 def test_elf_routine_alternates_hints_and_gold_rewards():
     player = _build_player(plyrid="hero", altnam="Hero", gamloc=50, gold=5)
     persisted: list[int] = []

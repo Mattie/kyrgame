@@ -58,15 +58,16 @@ def _room_brief(room_id: int | None, room_briefs: Mapping[int, str] | None) -> s
 
 
 def _dragon_placement_objects(room_id: int, before: Sequence[int]) -> list[int]:
-    # Legacy pzinlc() clears the room, places Zar, restores the room's special
-    # fixture, and preserves a dryad if she was already there.
+    # Legacy pzinlc() reconstructs Zar rooms, but the cleanup tool is narrower:
+    # preserve unrelated live objects while normalizing the singleton dragon.
+    dragon_count = before.count(ZAR_DRAGON_OBJECT_ID)
+    existing = [object_id for object_id in before if object_id != ZAR_DRAGON_OBJECT_ID]
     objects = [ZAR_DRAGON_OBJECT_ID]
     special = ZAR_SPECIAL_ROOM_OBJECTS.get(room_id)
-    if special is not None:
+    if dragon_count != 1 and special is not None and special not in existing:
         objects.append(special)
-    if DRYAD_OBJECT_ID in before:
-        objects.append(DRYAD_OBJECT_ID)
-    return objects
+    objects.extend(existing)
+    return objects[: constants.MXLOBS]
 
 
 def _canonical_after_objects(spec: SingletonMobSpec, room_id: int, before: Sequence[int]) -> list[int]:

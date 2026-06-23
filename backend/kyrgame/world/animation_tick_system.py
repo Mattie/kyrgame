@@ -853,6 +853,7 @@ class DryadWanderRoutine:
                     },
                 )
             )
+        events.extend(self._remove_stale_dryads(source_room_id, destination, origin))
 
         if destination == source_room_id:
             normalized = [
@@ -938,6 +939,43 @@ class DryadWanderRoutine:
             if self._dryad_object_id in objects:
                 return room_id, objects
         return None, []
+
+    def _remove_stale_dryads(
+        self, source_room_id: int, destination: int, tracker_room_id: int
+    ) -> list[AnimationTickEvent]:
+        events: list[AnimationTickEvent] = []
+        for room_id in self._known_room_ids(source_room_id, destination, tracker_room_id):
+            if room_id == source_room_id:
+                continue
+            objects = list(self._room_objects_getter(room_id))
+            stale_count = objects.count(self._dryad_object_id)
+            if stale_count == 0:
+                continue
+            updated = [
+                object_id for object_id in objects if object_id != self._dryad_object_id
+            ]
+            self._room_objects_setter(room_id, updated)
+            events.append(
+                self._audit_event(
+                    tracker_room_id,
+                    {
+                        "reason": "stale_copy",
+                        "tracker_room_id": tracker_room_id,
+                        "source_room_id": source_room_id,
+                        "destination_room_id": destination,
+                        "stale_room_id": room_id,
+                        "stale_copy_count": stale_count,
+                    },
+                )
+            )
+            events.append(
+                AnimationTickEvent(
+                    flag="dryads",
+                    room_id=room_id,
+                    payload=_room_objects_payload(room_id, updated),
+                )
+            )
+        return events
 
     def _audit_event(self, room_id: int, payload: Mapping[str, object]) -> AnimationTickEvent:
         return AnimationTickEvent(
