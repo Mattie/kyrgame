@@ -60,6 +60,9 @@ async def test_bootstrap_initializes_tick_scheduler_and_shutdown_cancels_timers(
     assert hasattr(app.state, "tick_runtime")
     assert hasattr(app.state, "animation_tick_system")
     assert app.state.tick_scheduler.tick_seconds == 0.25
+    assert app.state.animation_room_ids == tuple(sorted(app.state.location_index))
+    assert app.state.animation_zar_routine._room_ids_getter() is app.state.animation_room_ids
+    assert app.state.animation_dryad_routine._room_ids_getter() is app.state.animation_room_ids
 
     spell_handle = app.state.tick_runtime.handles["spell_tick"]
     animation_handle = app.state.tick_runtime.handles["animation_tick"]

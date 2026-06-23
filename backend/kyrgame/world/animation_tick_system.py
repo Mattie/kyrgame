@@ -4,12 +4,17 @@ from dataclasses import dataclass, field
 import asyncio
 import logging
 import time
-from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Protocol, Sequence
+from typing import Any, Awaitable, Callable, Dict, Iterable, Mapping, MutableMapping, Protocol, Sequence
 
 from sqlalchemy.exc import SQLAlchemyError
 
 from .. import constants, models, modern_features
 from ..honor_mode import HonorModePolicy
+from ..moving_mobs import (
+    DRYAD_OBJECT_ID,
+    ZAR_DRAGON_OBJECT_ID as MOVING_MOB_ZAR_DRAGON_OBJECT_ID,
+    ZAR_SPECIAL_ROOM_OBJECTS as MOVING_MOB_ZAR_SPECIAL_ROOM_OBJECTS,
+)
 from ..player_lifecycle import (
     DeathRecoveryPlan,
     apply_death_recovery_plan,
@@ -180,6 +185,28 @@ def _room_objects_payload(room_id: int, object_ids: Sequence[int]) -> dict[str, 
     }
 
 
+def _known_room_ids_from_getter(
+    room_ids_getter: Callable[[], Iterable[int]] | None,
+    required_room_ids: Sequence[int],
+) -> list[int]:
+    required = {int(room_id) for room_id in required_room_ids}
+    if room_ids_getter is None:
+        return sorted(required)
+
+    room_ids = [int(room_id) for room_id in room_ids_getter()]
+    is_sorted_unique = all(
+        room_ids[index] < room_ids[index + 1]
+        for index in range(len(room_ids) - 1)
+    )
+    if not is_sorted_unique:
+        room_ids = sorted(set(room_ids))
+
+    missing_room_ids = required - set(room_ids)
+    if not missing_room_ids:
+        return room_ids
+    return sorted([*room_ids, *missing_room_ids])
+
+
 # Legacy reference: KYRANIM.C bpath/bpidx/bloc globals at lines 69-80.
 BROWNIE_PATH = (
     71, 144, 66, 29, 82, 96, 136, 31, 114, 134,
@@ -189,17 +216,9 @@ BROWNIE_PATH = (
 )
 
 ZAR_HOME_ROOM = 302
-ZAR_DRAGON_OBJECT_ID = 52
-ZAR_DRYAD_OBJECT_ID = 45
-ZAR_SPECIAL_ROOM_OBJECTS = {
-    0: 46,
-    7: 47,
-    9: 48,
-    42: 49,
-    101: 50,
-    186: 51,
-    295: 53,
-}
+ZAR_DRAGON_OBJECT_ID = MOVING_MOB_ZAR_DRAGON_OBJECT_ID
+ZAR_DRYAD_OBJECT_ID = DRYAD_OBJECT_ID
+ZAR_SPECIAL_ROOM_OBJECTS = dict(MOVING_MOB_ZAR_SPECIAL_ROOM_OBJECTS)
 ZAR_ATTACKS = ("bite", "breath", "claw", "lightning")
 
 
@@ -243,6 +262,7 @@ class ZarDragonRoutine:
         message_formatter: Callable[..., str],
         object_name_lookup: Callable[[int], str] | None = None,
         zar_location_setter: Callable[[int], None] | None = None,
+        room_ids_getter: Callable[[], Iterable[int]] | None = None,
         locations_getter: Callable[[], dict[int, models.LocationModel]] | None = None,
         death_recovery_persister: Callable[
             [models.PlayerModel, DeathRecoveryPlan], None
@@ -261,6 +281,7 @@ class ZarDragonRoutine:
         self._message_formatter = message_formatter
         self._object_name_lookup = object_name_lookup or (lambda object_id: str(object_id))
         self._zar_location_setter = zar_location_setter
+        self._room_ids_getter = room_ids_getter
         self._locations_getter = locations_getter
         self._death_recovery_persister = death_recovery_persister
         self._honor_mode_policy = honor_mode_policy or HonorModePolicy()
@@ -272,7 +293,15 @@ class ZarDragonRoutine:
         return ZAR_ATTACKS[attack_index % len(ZAR_ATTACKS)]
 
     def initialize(self, state: AnimationTickState) -> None:
-        if self.dragon_object_id not in self._room_objects_getter(state.zar_location):
+        self._remove_stale_dragons(state.zar_location)
+
+        current_objects = list(self._room_objects_getter(state.zar_location))
+        if self.dragon_object_id not in current_objects:
+            self._set_zar_room_objects(
+                state.zar_location,
+                self._placement_objects(state.zar_location),
+            )
+        elif current_objects.count(self.dragon_object_id) > 1:
             self._set_zar_room_objects(
                 state.zar_location,
                 self._placement_objects(state.zar_location),
@@ -346,8 +375,10 @@ class ZarDragonRoutine:
         objects = self._placement_objects(room_id)
         state.zar_location = room_id
         self._sync_zar_location(room_id)
+        stale_removal_events = self._remove_stale_dragons(room_id)
         self._set_zar_room_objects(room_id, objects)
         return [
+            *stale_removal_events,
             AnimationTickEvent(
                 flag="pzinlc",
                 room_id=room_id,
@@ -643,6 +674,35 @@ class ZarDragonRoutine:
         if self._zar_location_setter:
             self._zar_location_setter(room_id)
 
+    def _remove_stale_dragons(self, active_room_id: int) -> list[AnimationTickEvent]:
+        events: list[AnimationTickEvent] = []
+        for room_id in self._known_room_ids(active_room_id):
+            if room_id == active_room_id:
+                continue
+            objects = list(self._room_objects_getter(room_id))
+            if self.dragon_object_id not in objects:
+                continue
+            updated = [
+                object_id for object_id in objects if object_id != self.dragon_object_id
+            ]
+            self._set_zar_room_objects(
+                room_id,
+                updated,
+            )
+            events.append(
+                AnimationTickEvent(
+                    flag="rmvzar",
+                    room_id=room_id,
+                    payload=_room_objects_payload(room_id, updated),
+                )
+            )
+        return events
+
+    def _known_room_ids(self, *required_room_ids: int) -> list[int]:
+        return _known_room_ids_from_getter(
+            self._room_ids_getter, required_room_ids
+        )
+
 
 class GemSpawnRoutine:
     """Port KYRANIM.C `gemakr()` gem placement into runtime-owned world state.
@@ -763,6 +823,7 @@ class DryadWanderRoutine:
         room_picker: Callable[[int, int], int],
         room_objects_getter: Callable[[int], Sequence[int]],
         room_objects_setter: Callable[[int, Sequence[int]], None],
+        room_ids_getter: Callable[[], Iterable[int]] | None = None,
         object_name_lookup: Callable[[int], str],
         location_phrase_lookup: Callable[[int], str],
         message_formatter: Callable[..., str],
@@ -772,33 +833,115 @@ class DryadWanderRoutine:
         self._room_picker = room_picker
         self._room_objects_getter = room_objects_getter
         self._room_objects_setter = room_objects_setter
+        self._room_ids_getter = room_ids_getter
         self._object_name_lookup = object_name_lookup
         self._location_phrase_lookup = location_phrase_lookup
         self._message_formatter = message_formatter
         self._dryad_object_id = dryad_object_id
         self._max_room_objects = max_room_objects
 
+    def initialize(self, state: AnimationTickState) -> None:
+        tracker_room_id = state.dryad_location
+        room_ids = self._known_room_ids(tracker_room_id)
+        current_tracker_objects = list(self._room_objects_getter(tracker_room_id))
+        tracker_objects = [
+            object_id
+            for object_id in current_tracker_objects
+            if object_id != self._dryad_object_id
+        ]
+        if len(tracker_objects) >= self._max_room_objects:
+            tracker_objects = tracker_objects[: self._max_room_objects - 1]
+        normalized_tracker_objects = [*tracker_objects, self._dryad_object_id]
+        if current_tracker_objects != normalized_tracker_objects:
+            self._room_objects_setter(tracker_room_id, normalized_tracker_objects)
+
+        for room_id in room_ids:
+            if room_id == tracker_room_id:
+                continue
+            objects = list(self._room_objects_getter(room_id))
+            if self._dryad_object_id not in objects:
+                continue
+            self._room_objects_setter(
+                room_id,
+                [
+                    object_id
+                    for object_id in objects
+                    if object_id != self._dryad_object_id
+                ],
+            )
+
     def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
         destination = self._room_picker(12, 168)
         origin = state.dryad_location
-        if destination == origin:
-            return []
 
         events: list[AnimationTickEvent] = []
-        origin_objects = list(self._room_objects_getter(origin))
-        if self._dryad_object_id in origin_objects:
-            origin_objects.remove(self._dryad_object_id)
-            self._room_objects_setter(origin, origin_objects)
-            events.append(AnimationTickEvent(flag="dryads", room_id=origin, message_id="DMSG00"))
+        source_room_id, source_objects = self._find_source_room(origin, destination)
+        if source_room_id is None:
             events.append(
-                AnimationTickEvent(
-                    flag="dryads",
-                    room_id=origin,
-                    payload=_room_objects_payload(origin, origin_objects),
+                self._audit_event(
+                    origin,
+                    {
+                        "reason": "missing",
+                        "tracker_room_id": origin,
+                        "source_room_id": None,
+                        "destination_room_id": destination,
+                    },
                 )
             )
+            return events
 
-        destination_objects = list(self._room_objects_getter(destination))
+        source_count = source_objects.count(self._dryad_object_id)
+        if source_room_id != origin or source_count != 1:
+            events.append(
+                self._audit_event(
+                    origin,
+                    {
+                        "reason": "tracker_mismatch" if source_room_id != origin else "duplicate_source",
+                        "tracker_room_id": origin,
+                        "source_room_id": source_room_id,
+                        "destination_room_id": destination,
+                        "source_copy_count": source_count,
+                    },
+                )
+            )
+        if source_room_id != origin:
+            events.extend(self._remove_stale_dryads(source_room_id, destination, origin))
+
+        if destination == source_room_id:
+            normalized = [
+                object_id for object_id in source_objects if object_id != self._dryad_object_id
+            ]
+            normalized.append(self._dryad_object_id)
+            if normalized != source_objects:
+                self._room_objects_setter(source_room_id, normalized)
+                events.append(
+                    AnimationTickEvent(
+                        flag="dryads",
+                        room_id=source_room_id,
+                        payload=_room_objects_payload(source_room_id, normalized),
+                    )
+                )
+            state.dryad_location = destination
+            return events
+
+        origin_objects = [
+            object_id for object_id in source_objects if object_id != self._dryad_object_id
+        ]
+        self._room_objects_setter(source_room_id, origin_objects)
+        events.append(AnimationTickEvent(flag="dryads", room_id=source_room_id, message_id="DMSG00"))
+        events.append(
+            AnimationTickEvent(
+                flag="dryads",
+                room_id=source_room_id,
+                payload=_room_objects_payload(source_room_id, origin_objects),
+            )
+        )
+
+        destination_objects = [
+            object_id
+            for object_id in self._room_objects_getter(destination)
+            if object_id != self._dryad_object_id
+        ]
         if len(destination_objects) >= self._max_room_objects:
             evicted_object_id = destination_objects[-1]
             destination_objects = destination_objects[:-1]
@@ -828,6 +971,76 @@ class DryadWanderRoutine:
             )
         )
         return events
+
+    def _known_room_ids(self, *required_room_ids: int) -> list[int]:
+        return _known_room_ids_from_getter(
+            self._room_ids_getter, required_room_ids
+        )
+
+    def _find_source_room(
+        self, origin: int, destination: int
+    ) -> tuple[int | None, list[int]]:
+        origin_objects = list(self._room_objects_getter(origin))
+        if self._dryad_object_id in origin_objects:
+            return origin, origin_objects
+
+        room_ids = self._known_room_ids(origin, destination)
+        for room_id in room_ids:
+            objects = list(self._room_objects_getter(room_id))
+            if self._dryad_object_id in objects:
+                return room_id, objects
+        return None, []
+
+    def _remove_stale_dryads(
+        self, source_room_id: int, destination: int, tracker_room_id: int
+    ) -> list[AnimationTickEvent]:
+        events: list[AnimationTickEvent] = []
+        for room_id in self._known_room_ids(source_room_id, destination, tracker_room_id):
+            if room_id == source_room_id:
+                continue
+            objects = list(self._room_objects_getter(room_id))
+            stale_count = objects.count(self._dryad_object_id)
+            if stale_count == 0:
+                continue
+            updated = [
+                object_id for object_id in objects if object_id != self._dryad_object_id
+            ]
+            self._room_objects_setter(room_id, updated)
+            events.append(
+                self._audit_event(
+                    tracker_room_id,
+                    {
+                        "reason": "stale_copy",
+                        "tracker_room_id": tracker_room_id,
+                        "source_room_id": source_room_id,
+                        "destination_room_id": destination,
+                        "stale_room_id": room_id,
+                        "stale_copy_count": stale_count,
+                    },
+                )
+            )
+            events.append(
+                AnimationTickEvent(
+                    flag="dryads",
+                    room_id=room_id,
+                    payload=_room_objects_payload(room_id, updated),
+                )
+            )
+        return events
+
+    def _audit_event(self, room_id: int, payload: Mapping[str, object]) -> AnimationTickEvent:
+        return AnimationTickEvent(
+            flag="dryads",
+            room_id=room_id,
+            payload={
+                "audit_only": True,
+                "audit": {
+                    "event_type": "animation.mob_singleton_drift",
+                    "mob_id": "dryad",
+                    **dict(payload),
+                },
+            },
+        )
 
 
 class ElfEncounterRoutine:

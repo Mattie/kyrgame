@@ -232,6 +232,9 @@ async def bootstrap_app(app: FastAPI):
         else:
             # No database records yet, use fixtures
             app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
+    app.state.animation_room_ids = tuple(
+        sorted(int(room_id) for room_id in app.state.location_index)
+    )
 
     objects_by_id = {obj.id: obj for obj in app.state.fixture_cache["objects"]}
     object_names_by_id = {obj.id: obj.name for obj in app.state.fixture_cache["objects"]}
@@ -269,6 +272,9 @@ async def bootstrap_app(app: FastAPI):
             app.state.location_index[room_id] = location.model_copy(
                 update={"objects": list(object_ids), "nlobjs": len(object_ids)}
             )
+
+    def _animation_room_ids() -> tuple[int, ...]:
+        return app.state.animation_room_ids
 
     def _animation_object_name_lookup(object_id: int) -> str:
         return object_names_by_id.get(object_id, "object")
@@ -435,23 +441,27 @@ async def bootstrap_app(app: FastAPI):
         message_formatter=_animation_message_formatter,
         object_name_lookup=_animation_object_name_lookup,
         zar_location_setter=_set_zar_location,
+        room_ids_getter=_animation_room_ids,
         locations_getter=lambda: app.state.location_index,
         death_recovery_persister=_animation_death_recovery_persister,
         honor_mode_policy=app.state.honor_mode_policy,
     )
     app.state.animation_zar_routine = zar_routine
+    dryad_routine = DryadWanderRoutine(
+        room_picker=_animation_room_picker,
+        room_objects_getter=_animation_get_room_objects,
+        room_objects_setter=_animation_set_room_objects,
+        room_ids_getter=_animation_room_ids,
+        object_name_lookup=_animation_object_name_lookup,
+        location_phrase_lookup=_animation_location_phrase_lookup,
+        message_formatter=_animation_message_formatter,
+    )
+    app.state.animation_dryad_routine = dryad_routine
     app.state.animation_tick_persistence = SQLAlchemyAnimationTickPersistence(session_factory)
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence,
         routine_handlers={
-            "dryads": DryadWanderRoutine(
-                room_picker=_animation_room_picker,
-                room_objects_getter=_animation_get_room_objects,
-                room_objects_setter=_animation_set_room_objects,
-                object_name_lookup=_animation_object_name_lookup,
-                location_phrase_lookup=_animation_location_phrase_lookup,
-                message_formatter=_animation_message_formatter,
-            ),
+            "dryads": dryad_routine,
             "elves": elf_routine,
             "gemakr": GemSpawnRoutine(
                 room_picker=_animation_room_picker,
@@ -497,6 +507,7 @@ async def bootstrap_app(app: FastAPI):
         honor_mode_policy=app.state.honor_mode_policy,
         defer_modern_death_recovery=True,
     )
+    dryad_routine.initialize(app.state.animation_tick_system.state)
     zar_routine.initialize(app.state.animation_tick_system.state)
     app.state.animation_tick_system.persist_state()
 
