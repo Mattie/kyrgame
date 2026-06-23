@@ -232,6 +232,9 @@ async def bootstrap_app(app: FastAPI):
         else:
             # No database records yet, use fixtures
             app.state.location_index = {loc.id: loc for loc in app.state.fixture_cache["locations"]}
+    app.state.animation_room_ids = tuple(
+        sorted(int(room_id) for room_id in app.state.location_index)
+    )
 
     objects_by_id = {obj.id: obj for obj in app.state.fixture_cache["objects"]}
     object_names_by_id = {obj.id: obj.name for obj in app.state.fixture_cache["objects"]}
@@ -270,8 +273,8 @@ async def bootstrap_app(app: FastAPI):
                 update={"objects": list(object_ids), "nlobjs": len(object_ids)}
             )
 
-    def _animation_room_ids() -> list[int]:
-        return sorted(int(room_id) for room_id in app.state.location_index)
+    def _animation_room_ids() -> tuple[int, ...]:
+        return app.state.animation_room_ids
 
     def _animation_object_name_lookup(object_id: int) -> str:
         return object_names_by_id.get(object_id, "object")

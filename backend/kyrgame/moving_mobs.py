@@ -310,7 +310,18 @@ def _cleanup_changes(audit: Mapping[str, object]) -> list[dict[str, object]]:
         before = list(room_changes[room_id]["before"])
         after = list(before)
         mob_ids: list[str] = []
-        for mob_id, tracker_room_id in mob_changes_by_room[room_id]:
+
+        def operation_order(operation: tuple[str, int | None]) -> tuple[int, int]:
+            mob_id, tracker_room_id = operation
+            # Remove off-tracker singleton copies before adding tracked mobs; that
+            # lets capacity checks see slots freed by stale Zar and dryad objects.
+            placement_phase = int(room_id == tracker_room_id)
+            mob_order = 0 if mob_id == "dryad" else 1
+            return (placement_phase, mob_order)
+
+        for mob_id, tracker_room_id in sorted(
+            mob_changes_by_room[room_id], key=operation_order
+        ):
             after = _apply_singleton_cleanup(
                 mob_id=mob_id,
                 room_id=room_id,

@@ -217,13 +217,13 @@ def test_cleanup_merge_removes_stale_zar_from_dryad_tracker_room(tmp_path):
     dry_run = cleanup_moving_mobs(session, dry_run=True)
     changes = {change["room_id"]: change for change in dry_run["changes"]}
 
-    assert changes[20]["mob_ids"] == ["dryad", "dragon"]
-    assert changes[20]["after"] == [1, 2, 3, 4, 45]
+    assert changes[20]["mob_ids"] == ["dragon", "dryad"]
+    assert changes[20]["after"] == [1, 2, 3, 4, 5, 45]
 
     token = cleanup_confirmation_token(audit_moving_mobs(session))
     cleanup_moving_mobs(session, apply=True, confirm=token)
 
-    assert session.get(models.Location, 20).objects == [1, 2, 3, 4, 45]
+    assert session.get(models.Location, 20).objects == [1, 2, 3, 4, 5, 45]
     assert session.get(models.Location, 30).objects == [52]
 
 

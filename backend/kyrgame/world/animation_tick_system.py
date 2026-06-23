@@ -185,6 +185,28 @@ def _room_objects_payload(room_id: int, object_ids: Sequence[int]) -> dict[str, 
     }
 
 
+def _known_room_ids_from_getter(
+    room_ids_getter: Callable[[], Iterable[int]] | None,
+    required_room_ids: Sequence[int],
+) -> list[int]:
+    required = {int(room_id) for room_id in required_room_ids}
+    if room_ids_getter is None:
+        return sorted(required)
+
+    room_ids = [int(room_id) for room_id in room_ids_getter()]
+    is_sorted_unique = all(
+        room_ids[index] < room_ids[index + 1]
+        for index in range(len(room_ids) - 1)
+    )
+    if not is_sorted_unique:
+        room_ids = sorted(set(room_ids))
+
+    missing_room_ids = required - set(room_ids)
+    if not missing_room_ids:
+        return room_ids
+    return sorted([*room_ids, *missing_room_ids])
+
+
 # Legacy reference: KYRANIM.C bpath/bpidx/bloc globals at lines 69-80.
 BROWNIE_PATH = (
     71, 144, 66, 29, 82, 96, 136, 31, 114, 134,
@@ -677,10 +699,9 @@ class ZarDragonRoutine:
         return events
 
     def _known_room_ids(self, *required_room_ids: int) -> list[int]:
-        room_ids = {int(room_id) for room_id in required_room_ids}
-        if self._room_ids_getter is not None:
-            room_ids.update(int(room_id) for room_id in self._room_ids_getter())
-        return sorted(room_ids)
+        return _known_room_ids_from_getter(
+            self._room_ids_getter, required_room_ids
+        )
 
 
 class GemSpawnRoutine:
@@ -921,10 +942,9 @@ class DryadWanderRoutine:
         return events
 
     def _known_room_ids(self, *required_room_ids: int) -> list[int]:
-        room_ids = {int(room_id) for room_id in required_room_ids}
-        if self._room_ids_getter is not None:
-            room_ids.update(int(room_id) for room_id in self._room_ids_getter())
-        return sorted(room_ids)
+        return _known_room_ids_from_getter(
+            self._room_ids_getter, required_room_ids
+        )
 
     def _find_source_room(
         self, origin: int, destination: int
