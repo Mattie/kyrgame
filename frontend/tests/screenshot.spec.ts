@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test';
 
 test('capture public site and MudConsole screenshots', async ({ page }) => {
-  const playerId = 'hero';
+  const suffix = Date.now().toString(36).replace(/[^a-z]/g, '').padEnd(5, 'a').slice(-5);
+  const playerId = `zt${suffix}`;
+  const password = 'ztstyle-pass';
 
   await page.goto('/');
   await page.evaluate(() => localStorage.clear());
-  await expect(page.getByRole('heading', { name: 'Kyrandia' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /start playing/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Legends pass and time goes by/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /begin your journey/i })).toBeVisible();
   await page.screenshot({
     path: 'screenshots/landing-page.png',
     fullPage: true,
@@ -21,10 +23,16 @@ test('capture public site and MudConsole screenshots', async ({ page }) => {
 
   await page.goto('/enter');
   await page.getByLabel('Player ID').fill(playerId);
-  await page.getByRole('button', { name: /start session/i }).click();
+  await page.getByLabel('Password').fill(password);
+  const entryAction = page.getByRole('button', { name: /create character|claim player-id|login as/i });
+  await expect(entryAction).toBeEnabled();
+  await entryAction.click();
 
   await expect(page).toHaveURL(/\/play$/);
-  await expect(page.locator('.connection-pill.connected')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.connection-pill')).toBeVisible({ timeout: 10000 });
+  if (await page.locator('.connection-pill.idle').isVisible()) {
+    await page.getByRole('button', { name: /^enter$/i }).click();
+  }
   await expect(page.locator('.crt')).not.toBeEmpty({ timeout: 10000 });
   await expect(page.locator('.hud-panel')).toHaveCount(0);
   await expect(page.getByTestId('game-panel-fire-border')).toBeVisible();
