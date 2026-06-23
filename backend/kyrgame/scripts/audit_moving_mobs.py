@@ -49,11 +49,12 @@ def _session_from_args(args: argparse.Namespace):
 def run_audit(args: argparse.Namespace) -> int:
     with _session_from_args(args) as session:
         audit = audit_moving_mobs(session)
+    token = cleanup_confirmation_token(audit)
     if args.format == "json":
-        _print_json(audit)
+        _print_json({**audit, "confirmation_token": token})
     else:
         _print_audit_table(audit)
-        print(f"\nconfirmation_token: {cleanup_confirmation_token(audit)}")
+        print(f"\nconfirmation_token: {token}")
     return 0
 
 

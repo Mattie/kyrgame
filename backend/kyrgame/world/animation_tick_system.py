@@ -840,6 +840,36 @@ class DryadWanderRoutine:
         self._dryad_object_id = dryad_object_id
         self._max_room_objects = max_room_objects
 
+    def initialize(self, state: AnimationTickState) -> None:
+        tracker_room_id = state.dryad_location
+        room_ids = self._known_room_ids(tracker_room_id)
+        current_tracker_objects = list(self._room_objects_getter(tracker_room_id))
+        tracker_objects = [
+            object_id
+            for object_id in current_tracker_objects
+            if object_id != self._dryad_object_id
+        ]
+        if len(tracker_objects) >= self._max_room_objects:
+            tracker_objects = tracker_objects[: self._max_room_objects - 1]
+        normalized_tracker_objects = [*tracker_objects, self._dryad_object_id]
+        if current_tracker_objects != normalized_tracker_objects:
+            self._room_objects_setter(tracker_room_id, normalized_tracker_objects)
+
+        for room_id in room_ids:
+            if room_id == tracker_room_id:
+                continue
+            objects = list(self._room_objects_getter(room_id))
+            if self._dryad_object_id not in objects:
+                continue
+            self._room_objects_setter(
+                room_id,
+                [
+                    object_id
+                    for object_id in objects
+                    if object_id != self._dryad_object_id
+                ],
+            )
+
     def __call__(self, state: AnimationTickState) -> list[AnimationTickEvent]:
         destination = self._room_picker(12, 168)
         origin = state.dryad_location
@@ -874,7 +904,8 @@ class DryadWanderRoutine:
                     },
                 )
             )
-        events.extend(self._remove_stale_dryads(source_room_id, destination, origin))
+        if source_room_id != origin:
+            events.extend(self._remove_stale_dryads(source_room_id, destination, origin))
 
         if destination == source_room_id:
             normalized = [
@@ -949,11 +980,11 @@ class DryadWanderRoutine:
     def _find_source_room(
         self, origin: int, destination: int
     ) -> tuple[int | None, list[int]]:
-        room_ids = self._known_room_ids(origin, destination)
         origin_objects = list(self._room_objects_getter(origin))
         if self._dryad_object_id in origin_objects:
             return origin, origin_objects
 
+        room_ids = self._known_room_ids(origin, destination)
         for room_id in room_ids:
             objects = list(self._room_objects_getter(room_id))
             if self._dryad_object_id in objects:

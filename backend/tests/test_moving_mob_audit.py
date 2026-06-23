@@ -131,6 +131,22 @@ def test_audit_preserves_non_mob_objects_in_zar_tracker_room(tmp_path):
     assert session.get(models.Location, 7).objects == [52, 1]
 
 
+def test_audit_preserves_existing_zar_special_fixture_before_truncating(tmp_path):
+    engine = database.get_engine(f"sqlite+pysqlite:///{tmp_path / 'zar-special.db'}")
+    database.init_db_schema(engine)
+    session = database.create_session(engine)
+    _seed_location(session, 18, [45])
+    _seed_location(session, 7, [1, 2, 3, 4, 5, 47])
+    _seed_runtime_state(session, dryad_location=18, zar_location=7)
+    session.commit()
+
+    dry_run = cleanup_moving_mobs(session, dry_run=True)
+    changes = {change["room_id"]: change for change in dry_run["changes"]}
+
+    assert changes[7]["before"] == [1, 2, 3, 4, 5, 47]
+    assert changes[7]["after"] == [52, 47, 1, 2, 3, 4]
+
+
 def test_cleanup_dry_run_and_confirmed_apply(tmp_path):
     session = _session_with_mob_drift(tmp_path)
 
@@ -304,6 +320,29 @@ def test_cli_cleanup_dry_run_flag_previews_without_writing(tmp_path, capsys):
     with database.create_session(engine) as verify_session:
         assert verify_session.get(models.Location, 5).objects == [45]
         assert verify_session.get(models.Location, 18).objects == [45, 45, 2]
+
+
+def test_cli_audit_json_includes_confirmation_token(tmp_path, capsys):
+    session = _session_with_mob_drift(tmp_path)
+    token = cleanup_confirmation_token(audit_moving_mobs(session))
+    session.close()
+    db_path = tmp_path / "mobs.db"
+
+    code = audit_cli.main(
+        [
+            "--database-url",
+            f"sqlite+pysqlite:///{db_path}",
+            "audit",
+            "--format",
+            "json",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    result = json.loads(captured.out)
+    assert code == 0
+    assert result["confirmation_token"] == token
+    assert {mob["id"] for mob in result["mobs"]} >= {"dryad", "dragon"}
 
 
 def test_root_wrapper_imports_backend_cli():

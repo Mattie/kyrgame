@@ -62,12 +62,18 @@ def _dragon_placement_objects(room_id: int, before: Sequence[int]) -> list[int]:
     # preserve unrelated live objects while normalizing the singleton dragon.
     dragon_count = before.count(ZAR_DRAGON_OBJECT_ID)
     existing = [object_id for object_id in before if object_id != ZAR_DRAGON_OBJECT_ID]
+    special = ZAR_SPECIAL_ROOM_OBJECTS.get(room_id)
+    special_present = special is not None and special in existing
+    existing_without_special = [
+        object_id for object_id in existing if object_id != special
+    ]
     existing_without_dryad = [
-        object_id for object_id in existing if object_id != DRYAD_OBJECT_ID
+        object_id
+        for object_id in existing_without_special
+        if object_id != DRYAD_OBJECT_ID
     ]
     objects = [ZAR_DRAGON_OBJECT_ID]
-    special = ZAR_SPECIAL_ROOM_OBJECTS.get(room_id)
-    if dragon_count != 1 and special is not None and special not in existing:
+    if special is not None and (special_present or dragon_count != 1):
         objects.append(special)
     if DRYAD_OBJECT_ID in existing:
         objects.append(DRYAD_OBJECT_ID)

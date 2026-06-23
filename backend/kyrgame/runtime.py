@@ -447,19 +447,21 @@ async def bootstrap_app(app: FastAPI):
         honor_mode_policy=app.state.honor_mode_policy,
     )
     app.state.animation_zar_routine = zar_routine
+    dryad_routine = DryadWanderRoutine(
+        room_picker=_animation_room_picker,
+        room_objects_getter=_animation_get_room_objects,
+        room_objects_setter=_animation_set_room_objects,
+        room_ids_getter=_animation_room_ids,
+        object_name_lookup=_animation_object_name_lookup,
+        location_phrase_lookup=_animation_location_phrase_lookup,
+        message_formatter=_animation_message_formatter,
+    )
+    app.state.animation_dryad_routine = dryad_routine
     app.state.animation_tick_persistence = SQLAlchemyAnimationTickPersistence(session_factory)
     app.state.animation_tick_system = AnimationTickSystem(
         persistence=app.state.animation_tick_persistence,
         routine_handlers={
-            "dryads": DryadWanderRoutine(
-                room_picker=_animation_room_picker,
-                room_objects_getter=_animation_get_room_objects,
-                room_objects_setter=_animation_set_room_objects,
-                room_ids_getter=_animation_room_ids,
-                object_name_lookup=_animation_object_name_lookup,
-                location_phrase_lookup=_animation_location_phrase_lookup,
-                message_formatter=_animation_message_formatter,
-            ),
+            "dryads": dryad_routine,
             "elves": elf_routine,
             "gemakr": GemSpawnRoutine(
                 room_picker=_animation_room_picker,
@@ -505,6 +507,7 @@ async def bootstrap_app(app: FastAPI):
         honor_mode_policy=app.state.honor_mode_policy,
         defer_modern_death_recovery=True,
     )
+    dryad_routine.initialize(app.state.animation_tick_system.state)
     zar_routine.initialize(app.state.animation_tick_system.state)
     app.state.animation_tick_system.persist_state()
 
