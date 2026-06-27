@@ -65,10 +65,10 @@ def test_cloudflared_ingress_routes_to_frontend_loopback_for_dashboard_parity():
 def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     text = (REPO_ROOT / "frontend" / "vite.config.ts").read_text(encoding="utf-8")
     source_proxy_pattern = (
-        "^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\\\\?|$)|^/admin/(?!($|\\\\?))"
+        "^/(auth|public|i18n|world|objects|spells|commands|players|content|ws)(/|\\\\?|$)|^/admin/(?!($|\\\\?))"
     )
     runtime_proxy_pattern = re.compile(
-        r"^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\?|$)|^/admin/(?!($|\?))"
+        r"^/(auth|public|i18n|world|objects|spells|commands|players|content|ws)(/|\?|$)|^/admin/(?!($|\?))"
     )
 
     assert "KYRGAME_BACKEND_PROXY_TARGET" in text
@@ -82,6 +82,8 @@ def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     assert runtime_proxy_pattern.match("/admin/fixtures")
     assert runtime_proxy_pattern.match("/admin/fixtures?reload=1")
     assert runtime_proxy_pattern.match("/world/locations")
+    assert not runtime_proxy_pattern.match("/locations")
+    assert not runtime_proxy_pattern.match("/sessions")
     assert runtime_proxy_pattern.match("/ws?token=game-session")
     assert runtime_proxy_pattern.match("/ws/admin/scry?player=Hero")
     assert not runtime_proxy_pattern.match("/assets/ws?token=game-session")
@@ -204,10 +206,16 @@ def test_self_hosting_guide_covers_operator_lifecycle():
         "KYRGAME_SEED_IF_EMPTY=1",
         "KYRGAME_TRUST_PROXY_HEADERS=1",
         "kyrgame.webapp:create_app --factory",
+        "/world*",
+        "Backend admin API subpaths under `/admin/`",
+        "Keep the frontend `/admin` page on the SPA fallback",
         "LICENSE.txt",
     ]:
         assert required in text
     assert "deploy/self-host" not in text
+    assert "/locations*" not in text
+    assert "/sessions*" not in text
+    assert "/admin/*" not in text
 
 
 def test_self_hosting_guide_does_not_ship_production_deploy_stack():

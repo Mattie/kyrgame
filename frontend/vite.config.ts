@@ -27,7 +27,7 @@ export default defineConfig({
       : undefined,
     ...(tunnelAllowedHosts.length > 0 ? { allowedHosts: tunnelAllowedHosts } : {}),
     proxy: {
-      '^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\\?|$)|^/admin/(?!($|\\?))': {
+      '^/(auth|public|i18n|world|objects|spells|commands|players|content|ws)(/|\\?|$)|^/admin/(?!($|\\?))': {
         target: backendProxyTarget,
         changeOrigin: true,
         ws: true,

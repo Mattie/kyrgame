@@ -76,5 +76,8 @@ describe('Vite config', () => {
     expect(isProxied('/admin/fixtures')).toBe(true)
     expect(isProxied('/admin/fixtures?reload=1')).toBe(true)
     expect(isProxied('/admin/players/Necro')).toBe(true)
+    expect(isProxied('/world/locations')).toBe(true)
+    expect(isProxied('/locations')).toBe(false)
+    expect(isProxied('/sessions')).toBe(false)
   })
 })

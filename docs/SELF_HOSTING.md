@@ -109,18 +109,21 @@ Route these HTTP paths to the backend:
 /public*
 /i18n*
 /world*
-/locations*
 /objects*
 /spells*
 /commands*
 /players*
-/sessions*
 /content*
-/admin/*
 /openapi.json
 /docs*
 /redoc*
 ```
+
+Backend admin API subpaths under `/admin/` should also route to the backend.
+That includes paths such as `/admin/fixtures`, `/admin/players*`,
+`/admin/rooms*`, `/admin/mobs*`, `/admin/content*`, and `/admin/i18n*`.
+Keep the frontend `/admin` page on the SPA fallback. This lets the browser load
+the admin console route directly.
 
 Route `/ws*` to the backend with WebSocket upgrade support.
 
