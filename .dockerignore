@@ -14,7 +14,6 @@ __pycache__
 .env
 .env.*
 !.env.docker.example
-!deploy/self-host/.env.selfhost.example
 backend/.env
 frontend/.env
 frontend/.env.local

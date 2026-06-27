@@ -381,7 +381,6 @@ frontend/.env.local
 # Local Docker and tunnel credentials
 /local-docker/
 /selfhost/
-/deploy/self-host/.env.selfhost.local
 /cloudflared/*.json
 /cloudflared/*.pem
 /cloudflared/cert.*

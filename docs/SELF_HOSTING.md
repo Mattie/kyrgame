@@ -1,48 +1,67 @@
 # Self Hosting
 
-This guide is for running a public Kyrgame server that is independent from the
-project's local development stack. The default shape is one public HTTPS host:
-the browser loads the built frontend from that host, and the same host proxies
-API and WebSocket traffic to the backend service.
+This guide is for running an independent public Kyrgame server. It documents
+the deployment contract: one public HTTPS origin, an internal backend, a private
+Postgres database, admin bootstrap, backups, restore, and upgrade habits.
+
+This repository does not ship a production reverse-proxy stack in this PR. Use
+Caddy, nginx, Traefik, a managed load balancer, or your platform's routing layer
+to implement the same-origin routing described below.
+
+Run commands from the repository root unless your deployment wrapper says
+otherwise.
+
+## Target Shape
+
+- Public origin: `https://<your-domain>`
+- Frontend: built static files served from the public origin.
+- Backend: FastAPI service reachable only from the proxy or private network.
+- Database: private Postgres with no public host port.
+- Browser traffic: same-origin HTTP and WebSocket paths through the public
+  origin, so the frontend can keep `VITE_API_BASE_URL` and `VITE_WS_URL` blank.
 
 ## Prerequisites
 
-- A server with Docker Compose v2.
-- A DNS name such as `game.example.test` pointed at the server.
-- Inbound TCP ports 80 and 443 open to the server.
-- A checkout of this repository.
-
-Run commands from the repository root.
+- A server or platform account that can run the backend, frontend static files,
+  and Postgres.
+- A DNS name such as `<your-domain>` pointed at the public edge.
+- TLS enabled for the public origin.
+- A private place for env files, secrets, admin allowlists, and backups.
 
 ## Private Configuration
 
-Copy the example env file and edit the copy:
-
-```bash
-cp deploy/self-host/.env.selfhost.example deploy/self-host/.env.selfhost.local
-```
-
-Set these values before first boot:
+Keep deployment secrets outside git. A typical production env needs:
 
 ```dotenv
-KYRGAME_PUBLIC_HOST=game.example.test
-KYRGAME_CORS_ORIGINS=https://game.example.test
-POSTGRES_PASSWORD=<long-random-password>
+DATABASE_URL=postgresql+psycopg://<postgres-user>:<url-encoded-password>@<postgres-host>:5432/<postgres-db>
+KYRGAME_CORS_ORIGINS=https://<your-domain>
+KYRGAME_ADMIN_ALLOWLIST_PATH=/config/admin-allowlist.yaml
 KYRGAME_RESET_ON_BOOT=0
 KYRGAME_SEED_IF_EMPTY=1
+KYRGAME_TRUST_PROXY_HEADERS=1
+KYRGAME_TELEMETRY_DIR=/data/telemetry
+VITE_API_BASE_URL=
+VITE_WS_URL=
 ```
 
-Do not commit `deploy/self-host/.env.selfhost.local`. Keep
-`KYRGAME_RESET_ON_BOOT=0` for public servers so ordinary restarts do not reload
-fixtures over live data.
+URL-encode the password portion of `DATABASE_URL` if it contains characters such
+as `@`, `:`, `/`, `?`, `#`, or `%`.
 
-Create the admin allowlist mounted by `deploy/self-host/compose.yaml`:
+Enable `KYRGAME_TRUST_PROXY_HEADERS=1` only when the reverse proxy overwrites or
+strips incoming `CF-Connecting-IP`, `X-Forwarded-For`, and `X-Real-IP` headers
+before requests reach the backend.
 
-```bash
-mkdir -p selfhost/config selfhost/backups
-```
+Keep `KYRGAME_RESET_ON_BOOT=0` for public servers so ordinary restarts do not
+reload fixtures over live data. Use `KYRGAME_SEED_IF_EMPTY=1` for first boot so
+an empty database gets the packaged fixtures.
 
-`selfhost/config/admin-allowlist.yaml`:
+## Admin Allowlist
+
+Create an allowlist in your private deployment config. For file-based hosting,
+`selfhost/config/admin-allowlist.yaml` is a reasonable local path to keep ignored
+by git and mount into the backend at `/config/admin-allowlist.yaml`.
+
+Example:
 
 ```yaml
 admins:
@@ -58,108 +77,142 @@ admins:
 
 The `sysop` key is the account userid that should receive admin grants.
 
+## Build And Runtime
+
+Build the frontend and serve the generated static files from your public web
+service:
+
+```bash
+cd frontend
+npm ci
+npm run build
+```
+
+Run the backend behind the private proxy network. The checked-in
+`backend/Dockerfile` is suitable for container deployments, or the equivalent
+process command is:
+
+```bash
+cd backend
+python -m uvicorn kyrgame.webapp:create_app --factory --host 0.0.0.0 --port 8000
+```
+
+## Reverse Proxy Contract
+
+The proxy should route API and WebSocket paths to the backend service and serve
+the frontend for everything else.
+
+Route these HTTP paths to the backend:
+
+```text
+/auth*
+/public*
+/i18n*
+/world*
+/locations*
+/objects*
+/spells*
+/commands*
+/players*
+/sessions*
+/content*
+/admin/*
+/openapi.json
+/docs*
+/redoc*
+```
+
+Route `/ws*` to the backend with WebSocket upgrade support.
+
+Serve all other paths from the built frontend with an SPA fallback to
+`index.html`.
+
+If the proxy forwards client IP headers, overwrite them at the edge before they
+reach the backend. Do not pass through client-supplied forwarding headers.
+
 ## Start And Verify
 
-Review the generated Compose config:
+Start the services with your deployment wrapper, Compose file, or platform
+dashboard. Then verify the public origin:
 
 ```bash
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml config
+curl -I https://<your-domain>/
+curl https://<your-domain>/world/locations
+curl https://<your-domain>/public/runtime-mode
 ```
 
-Start the stack:
-
-```bash
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml up -d --build
-```
-
-The public service is Caddy. It serves the built frontend, handles HTTPS for
-`KYRGAME_PUBLIC_HOST`, and proxies backend paths to the internal backend
-container. Postgres has no public host port in this stack.
-
-Smoke checks:
-
-```bash
-curl -I https://game.example.test/
-curl https://game.example.test/world/locations
-curl https://game.example.test/public/runtime-mode
-```
-
-Replace `game.example.test` with `KYRGAME_PUBLIC_HOST`.
+The frontend should return HTML, and the backend endpoints should return JSON.
 
 ## Admin Bootstrap
 
-1. Open the site and create the account named in
-   `selfhost/config/admin-allowlist.yaml`.
+1. Open the site and create the account named in the admin allowlist.
 2. Log in with `session_kind: "admin"` through the UI or an API client.
 3. Verify an admin endpoint:
 
 ```bash
 curl -H "Authorization: Bearer <admin-session-token>" \
-  https://game.example.test/admin/fixtures
+  https://<your-domain>/admin/fixtures
 ```
 
 Static emergency admin tokens are still supported through `KYRGAME_ADMIN_TOKEN`,
 but account allowlists are preferred for normal hosting.
 
-## Operations
+## Backups
 
-Follow logs:
-
-```bash
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml logs -f
-```
-
-Restart after config or code updates:
-
-```bash
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml up -d --build
-```
-
-Stop without removing data:
-
-```bash
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml down
-```
-
-Back up Postgres before upgrades, resets, and risky admin work. Use
+Back up Postgres before upgrades, resets, migrations, and risky admin work. Use
 `pg_dump -Fc` so the backup is a custom-format dump that can be inspected with
-`pg_restore -l` before restore:
+`pg_restore -l` before restore.
+
+Generic host-side pattern:
 
 ```bash
 stamp=$(date +%Y%m%d-%H%M%S)
 mkdir -p selfhost/backups
 final="selfhost/backups/kyrgame-$stamp.dump"
 tmp="$final.tmp"
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml exec -T db \
-  sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
-  > "$tmp"
+PGHOST=<postgres-host> PGUSER=<postgres-user> PGDATABASE=<postgres-db> \
+  pg_dump -Fc > "$tmp"
 mv "$tmp" "$final"
 pg_restore -l "$final" > "$final.list.txt"
 ```
 
-Restore into a fresh database only after stopping the app services and saving a
-new backup of the current database:
+Use your deployment's secret manager or private shell environment to provide the
+database password. Do not commit database credentials or backup dumps.
+
+## Restore
+
+Restore only after taking a fresh backup of the current database and stopping
+app traffic to the backend.
+
+Generic host-side pattern:
 
 ```bash
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml stop backend web
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml exec -T db \
-  sh -lc 'dropdb -U "$POSTGRES_USER" "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml exec -T db \
-  sh -lc 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
-  < selfhost/backups/kyrgame-YYYYMMDD-HHMMSS.dump
-docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml up -d
+pg_restore -l selfhost/backups/kyrgame-YYYYMMDD-HHMMSS.dump
+dropdb -h <postgres-host> -U <postgres-user> <postgres-db>
+createdb -h <postgres-host> -U <postgres-user> <postgres-db>
+pg_restore -h <postgres-host> -U <postgres-user> -d <postgres-db> \
+  --clean --if-exists selfhost/backups/kyrgame-YYYYMMDD-HHMMSS.dump
 ```
 
-Use `down -v` only when intentionally deleting the database and Caddy state.
-Create and verify a backup first.
+Restart the backend after restore and rerun the smoke checks.
 
 ## Updates
 
-1. Back up Postgres.
+1. Back up Postgres and verify `pg_restore -l` can read the dump.
 2. Pull or checkout the desired revision.
-3. Review config with `docker compose ... config`.
-4. Rebuild and start with `docker compose ... up -d --build`.
-5. Re-run the smoke checks.
+3. Rebuild the frontend and backend image or runtime environment.
+4. Apply any deployment config changes in your private env.
+5. Restart the services.
+6. Re-run the smoke checks.
+
+## Safe Resets
+
+Database resets are destructive. Only enable `KYRGAME_RESET_ON_BOOT=1` when an
+intentional fixture reload is the goal and a verified backup exists. Return it
+to `0` after the reset boot.
+
+Do not remove Postgres volumes, managed database instances, or backup folders
+unless the goal is permanent data deletion.
 
 ## License
 

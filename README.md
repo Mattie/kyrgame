@@ -51,12 +51,12 @@ Kyrandia began as a MajorBBS/Worldgroup text adventure where apprentices chased 
 - Use `docs/DEV_HOSTING.md` for local development, Docker Desktop testing,
   hot reload, local admin allowlists, and optional temporary tunnel checks.
 - Use `docs/SELF_HOSTING.md` to run an independent public server with a
-  production-leaning Compose stack, Caddy, private Postgres, backups, restore
-  steps, and admin bootstrap guidance.
+  same-origin domain, private Postgres, backups, restore steps, reverse-proxy
+  requirements, and admin bootstrap guidance.
 
-The root `compose.yaml` remains the development stack. The self-host stack lives
-under `deploy/self-host/` so public operators do not have to adapt the local
-Vite hot-reload setup.
+The root `compose.yaml` remains the development stack. Public operators should
+treat the self-hosting guide as the hosting contract and adapt it to their own
+Compose, reverse-proxy, or platform deployment.
 
 ## Legacy Backstory (for context)
 

@@ -120,8 +120,7 @@ def test_makefile_exposes_documented_ops_targets():
     assert "$(COMPOSE) --env-file $(ENV_FILE) --profile tunnel up -d cloudflared" in text
     assert "-m kyrgame.scripts.seed_db" in text
     assert "-m kyrgame.scripts.package_content" in text
-    assert "$$final.tmp" in text
-    assert "mv $$tmp $$final" in text
+    assert "selfhost-" not in text
 
 
 def test_backend_development_package_content_command_runs_from_repo_root():
@@ -157,7 +156,7 @@ def test_root_dockerignore_keeps_local_credentials_and_build_outputs_out_of_cont
         "selfhost",
     ]:
         assert pattern in text
-    assert "!deploy/self-host/.env.selfhost.example" in text
+    assert "deploy/self-host" not in text
 
 
 def test_readme_links_to_general_hosting_guides():
@@ -181,9 +180,6 @@ def test_public_hosting_docs_do_not_include_private_environment_references():
         REPO_ROOT / "docs" / "SELF_HOSTING.md",
         REPO_ROOT / "docs" / "DEV_HOSTING.md",
         REPO_ROOT / "docs" / "ALPHA_TESTING_RUNBOOK.md",
-        REPO_ROOT / "deploy" / "self-host" / ".env.selfhost.example",
-        REPO_ROOT / "deploy" / "self-host" / "compose.yaml",
-        REPO_ROOT / "deploy" / "self-host" / "Caddyfile",
     ]
 
     for path in docs_to_scan:
@@ -196,18 +192,32 @@ def test_self_hosting_guide_covers_operator_lifecycle():
     text = (REPO_ROOT / "docs" / "SELF_HOSTING.md").read_text(encoding="utf-8")
 
     for required in [
-        "deploy/self-host/compose.yaml",
-        "KYRGAME_PUBLIC_HOST",
+        "This repository does not ship a production reverse-proxy stack",
+        "Caddy, nginx, Traefik",
+        "same-origin",
+        "private Postgres",
+        "<your-domain>",
         "selfhost/config/admin-allowlist.yaml",
         "pg_dump -Fc",
         "pg_restore -l",
-        'tmp="$final.tmp"',
-        "sh -lc 'pg_restore -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" --clean --if-exists'",
         "KYRGAME_RESET_ON_BOOT=0",
-        "docker compose --env-file deploy/self-host/.env.selfhost.local",
+        "KYRGAME_SEED_IF_EMPTY=1",
+        "KYRGAME_TRUST_PROXY_HEADERS=1",
+        "kyrgame.webapp:create_app --factory",
         "LICENSE.txt",
     ]:
         assert required in text
+    assert "deploy/self-host" not in text
+
+
+def test_self_hosting_guide_does_not_ship_production_deploy_stack():
+    for path in [
+        REPO_ROOT / "deploy" / "self-host" / ".env.selfhost.example",
+        REPO_ROOT / "deploy" / "self-host" / "Caddyfile",
+        REPO_ROOT / "deploy" / "self-host" / "compose.yaml",
+        REPO_ROOT / "deploy" / "self-host" / "web.Dockerfile",
+    ]:
+        assert not path.exists(), f"{path.relative_to(REPO_ROOT)} should stay out of the docs-only self-host guide"
 
 
 def test_dev_hosting_guide_covers_local_stack_without_private_hostnames():
@@ -224,61 +234,3 @@ def test_dev_hosting_guide_covers_local_stack_without_private_hostnames():
         "127.0.0.1:8000",
     ]:
         assert required in text
-
-
-def test_self_host_compose_keeps_database_private_and_serves_public_web():
-    stack = yaml.safe_load(
-        (REPO_ROOT / "deploy" / "self-host" / "compose.yaml").read_text(encoding="utf-8")
-    )
-    services = stack["services"]
-
-    assert set(services) == {"backend", "db", "web"}
-    assert "ports" not in services["db"]
-    assert "ports" not in services["backend"]
-    assert services["web"]["ports"] == ["${HTTP_PORT:-80}:80", "${HTTPS_PORT:-443}:443"]
-    assert services["web"]["build"] == {
-        "context": "../..",
-        "dockerfile": "deploy/self-host/web.Dockerfile",
-    }
-    assert services["backend"]["build"] == {
-        "context": "../..",
-        "dockerfile": "backend/Dockerfile",
-    }
-    assert services["backend"]["environment"]["KYRGAME_TRUST_PROXY_HEADERS"] == (
-        "${KYRGAME_TRUST_PROXY_HEADERS:-1}"
-    )
-    assert services["backend"]["environment"]["KYRGAME_RESET_ON_BOOT"] == (
-        "${KYRGAME_RESET_ON_BOOT:-0}"
-    )
-
-
-def test_self_host_caddyfile_proxies_backend_paths_and_spa_fallback():
-    text = (REPO_ROOT / "deploy" / "self-host" / "Caddyfile").read_text(encoding="utf-8")
-
-    assert "{$KYRGAME_PUBLIC_HOST}" in text
-    assert "backend:8000" in text
-    assert "handle @backend" in text
-    assert "handle {" in text
-    assert "try_files {path} /index.html" in text
-    for route in [
-        "auth",
-        "public",
-        "i18n",
-        "world",
-        "locations",
-        "objects",
-        "spells",
-        "commands",
-        "players",
-        "sessions",
-        "content",
-        "ws",
-        "docs",
-        "redoc",
-    ]:
-        assert f"/{route}*" in text
-    assert "/openapi.json" in text
-    assert "/admin/*" in text
-    assert "header_up X-Forwarded-For {remote_host}" in text
-    assert "header_up X-Real-IP {remote_host}" in text
-    assert "header_up CF-Connecting-IP {remote_host}" in text
