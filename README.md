@@ -46,59 +46,17 @@ Kyrandia began as a MajorBBS/Worldgroup text adventure where apprentices chased 
 6. **Consult or build the legacy module**
    - The C sources live in `legacy/`. To build the Borland target, run `cd legacy && make -f ELWKYR`. Visual Studio users can open `legacy/elwkyr.vcxproj`.
 
-## Docker Development Stack
+## Hosting
 
-The root Compose stack runs PostgreSQL, the FastAPI backend, and the Vite frontend with hot reload:
+- Use `docs/DEV_HOSTING.md` for local development, Docker Desktop testing,
+  hot reload, local admin allowlists, and optional temporary tunnel checks.
+- Use `docs/SELF_HOSTING.md` to run an independent public server with a
+  same-origin domain, private Postgres, backups, restore steps, reverse-proxy
+  requirements, and admin bootstrap guidance.
 
-```bash
-docker compose --env-file .env.docker.example config
-make ENV_FILE=.env.docker.example up
-```
-
-Useful wrappers:
-
-```bash
-make ENV_FILE=.env.docker.example test
-make ENV_FILE=.env.docker.example seed
-make ENV_FILE=.env.docker.example package-content
-make ENV_FILE=.env.docker.example tunnel-config
-make ENV_FILE=.env.docker.local tunnel-up
-make ENV_FILE=.env.docker.local tunnel-logs
-```
-
-Admin account grants are loaded from `KYRGAME_ADMIN_ALLOWLIST_PATH`, mounted at `/config/admin-allowlist.yaml` in the Compose backend. A local allowlist uses this shape:
-
-```yaml
-admins:
-  sysop:
-    roles:
-      - player_admin
-      - content_admin
-      - message_admin
-    flags:
-      - allow_delete_players
-      - allow_player_rename
-```
-
-The optional Cloudflare tunnel profile reads `CLOUDFLARE_TUNNEL_TOKEN` from the selected env file. For local tunnel runs, copy `.env.docker.example` to `.env.docker.local`, add the tunnel token, set `KYRGAME_ALLOW_CLOUDFLARE_TUNNEL=1`, and start the connector with `make ENV_FILE=.env.docker.local tunnel-up`. The Cloudflare dashboard service can point to `http://localhost:5173` or `http://127.0.0.1:5173`; the tunnel container shares the frontend container network, and Vite proxies API and WebSocket paths to `KYRGAME_BACKEND_PROXY_TARGET`.
-
-For the long-running local alpha stack, use `docs/ALPHA_TESTING_RUNBOOK.md`.
-
-## Backend Bootstrap Seeding Controls
-
-The API runtime supports two environment flags that control fixture loading at startup:
-
-- `KYRGAME_RESET_ON_BOOT` (default: `0`)
-  - `0`: do not force fixture reset at startup.
-  - `1`: **destructive reset + reload**. The server re-imports fixture content into the database on boot using `loader.load_all_from_fixtures(...)`, overwriting persisted content with fixture state.
-- `KYRGAME_SEED_IF_EMPTY` (default: `1`)
-  - Only evaluated when `KYRGAME_RESET_ON_BOOT=0`.
-  - `1`: if the database has no locations yet, seed from fixtures once at startup.
-  - `0`: skip startup seeding, even for an empty database.
-
-### Public demo / production recommendation
-
-For public demos or production-like environments, keep `KYRGAME_RESET_ON_BOOT=0` so restarts do not wipe runtime data. Prefer explicit one-off seed scripts and schema migrations for controlled data updates.
+The root `compose.yaml` remains the development stack. Public operators should
+treat the self-hosting guide as the hosting contract and adapt it to their own
+Compose, reverse-proxy, or platform deployment.
 
 ## Legacy Backstory (for context)
 

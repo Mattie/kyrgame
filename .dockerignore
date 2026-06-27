@@ -29,4 +29,5 @@ frontend/coverage
 frontend/.local_references
 
 local-docker
+selfhost
 legacy/Dist/offline-content.json

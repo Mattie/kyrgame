@@ -65,10 +65,10 @@ def test_cloudflared_ingress_routes_to_frontend_loopback_for_dashboard_parity():
 def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     text = (REPO_ROOT / "frontend" / "vite.config.ts").read_text(encoding="utf-8")
     source_proxy_pattern = (
-        "^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\\\\?|$)|^/admin/(?!($|\\\\?))"
+        "^/(auth|public|i18n|world|objects|spells|commands|players|content|ws)(/|\\\\?|$)|^/admin/(?!($|\\\\?))"
     )
     runtime_proxy_pattern = re.compile(
-        r"^/(auth|public|i18n|world|locations|objects|spells|commands|players|sessions|ws)(/|\?|$)|^/admin/(?!($|\?))"
+        r"^/(auth|public|i18n|world|objects|spells|commands|players|content|ws)(/|\?|$)|^/admin/(?!($|\?))"
     )
 
     assert "KYRGAME_BACKEND_PROXY_TARGET" in text
@@ -82,6 +82,8 @@ def test_vite_tunnel_mode_proxies_backend_http_and_websocket_paths():
     assert runtime_proxy_pattern.match("/admin/fixtures")
     assert runtime_proxy_pattern.match("/admin/fixtures?reload=1")
     assert runtime_proxy_pattern.match("/world/locations")
+    assert not runtime_proxy_pattern.match("/locations")
+    assert not runtime_proxy_pattern.match("/sessions")
     assert runtime_proxy_pattern.match("/ws?token=game-session")
     assert runtime_proxy_pattern.match("/ws/admin/scry?player=Hero")
     assert not runtime_proxy_pattern.match("/assets/ws?token=game-session")
@@ -120,6 +122,7 @@ def test_makefile_exposes_documented_ops_targets():
     assert "$(COMPOSE) --env-file $(ENV_FILE) --profile tunnel up -d cloudflared" in text
     assert "-m kyrgame.scripts.seed_db" in text
     assert "-m kyrgame.scripts.package_content" in text
+    assert "selfhost-" not in text
 
 
 def test_backend_development_package_content_command_runs_from_repo_root():
@@ -136,11 +139,10 @@ def test_alpha_runbook_uses_portable_paths_and_distinct_tunnel_steps():
     text = (REPO_ROOT / "docs" / "ALPHA_TESTING_RUNBOOK.md").read_text(encoding="utf-8")
 
     assert "C:\\Users\\matti" not in text
+    assert "willow.eventscripts.com" not in text
+    assert "kyrgame-local" not in text
     assert ".agents\\skills\\local-dev-servers" not in text
-    assert "Set-Location -LiteralPath '<path-to-kyrgame>'" in text
-    assert "make ENV_FILE=.env.docker.local up" in text
-    assert "make ENV_FILE=.env.docker.local tunnel-up" in text
-    assert "docker compose --env-file .env.docker.local -p kyrgame-local ps" in text
+    assert "docs/DEV_HOSTING.md" in text
 
 
 def test_root_dockerignore_keeps_local_credentials_and_build_outputs_out_of_context():
@@ -153,5 +155,90 @@ def test_root_dockerignore_keeps_local_credentials_and_build_outputs_out_of_cont
         "frontend/node_modules",
         "frontend/dist",
         "local-docker",
+        "selfhost",
     ]:
         assert pattern in text
+    assert "deploy/self-host" not in text
+
+
+def test_readme_links_to_general_hosting_guides():
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "docs/DEV_HOSTING.md" in text
+    assert "docs/SELF_HOSTING.md" in text
+    assert "willow.eventscripts.com" not in text
+    assert "kyrgame-local" not in text
+
+
+def test_public_hosting_docs_do_not_include_private_environment_references():
+    private_patterns = [
+        (r"C:\\Users\\matti", "C:\\Users\\matti"),
+        (r"\bmatti\b", "matti"),
+        (r"willow\.eventscripts\.com", "willow.eventscripts.com"),
+        (r"kyrgame-local", "kyrgame-local"),
+    ]
+    docs_to_scan = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "docs" / "SELF_HOSTING.md",
+        REPO_ROOT / "docs" / "DEV_HOSTING.md",
+        REPO_ROOT / "docs" / "ALPHA_TESTING_RUNBOOK.md",
+    ]
+
+    for path in docs_to_scan:
+        text = path.read_text(encoding="utf-8")
+        for pattern, label in private_patterns:
+            assert not re.search(pattern, text), f"{label!r} leaked into {path.relative_to(REPO_ROOT)}"
+
+
+def test_self_hosting_guide_covers_operator_lifecycle():
+    text = (REPO_ROOT / "docs" / "SELF_HOSTING.md").read_text(encoding="utf-8")
+
+    for required in [
+        "This repository does not ship a production reverse-proxy stack",
+        "Caddy, nginx, Traefik",
+        "same-origin",
+        "private Postgres",
+        "<your-domain>",
+        "selfhost/config/admin-allowlist.yaml",
+        "pg_dump -Fc",
+        "pg_restore -l",
+        "KYRGAME_RESET_ON_BOOT=0",
+        "KYRGAME_SEED_IF_EMPTY=1",
+        "KYRGAME_TRUST_PROXY_HEADERS=1",
+        "kyrgame.webapp:create_app --factory",
+        "/world*",
+        "Backend admin API subpaths under `/admin/`",
+        "Keep the frontend `/admin` page on the SPA fallback",
+        "LICENSE.txt",
+    ]:
+        assert required in text
+    assert "deploy/self-host" not in text
+    assert "/locations*" not in text
+    assert "/sessions*" not in text
+    assert "/admin/*" not in text
+
+
+def test_self_hosting_guide_does_not_ship_production_deploy_stack():
+    for path in [
+        REPO_ROOT / "deploy" / "self-host" / ".env.selfhost.example",
+        REPO_ROOT / "deploy" / "self-host" / "Caddyfile",
+        REPO_ROOT / "deploy" / "self-host" / "compose.yaml",
+        REPO_ROOT / "deploy" / "self-host" / "web.Dockerfile",
+    ]:
+        assert not path.exists(), f"{path.relative_to(REPO_ROOT)} should stay out of the docs-only self-host guide"
+
+
+def test_dev_hosting_guide_covers_local_stack_without_private_hostnames():
+    text = (REPO_ROOT / "docs" / "DEV_HOSTING.md").read_text(encoding="utf-8")
+
+    for required in [
+        "compose.yaml",
+        ".env.docker.example",
+        "local-docker/admin-allowlist.yaml",
+        "make ENV_FILE=.env.docker.example up",
+        "docker compose --env-file .env.docker.example up -d --build",
+        "KYRGAME_VITE_ALLOWED_HOSTS=<your-tunnel-host>",
+        "127.0.0.1:5173",
+        "127.0.0.1:8000",
+    ]:
+        assert required in text
