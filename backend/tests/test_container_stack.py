@@ -260,6 +260,25 @@ def test_self_host_caddyfile_proxies_backend_paths_and_spa_fallback():
     assert "handle @backend" in text
     assert "handle {" in text
     assert "try_files {path} /index.html" in text
-    for route in ["auth", "public", "i18n", "world", "locations", "objects", "spells", "commands", "players", "sessions", "ws"]:
+    for route in [
+        "auth",
+        "public",
+        "i18n",
+        "world",
+        "locations",
+        "objects",
+        "spells",
+        "commands",
+        "players",
+        "sessions",
+        "content",
+        "ws",
+        "docs",
+        "redoc",
+    ]:
         assert f"/{route}*" in text
+    assert "/openapi.json" in text
     assert "/admin/*" in text
+    assert "header_up X-Forwarded-For {remote_host}" in text
+    assert "header_up X-Real-IP {remote_host}" in text
+    assert "header_up CF-Connecting-IP {remote_host}" in text

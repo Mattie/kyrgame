@@ -3,11 +3,15 @@
 	root * /usr/share/caddy
 
 	@backend {
-		path /auth* /public* /i18n* /world* /locations* /objects* /spells* /commands* /players* /sessions* /ws* /admin/*
+		path /auth* /public* /i18n* /world* /locations* /objects* /spells* /commands* /players* /sessions* /content* /ws* /docs* /redoc* /openapi.json /admin/*
 		not path /admin /admin/
 	}
 	handle @backend {
-		reverse_proxy backend:8000
+		reverse_proxy backend:8000 {
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Real-IP {remote_host}
+			header_up CF-Connecting-IP {remote_host}
+		}
 	}
 
 	handle {
