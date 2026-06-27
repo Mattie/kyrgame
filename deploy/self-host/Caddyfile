@@ -1,0 +1,13 @@
+{$KYRGAME_PUBLIC_HOST} {
+	encode zstd gzip
+	root * /usr/share/caddy
+
+	@backend {
+		path /auth* /public* /i18n* /world* /locations* /objects* /spells* /commands* /players* /sessions* /ws* /admin/*
+		not path /admin /admin/
+	}
+	reverse_proxy @backend backend:8000
+
+	try_files {path} /index.html
+	file_server
+}

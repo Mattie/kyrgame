@@ -136,11 +136,10 @@ def test_alpha_runbook_uses_portable_paths_and_distinct_tunnel_steps():
     text = (REPO_ROOT / "docs" / "ALPHA_TESTING_RUNBOOK.md").read_text(encoding="utf-8")
 
     assert "C:\\Users\\matti" not in text
+    assert "willow.eventscripts.com" not in text
+    assert "kyrgame-local" not in text
     assert ".agents\\skills\\local-dev-servers" not in text
-    assert "Set-Location -LiteralPath '<path-to-kyrgame>'" in text
-    assert "make ENV_FILE=.env.docker.local up" in text
-    assert "make ENV_FILE=.env.docker.local tunnel-up" in text
-    assert "docker compose --env-file .env.docker.local -p kyrgame-local ps" in text
+    assert "docs/DEV_HOSTING.md" in text
 
 
 def test_root_dockerignore_keeps_local_credentials_and_build_outputs_out_of_context():
@@ -153,5 +152,108 @@ def test_root_dockerignore_keeps_local_credentials_and_build_outputs_out_of_cont
         "frontend/node_modules",
         "frontend/dist",
         "local-docker",
+        "selfhost",
     ]:
         assert pattern in text
+    assert "!deploy/self-host/.env.selfhost.example" in text
+
+
+def test_readme_links_to_general_hosting_guides():
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "docs/DEV_HOSTING.md" in text
+    assert "docs/SELF_HOSTING.md" in text
+    assert "willow.eventscripts.com" not in text
+    assert "kyrgame-local" not in text
+
+
+def test_public_hosting_docs_do_not_include_private_environment_references():
+    private_patterns = [
+        (r"C:\\Users\\matti", "C:\\Users\\matti"),
+        (r"\bmatti\b", "matti"),
+        (r"willow\.eventscripts\.com", "willow.eventscripts.com"),
+        (r"kyrgame-local", "kyrgame-local"),
+    ]
+    docs_to_scan = [
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "docs" / "SELF_HOSTING.md",
+        REPO_ROOT / "docs" / "DEV_HOSTING.md",
+        REPO_ROOT / "docs" / "ALPHA_TESTING_RUNBOOK.md",
+        REPO_ROOT / "deploy" / "self-host" / ".env.selfhost.example",
+        REPO_ROOT / "deploy" / "self-host" / "compose.yaml",
+        REPO_ROOT / "deploy" / "self-host" / "Caddyfile",
+    ]
+
+    for path in docs_to_scan:
+        text = path.read_text(encoding="utf-8")
+        for pattern, label in private_patterns:
+            assert not re.search(pattern, text), f"{label!r} leaked into {path.relative_to(REPO_ROOT)}"
+
+
+def test_self_hosting_guide_covers_operator_lifecycle():
+    text = (REPO_ROOT / "docs" / "SELF_HOSTING.md").read_text(encoding="utf-8")
+
+    for required in [
+        "deploy/self-host/compose.yaml",
+        "KYRGAME_PUBLIC_HOST",
+        "selfhost/config/admin-allowlist.yaml",
+        "pg_dump -Fc",
+        "pg_restore -l",
+        "KYRGAME_RESET_ON_BOOT=0",
+        "docker compose --env-file deploy/self-host/.env.selfhost.local",
+        "LICENSE.txt",
+    ]:
+        assert required in text
+
+
+def test_dev_hosting_guide_covers_local_stack_without_private_hostnames():
+    text = (REPO_ROOT / "docs" / "DEV_HOSTING.md").read_text(encoding="utf-8")
+
+    for required in [
+        "compose.yaml",
+        ".env.docker.example",
+        "local-docker/admin-allowlist.yaml",
+        "make ENV_FILE=.env.docker.example up",
+        "docker compose --env-file .env.docker.example up -d --build",
+        "KYRGAME_VITE_ALLOWED_HOSTS=<your-tunnel-host>",
+        "127.0.0.1:5173",
+        "127.0.0.1:8000",
+    ]:
+        assert required in text
+
+
+def test_self_host_compose_keeps_database_private_and_serves_public_web():
+    stack = yaml.safe_load(
+        (REPO_ROOT / "deploy" / "self-host" / "compose.yaml").read_text(encoding="utf-8")
+    )
+    services = stack["services"]
+
+    assert set(services) == {"backend", "db", "web"}
+    assert "ports" not in services["db"]
+    assert "ports" not in services["backend"]
+    assert services["web"]["ports"] == ["${HTTP_PORT:-80}:80", "${HTTPS_PORT:-443}:443"]
+    assert services["web"]["build"] == {
+        "context": "../..",
+        "dockerfile": "deploy/self-host/web.Dockerfile",
+    }
+    assert services["backend"]["build"] == {
+        "context": "../..",
+        "dockerfile": "backend/Dockerfile",
+    }
+    assert services["backend"]["environment"]["KYRGAME_TRUST_PROXY_HEADERS"] == (
+        "${KYRGAME_TRUST_PROXY_HEADERS:-1}"
+    )
+    assert services["backend"]["environment"]["KYRGAME_RESET_ON_BOOT"] == (
+        "${KYRGAME_RESET_ON_BOOT:-0}"
+    )
+
+
+def test_self_host_caddyfile_proxies_backend_paths_and_spa_fallback():
+    text = (REPO_ROOT / "deploy" / "self-host" / "Caddyfile").read_text(encoding="utf-8")
+
+    assert "{$KYRGAME_PUBLIC_HOST}" in text
+    assert "backend:8000" in text
+    assert "try_files {path} /index.html" in text
+    for route in ["auth", "public", "i18n", "world", "locations", "objects", "spells", "commands", "players", "sessions", "ws"]:
+        assert f"/{route}*" in text
+    assert "/admin/*" in text

@@ -14,6 +14,7 @@ __pycache__
 .env
 .env.*
 !.env.docker.example
+!deploy/self-host/.env.selfhost.example
 backend/.env
 frontend/.env
 frontend/.env.local
@@ -29,4 +30,5 @@ frontend/coverage
 frontend/.local_references
 
 local-docker
+selfhost
 legacy/Dist/offline-content.json
