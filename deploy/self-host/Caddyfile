@@ -6,8 +6,12 @@
 		path /auth* /public* /i18n* /world* /locations* /objects* /spells* /commands* /players* /sessions* /ws* /admin/*
 		not path /admin /admin/
 	}
-	reverse_proxy @backend backend:8000
+	handle @backend {
+		reverse_proxy backend:8000
+	}
 
-	try_files {path} /index.html
-	file_server
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
 }

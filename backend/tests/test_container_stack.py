@@ -120,6 +120,8 @@ def test_makefile_exposes_documented_ops_targets():
     assert "$(COMPOSE) --env-file $(ENV_FILE) --profile tunnel up -d cloudflared" in text
     assert "-m kyrgame.scripts.seed_db" in text
     assert "-m kyrgame.scripts.package_content" in text
+    assert "$$final.tmp" in text
+    assert "mv $$tmp $$final" in text
 
 
 def test_backend_development_package_content_command_runs_from_repo_root():
@@ -199,6 +201,8 @@ def test_self_hosting_guide_covers_operator_lifecycle():
         "selfhost/config/admin-allowlist.yaml",
         "pg_dump -Fc",
         "pg_restore -l",
+        'tmp="$final.tmp"',
+        "sh -lc 'pg_restore -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\" --clean --if-exists'",
         "KYRGAME_RESET_ON_BOOT=0",
         "docker compose --env-file deploy/self-host/.env.selfhost.local",
         "LICENSE.txt",
@@ -253,6 +257,8 @@ def test_self_host_caddyfile_proxies_backend_paths_and_spa_fallback():
 
     assert "{$KYRGAME_PUBLIC_HOST}" in text
     assert "backend:8000" in text
+    assert "handle @backend" in text
+    assert "handle {" in text
     assert "try_files {path} /index.html" in text
     for route in ["auth", "public", "i18n", "world", "locations", "objects", "spells", "commands", "players", "sessions", "ws"]:
         assert f"/{route}*" in text

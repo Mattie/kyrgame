@@ -60,4 +60,4 @@ selfhost-logs:
 
 selfhost-backup:
 	mkdir -p selfhost/backups
-	$(COMPOSE) --env-file $(SELFHOST_ENV_FILE) -f $(SELFHOST_COMPOSE_FILE) exec -T db sh -lc 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' > selfhost/backups/kyrgame-$$(date +%Y%m%d-%H%M%S).dump
+	stamp=$$(date +%Y%m%d-%H%M%S); final=selfhost/backups/kyrgame-$$stamp.dump; tmp=$$final.tmp; $(COMPOSE) --env-file $(SELFHOST_ENV_FILE) -f $(SELFHOST_COMPOSE_FILE) exec -T db sh -lc 'pg_dump -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -Fc' > $$tmp && mv $$tmp $$final

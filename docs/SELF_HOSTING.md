@@ -128,11 +128,13 @@ Back up Postgres before upgrades, resets, and risky admin work. Use
 ```bash
 stamp=$(date +%Y%m%d-%H%M%S)
 mkdir -p selfhost/backups
+final="selfhost/backups/kyrgame-$stamp.dump"
+tmp="$final.tmp"
 docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml exec -T db \
   sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
-  > "selfhost/backups/kyrgame-$stamp.dump"
-pg_restore -l "selfhost/backups/kyrgame-$stamp.dump" \
-  > "selfhost/backups/kyrgame-$stamp.dump.list.txt"
+  > "$tmp"
+mv "$tmp" "$final"
+pg_restore -l "$final" > "$final.list.txt"
 ```
 
 Restore into a fresh database only after stopping the app services and saving a
@@ -143,7 +145,7 @@ docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-ho
 docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml exec -T db \
   sh -lc 'dropdb -U "$POSTGRES_USER" "$POSTGRES_DB" && createdb -U "$POSTGRES_USER" "$POSTGRES_DB"'
 docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml exec -T db \
-  pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists \
+  sh -lc 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
   < selfhost/backups/kyrgame-YYYYMMDD-HHMMSS.dump
 docker compose --env-file deploy/self-host/.env.selfhost.local -f deploy/self-host/compose.yaml up -d
 ```
